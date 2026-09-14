@@ -38,7 +38,7 @@ const DEDUPE_SCAN_PAGES = 5;
 const STORAGE_VERSION = '1C';
 const RESEARCH_TABLE = 'sire_research_experiments_v1';
 const CATALOGUE_TABLE = 'sire_catalogue_v1';
-const OPENAI_MODEL = 'openai/gpt-5.6-luna';
+const OPENAI_MODEL = 'nvidia/nemotron-3-super-120b-a12b';
 const OPENAI_MAX_STEPS = 18;
 const OPENAI_MAX_TICKS = 2500;
 const OPENAI_MAX_ANALYSIS_TICKS = 25000;
@@ -96,9 +96,11 @@ function normalizeOpenAISchema(value: unknown): unknown {
 
 const OPENAI_FUNCTION_TOOLS = SIRE_FUNCTIONS.map(tool => ({
   type: 'function',
-  name: tool.name,
-  description: tool.description,
-  ...(tool.parameters ? { parameters: normalizeOpenAISchema(tool.parameters) } : {}),
+  function: {
+    name: tool.name,
+    description: tool.description,
+    parameters: normalizeOpenAISchema(tool.parameters || { type: 'OBJECT', properties: {} }),
+  },
 }));
 
 function openAIToolArgs(name: string, args: Record<string, unknown>, runtimeContext?: Record<string, unknown>) {
@@ -159,118 +161,70 @@ function openAITransportMessage(cause: unknown) {
 let openAIInFlight: Promise<unknown> | null = null;
 
 async function runOpenAIChatUnlocked(userQuery: string, symbol?: string, runtimeContext?: Record<string, unknown>, history: Array<{ role: string; text: string }> = []) {
-  const apiKey = await secrets.readSecret('BAZAARLINK_API_KEY');
-  let input: Array<Record<string, unknown>> = [
-    ...(history.length ? [{ type: 'message', role: 'user', content: [{ type: 'input_text', text: history.map(item => `${item.role.toUpperCase()}: ${item.text}`).join('\n\n') }] }] : []),
-    { type: 'message', role: 'user', content: [{ type: 'input_text', text: `${symbol ? `Current instrument: ${symbol}\n` : ''}${runtimeContext ? `Current SIRE runtime context:\n${JSON.stringify(runtimeContext)}\n` : ''}\nUser message:\n${userQuery}` }] },
+  const apiKey = await secrets.readSecret('NVIDIA_API_KEY');
+  if (!apiKey) throw new Error('NVIDIA_API_KEY is not configured.');
+  const messages: Array<Record<string, unknown>> = [
+    { role: 'system', content: OPENAI_SYSTEM_INSTRUCTION },
+    ...history.filter(item => item && typeof item.text === 'string').map(item => ({ role: item.role === 'assistant' ? 'assistant' : 'user', content: item.text })),
+    { role: 'user', content: `${symbol ? `Current instrument: ${symbol}\n` : ''}${runtimeContext ? `Current SIRE runtime context:\n${JSON.stringify(runtimeContext)}\n` : ''}\nUser message:\n${userQuery}` },
   ];
   let steps = 0;
-  const actions: Array<Record<string, unknown>> = []; 
+  const actions: Array<Record<string, unknown>> = [];
   const normalizedQuery = userQuery.trim();
-  // All turns, including greetings and casual conversation, go through the same
-  // conversational model path so SIRE can maintain natural continuity and return
-  // a real assistant response instead of switching into a task-only shortcut.
-
   while (true) {
-    const requestBody: Record<string, unknown> = {
-      model: OPENAI_MODEL,
-      instructions: OPENAI_SYSTEM_INSTRUCTION,
-      tools: OPENAI_FUNCTION_TOOLS,
-      tool_choice: 'auto',
-      input,
-    };
-
+    const requestBody: Record<string, unknown> = { model: OPENAI_MODEL, messages, tools: OPENAI_FUNCTION_TOOLS, tool_choice: 'auto', temperature: 1, top_p: 0.95, max_tokens: 8192, chat_template_kwargs: { enable_thinking: true, force_nonempty_content: true } };
     let response: Response | null = null;
     let payload: Record<string, unknown> = {};
     let lastTransportError: unknown = null;
     const maxAttempts = 6;
     for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
       try {
-        response = await fetch('https://api.bazaarlink.ai/v1/responses', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
-          body: JSON.stringify(requestBody),
-          signal: AbortSignal.timeout(60000),
-        });
+        response = await fetch('https://integrate.api.nvidia.com/v1/chat/completions', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` }, body: JSON.stringify(requestBody), signal: AbortSignal.timeout(120000) });
         const raw = await response.text();
-        try {
-          payload = raw ? JSON.parse(raw) as Record<string, unknown> : {};
-        } catch {
-          payload = { raw: raw.slice(0, 2000) };
-        }
+        try { payload = raw ? JSON.parse(raw) as Record<string, unknown> : {}; } catch { payload = { raw: raw.slice(0, 2000) }; }
         if (response.ok) break;
-        const retryable = [408, 425, 429, 500, 502, 503, 504].includes(response.status);
-        if (!retryable || attempt === maxAttempts - 1) break;
+        if (![408,425,429,500,502,503,504].includes(response.status) || attempt === maxAttempts - 1) break;
         await new Promise(resolve => setTimeout(resolve, openAIRetryDelayMs(response, attempt)));
       } catch (cause) {
         lastTransportError = cause;
         response = null;
-        if (attempt === maxAttempts - 1) {
-          throw new Error(`OpenAI connection failed after ${maxAttempts} attempts: ${openAITransportMessage(cause)}`);
-        }
+        if (attempt === maxAttempts - 1) throw new Error(`NVIDIA connection failed after ${maxAttempts} attempts: ${openAITransportMessage(cause)}`);
         await new Promise(resolve => setTimeout(resolve, openAIRetryDelayMs(null, attempt)));
       }
     }
-    if (!response) throw new Error(`OpenAI connection failed after ${maxAttempts} attempts: ${openAITransportMessage(lastTransportError)}`);
+    if (!response) throw new Error(`NVIDIA connection failed after ${maxAttempts} attempts: ${openAITransportMessage(lastTransportError)}`);
     if (!response.ok) {
       const apiError = payload.error as Record<string, unknown> | undefined;
       const detail = apiError?.message ? String(apiError.message) : JSON.stringify(payload).slice(0, 2000);
-      if (response.status === 429) {
-        throw new Error(`OpenAI rate limit remained active after ${maxAttempts} attempts. ${detail} Please retry shortly.`);
-      }
-      if ([408, 502, 503, 504].includes(response.status)) {
-        throw new Error(`OpenAI temporary service/network error (${response.status}) after ${maxAttempts} attempts. ${detail} Please retry shortly.`);
-      }
-      throw new Error(`OpenAI HTTP ${response.status}: ${detail}`);
+      if (response.status === 429) throw new Error(`NVIDIA rate limit remained active after ${maxAttempts} attempts. ${detail} Please retry shortly.`);
+      if ([408,502,503,504].includes(response.status)) throw new Error(`NVIDIA temporary service/network error (${response.status}) after ${maxAttempts} attempts. ${detail} Please retry shortly.`);
+      throw new Error(`NVIDIA HTTP ${response.status}: ${detail}`);
     }
-    if (payload.status === 'failed') {
-      const failure = payload.error as Record<string, unknown> | undefined;
-      throw new Error(String(failure?.message || 'OpenAI response failed.'));
+    const choice = Array.isArray(payload.choices) ? payload.choices[0] as Record<string, unknown> | undefined : undefined;
+    const message = choice?.message as Record<string, unknown> | undefined;
+    const content = typeof message?.content === 'string' ? message.content.trim() : '';
+    const toolCalls = Array.isArray(message?.tool_calls) ? message.tool_calls as Array<Record<string, unknown>> : [];
+    if (!toolCalls.length) {
+      const text = content || (actions.length ? 'Done — I completed that action. What would you like to do next?' : `I’m here. ${normalizedQuery ? 'Tell me more about what you’re thinking.' : 'What’s on your mind?'}`);
+      return { text, steps, model: OPENAI_MODEL, responseId: typeof payload.id === 'string' ? payload.id : '', mode: actions.length ? 'action' : 'discussion', actions };
     }
-
-    const responseId = typeof payload.id === 'string' ? payload.id : '';
-    const output = Array.isArray(payload.output) ? payload.output as Array<Record<string, unknown>> : [];
-    const calls = output.filter(step => step.type === 'function_call');
-
-    if (!calls.length) {
-      // Responses can expose assistant text through output_text or through the
-      // output message/content structure. Prefer the model's actual text so a
-      // normal greeting or conversation can never fall through to a canned
-      // task-style response just because output_text was omitted.
-      const directText = typeof payload.output_text === 'string' ? payload.output_text.trim() : '';
-      const contentText = output
-        .filter(step => step.type === 'message')
-        .flatMap(step => Array.isArray(step.content) ? step.content as Array<Record<string, unknown>> : [])
-        .filter(item => item.type === 'output_text' || item.type === 'text')
-        .map(item => typeof item.text === 'string' ? item.text.trim() : '')
-        .filter(Boolean)
-        .join('\\n\\n');
-      const text = directText || contentText || (actions.length
-        ? 'Done — I completed that action. What would you like to do next?'
-        : `I’m here. ${normalizedQuery ? 'Tell me more about what you’re thinking.' : 'What’s on your mind?'}`);
-      return { text, steps, model: OPENAI_MODEL, responseId, mode: actions.length ? 'action' : 'discussion', actions };
-    }
-
-    if (!responseId) throw new Error('OpenAI returned tool calls without a response id.');
-    if (steps + calls.length > OPENAI_MAX_STEPS) throw new Error(`Exceeded maximum SIRE tool steps limit (${OPENAI_MAX_STEPS}).`);
-
-    const functionResults: Array<Record<string, unknown>> = [];
-    for (const call of calls) {
-      const name = String(call.name || '');
-      const callId = String(call.call_id || call.id || '');
+    if (steps + toolCalls.length > OPENAI_MAX_STEPS) throw new Error(`Exceeded maximum SIRE tool steps limit (${OPENAI_MAX_STEPS}).`);
+    messages.push({ role: 'assistant', content: content || '', tool_calls: toolCalls });
+    for (const call of toolCalls) {
+      const callId = String(call.id || '');
+      const fn = call.function as Record<string, unknown> | undefined;
+      const name = String(fn?.name || '');
       let args: Record<string, unknown> = {};
-      try { args = JSON.parse(String(call.arguments || '{}')) as Record<string, unknown>; } catch { args = {}; }
+      try { args = JSON.parse(String(fn?.arguments || '{}')) as Record<string, unknown>; } catch { args = {}; }
       try {
         const result = await openAIToolArgs(name, args, runtimeContext);
         if (result && typeof result === 'object' && '__sireAction' in result) actions.push(result as Record<string, unknown>);
-        functionResults.push({ type: 'function_call_output', call_id: callId, output: JSON.stringify(result) });
+        messages.push({ role: 'tool', tool_call_id: callId, content: JSON.stringify(result) });
       } catch (cause) {
-        functionResults.push({ type: 'function_call_output', call_id: callId, output: JSON.stringify({ error: cause instanceof Error ? cause.message : String(cause) }) });
+        messages.push({ role: 'tool', tool_call_id: callId, content: JSON.stringify({ error: cause instanceof Error ? cause.message : String(cause) }) });
       }
       steps += 1;
     }
-
-    input = [...(Array.isArray(input) ? input : []), ...output, ...functionResults];
   }
 }
 
@@ -619,7 +573,7 @@ export const handler = router({
   'GET /api/sire/ai/status': [
     async () => {
       const names = await secrets.listSecretNames();
-      return json({ ok: true, provider: 'BazaarLink', configured: names.includes('BAZAARLINK_API_KEY'), model: OPENAI_MODEL });
+      return json({ ok: true, provider: 'NVIDIA', configured: names.includes('NVIDIA_API_KEY'), model: OPENAI_MODEL });
     },
   ],
   'POST /api/sire/agent/chat': [
@@ -632,11 +586,11 @@ export const handler = router({
       if (!query) return error('query is required', 400);
       try {
         const result = await runSIREConversation(query, symbol, runtimeContext, history);
-        return json({ ok: true, ...result, provenance: 'BazaarLink GPT-5.6 Luna intelligence operating inside the SIRE environment' });
+        return json({ ok: true, ...result, provenance: 'NVIDIA Nemotron 3 Super intelligence operating inside the SIRE environment' });
       } catch (cause) {
         const message = cause instanceof Error ? cause.message : String(cause);
-        if (message.includes('BAZAARLINK_API_KEY')) return error('SIRE brain is not configured. Add BAZAARLINK_API_KEY to this SIRE app.', 503);
-        const statusMatch = message.match(/(?:BazaarLink|OpenAI) (?:HTTP |temporary service\/network error \(|rate limit remained active )(?:(408|425|429|500|502|503|504))/);
+        if (message.includes('NVIDIA_API_KEY')) return error('SIRE brain is not configured. Add NVIDIA_API_KEY to this SIRE app.', 503);
+        const statusMatch = message.match(/(?:NVIDIA|OpenAI) (?:HTTP |temporary service\/network error \(|rate limit remained active )(?:(408|425|429|500|502|503|504))/);
         const status = statusMatch ? Number(statusMatch[1]) : (message.includes('timed out') || message.includes('Timeout') ? 504 : 502);
         return error(message, status);
       }
@@ -652,11 +606,11 @@ export const handler = router({
       if (!query) return error('query is required', 400);
       try {
         const result = await runSIREConversation(query, symbol, runtimeContext, history);
-        return json({ ok: true, ...result, provenance: 'BazaarLink GPT-5.6 Luna intelligence operating inside the SIRE environment' });
+        return json({ ok: true, ...result, provenance: 'NVIDIA Nemotron 3 Super intelligence operating inside the SIRE environment' });
       } catch (cause) {
         const message = cause instanceof Error ? cause.message : String(cause);
-        if (message.includes('BAZAARLINK_API_KEY')) return error('BazaarLink is not configured. Add BAZAARLINK_API_KEY to this SIRE app.', 503);
-        const statusMatch = message.match(/(?:BazaarLink|OpenAI) (?:HTTP |temporary service\/network error \(|rate limit remained active )(?:(408|425|429|500|502|503|504))/);
+        if (message.includes('NVIDIA_API_KEY')) return error('BazaarLink is not configured. Add NVIDIA_API_KEY to this SIRE app.', 503);
+        const statusMatch = message.match(/(?:NVIDIA|OpenAI) (?:HTTP |temporary service\/network error \(|rate limit remained active )(?:(408|425|429|500|502|503|504))/);
         const status = statusMatch ? Number(statusMatch[1]) : (message.includes('timed out') || message.includes('Timeout') ? 504 : 502);
         return error(message, status);
       }
