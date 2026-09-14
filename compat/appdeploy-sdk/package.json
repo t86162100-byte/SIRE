@@ -1,0 +1,6 @@
+{
+  "name": "@appdeploy/sdk",
+  "version": "0.0.0-render-compat",
+  "private": true,
+  "type": "module"
+}
