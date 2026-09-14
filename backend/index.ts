@@ -38,7 +38,7 @@ const DEDUPE_SCAN_PAGES = 5;
 const STORAGE_VERSION = '1C';
 const RESEARCH_TABLE = 'sire_research_experiments_v1';
 const CATALOGUE_TABLE = 'sire_catalogue_v1';
-const OPENAI_MODEL = 'nvidia/nemotron-3-super-120b-a12b';
+const OPENAI_MODEL = 'openai/gpt-oss-120b';
 const OPENAI_MAX_STEPS = 18;
 const OPENAI_MAX_TICKS = 2500;
 const OPENAI_MAX_ANALYSIS_TICKS = 25000;
@@ -190,7 +190,7 @@ async function runOpenAIChatUnlocked(userQuery: string, symbol?: string, runtime
   const actions: Array<Record<string, unknown>> = [];
   const normalizedQuery = userQuery.trim();
   while (true) {
-    const requestBody: Record<string, unknown> = { model: OPENAI_MODEL, messages, tools: OPENAI_FUNCTION_TOOLS, tool_choice: 'auto', temperature: 1, top_p: 0.95, max_tokens: 8192 };
+    const requestBody: Record<string, unknown> = { model: OPENAI_MODEL, messages, tools: OPENAI_FUNCTION_TOOLS, tool_choice: 'auto', temperature: 0.6, top_p: 0.95, max_tokens: 16384 };
     let response: Response | null = null;
     let payload: Record<string, unknown> = {};
     let lastTransportError: unknown = null;
@@ -603,7 +603,7 @@ export const handler = router({
       if (!query) return error('query is required', 400);
       try {
         const result = await runSIREConversation(query, symbol, runtimeContext, history);
-        return json({ ok: true, ...result, provenance: 'NVIDIA Nemotron 3 Super intelligence operating inside the SIRE environment' });
+        return json({ ok: true, ...result, provenance: 'NVIDIA-hosted GPT-OSS 120B intelligence operating inside the SIRE environment' });
       } catch (cause) {
         const message = cause instanceof Error ? cause.message : String(cause);
         if (message.includes('NVIDIA_API_KEY')) return error('SIRE brain is not configured. Add NVIDIA_API_KEY to this SIRE app.', 503);
@@ -623,7 +623,7 @@ export const handler = router({
       if (!query) return error('query is required', 400);
       try {
         const result = await runSIREConversation(query, symbol, runtimeContext, history);
-        return json({ ok: true, ...result, provenance: 'NVIDIA Nemotron 3 Super intelligence operating inside the SIRE environment' });
+        return json({ ok: true, ...result, provenance: 'NVIDIA-hosted GPT-OSS 120B intelligence operating inside the SIRE environment' });
       } catch (cause) {
         const message = cause instanceof Error ? cause.message : String(cause);
         if (message.includes('NVIDIA_API_KEY')) return error('NVIDIA is not configured. Add NVIDIA_API_KEY to this SIRE app.', 503);
