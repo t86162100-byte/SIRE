@@ -3,7 +3,13 @@ import { randomUUID } from 'node:crypto';
 import { readFile, stat } from 'node:fs/promises';
 import { extname, join, normalize } from 'node:path';
 import { WebSocketServer } from 'ws';
-import { handler } from './backend/openrouter-team.ts';
+
+// Normalize OpenRouter credentials before importing the AI council. The council
+// reads process.env.OPENROUTER_API_KEY during request handling, and Render may
+// expose the configured secret under a legacy alias.
+await import('./backend/openrouter-env.mjs');
+
+const { handler } = await import('./backend/openrouter-team.ts');
 import { ws } from './compat/appdeploy-sdk/index.js';
 import { realtime } from './backend/realtime.ts';
 
