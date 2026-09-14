@@ -39,7 +39,11 @@ const DEDUPE_SCAN_PAGES = 5;
 const STORAGE_VERSION = '1C';
 const RESEARCH_TABLE = 'sire_research_experiments_v1';
 const CATALOGUE_TABLE = 'sire_catalogue_v1';
-const OPENAI_MODEL = 'openai/gpt-oss-120b';
+const AI_MODELS = [
+  { id: 'moonshotai/kimi-k2.6', name: 'Kimi K2.6', thinking: true },
+  { id: 'deepseek-ai/deepseek-v4-pro-0813', name: 'DeepSeek V4 Pro', reasoning_effort: 'max' },
+] as const;
+const OPENAI_MODEL = AI_MODELS[0].id;
 const OPENAI_MAX_STEPS = 18;
 const OPENAI_MAX_TICKS = 2500;
 const OPENAI_MAX_ANALYSIS_TICKS = 25000;
@@ -189,47 +193,84 @@ async function runOpenAIChatUnlocked(userQuery: string, symbol?: string, runtime
   const messages: Array<Record<string, unknown>> = [
     { role: 'system', content: OPENAI_SYSTEM_INSTRUCTION },
     ...history.filter(item => item && typeof item.text === 'string').map(item => ({ role: item.role === 'assistant' ? 'assistant' : 'user', content: item.text })),
-    { role: 'user', content: `${symbol ? `Current instrument: ${symbol}\n` : ''}${runtimeContext ? `Current SIRE runtime context:\n${JSON.stringify(runtimeContext)}\n` : ''}\nUser message:\n${userQuery}` },
+    { role: 'user', content: `${symbol ? `Current instrument: ${symbol}
+` : ''}${runtimeContext ? `Current SIRE runtime context:
+${JSON.stringify(runtimeContext)}
+` : ''}
+User message:
+${userQuery}` },
   ];
   let steps = 0;
   const actions: Array<Record<string, unknown>> = [];
   const normalizedQuery = userQuery.trim();
+  let modelIndex = 0;
+
   while (true) {
-    const requestBody: Record<string, unknown> = { model: OPENAI_MODEL, messages, tools: OPENAI_FUNCTION_TOOLS, tool_choice: 'auto', temperature: 0.6, top_p: 0.95, max_tokens: 16384 };
+    const model = AI_MODELS[modelIndex];
+    const requestBody: Record<string, unknown> = {
+      model: model.id,
+      messages,
+      tools: OPENAI_FUNCTION_TOOLS,
+      tool_choice: 'auto',
+      temperature: 1,
+      top_p: 0.95,
+      max_tokens: 16384,
+      ...(model.thinking ? { chat_template_kwargs: { thinking: true } } : {}),
+      ...(model.reasoning_effort ? { reasoning_effort: model.reasoning_effort } : {}),
+    };
     let response: Response | null = null;
     let payload: Record<string, unknown> = {};
     let lastTransportError: unknown = null;
-    const maxAttempts = 6;
+    const maxAttempts = 3;
+    let shouldFallback = false;
+
     for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
       try {
-        response = await fetch('https://integrate.api.nvidia.com/v1/chat/completions', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` }, body: JSON.stringify(requestBody), signal: AbortSignal.timeout(120000) });
+        response = await fetch('https://integrate.api.nvidia.com/v1/chat/completions', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
+          body: JSON.stringify(requestBody),
+          signal: AbortSignal.timeout(120000),
+        });
         const raw = await response.text();
         try { payload = raw ? JSON.parse(raw) as Record<string, unknown> : {}; } catch { payload = { raw: raw.slice(0, 2000) }; }
         if (response.ok) break;
-        if (![408,425,429,500,502,503,504].includes(response.status) || attempt === maxAttempts - 1) break;
+
+        // Retired/unavailable or model-specific validation errors must never block SIRE.
+        if ([404, 410, 422].includes(response.status)) {
+          shouldFallback = true;
+          break;
+        }
+        if (![408, 425, 429, 500, 502, 503, 504].includes(response.status) || attempt === maxAttempts - 1) break;
         await new Promise(resolve => setTimeout(resolve, openAIRetryDelayMs(response, attempt)));
       } catch (cause) {
         lastTransportError = cause;
         response = null;
-        if (attempt === maxAttempts - 1) throw new Error(`NVIDIA connection failed after ${maxAttempts} attempts: ${openAITransportMessage(cause)}`);
+        if (attempt === maxAttempts - 1) break;
         await new Promise(resolve => setTimeout(resolve, openAIRetryDelayMs(null, attempt)));
       }
     }
-    if (!response) throw new Error(`NVIDIA connection failed after ${maxAttempts} attempts: ${openAITransportMessage(lastTransportError)}`);
-    if (!response.ok) {
+
+    if (shouldFallback || !response || !response.ok) {
+      if (modelIndex < AI_MODELS.length - 1) {
+        modelIndex += 1;
+        continue;
+      }
+      if (!response) throw new Error(`${model.name} connection failed after ${maxAttempts} attempts: ${openAITransportMessage(lastTransportError)}`);
       const apiError = payload.error as Record<string, unknown> | undefined;
       const detail = apiError?.message ? String(apiError.message) : JSON.stringify(payload).slice(0, 2000);
-      if (response.status === 429) throw new Error(`NVIDIA rate limit remained active after ${maxAttempts} attempts. ${detail} Please retry shortly.`);
-      if ([408,502,503,504].includes(response.status)) throw new Error(`NVIDIA temporary service/network error (${response.status}) after ${maxAttempts} attempts. ${detail} Please retry shortly.`);
-      throw new Error(`NVIDIA HTTP ${response.status}: ${detail}`);
+      if (response.status === 429) throw new Error(`${model.name} rate limit remained active after ${maxAttempts} attempts. ${detail} Please retry shortly.`);
+      if ([408, 500, 502, 503, 504].includes(response.status)) throw new Error(`${model.name} temporary service/network error (${response.status}) after ${maxAttempts} attempts. ${detail} Please retry shortly.`);
+      throw new Error(`${model.name} HTTP ${response.status}: ${detail}`);
     }
+
     const choice = Array.isArray(payload.choices) ? payload.choices[0] as Record<string, unknown> | undefined : undefined;
     const message = choice?.message as Record<string, unknown> | undefined;
     const content = typeof message?.content === 'string' ? message.content.trim() : '';
     const toolCalls = Array.isArray(message?.tool_calls) ? message.tool_calls as Array<Record<string, unknown>> : [];
     if (!toolCalls.length) {
       const text = content || (actions.length ? 'Done — I completed that action. What would you like to do next?' : `I’m here. ${normalizedQuery ? 'Tell me more about what you’re thinking.' : 'What’s on your mind?'}`);
-      return { text, steps, model: OPENAI_MODEL, responseId: typeof payload.id === 'string' ? payload.id : '', mode: actions.length ? 'action' : 'discussion', actions };
+      return { text, steps, model: model.id, provider: model.name, responseId: typeof payload.id === 'string' ? payload.id : '', mode: actions.length ? 'action' : 'discussion', actions };
     }
     if (steps + toolCalls.length > OPENAI_MAX_STEPS) throw new Error(`Exceeded maximum SIRE tool steps limit (${OPENAI_MAX_STEPS}).`);
     messages.push({ role: 'assistant', content: content || '', tool_calls: toolCalls });
@@ -595,7 +636,7 @@ async function gptTool(tool: string, args: Record<string, unknown>) {
 export const handler = router({
   'GET /api/sire/ai/status': [
     async () => {
-      return json({ ok: true, provider: 'NVIDIA', configured: Boolean(process.env.NVIDIA_API_KEY), model: OPENAI_MODEL });
+      return json({ ok: true, provider: 'NVIDIA-hosted Kimi/DeepSeek', configured: Boolean(process.env.NVIDIA_API_KEY), model: OPENAI_MODEL });
     },
   ],
   'POST /api/sire/agent/chat': [
@@ -608,7 +649,7 @@ export const handler = router({
       if (!query) return error('query is required', 400);
       try {
         const result = await runSIREConversation(query, symbol, runtimeContext, history);
-        return json({ ok: true, ...result, provenance: 'NVIDIA-hosted GPT-OSS 120B intelligence operating inside the SIRE environment' });
+        return json({ ok: true, ...result, provenance: 'NVIDIA-hosted Kimi K2.6 with DeepSeek V4 Pro fallback operating inside the SIRE environment' });
       } catch (cause) {
         const message = cause instanceof Error ? cause.message : String(cause);
         if (message.includes('NVIDIA_API_KEY')) return error('SIRE brain is not configured. Add NVIDIA_API_KEY to this SIRE app.', 503);
@@ -628,7 +669,7 @@ export const handler = router({
       if (!query) return error('query is required', 400);
       try {
         const result = await runSIREConversation(query, symbol, runtimeContext, history);
-        return json({ ok: true, ...result, provenance: 'NVIDIA-hosted GPT-OSS 120B intelligence operating inside the SIRE environment' });
+        return json({ ok: true, ...result, provenance: 'NVIDIA-hosted Kimi K2.6 with DeepSeek V4 Pro fallback operating inside the SIRE environment' });
       } catch (cause) {
         const message = cause instanceof Error ? cause.message : String(cause);
         if (message.includes('NVIDIA_API_KEY')) return error('NVIDIA is not configured. Add NVIDIA_API_KEY to this SIRE app.', 503);
