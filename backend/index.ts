@@ -153,9 +153,9 @@ function openAIRetryDelayMs(response: Response | null, attempt: number) {
 }
 
 function openAITransportMessage(cause: unknown) {
-  if (cause instanceof DOMException && cause.name === 'AbortError') return 'The OpenAI connection timed out.';
-  if (cause instanceof Error) return cause.message || 'The connection to OpenAI was interrupted.';
-  return 'The connection to OpenAI was interrupted.';
+  if (cause instanceof DOMException && cause.name === 'AbortError') return 'The NVIDIA connection timed out.';
+  if (cause instanceof Error) return cause.message || 'The connection to NVIDIA was interrupted.';
+  return 'The connection to NVIDIA was interrupted.';
 }
 
 let openAIInFlight: Promise<unknown> | null = null;
@@ -609,7 +609,7 @@ export const handler = router({
         return json({ ok: true, ...result, provenance: 'NVIDIA Nemotron 3 Super intelligence operating inside the SIRE environment' });
       } catch (cause) {
         const message = cause instanceof Error ? cause.message : String(cause);
-        if (message.includes('NVIDIA_API_KEY')) return error('BazaarLink is not configured. Add NVIDIA_API_KEY to this SIRE app.', 503);
+        if (message.includes('NVIDIA_API_KEY')) return error('NVIDIA is not configured. Add NVIDIA_API_KEY to this SIRE app.', 503);
         const statusMatch = message.match(/(?:NVIDIA|OpenAI) (?:HTTP |temporary service\/network error \(|rate limit remained active )(?:(408|425|429|500|502|503|504))/);
         const status = statusMatch ? Number(statusMatch[1]) : (message.includes('timed out') || message.includes('Timeout') ? 504 : 502);
         return error(message, status);
