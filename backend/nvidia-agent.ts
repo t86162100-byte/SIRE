@@ -3,11 +3,9 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { handler as legacyHandler } from './index.ts';
 
-const RETIRED_MODEL = 'openai/gpt-oss-120b';
-const NVIDIA_MODELS = [
-  process.env.NVIDIA_MODEL && process.env.NVIDIA_MODEL !== RETIRED_MODEL ? process.env.NVIDIA_MODEL : 'moonshotai/kimi-k3',
-  process.env.NVIDIA_FALLBACK_MODEL && process.env.NVIDIA_FALLBACK_MODEL !== RETIRED_MODEL ? process.env.NVIDIA_FALLBACK_MODEL : 'deepseek-ai/deepseek-v4-pro-0813',
-].filter((model, index, all) => Boolean(model) && all.indexOf(model) === index);
+// Keep the SIRE brain on models that are currently intended for the NVIDIA hosted API.
+// Do not allow stale Render environment variables to resurrect retired model IDs.
+const NVIDIA_MODELS = ['moonshotai/kimi-k3', 'deepseek-ai/deepseek-v4-flash-0731'];
 const NVIDIA_ENDPOINT = 'https://integrate.api.nvidia.com/v1/chat/completions';
 const NVIDIA_TIMEOUT_MS = 20000;
 const MAX_STEPS = 8;
