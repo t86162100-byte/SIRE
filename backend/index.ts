@@ -1,4 +1,4 @@
-import { router, json, error, db, secrets } from '@appdeploy/sdk';
+import { router, json, error, db } from '@appdeploy/sdk';
 
 type StoredTick = {
   symbol: string;
@@ -161,7 +161,7 @@ function openAITransportMessage(cause: unknown) {
 let openAIInFlight: Promise<unknown> | null = null;
 
 async function runOpenAIChatUnlocked(userQuery: string, symbol?: string, runtimeContext?: Record<string, unknown>, history: Array<{ role: string; text: string }> = []) {
-  const apiKey = await secrets.readSecret('NVIDIA_API_KEY');
+  const apiKey = process.env.NVIDIA_API_KEY;
   if (!apiKey) throw new Error('NVIDIA_API_KEY is not configured.');
   const messages: Array<Record<string, unknown>> = [
     { role: 'system', content: OPENAI_SYSTEM_INSTRUCTION },
@@ -572,8 +572,7 @@ async function gptTool(tool: string, args: Record<string, unknown>) {
 export const handler = router({
   'GET /api/sire/ai/status': [
     async () => {
-      const names = await secrets.listSecretNames();
-      return json({ ok: true, provider: 'NVIDIA', configured: names.includes('NVIDIA_API_KEY'), model: OPENAI_MODEL });
+      return json({ ok: true, provider: 'NVIDIA', configured: Boolean(process.env.NVIDIA_API_KEY), model: OPENAI_MODEL });
     },
   ],
   'POST /api/sire/agent/chat': [
