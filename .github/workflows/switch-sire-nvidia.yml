@@ -1,0 +1,233 @@
+name: Switch SIRE brain to NVIDIA
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/switch-sire-nvidia.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  switch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Rewrite SIRE AI provider
+        run: |
+          python3 <<'PY'
+          from pathlib import Path
+          import re
+
+          path = Path('backend/index.ts')
+          text = path.read_text()
+
+          text = text.replace(
+              "const OPENAI_MODEL = 'openai/gpt-5.6-luna';",
+              "const OPENAI_MODEL = 'nvidia/nemotron-3-super-120b-a12b';"
+          )
+
+          old_tools = re.compile(
+              r"const OPENAI_FUNCTION_TOOLS = SIRE_FUNCTIONS\.map\(tool => \(\{.*?\n\}\);",
+              re.S,
+          )
+          new_tools = '''const OPENAI_FUNCTION_TOOLS = SIRE_FUNCTIONS.map(tool => ({
+            type: 'function',
+            function: {
+              name: tool.name,
+              description: tool.description,
+              parameters: normalizeOpenAISchema(tool.parameters || { type: 'OBJECT', properties: {} }),
+            },
+          }));'''
+          text, count = old_tools.subn(new_tools, text, count=1)
+          if count != 1:
+              raise SystemExit('Could not locate SIRE tool definition block')
+
+          old_run = re.compile(
+              r"async function runOpenAIChatUnlocked\(.*?\n\}\n\nfunction isCasualGreeting",
+              re.S,
+          )
+          new_run = r'''async function runOpenAIChatUnlocked(userQuery: string, symbol?: string, runtimeContext?: Record<string, unknown>, history: Array<{ role: string; text: string }> = []) {
+            const apiKey = await secrets.readSecret('NVIDIA_API_KEY');
+            if (!apiKey) throw new Error('NVIDIA_API_KEY is not configured.');
+
+            const messages: Array<Record<string, unknown>> = [
+              { role: 'system', content: OPENAI_SYSTEM_INSTRUCTION },
+              ...history
+                .filter(item => item && typeof item.text === 'string')
+                .map(item => ({
+                  role: item.role === 'assistant' ? 'assistant' : 'user',
+                  content: item.text,
+                })),
+              {
+                role: 'user',
+                content: `${symbol ? `Current instrument: ${symbol}\\n` : ''}${runtimeContext ? `Current SIRE runtime context:\\n${JSON.stringify(runtimeContext)}\\n` : ''}\\nUser message:\\n${userQuery}`,
+              },
+            ];
+
+            let steps = 0;
+            const actions: Array<Record<string, unknown>> = [];
+            const normalizedQuery = userQuery.trim();
+
+            while (true) {
+              const requestBody: Record<string, unknown> = {
+                model: OPENAI_MODEL,
+                messages,
+                tools: OPENAI_FUNCTION_TOOLS,
+                tool_choice: 'auto',
+                temperature: 1,
+                top_p: 0.95,
+                max_tokens: 8192,
+                chat_template_kwargs: {
+                  enable_thinking: true,
+                  force_nonempty_content: true,
+                },
+              };
+
+              let response: Response | null = null;
+              let payload: Record<string, unknown> = {};
+              let lastTransportError: unknown = null;
+              const maxAttempts = 6;
+
+              for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+                try {
+                  response = await fetch('https://integrate.api.nvidia.com/v1/chat/completions', {
+                    method: 'POST',
+                    headers: {
+                      'Content-Type': 'application/json',
+                      Authorization: `Bearer ${apiKey}`,
+                    },
+                    body: JSON.stringify(requestBody),
+                    signal: AbortSignal.timeout(120000),
+                  });
+                  const raw = await response.text();
+                  try {
+                    payload = raw ? JSON.parse(raw) as Record<string, unknown> : {};
+                  } catch {
+                    payload = { raw: raw.slice(0, 2000) };
+                  }
+                  if (response.ok) break;
+                  const retryable = [408, 425, 429, 500, 502, 503, 504].includes(response.status);
+                  if (!retryable || attempt === maxAttempts - 1) break;
+                  await new Promise(resolve => setTimeout(resolve, openAIRetryDelayMs(response, attempt)));
+                } catch (cause) {
+                  lastTransportError = cause;
+                  response = null;
+                  if (attempt === maxAttempts - 1) {
+                    throw new Error(`NVIDIA connection failed after ${maxAttempts} attempts: ${openAITransportMessage(cause)}`);
+                  }
+                  await new Promise(resolve => setTimeout(resolve, openAIRetryDelayMs(null, attempt)));
+                }
+              }
+
+              if (!response) throw new Error(`NVIDIA connection failed after ${maxAttempts} attempts: ${openAITransportMessage(lastTransportError)}`);
+              if (!response.ok) {
+                const apiError = payload.error as Record<string, unknown> | undefined;
+                const detail = apiError?.message ? String(apiError.message) : JSON.stringify(payload).slice(0, 2000);
+                if (response.status === 429) {
+                  throw new Error(`NVIDIA rate limit remained active after ${maxAttempts} attempts. ${detail} Please retry shortly.`);
+                }
+                if ([408, 502, 503, 504].includes(response.status)) {
+                  throw new Error(`NVIDIA temporary service/network error (${response.status}) after ${maxAttempts} attempts. ${detail} Please retry shortly.`);
+                }
+                throw new Error(`NVIDIA HTTP ${response.status}: ${detail}`);
+              }
+
+              const choice = Array.isArray(payload.choices) ? payload.choices[0] as Record<string, unknown> | undefined : undefined;
+              const message = choice?.message as Record<string, unknown> | undefined;
+              const content = typeof message?.content === 'string' ? message.content.trim() : '';
+              const toolCalls = Array.isArray(message?.tool_calls) ? message.tool_calls as Array<Record<string, unknown>> : [];
+
+              if (!toolCalls.length) {
+                const text = content || (actions.length
+                  ? 'Done — I completed that action. What would you like to do next?'
+                  : `I’m here. ${normalizedQuery ? 'Tell me more about what you’re thinking.' : 'What’s on your mind?'}`);
+                return {
+                  text,
+                  steps,
+                  model: OPENAI_MODEL,
+                  responseId: typeof payload.id === 'string' ? payload.id : '',
+                  mode: actions.length ? 'action' : 'discussion',
+                  actions,
+                };
+              }
+
+              if (steps + toolCalls.length > OPENAI_MAX_STEPS) {
+                throw new Error(`Exceeded maximum SIRE tool steps limit (${OPENAI_MAX_STEPS}).`);
+              }
+
+              const assistantToolMessage: Record<string, unknown> = {
+                role: 'assistant',
+                content: content || '',
+                tool_calls: toolCalls,
+              };
+              messages.push(assistantToolMessage);
+
+              for (const call of toolCalls) {
+                const callId = String(call.id || '');
+                const fn = call.function as Record<string, unknown> | undefined;
+                const name = String(fn?.name || '');
+                let args: Record<string, unknown> = {};
+                try {
+                  args = JSON.parse(String(fn?.arguments || '{}')) as Record<string, unknown>;
+                } catch {
+                  args = {};
+                }
+
+                try {
+                  const result = await openAIToolArgs(name, args, runtimeContext);
+                  if (result && typeof result === 'object' && '__sireAction' in result) {
+                    actions.push(result as Record<string, unknown>);
+                  }
+                  messages.push({
+                    role: 'tool',
+                    tool_call_id: callId,
+                    content: JSON.stringify(result),
+                  });
+                } catch (cause) {
+                  messages.push({
+                    role: 'tool',
+                    tool_call_id: callId,
+                    content: JSON.stringify({ error: cause instanceof Error ? cause.message : String(cause) }),
+                  });
+                }
+                steps += 1;
+              }
+            }
+          }
+
+          function isCasualGreeting'''
+          text, count = old_run.subn(new_run, text, count=1)
+          if count != 1:
+              raise SystemExit('Could not locate SIRE chat function')
+
+          replacements = {
+              "const names = await secrets.listSecretNames();\n      return json({ ok: true, provider: 'BazaarLink', configured: names.includes('BAZAARLINK_API_KEY'), model: OPENAI_MODEL });":
+              "const names = await secrets.listSecretNames();\n      return json({ ok: true, provider: 'NVIDIA', configured: names.includes('NVIDIA_API_KEY'), model: OPENAI_MODEL });",
+              "provenance: 'BazaarLink GPT-5.6 Luna intelligence operating inside the SIRE environment'":
+              "provenance: 'NVIDIA Nemotron 3 Super intelligence operating inside the SIRE environment'",
+              "if (message.includes('BAZAARLINK_API_KEY')) return error('SIRE brain is not configured. Add BAZAARLINK_API_KEY to this SIRE app.', 503);":
+              "if (message.includes('NVIDIA_API_KEY')) return error('SIRE brain is not configured. Add NVIDIA_API_KEY to this SIRE app.', 503);",
+              "const statusMatch = message.match(/(?:BazaarLink|OpenAI) (?:HTTP |temporary service\\/network error \\( |rate limit remained active )(?:(408|425|429|500|502|503|504))/);":
+              "const statusMatch = message.match(/(?:NVIDIA|OpenAI) (?:HTTP |temporary service\\/network error \\( |rate limit remained active )(?:(408|425|429|500|502|503|504))/);",
+              "if (message.includes('BAZAARLINK_API_KEY')) return error('BazaarLink is not configured. Add BAZAARLINK_API_KEY to this SIRE app.', 503);":
+              "if (message.includes('NVIDIA_API_KEY')) return error('NVIDIA is not configured. Add NVIDIA_API_KEY to this SIRE app.', 503);",
+          }
+          for old, new in replacements.items():
+              text = text.replace(old, new)
+
+          text = text.replace('return { text, steps, model: OPENAI_MODEL, responseId, mode: actions.length ? \'action\' : \'discussion\', actions };', 'return { text, steps, model: OPENAI_MODEL, responseId, mode: actions.length ? \'action\' : \'discussion\', actions };')
+          path.write_text(text)
+          PY
+
+      - name: Commit NVIDIA migration
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add backend/index.ts
+          git diff --cached --quiet && exit 0
+          git commit -m "Use NVIDIA Nemotron for SIRE intelligence"
+          git push
