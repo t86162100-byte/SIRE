@@ -1,0 +1,57 @@
+# Tests
+
+## Test 1 - Automatically discover and persist the complete active Deriv catalogue [sanity]
+Viewport: desktop
+Covers: automatic instrument discovery, Deriv active_symbols retrieval, complete catalogue persistence, no manual instrument selection required
+Description: Verifies SIRE discovers the active Deriv market catalogue on load and persists the discovered instruments for whole-environment access.
+Steps:
+1. Open SIRE and allow the initial Deriv connection to complete
+2. Wait for the market catalogue discovery status to show the discovered active-market count
+3. Refresh SIRE
+4. Open the instrument selector and confirm Synthetic Index instruments are available without manually entering a symbol
+Expected: SIRE automatically connects to Deriv, reports a discovered active-market count, retains the catalogue through the backend, and the Synthetic Index selector remains populated.
+
+## Test 2 - Preserve discovered metadata while filtering the chart view
+Viewport: desktop
+Covers: full catalogue capture, instrument metadata normalization, Synthetic Index presentation filter, autonomous catalogue persistence
+Description: Verifies SIRE retains the complete active-symbol records while the existing chart UI continues to present its Synthetic Index subset.
+Steps:
+1. Open SIRE after automatic discovery completes
+2. Search for a known Synthetic Index in the instrument selector
+3. Select the matching Synthetic Index
+4. Confirm the chart identifies the selected symbol and Deriv as its source
+Expected: The selected Synthetic Index is available from the discovered catalogue, its symbol/name metadata are intact, and selecting it does not require a separate manual catalogue import.
+
+## Test 3 - Persist acquired Deriv history across reload
+Viewport: desktop
+Covers: historical tick acquisition, persistent historical storage, durable coverage metadata, history retrieval after refresh
+Description: Verifies acquired Deriv ticks are stored by the backend and remain available after the SIRE page is refreshed.
+Steps:
+1. Open SIRE and select a Synthetic Index
+2. Use the HISTORY control to acquire historical ticks
+3. Confirm the persistent tick count increases in the chart status bar
+4. Refresh SIRE
+5. Select the same Synthetic Index
+Expected: The acquired history remains available after refresh, the persistent count is retained, and the returned history is chronological rather than regenerated from the current chart stream.
+
+## Test 4 - Avoid duplicate historical ticks during repeated acquisition
+Viewport: mobile
+Covers: idempotent historical ingestion, tick-level deduplication, persistent count integrity, repeated acquisition
+Description: Verifies repeating an overlapping historical acquisition does not inflate the persistent tick count with duplicate records.
+Steps:
+1. Open SIRE and select a Synthetic Index
+2. Acquire a historical tick range
+3. Record the persistent tick count shown in the status bar
+4. Acquire the same or overlapping historical range again
+5. Refresh SIRE
+Expected: The persistent count does not increase by the number of already stored ticks, and the visible historical series contains no duplicate timestamp-and-quote records.
+
+## Test 5 - Chat naturally and survive a provider outage
+Viewport: mobile
+Covers: SIRE conversation handling, casual greeting path, Gemini transient-service resilience, user-visible AI response
+Description: Verifies a normal greeting is treated as conversation rather than a research task and does not depend on Gemini being available, while transient Gemini outages are retried for substantive requests.
+Steps:
+1. Open SIRE and send "Hey"
+2. Send a substantive question after the greeting
+3. If Gemini temporarily returns a 503/502/504 for the substantive question, wait for SIRE's automatic retry handling
+Expected: SIRE immediately responds naturally to "Hey" and does not show a 503 error; substantive questions use Gemini and transient 5xx failures are retried before an error is shown.
