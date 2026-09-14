@@ -4,10 +4,11 @@ import { readFile, stat } from 'node:fs/promises';
 import { extname, join, normalize } from 'node:path';
 import { WebSocketServer } from 'ws';
 
-// Normalize OpenRouter credentials before importing the AI council. The council
-// reads process.env.OPENROUTER_API_KEY during request handling, and Render may
-// expose the configured secret under a legacy alias.
+// Normalize OpenRouter credentials and install the native HTTPS transport before
+// importing the AI council. This guarantees the Authorization header is attached
+// directly to requests sent to OpenRouter and avoids any fetch transport behavior.
 await import('./backend/openrouter-env.mjs');
+await import('./backend/openrouter-native-fetch.mjs');
 
 const { handler } = await import('./backend/openrouter-team.ts');
 import { ws } from './compat/appdeploy-sdk/index.js';
