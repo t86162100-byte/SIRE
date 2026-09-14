@@ -172,7 +172,7 @@ async function runOpenAIChatUnlocked(userQuery: string, symbol?: string, runtime
   const actions: Array<Record<string, unknown>> = [];
   const normalizedQuery = userQuery.trim();
   while (true) {
-    const requestBody: Record<string, unknown> = { model: OPENAI_MODEL, messages, tools: OPENAI_FUNCTION_TOOLS, tool_choice: 'auto', temperature: 1, top_p: 0.95, max_tokens: 8192, chat_template_kwargs: { enable_thinking: true, force_nonempty_content: true } };
+    const requestBody: Record<string, unknown> = { model: OPENAI_MODEL, messages, tools: OPENAI_FUNCTION_TOOLS, tool_choice: 'auto', temperature: 1, top_p: 0.95, max_tokens: 8192 };
     let response: Response | null = null;
     let payload: Record<string, unknown> = {};
     let lastTransportError: unknown = null;
