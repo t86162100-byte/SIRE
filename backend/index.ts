@@ -1,4 +1,5 @@
 import { router, json, error, db } from '@appdeploy/sdk';
+import { ensureDerivHistory, analyzeM30Trend, autonomousEnvironmentAudit } from './sire-autonomy';
 
 type StoredTick = {
   symbol: string;
@@ -100,6 +101,8 @@ const SIRE_FUNCTIONS = [
   { name: 'select_instrument', description: 'Action: change the SIRE chart to a specific instrument. Use when the user explicitly asks to switch/select an instrument, or when autonomously choosing the most relevant instrument is necessary to fulfill an explicit task that did not name one. Never switch merely during casual conversation.', parameters: { type: 'OBJECT', properties: { symbol: { type: 'STRING' } }, required: ['symbol'] } },
   { name: 'set_chart_view', description: 'Action: change chart view settings requested by the user. Use only for explicit chart-control requests.', parameters: { type: 'OBJECT', properties: { chartMode: { type: 'STRING', description: 'candles, line, or ticks' }, timeframe: { type: 'STRING' }, zoom: { type: 'NUMBER' }, autoScale: { type: 'BOOLEAN' }, showCrosshair: { type: 'BOOLEAN' } } } },
   { name: 'add_chart_marker', description: 'Action: place a marker at the current chart inspection/crosshair point. Use only when the user explicitly asks to mark the current point.', parameters: { type: 'OBJECT', properties: { label: { type: 'STRING' } } } },
+  { name: 'ensure_market_data', description: 'Autonomously acquire missing historical Deriv tick data for any catalogue instrument. Use this before technical analysis when persisted coverage is insufficient. Never require the user to select the market in the UI first.', parameters: { type: 'OBJECT', properties: { symbol: { type: 'STRING' }, ticks: { type: 'NUMBER' } }, required: ['symbol'] } },
+  { name: 'analyze_m30_trend', description: 'Autonomously ensure enough Deriv history exists, construct M30 candles and return an evidence-based trend assessment. Use for requests such as checking the M30 trend of Boom 1000.', parameters: { type: 'OBJECT', properties: { symbol: { type: 'STRING' }, candles: { type: 'NUMBER' } }, required: ['symbol'] } },
 ];
 
 function normalizeOpenAISchema(value: unknown): unknown {
@@ -151,6 +154,8 @@ function openAIToolArgs(name: string, args: Record<string, unknown>, runtimeCont
   if (name === 'select_instrument') return { __sireAction: 'select_instrument', symbol: String(args.symbol || '').trim(), reason: 'The user explicitly requested the instrument or the instrument was autonomously selected as necessary to fulfill an explicit task.' };
   if (name === 'set_chart_view') return { __sireAction: 'set_chart_view', settings: args, reason: 'User explicitly requested a chart-view change.' };
   if (name === 'add_chart_marker') return { __sireAction: 'add_chart_marker', label: String(args.label || 'SIRE marker') };
+  if (name === 'ensure_market_data') return ensureDerivHistory(String(args.symbol || '').trim(), Number(args.ticks || 10000));
+  if (name === 'analyze_m30_trend') return analyzeM30Trend(String(args.symbol || '').trim(), Number(args.candles || 250));
   throw new Error(`Unknown SIRE function: ${name}`);
 }
 
@@ -648,6 +653,26 @@ export const handler = router({
         return error(cause instanceof Error ? cause.message : String(cause), 400);
       }
     },
+  ],
+  'POST /api/sire/data/ensure': [
+    async ({ body }) => {
+      const payload = (body || {}) as Record<string, unknown>;
+      const symbol = String(payload.symbol || '').trim();
+      if (!symbol) return error('symbol is required', 400);
+      try { return json({ ok: true, ...(await ensureDerivHistory(symbol, Number(payload.ticks || 10000))) }); }
+      catch (cause) { return error(cause instanceof Error ? cause.message : String(cause), 502); }
+    },
+  ],
+  'GET /api/sire/data/m30-trend': [
+    async ({ query }) => {
+      const symbol = String(query.symbol || '').trim();
+      if (!symbol) return error('symbol is required', 400);
+      try { return json({ ok: true, ...(await analyzeM30Trend(symbol, Number(query.candles || 250))) }); }
+      catch (cause) { return error(cause instanceof Error ? cause.message : String(cause), 502); }
+    },
+  ],
+  'GET /api/sire/environment/audit': [
+    async () => json({ ok: true, ...(await autonomousEnvironmentAudit()) }),
   ],
   'GET /api/_healthcheck': [
     async () => json({ ok: true, source: 'Deriv', part: 1 }),
