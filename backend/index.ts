@@ -40,7 +40,7 @@ const STORAGE_VERSION = '1C';
 const RESEARCH_TABLE = 'sire_research_experiments_v1';
 const CATALOGUE_TABLE = 'sire_catalogue_v1';
 const AI_MODELS = [
-  { id: 'moonshotai/kimi-k2.6', name: 'Kimi K2.6', thinking: true },
+  { id: 'moonshotai/kimi-k3', name: 'Kimi K3', thinking: true },
   { id: 'deepseek-ai/deepseek-v4-pro-0813', name: 'DeepSeek V4 Pro', reasoning_effort: 'max' },
 ] as const;
 const OPENAI_MODEL = AI_MODELS[0].id;
@@ -649,7 +649,7 @@ export const handler = router({
       if (!query) return error('query is required', 400);
       try {
         const result = await runSIREConversation(query, symbol, runtimeContext, history);
-        return json({ ok: true, ...result, provenance: 'NVIDIA-hosted Kimi K2.6 with DeepSeek V4 Pro fallback operating inside the SIRE environment' });
+        return json({ ok: true, ...result, provenance: 'NVIDIA-hosted Kimi K3 with DeepSeek V4 Pro fallback operating inside the SIRE environment' });
       } catch (cause) {
         const message = cause instanceof Error ? cause.message : String(cause);
         if (message.includes('NVIDIA_API_KEY')) return error('SIRE brain is not configured. Add NVIDIA_API_KEY to this SIRE app.', 503);
@@ -669,7 +669,7 @@ export const handler = router({
       if (!query) return error('query is required', 400);
       try {
         const result = await runSIREConversation(query, symbol, runtimeContext, history);
-        return json({ ok: true, ...result, provenance: 'NVIDIA-hosted Kimi K2.6 with DeepSeek V4 Pro fallback operating inside the SIRE environment' });
+        return json({ ok: true, ...result, provenance: 'NVIDIA-hosted Kimi K3 with DeepSeek V4 Pro fallback operating inside the SIRE environment' });
       } catch (cause) {
         const message = cause instanceof Error ? cause.message : String(cause);
         if (message.includes('NVIDIA_API_KEY')) return error('NVIDIA is not configured. Add NVIDIA_API_KEY to this SIRE app.', 503);
