@@ -5,6 +5,7 @@ import './index.css';
 import './mobile.css';
 import './tabNavigation';
 import './chartToolbarCleanup';
+import './removeMobileChartControls';
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
