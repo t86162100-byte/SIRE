@@ -17,10 +17,15 @@ export type ConnectorDefinition = {
 
 const CONNECTOR_TABLE = 'sire_connectors_v1';
 const JOB_TABLE = 'sire_agent_jobs_v1';
+
+// Public SearXNG instances can rate-limit automated traffic. Keep several
+// independent fallbacks and allow Render env configuration through
+// SIRE_SEARXNG_URLS. A 429 is treated as an instance failure and SIRE moves on.
 const DEFAULT_SEARXNG_INSTANCES = [
+  'https://searx.debnerd.in',
+  'https://search.wdpserver.com',
   'https://searx.tiekoetter.com',
   'https://searx.rhscz.eu',
-  'https://search.mdosch.de',
 ];
 
 function envJson<T>(name: string, fallback: T): T {
@@ -82,8 +87,11 @@ export async function webSearch(query: string, limit = 8) {
       url.searchParams.set('language', 'en');
       const response = await fetch(url, {
         method: 'GET',
-        headers: { accept: 'application/json', 'user-agent': 'SIRE-Agent/1.0' },
-        signal: AbortSignal.timeout(12000),
+        headers: {
+          accept: 'application/json',
+          'user-agent': 'SIRE-Agent/1.0 (+https://sire-rwv9.onrender.com)',
+        },
+        signal: AbortSignal.timeout(10000),
       });
       if (!response.ok) {
         lastError = `${baseUrl}: HTTP ${response.status}`;
@@ -91,6 +99,10 @@ export async function webSearch(query: string, limit = 8) {
       }
       const data = await response.json() as Record<string, unknown>;
       const results = Array.isArray(data.results) ? data.results : [];
+      if (!results.length) {
+        lastError = `${baseUrl}: no results`;
+        continue;
+      }
       return {
         query,
         provider: 'SearXNG',
