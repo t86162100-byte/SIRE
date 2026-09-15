@@ -44,11 +44,6 @@ const DATA_PAGE_LIMIT = 100;
 const PAPER_TABLE = 'sire_paper_trades_v1';
 const DATA_MAX_PAGES = 120;
 
-const BACKTEST_MAX_TICKS = 100000;
-const DATA_PAGE_LIMIT = 100;
-const PAPER_TABLE = 'sire_paper_trades_v1';
-const DATA_MAX_PAGES = 120;
-
 type StrategySpec = { signal?: 'reversal_after_streak' | 'momentum_after_streak' | 'direction'; streakLength?: number; direction?: 'long' | 'short' | 'both'; exitTicks?: number; stopLoss?: number; takeProfit?: number; stake?: number; exposure?: number; spread?: number; slippage?: number; delayTicks?: number };
 
 function strategySignal(diff: number[], index: number, strategy: StrategySpec) {
