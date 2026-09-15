@@ -1,222 +1,31 @@
 const STYLE_ID = 'sire-tab-navigation-style';
 const NAV_ID = 'sire-bottom-tabs';
-
 type Tab = 'sire' | 'chart' | 'quote';
-
 function injectStyles() {
   if (document.getElementById(STYLE_ID)) return;
-  const style = document.createElement('style');
-  style.id = STYLE_ID;
+  const style = document.createElement('style'); style.id = STYLE_ID;
   style.textContent = `
-    /* Keep every tab surface independent from the page behind it. */
-    .sire-tab-mode .symbol-sidebar { display: none !important; }
-    .sire-tab-mode .chart-terminal { width: 100% !important; }
-
-    /* Market-tab cleanup: remove the complete old chart header controls. */
-    .sire-tab-mode .terminal-topbar .instrument-picker,
-    .sire-tab-mode .terminal-topbar .live-state,
-    .sire-tab-mode .chart-subbar,
-    .sire-tab-mode .research-controls,
-    .sire-tab-mode button[title="Open GPT research laboratory"] { display: none !important; }
-
-    .sire-tab-quote .terminal-body { display: block !important; padding-bottom: 108px !important; }
-    .sire-tab-quote .chart-terminal { display: none !important; }
-    .sire-tab-quote .symbol-sidebar { display: flex !important; width: 100% !important; height: calc(100vh - 132px) !important; border-right: 0 !important; padding: 16px 16px 108px !important; box-sizing: border-box; }
-    .sire-tab-quote .sidebar-search { max-width: 760px; width: 100%; margin: 0 auto 12px; }
-    .sire-tab-quote .sidebar-meta { max-width: 760px; width: 100%; margin: 0 auto 10px; }
-    .sire-tab-quote .symbol-list { width: 100%; max-width: 760px; margin: 0 auto; display: grid !important; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px; overflow-y: auto; align-content: start; padding-bottom: 8px; }
-    .sire-tab-quote .symbol-row { min-height: 82px; padding: 14px !important; border: 1px solid rgba(255,255,255,.08); border-radius: 14px; background: rgba(255,255,255,.025); text-align: left; }
-    .sire-tab-quote .symbol-row.active { border-color: rgba(255,255,255,.72); background: rgba(255,255,255,.07); box-shadow: 0 0 18px rgba(255,255,255,.08); }
-    .sire-tab-quote .catalogue-refresh { width: min(760px, 100%); margin: 12px auto 0; }
-
-    /* SIRE is intentionally clean: no duplicate instrument title or cancel control. */
-    .sire-chat-only-header .sire-chat-context,
-    .sire-chat-only-header .sire-chat-only-close { display: none !important; }
-
-    /* Keep the composer fully above the three primary tabs by default. */
-    .sire-chat-only-composer {
-      bottom: 62px !important;
-      transition: transform .22s ease, opacity .22s ease;
+    .sire-tab-mode .symbol-sidebar{display:none!important}.sire-tab-mode .chart-terminal{width:100%!important}
+    .sire-tab-mode .terminal-topbar .instrument-picker,.sire-tab-mode .terminal-topbar .live-state,.sire-tab-mode .chart-subbar,.sire-tab-mode .research-controls,.sire-tab-mode button[title="Open GPT research laboratory"]{display:none!important}
+    .sire-tab-quote .terminal-body{display:block!important;padding-bottom:108px!important}.sire-tab-quote .chart-terminal{display:none!important}.sire-tab-quote .symbol-sidebar{display:flex!important;width:100%!important;height:calc(100vh - 132px)!important;border-right:0!important;padding:16px 16px 108px!important;box-sizing:border-box}.sire-tab-quote .sidebar-search{max-width:760px;width:100%;margin:0 auto 12px}.sire-tab-quote .sidebar-meta{max-width:760px;width:100%;margin:0 auto 10px}.sire-tab-quote .symbol-list{width:100%;max-width:760px;margin:0 auto;display:grid!important;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px;overflow-y:auto;align-content:start;padding-bottom:8px}.sire-tab-quote .symbol-row{min-height:82px;padding:14px!important;border:1px solid rgba(255,255,255,.08);border-radius:14px;background:rgba(255,255,255,.025);text-align:left}.sire-tab-quote .symbol-row.active{border-color:rgba(255,255,255,.72);background:rgba(255,255,255,.07);box-shadow:0 0 18px rgba(255,255,255,.08)}.sire-tab-quote .catalogue-refresh{width:min(760px,100%);margin:12px auto 0}
+    .sire-chat-only-header .sire-chat-context,.sire-chat-only-header .sire-chat-only-close{display:none!important}.sire-chat-only-composer{bottom:62px!important;transition:transform .22s ease,opacity .22s ease}.sire-chat-only-composer.is-scroll-hidden{transform:translateY(calc(100% + 22px))!important;opacity:0!important;pointer-events:none!important}
+    #${NAV_ID}{position:fixed;z-index:9999;left:50%;right:auto;bottom:max(6px,env(safe-area-inset-bottom));transform:translateX(-50%);display:flex;align-items:center;justify-content:center;gap:10px;padding:0;margin:0;pointer-events:none;background:transparent;border:0}#${NAV_ID} button{pointer-events:auto;min-width:86px;height:46px;padding:0 17px;border:1px solid rgba(255,255,255,.32);border-radius:999px;background:rgba(20,22,28,.34);color:rgba(255,255,255,.72);-webkit-backdrop-filter:blur(18px) saturate(125%);backdrop-filter:blur(18px) saturate(125%);box-shadow:0 7px 22px rgba(0,0,0,.22),inset 0 0 0 1px rgba(255,255,255,.035),0 0 12px rgba(255,255,255,.035);font:700 11px/1 system-ui,sans-serif;letter-spacing:.09em;display:inline-flex;align-items:center;justify-content:center;gap:7px;cursor:pointer;touch-action:manipulation;-webkit-tap-highlight-color:transparent}#${NAV_ID} button.active{color:#fff;border-color:rgba(255,255,255,.9);background:rgba(255,255,255,.08);box-shadow:0 8px 26px rgba(0,0,0,.24),inset 0 0 0 1px rgba(255,255,255,.08),0 0 22px rgba(255,255,255,.18)}#${NAV_ID} .tab-icon{font-size:15px;line-height:1;opacity:.9}.sire-tab-mode .terminal-body{padding-bottom:82px!important}.sire-chat-only{padding-bottom:82px!important;box-sizing:border-box}
+    @media(max-width:520px){
+      html,body,#root{margin:0!important;padding:0!important;min-height:100%!important;background:#000!important}
+      .sire-tab-mode.sire-chart-tab .terminal-shell,.sire-tab-mode.sire-chart-tab .terminal-body,.sire-tab-mode.sire-chart-tab .chart-terminal,.sire-tab-mode.sire-chart-tab .chart-stage{position:fixed!important;top:0!important;left:0!important;right:0!important;bottom:0!important;width:100%!important;height:100dvh!important;min-height:100dvh!important;margin:0!important;padding:0!important;box-sizing:border-box!important;transform:none!important}
+      .sire-tab-mode.sire-chart-tab .terminal-shell{overflow:hidden!important;border:0!important;border-radius:0!important}
+      .sire-tab-mode.sire-chart-tab .terminal-body{overflow:hidden!important}
+      .sire-tab-mode.sire-chart-tab .chart-terminal,.sire-tab-mode.sire-chart-tab .chart-stage,.sire-tab-mode.sire-chart-tab .chart-area,.sire-tab-mode.sire-chart-tab .chart-container{background:#000!important}
+      .sire-tab-mode.sire-chart-tab .chart-terminal{z-index:1!important}
+      #${NAV_ID}{gap:7px;bottom:max(6px,env(safe-area-inset-bottom));width:calc(100vw - 28px)}#${NAV_ID} button{flex:1 1 0;min-width:0;height:44px;padding:0 10px}.sire-chat-only-composer{bottom:60px!important}
     }
-    /* While the user scrolls down, let the composer travel behind the tab bar and off-screen. */
-    .sire-chat-only-composer.is-scroll-hidden {
-      transform: translateY(calc(100% + 22px)) !important;
-      opacity: 0 !important;
-      pointer-events: none !important;
-    }
-
-    /* The navigation itself has no hit-area/container except for its three buttons. */
-    #${NAV_ID} {
-      position: fixed;
-      z-index: 9999;
-      left: 50%;
-      right: auto;
-      bottom: max(6px, env(safe-area-inset-bottom));
-      transform: translateX(-50%);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: 10px;
-      padding: 0;
-      margin: 0;
-      pointer-events: none;
-      background: transparent;
-      border: 0;
-      backdrop-filter: none;
-    }
-    #${NAV_ID} button {
-      pointer-events: auto;
-      min-width: 86px;
-      height: 46px;
-      padding: 0 17px;
-      border: 1px solid rgba(255,255,255,.32);
-      border-radius: 999px;
-      background: rgba(20,22,28,.34);
-      color: rgba(255,255,255,.72);
-      -webkit-backdrop-filter: blur(18px) saturate(125%);
-      backdrop-filter: blur(18px) saturate(125%);
-      box-shadow: 0 7px 22px rgba(0,0,0,.22), inset 0 0 0 1px rgba(255,255,255,.035), 0 0 12px rgba(255,255,255,.035);
-      font: 700 11px/1 system-ui,sans-serif;
-      letter-spacing: .09em;
-      display: inline-flex;
-      flex-direction: row;
-      align-items: center;
-      justify-content: center;
-      gap: 7px;
-      cursor: pointer;
-      transition: border-color .18s ease, color .18s ease, background .18s ease, box-shadow .18s ease, transform .18s ease;
-      touch-action: manipulation;
-      -webkit-tap-highlight-color: transparent;
-    }
-    #${NAV_ID} button:hover { border-color: rgba(255,255,255,.56); color: #fff; background: rgba(28,30,36,.44); }
-    #${NAV_ID} button:active { transform: translateY(1px) scale(.98); }
-    #${NAV_ID} button.active {
-      color: #fff;
-      border-color: rgba(255,255,255,.9);
-      background: rgba(255,255,255,.08);
-      box-shadow: 0 8px 26px rgba(0,0,0,.24), inset 0 0 0 1px rgba(255,255,255,.08), 0 0 22px rgba(255,255,255,.18);
-    }
-    #${NAV_ID} .tab-icon { font-size: 15px; line-height: 1; opacity: .9; }
-
-    /* Keep the bottom composer/content above the floating controls. */
-    .sire-tab-mode .terminal-body { padding-bottom: 82px !important; }
-    .sire-chat-only { padding-bottom: 82px !important; box-sizing: border-box; }
-
-    @media (max-width: 520px) {
-      /* Chart tab: the chart starts at the highest possible app level. */
-      .sire-tab-mode.sire-chart-tab .terminal-shell,
-      .sire-tab-mode.sire-chart-tab .terminal-body,
-      .sire-tab-mode.sire-chart-tab .chart-terminal,
-      .sire-tab-mode.sire-chart-tab .chart-stage {
-        position: fixed !important;
-        top: 0 !important;
-        left: 0 !important;
-        right: 0 !important;
-        bottom: 0 !important;
-        width: 100% !important;
-        height: 100dvh !important;
-        min-height: 100dvh !important;
-        margin: 0 !important;
-        padding: 0 !important;
-        box-sizing: border-box !important;
-      }
-      /* True black chart surface instead of the previous dim blue-gray. */
-      .sire-tab-mode.sire-chart-tab,
-      .sire-tab-mode.sire-chart-tab .terminal-shell,
-      .sire-tab-mode.sire-chart-tab .terminal-body,
-      .sire-tab-mode.sire-chart-tab .chart-terminal,
-      .sire-tab-mode.sire-chart-tab .chart-stage,
-      .sire-tab-mode.sire-chart-tab .chart-area,
-      .sire-tab-mode.sire-chart-tab .chart-container {
-        background: #000 !important;
-      }
-      .sire-tab-mode.sire-chart-tab .chart-terminal { z-index: 1 !important; }
-      #${NAV_ID} { gap: 7px; bottom: max(6px, env(safe-area-inset-bottom)); width: calc(100vw - 28px); }
-      #${NAV_ID} button { flex: 1 1 0; min-width: 0; height: 44px; padding: 0 10px; }
-      .sire-chat-only-composer { bottom: 60px !important; }
-    }
-
-    @media (min-width: 800px) {
-      #${NAV_ID} { gap: 12px; }
-      #${NAV_ID} button { min-width: 94px; height: 48px; }
-    }
-  `;
-  document.head.appendChild(style);
+    @media(min-width:800px){#${NAV_ID}{gap:12px}#${NAV_ID} button{min-width:94px;height:48px}}
+  `; document.head.appendChild(style);
 }
-
-function findSireOpenButton() {
-  return Array.from(document.querySelectorAll('button')).find(button => button.getAttribute('title') === 'Open GPT research laboratory') as HTMLButtonElement | undefined;
-}
-
-function findChatCloseButton() {
-  return document.querySelector('.sire-chat-only-close') as HTMLButtonElement | null;
-}
-
-function wireChatComposer() {
-  const messages = document.querySelector('.sire-chat-only-messages') as HTMLElement | null;
-  const composer = document.querySelector('.sire-chat-only-composer') as HTMLElement | null;
-  if (!messages || !composer || composer.dataset.scrollWired === 'true') return;
-
-  composer.dataset.scrollWired = 'true';
-  composer.classList.remove('is-scroll-hidden');
-  let previousTop = messages.scrollTop;
-  messages.addEventListener('scroll', () => {
-    const nextTop = messages.scrollTop;
-    const delta = nextTop - previousTop;
-    if (Math.abs(delta) >= 4) {
-      composer.classList.toggle('is-scroll-hidden', delta > 0 && nextTop > 12);
-      previousTop = nextTop;
-    }
-  }, { passive: true });
-}
-
-function setTab(tab: Tab) {
-  const root = document.getElementById('root');
-  const nav = document.getElementById(NAV_ID);
-  if (!root || !nav) return;
-
-  root.classList.toggle('sire-tab-mode', tab !== 'quote');
-  root.classList.toggle('sire-tab-quote', tab === 'quote');
-  root.classList.toggle('sire-chart-tab', tab === 'chart');
-  nav.querySelectorAll('button').forEach(button => button.classList.toggle('active', button.dataset.tab === tab));
-
-  if (tab === 'sire') {
-    findSireOpenButton()?.click();
-    window.setTimeout(wireChatComposer, 0);
-  } else {
-    findChatCloseButton()?.click();
-  }
-}
-
-function mountNavigation() {
-  injectStyles();
-  if (document.getElementById(NAV_ID)) return;
-
-  const nav = document.createElement('nav');
-  nav.id = NAV_ID;
-  nav.setAttribute('aria-label', 'Primary navigation');
-  const tabs: Array<[Tab, string, string]> = [
-    ['sire', '✦', 'SIRE'],
-    ['chart', '⌁', 'CHART'],
-    ['quote', '▦', 'QUOTE'],
-  ];
-  tabs.forEach(([tab, icon, label]) => {
-    const button = document.createElement('button');
-    button.type = 'button';
-    button.dataset.tab = tab;
-    button.innerHTML = `<span class="tab-icon">${icon}</span><span>${label}</span>`;
-    button.addEventListener('click', () => setTab(tab));
-    nav.appendChild(button);
-  });
-  document.body.appendChild(nav);
-  setTab('chart');
-}
-
-if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', mountNavigation, { once: true });
-else mountNavigation();
-
-const observer = new MutationObserver(() => {
-  if (!document.getElementById(NAV_ID)) mountNavigation();
-  if (document.querySelector('.sire-chat-only-composer')) wireChatComposer();
-});
-observer.observe(document.documentElement, { childList: true, subtree: true });
+function findSireOpenButton(){return Array.from(document.querySelectorAll('button')).find(button=>button.getAttribute('title')==='Open GPT research laboratory') as HTMLButtonElement|undefined}
+function findChatCloseButton(){return document.querySelector('.sire-chat-only-close') as HTMLButtonElement|null}
+function wireChatComposer(){const messages=document.querySelector('.sire-chat-only-messages') as HTMLElement|null,composer=document.querySelector('.sire-chat-only-composer') as HTMLElement|null;if(!messages||!composer||composer.dataset.scrollWired==='true')return;composer.dataset.scrollWired='true';composer.classList.remove('is-scroll-hidden');let previousTop=messages.scrollTop;messages.addEventListener('scroll',()=>{const nextTop=messages.scrollTop,delta=nextTop-previousTop;if(Math.abs(delta)>=4){composer.classList.toggle('is-scroll-hidden',delta>0&&nextTop>12);previousTop=nextTop}},{passive:true})}
+function setTab(tab:Tab){const root=document.getElementById('root'),nav=document.getElementById(NAV_ID);if(!root||!nav)return;root.classList.toggle('sire-tab-mode',tab!=='quote');root.classList.toggle('sire-tab-quote',tab==='quote');root.classList.toggle('sire-chart-tab',tab==='chart');nav.querySelectorAll('button').forEach(button=>button.classList.toggle('active',button.dataset.tab===tab));if(tab==='sire'){findSireOpenButton()?.click();window.setTimeout(wireChatComposer,0)}else findChatCloseButton()?.click()}
+function mountNavigation(){injectStyles();if(document.getElementById(NAV_ID))return;const nav=document.createElement('nav');nav.id=NAV_ID;nav.setAttribute('aria-label','Primary navigation');const tabs:Array<[Tab,string,string]>=[['sire','✦','SIRE'],['chart','⌁','CHART'],['quote','▦','QUOTE']];tabs.forEach(([tab,icon,label])=>{const button=document.createElement('button');button.type='button';button.dataset.tab=tab;button.innerHTML=`<span class="tab-icon">${icon}</span><span>${label}</span>`;button.addEventListener('click',()=>setTab(tab));nav.appendChild(button)});document.body.appendChild(nav);setTab('chart')}
+if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',mountNavigation,{once:true});else mountNavigation();
+const observer=new MutationObserver(()=>{if(!document.getElementById(NAV_ID))mountNavigation();if(document.querySelector('.sire-chat-only-composer'))wireChatComposer()});observer.observe(document.documentElement,{childList:true,subtree:true});
