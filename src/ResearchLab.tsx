@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { api } from '@appdeploy/client';
-import { Send, Sparkles, X, Globe2 } from 'lucide-react';
+import { Copy, Check, Send, Sparkles, X, Globe2 } from 'lucide-react';
 import './sire-council.css';
 
 type Instrument = { symbol: string; name: string };
@@ -24,6 +24,81 @@ const phaseLabel = (phase: string) => {
   if (value.includes('fallback')) return 'finishing';
   return phase || 'working';
 };
+
+const escapeText = (value: string) => value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+function InlineMarkdown({ text }: { text: string }) {
+  const escaped = escapeText(text);
+  const tokens = escaped.split(/(\*\*[^*]+\*\*|__[^_]+__|`[^`]+`|\[[^\]]+\]\(https?:\/\/[^\s)]+\)|https?:\/\/[^\s<]+)/g);
+  return <>{tokens.map((token, index) => {
+    if (!token) return null;
+    if ((token.startsWith('**') && token.endsWith('**')) || (token.startsWith('__') && token.endsWith('__'))) return <strong key={index}>{token.slice(2, -2)}</strong>;
+    if (token.startsWith('`') && token.endsWith('`')) return <code key={index} className="sire-inline-code">{token.slice(1, -1)}</code>;
+    const markdownLink = token.match(/^\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)$/);
+    if (markdownLink) return <a key={index} href={markdownLink[2]} target="_blank" rel="noreferrer">{markdownLink[1]}</a>;
+    if (/^https?:\/\//.test(token)) return <a key={index} href={token} target="_blank" rel="noreferrer">{token.replace(/^https?:\/\//, '')}</a>;
+    return <span key={index}>{token}</span>;
+  })}</>;
+}
+
+function RichMessage({ text }: { text: string }) {
+  const normalized = text.replace(/\r\n?/g, '\n');
+  const lines = normalized.split('\n');
+  const blocks: React.ReactNode[] = [];
+  let paragraph: string[] = [];
+  let list: { ordered: boolean; text: string }[] = [];
+  let code: string[] | null = null;
+  let codeLanguage = '';
+
+  const flushParagraph = () => {
+    if (!paragraph.length) return;
+    blocks.push(<p key={`p-${blocks.length}`}><InlineMarkdown text={paragraph.join(' ')} /></p>);
+    paragraph = [];
+  };
+  const flushList = () => {
+    if (!list.length) return;
+    const ordered = list[0].ordered;
+    const items = list.map((item, index) => <li key={index}><InlineMarkdown text={item.text} /></li>);
+    blocks.push(ordered ? <ol key={`ol-${blocks.length}`}>{items}</ol> : <ul key={`ul-${blocks.length}`}>{items}</ul>);
+    list = [];
+  };
+  const flushCode = () => {
+    if (code === null) return;
+    blocks.push(<pre key={`code-${blocks.length}`} className="sire-code-block"><div className="sire-code-head"><span>{codeLanguage || 'code'}</span><button type="button" onClick={() => void navigator.clipboard?.writeText(code!.join('\n'))}><Copy size={13} /><span>Copy</span></button></div><code>{code.join('\n')}</code></pre>);
+    code = null;
+    codeLanguage = '';
+  };
+
+  lines.forEach((line, index) => {
+    const fence = line.match(/^\s*```(.*)$/);
+    if (fence) {
+      if (code === null) { flushParagraph(); flushList(); code = []; codeLanguage = fence[1].trim(); }
+      else flushCode();
+      return;
+    }
+    if (code !== null) { code.push(line); return; }
+    if (!line.trim()) { flushParagraph(); flushList(); blocks.push(<div key={`space-${blocks.length}`} className="sire-message-spacer" />); return; }
+    const heading = line.match(/^\s*(#{1,3})\s+(.+)$/);
+    if (heading) { flushParagraph(); flushList(); const level = heading[1].length; const content = <InlineMarkdown text={heading[2]} />; if (level === 1) blocks.push(<h2 key={`h-${index}`}>{content}</h2>); else if (level === 2) blocks.push(<h3 key={`h-${index}`}>{content}</h3>); else blocks.push(<h4 key={`h-${index}`}>{content}</h4>); return; }
+    const bullet = line.match(/^\s*[-*•]\s+(.+)$/);
+    const numbered = line.match(/^\s*\d+[.)]\s+(.+)$/);
+    if (bullet || numbered) { flushParagraph(); const ordered = Boolean(numbered); if (list.length && list[0].ordered !== ordered) flushList(); list.push({ ordered, text: (bullet || numbered)![1] }); return; }
+    flushList();
+    paragraph.push(line.trim());
+  });
+  flushParagraph();
+  flushList();
+  flushCode();
+  return <div className="sire-rich-text">{blocks}</div>;
+}
+
+function MessageActions({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false);
+  const copy = async () => {
+    try { await navigator.clipboard.writeText(text); setCopied(true); window.setTimeout(() => setCopied(false), 1400); } catch { /* native long-press selection remains available */ }
+  };
+  return <div className="sire-message-actions"><button type="button" onClick={() => void copy()} aria-label="Copy message">{copied ? <Check size={14} /> : <Copy size={14} />}<span>{copied ? 'Copied' : 'Copy'}</span></button></div>;
+}
 
 export default function ResearchLab({ symbol, instruments, onClose, onSelectInstrument, onSetChartView, onAddMarker, runtimeContext }: Props) {
   const [activeSymbol, setActiveSymbol] = useState(symbol);
@@ -74,8 +149,8 @@ export default function ResearchLab({ symbol, instruments, onClose, onSelectInst
   return <div className="sire-chat-only-overlay"><section className="sire-chat-only" aria-label="SIRE conversation">
     <header className="sire-chat-only-header"><div className="sire-chat-only-brand"><div className="sire-chat-only-mark"><Sparkles size={16} /></div><span>SIRE</span><i className={chatBusy ? 'sire-live-dot active' : 'sire-live-dot'} /></div><button className="sire-chat-only-close" onClick={onClose} aria-label="Close SIRE"><X size={18} /></button></header>
     <main className="sire-chat-only-messages"><div className="sire-chat-only-inner">
-      {chatMessages.length === 0 && <div className="sire-chat-only-empty" aria-hidden="true"><div className="sire-chat-only-empty-mark"><Sparkles size={22} /></div><span>SIRE</span></div>}
-      {chatMessages.map(item => <article className={`sire-chat-only-message ${item.role}`} key={item.id}><div className="sire-chat-only-role">{item.role === 'sire' ? 'SIRE' : 'YOU'}</div><div className="sire-chat-only-bubble">{item.text}</div>{item.meta && <small>{item.meta}</small>}</article>)}
+      {chatMessages.length === 0 && <div className="sire-chat-only-empty" aria-hidden="true"><div className="sire-chat-only-empty-mark"><Sparkles size={22} /></div><span>SIRE</span><p>Ask anything. SIRE will reason, research, and respond.</p></div>}
+      {chatMessages.map(item => <article className={`sire-chat-only-message ${item.role}`} key={item.id}><div className="sire-chat-only-role">{item.role === 'sire' ? 'SIRE' : 'YOU'}</div><div className="sire-chat-only-bubble">{item.role === 'sire' ? <RichMessage text={item.text} /> : <div className="sire-user-text">{item.text}</div>}</div>{item.role === 'sire' && <MessageActions text={item.text} />}{item.meta && <small>{item.meta}</small>}</article>)}
       {chatBusy && <article className="sire-council-live" aria-live="polite"><div className="sire-council-live-head"><span className="sire-council-live-pulse" /><strong>SIRE is working</strong><small>live</small></div><div className="sire-council-live-stream">{activity.slice(-8).map((item, index) => <div className="sire-council-live-event" key={`${index}-${item.actor}-${item.phase}`}><span className="sire-council-live-actor">{item.actor}</span><span className="sire-council-live-phase">{phaseLabel(item.phase)}</span><p>{item.text}</p></div>)}<div className="sire-council-live-cursor"><i /><i /><i /></div></div></article>}
       {webSources.length > 0 && <section className="sire-web-sources" aria-label="Web sources"><div className="sire-web-sources-head"><Globe2 size={13} /><strong>Web sources searched</strong><span>{webSources.length}</span></div><div className="sire-web-sources-list">{webSources.map((source, index) => <a key={`${source.url}-${index}`} href={source.url} target="_blank" rel="noreferrer" className="sire-web-source"><span className="sire-web-source-index">{index + 1}</span><span className="sire-web-source-body"><strong>{source.title}</strong><small>{new URL(source.url).hostname}</small></span></a>)}</div></section>}
       {lastError && !chatBusy && <button className="sire-chat-only-retry" onClick={() => void runAgent(lastPrompt, true)}>Retry</button>}
