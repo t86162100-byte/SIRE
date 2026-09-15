@@ -4,6 +4,7 @@ import App from './App';
 import './index.css';
 import './mobile.css';
 import './tabNavigation';
+import './chartToolbarCleanup';
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
