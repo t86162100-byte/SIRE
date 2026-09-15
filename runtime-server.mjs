@@ -62,6 +62,22 @@ async function handleCouncilRequest(parsed) {
   }
 }
 
+async function handleDirectGptRequest(parsed) {
+  const query = String(parsed.query || '').trim();
+  if (!query) throw new Error('query is required');
+  const gpt = await runOpenRouter({
+    query,
+    history: Array.isArray(parsed.history) ? parsed.history : [],
+  });
+  return {
+    text: gpt.text,
+    responseId: gpt.responseId || '',
+    model: gpt.model,
+    provider: gpt.provider,
+    directGptTest: true,
+  };
+}
+
 const server = http.createServer(async (req,res) => {
   if (req.method === 'OPTIONS') { res.writeHead(204,{ 'Access-Control-Allow-Origin':'*','Access-Control-Allow-Methods':'GET,POST,PUT,DELETE,OPTIONS','Access-Control-Allow-Headers':'Content-Type, Authorization' }); return res.end(); }
   if (await serveStatic(req,res)) return;
@@ -77,6 +93,18 @@ const server = http.createServer(async (req,res) => {
       if (!String(parsed.query || '').trim()) return res.writeHead(400,{ 'Access-Control-Allow-Origin':'*','Content-Type':'application/json; charset=utf-8' }).end(JSON.stringify({ error:'query is required' }));
       const response = await handleCouncilRequest(parsed);
       return res.writeHead(200,{ 'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8' }).end(JSON.stringify(response));
+    }
+    if (req.method === 'POST' && pathname === '/api/sire/agent/gpt') {
+      const parsed = body ? JSON.parse(body) : {};
+      if (!String(parsed.query || '').trim()) return res.writeHead(400,{ 'Access-Control-Allow-Origin':'*','Content-Type':'application/json; charset=utf-8' }).end(JSON.stringify({ error:'query is required' }));
+      try {
+        const response = await handleDirectGptRequest(parsed);
+        return res.writeHead(200,{ 'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8' }).end(JSON.stringify(response));
+      } catch (cause) {
+        const message = cause instanceof Error ? cause.message : String(cause);
+        console.error('[DIRECT GPT]', message);
+        return res.writeHead(502,{ 'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8' }).end(JSON.stringify({ error:`Direct GPT test failed: ${message}` }));
+      }
     }
     const response=await handler(toEvent(req,body)); const statusCode=Number.isInteger(response?.statusCode)?response.statusCode:200; const rawBody=response?.body!==undefined?response.body:response; const isString=typeof rawBody==='string'; res.writeHead(statusCode,{ 'Access-Control-Allow-Origin':'*','Cache-Control':'no-store',...(isString?{}:{'Content-Type':'application/json; charset=utf-8'}),...(response?.headers||{}) }); res.end(isString?rawBody:JSON.stringify(rawBody??{}));
   } catch(cause) { const message=cause instanceof Error?cause.message:String(cause); console.error('[HTTP ERROR]',req.method,req.url,message); res.writeHead(500,{'Content-Type':'application/json','Access-Control-Allow-Origin':'*'}); res.end(JSON.stringify({error:message})); } });
