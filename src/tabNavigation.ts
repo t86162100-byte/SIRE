@@ -12,9 +12,12 @@ function injectStyles() {
     .sire-tab-mode .symbol-sidebar { display: none !important; }
     .sire-tab-mode .chart-terminal { width: 100% !important; }
 
-    /* First Market-tab cleanup: remove only the old instrument selector and LIVE status. */
+    /* Market-tab cleanup: remove the complete old chart header controls. */
     .sire-tab-mode .terminal-topbar .instrument-picker,
-    .sire-tab-mode .terminal-topbar .live-state { display: none !important; }
+    .sire-tab-mode .terminal-topbar .live-state,
+    .sire-tab-mode .chart-subbar,
+    .sire-tab-mode .research-controls,
+    .sire-tab-mode button[title="Open GPT research laboratory"] { display: none !important; }
 
     .sire-tab-quote .terminal-body { display: block !important; padding-bottom: 108px !important; }
     .sire-tab-quote .chart-terminal { display: none !important; }
