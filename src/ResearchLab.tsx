@@ -24,12 +24,14 @@ type Props = {
   onAddMarker?: (label: string) => void;
   runtimeContext?: RuntimeContext;
 };
-type ChatMessage = { id: number; role: 'user' | 'sire'; text: string; meta?: string };
+type CouncilTurn = { provider: string; model: string; role: string; text: string };
+type ChatMessage = { id: number; role: 'user' | 'sire'; text: string; meta?: string; council?: CouncilTurn[] };
 
 type AgentResponse = {
   text?: string;
   responseId?: string;
   actions?: Array<Record<string, unknown>>;
+  council?: CouncilTurn[];
   error?: string;
 };
 
@@ -76,11 +78,7 @@ export default function ResearchLab({ symbol, instruments, onClose, onSelectInst
     setChatInput('');
     setChatBusy(true);
     setLastError(false);
-    setChatMessages(previous => [...previous, {
-      id: Date.now(),
-      role: 'user',
-      text: query,
-    }]);
+    setChatMessages(previous => [...previous, { id: Date.now(), role: 'user', text: query }]);
 
     try {
       const directGptTest = query.toLowerCase().startsWith('/gpt ');
@@ -97,10 +95,7 @@ export default function ResearchLab({ symbol, instruments, onClose, onSelectInst
 
       const rawResponse = response as unknown;
       const data = (
-        rawResponse &&
-        typeof rawResponse === 'object' &&
-        'data' in rawResponse &&
-        (rawResponse as Record<string, unknown>).data !== undefined
+        rawResponse && typeof rawResponse === 'object' && 'data' in rawResponse && (rawResponse as Record<string, unknown>).data !== undefined
           ? (rawResponse as Record<string, unknown>).data
           : rawResponse
       ) as AgentResponse | undefined;
@@ -128,6 +123,7 @@ export default function ResearchLab({ symbol, instruments, onClose, onSelectInst
         id: Date.now() + 1,
         role: 'sire',
         text,
+        council: Array.isArray(data?.council) ? data.council : undefined,
       }]);
     } catch (error) {
       const detail = error instanceof Error ? error.message : 'Connection failed';
@@ -172,6 +168,23 @@ export default function ResearchLab({ symbol, instruments, onClose, onSelectInst
               <article className={`sire-chat-only-message ${item.role}`} key={item.id}>
                 <div className="sire-chat-only-role">{item.role === 'sire' ? 'SIRE' : 'YOU'}</div>
                 <div className="sire-chat-only-bubble">{item.text}</div>
+                {item.council && item.council.length > 1 && (
+                  <details className="sire-council-debate">
+                    <summary>View council debate</summary>
+                    <div className="sire-council-debate-body">
+                      <p className="sire-council-note">Decision-relevant debate summaries are shown here. Private chain-of-thought is not exposed.</p>
+                      {item.council.map((turn, index) => (
+                        <section className="sire-council-turn" key={`${item.id}-${index}`}>
+                          <div className="sire-council-turn-head">
+                            <strong>{turn.role === 'challenge' ? 'GPT · Challenge' : turn.role === 'rebuttal' ? 'Gemini · Rebuttal' : turn.role === 'final' ? 'GPT · Final' : turn.role}</strong>
+                            <span>{turn.model}</span>
+                          </div>
+                          <div>{turn.text}</div>
+                        </section>
+                      ))}
+                    </div>
+                  </details>
+                )}
                 {item.meta && <small>{item.meta}</small>}
               </article>
             ))}
@@ -179,16 +192,12 @@ export default function ResearchLab({ symbol, instruments, onClose, onSelectInst
             {chatBusy && (
               <article className="sire-chat-only-message sire">
                 <div className="sire-chat-only-role">SIRE</div>
-                <div className="sire-chat-only-typing" aria-label="SIRE is thinking">
-                  <i /><i /><i />
-                </div>
+                <div className="sire-chat-only-typing" aria-label="SIRE is thinking"><i /><i /><i /></div>
               </article>
             )}
 
             {lastError && !chatBusy && (
-              <button className="sire-chat-only-retry" onClick={() => void runAgent(lastPrompt, true)}>
-                Retry
-              </button>
+              <button className="sire-chat-only-retry" onClick={() => void runAgent(lastPrompt, true)}>Retry</button>
             )}
 
             <div ref={chatEndRef} />
@@ -211,13 +220,7 @@ export default function ResearchLab({ symbol, instruments, onClose, onSelectInst
               disabled={chatBusy}
               aria-label="Message SIRE"
             />
-            <button
-              onClick={() => void runAgent(chatInput)}
-              disabled={chatBusy || !chatInput.trim()}
-              aria-label="Send message"
-            >
-              <Send size={17} />
-            </button>
+            <button onClick={() => void runAgent(chatInput)} disabled={chatBusy || !chatInput.trim()} aria-label="Send message"><Send size={17} /></button>
           </div>
         </footer>
       </section>
