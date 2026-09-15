@@ -27,36 +27,60 @@ async function serveStatic(req, res) {
 function toEvent(req, body) { const url = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`); return { httpMethod:req.method, path:url.pathname, rawPath:url.pathname, body, headers:req.headers, requestContext:{ http:{ method:req.method, path:url.pathname } } }; }
 
 async function handleCouncilRequest(parsed) {
-  const query = String(parsed.query || '');
+  const query = String(parsed.query || '').trim();
   const history = Array.isArray(parsed.history) ? parsed.history : [];
-  const gemini = await runGemini({
-    query,
-    symbol: parsed.symbol ? String(parsed.symbol) : undefined,
-    history,
-    runtimeContext: parsed.runtimeContext && typeof parsed.runtimeContext === 'object' ? parsed.runtimeContext : undefined,
-  });
+  const shared = { symbol: parsed.symbol ? String(parsed.symbol) : undefined, runtimeContext: parsed.runtimeContext && typeof parsed.runtimeContext === 'object' ? parsed.runtimeContext : undefined };
+
+  // Round 1: Gemini proposes an initial answer.
+  const geminiProposal = await runGemini({ query, history, ...shared, debateRole: 'proposal' });
+  const debate = [{ provider: geminiProposal.provider, model: geminiProposal.model, role: 'proposal', text: geminiProposal.text }];
 
   try {
-    const gpt = await runOpenRouter({ query, history, councilContext: gemini.text });
-    const debate = Array.isArray(gpt.council)
-      ? [{ provider: gemini.provider, model: gemini.model, role: 'proposal', text: gemini.text }, ...gpt.council]
-      : [
-          { provider: gemini.provider, model: gemini.model, role: 'proposal', text: gemini.text },
-          { provider: gpt.provider, model: gpt.model, role: 'final', text: gpt.text },
-        ];
+    // Round 2: GPT directly challenges Gemini. It sees the first contribution.
+    const gptChallenge = await runOpenRouter({
+      query,
+      history,
+      councilContext: `GEMINI — INITIAL PROPOSAL:\n${geminiProposal.text}\n\nYou are the second member. Challenge this proposal: test its assumptions, point out errors or missing considerations, disagree where warranted, and propose improvements. Do not merely summarize it.`,
+    });
+    debate.push({ provider: gptChallenge.provider, model: gptChallenge.model, role: 'challenge', text: gptChallenge.text });
+
+    // Round 3: Gemini gets to answer GPT's objections instead of being silently overruled.
+    const geminiResponse = await runGemini({
+      query,
+      history,
+      ...shared,
+      councilContext: `GEMINI — INITIAL PROPOSAL:\n${geminiProposal.text}\n\nGPT — CHALLENGE:\n${gptChallenge.text}`,
+      debateRole: 'response',
+    });
+    debate.push({ provider: geminiResponse.provider, model: geminiResponse.model, role: 'response', text: geminiResponse.text });
+
+    // Round 4: GPT sees the whole discussion and makes the final SIRE answer.
+    const gptFinal = await runOpenRouter({
+      query,
+      history,
+      councilContext: `GEMINI — INITIAL PROPOSAL:\n${geminiProposal.text}\n\nGPT — CHALLENGE:\n${gptChallenge.text}\n\nGEMINI — RESPONSE TO CHALLENGE:\n${geminiResponse.text}\n\nNow act as the final council member. Compare the positions, resolve disagreements, preserve useful points from each side, reject unsupported claims, and produce the best final answer for the user as SIRE. Do not mention hidden chain-of-thought; give only the useful conclusion and concise decision-relevant reasoning.`,
+    });
+    debate.push({ provider: gptFinal.provider, model: gptFinal.model, role: 'final', text: gptFinal.text });
+
     return {
-      text: gpt.text,
-      responseId: gpt.responseId || gemini.responseId || '',
-      model: 'council:' + gemini.model + '+' + gpt.model,
+      text: gptFinal.text,
+      responseId: gptFinal.responseId || geminiResponse.responseId || gptChallenge.responseId || geminiProposal.responseId || '',
+      model: 'council:' + geminiProposal.model + '+' + gptChallenge.model,
       provider: 'SIRE AI Council',
       council: debate,
+      councilMode: 'multi-round-collaboration',
+      rounds: 4,
     };
   } catch (cause) {
-    console.warn('[COUNCIL] GPT member unavailable:', cause instanceof Error ? cause.message : String(cause));
+    console.warn('[COUNCIL] Multi-round debate stopped:', cause instanceof Error ? cause.message : String(cause));
     return {
-      ...gemini,
-      council: [{ provider: gemini.provider, model: gemini.model, role: 'proposal', text: gemini.text }],
-      councilWarning: 'OpenAI GPT council member is unavailable; Gemini answered this turn.',
+      text: geminiProposal.text,
+      responseId: geminiProposal.responseId || '',
+      model: geminiProposal.model,
+      provider: 'SIRE AI Council',
+      council: debate,
+      councilMode: 'degraded-single-member',
+      councilWarning: 'The full debate could not complete this turn; SIRE returned the available council contribution.',
     };
   }
 }
