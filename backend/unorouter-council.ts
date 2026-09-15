@@ -7,46 +7,14 @@ type ModelInfo = {
 };
 
 const BASE_URL = 'https://api.unorouter.com/v1';
-const MAX_MODELS = 200;
-const MAX_OUTPUT_CHARS_PER_MODEL = 6000;
-const MAX_TRANSCRIPT_CHARS = 60000;
+const MAX_OUTPUT_CHARS = 6000;
 const REQUEST_TIMEOUT_MS = 45000;
-const COUNCIL_SIZE = 5;
-const MODEL_COOLDOWN_MS = 65_000;
-const MAX_MODEL_ATTEMPTS = 15;
-
-// Preferred free council ranking. The live /models response is still authoritative:
-// a preferred model is used only when UnoRouter currently reports it as genuinely free.
-const PREFERRED_FREE_MODELS = [
-  'gemini-3.8-flash:free',
-  'ling-3.0-flash-fin:free',
-  'glm-5.3-flash-search:free',
-  'glm-5.3-flash-think-search:free',
-  'glm-5.3-flash-thinking:free',
-];
-
-const modelCooldownUntil = new Map<string, number>();
-let rotationCursor = 0;
+const SINGLE_MODEL = 'gemini-3.8-flash:free';
 
 function apiKey() {
   const key = process.env.UNOROUTER_API_KEY?.trim();
   if (!key) throw new Error('UnoRouter is not configured: UNOROUTER_API_KEY is missing');
   return key;
-}
-
-function isFreeModel(model: ModelInfo) {
-  const id = String(model.id || '').trim();
-  if (!id) return false;
-  if (id.endsWith(':free')) return true;
-  const pricing = model.pricing || {};
-  const prompt = Number(pricing.prompt ?? pricing.input);
-  const completion = Number(pricing.completion ?? pricing.output);
-  return Number.isFinite(prompt) && Number.isFinite(completion) && prompt === 0 && completion === 0;
-}
-
-function isTextModel(model: ModelInfo) {
-  const modalities = Array.isArray(model.input_modalities) ? model.input_modalities : [];
-  return modalities.length === 0 || modalities.some(value => String(value).toLowerCase() === 'text');
 }
 
 async function fetchJson(path: string, init: RequestInit = {}) {
@@ -81,23 +49,6 @@ async function fetchJson(path: string, init: RequestInit = {}) {
   }
 }
 
-export async function listFreeModels() {
-  const data = await fetchJson('/models');
-  const models = Array.isArray(data.data) ? data.data as ModelInfo[] : [];
-  return models.filter(model => isFreeModel(model) && isTextModel(model))
-    .map(model => String(model.id)).filter(Boolean).slice(0, MAX_MODELS);
-}
-
-function rankCouncilModels(models: string[]) {
-  const available = new Set(models);
-  const preferred = PREFERRED_FREE_MODELS.filter(model => available.has(model));
-  const remaining = models.filter(model => !preferred.includes(model));
-  // Keep the live UnoRouter catalogue order for the fallback slots. This means
-  // new free models can enter the council without ever enabling a paid model.
-  const ranked = [...preferred, ...remaining];
-  return ranked.slice(0, Math.min(COUNCIL_SIZE, ranked.length));
-}
-
 function extractMessageText(value: unknown): string {
   if (typeof value === 'string') return value;
   if (Array.isArray(value)) return value.map(item => {
@@ -115,31 +66,17 @@ function extractMessageText(value: unknown): string {
   return '';
 }
 
-async function callModel(model: string, messages: ChatMessage[]) {
+async function callModel(messages: ChatMessage[]) {
   const data = await fetchJson('/chat/completions', {
     method: 'POST',
-    body: JSON.stringify({ model, messages }),
+    body: JSON.stringify({ model: SINGLE_MODEL, messages }),
   });
   const choices = Array.isArray(data.choices) ? data.choices as Array<Record<string, unknown>> : [];
   const first = choices[0];
   const message = first && typeof first.message === 'object' ? first.message as Record<string, unknown> : undefined;
   const result = (extractMessageText(message?.content) || extractMessageText(first?.text)).trim();
-  if (!result) throw new Error(`UnoRouter model ${model} returned no text`);
-  return result.slice(0, MAX_OUTPUT_CHARS_PER_MODEL);
-}
-
-function isRateLimited(error: unknown) {
-  const value = error as { status?: number; message?: string };
-  return value?.status === 429 || /rate[_ -]?limit|too many requests|retry in \d+s/i.test(String(value?.message || ''));
-}
-
-function errorText(error: unknown) {
-  return error instanceof Error ? error.message : String(error);
-}
-
-function compactTranscript(rows: Array<{ model: string; response: string }>) {
-  const text = rows.map((row, index) => `MODEL ${index + 1} — ${row.model}\n${row.response || '(no response)'}`).join('\n\n');
-  return text.length > MAX_TRANSCRIPT_CHARS ? text.slice(0, MAX_TRANSCRIPT_CHARS) : text;
+  if (!result) throw new Error(`UnoRouter model ${SINGLE_MODEL} returned no text`);
+  return { text: result.slice(0, MAX_OUTPUT_CHARS), responseId: typeof data.id === 'string' ? data.id : '' };
 }
 
 export async function runFreeCouncil(input: {
@@ -148,74 +85,37 @@ export async function runFreeCouncil(input: {
   runtimeContext?: Record<string, unknown>;
   symbol?: string;
 }) {
-  const discoveredModels = await listFreeModels();
-  if (!discoveredModels.length) throw new Error('UnoRouter returned no free text models');
-
-  const selectedModels = rankCouncilModels(discoveredModels);
-  if (selectedModels.length < COUNCIL_SIZE) {
-    throw new Error(`UnoRouter currently exposes only ${selectedModels.length} usable free text models; SIRE requires ${COUNCIL_SIZE}. No paid fallback is allowed.`);
-  }
-
   const context = JSON.stringify({ symbol: input.symbol || null, runtimeContext: input.runtimeContext || null });
   const history = (input.history || []).slice(-12).map(item => `${item.role}: ${item.text}`).join('\n');
-  const basePrompt = [
-    'You are one member of the SIRE research and reasoning council.',
-    'There are five council members. The council is collaborative, not a vote.',
-    'Reason independently, then inspect the other council members\' arguments supplied below.',
-    'Challenge weak assumptions, correct errors, identify disagreements, and build on strong ideas.',
-    'Do not merely agree. State the best-supported conclusion and what the council should do.',
-    'Do not invent market data. If data is missing, say what is missing and use SIRE tools/context when available.',
-    `SIRE runtime context: ${context}`,
-    `Conversation history:\n${history || '(none)'}`,
-    `Current user request:\n${input.query}`,
-  ].join('\n\n');
+  const messages: ChatMessage[] = [
+    {
+      role: 'system',
+      content: [
+        'You are SIRE, the reasoning and research intelligence inside the SIRE environment.',
+        'Understand the user naturally like a capable general assistant. Conversation is first-class; do not invent tasks.',
+        'Reason carefully, challenge weak assumptions, distinguish facts from inference, and do not invent market data.',
+        'Use the supplied SIRE context when relevant. If information is missing, say what is missing.',
+        `SIRE runtime context: ${context}`,
+        `Conversation history:\n${history || '(none)'}`,
+      ].join('\n\n'),
+    },
+    { role: 'user', content: input.query },
+  ];
 
-  const council: Array<{ model: string; response: string }> = [];
-  const failures: string[] = [];
-
-  // Each of the five selected models is called at most once per user turn.
-  // Every later member receives the complete discussion accumulated so far,
-  // so the council is a real sequential debate rather than five isolated answers.
-  for (const model of selectedModels) {
-    try {
-      const discussion = council.length
-        ? [
-            'SHARED COUNCIL DISCUSSION SO FAR:',
-            compactTranscript(council),
-            '',
-            'You have now seen the other members\' positions. Debate them directly: identify agreements, disagreements, corrections, missing evidence, and the strongest path forward.',
-          ].join('\n\n')
-        : 'You are the first council member. Establish the initial analysis, key assumptions, risks, and proposed direction so the other four members can challenge it.';
-
-      const response = await callModel(model, [{
-        role: 'system',
-        content: [basePrompt, discussion, 'Return a concise council contribution for the next members and eventual SIRE answer.'].join('\n\n'),
-      }]);
-      council.push({ model, response });
-      modelCooldownUntil.set(model, Date.now() + MODEL_COOLDOWN_MS);
-    } catch (cause) {
-      if (isRateLimited(cause)) modelCooldownUntil.set(model, Date.now() + MODEL_COOLDOWN_MS);
-      failures.push(`${model}: ${errorText(cause)}`);
-    }
-  }
-
-  if (council.length < COUNCIL_SIZE) {
-    throw new Error(`The five-model free council could not complete. ${failures.slice(0, 5).join(' | ')}`);
-  }
-
-  const final = council[council.length - 1];
+  const result = await callModel(messages);
   return {
-    text: final.response,
+    text: result.text,
+    responseId: result.responseId,
+    model: SINGLE_MODEL,
+    provider: 'UnoRouter',
+    mode: 'single-model',
     council: {
       provider: 'UnoRouter',
       freeOnly: true,
-      discoveredFreeTextModels: discoveredModels.length,
-      councilMembersUsed: council.length,
-      councilModels: council.map(row => row.model),
-      debateMode: 'shared-sequential-five-model-council',
-      failedCandidates: failures.length,
-      synthesizer: final.model,
-      rateLimitPolicy: 'each free model is called at most once per user turn',
+      councilMembersUsed: 1,
+      councilModels: [SINGLE_MODEL],
+      debateMode: 'disabled-for-single-model-test',
+      rateLimitPolicy: 'one UnoRouter model request per user turn',
     },
   };
 }
@@ -236,6 +136,10 @@ export async function handleUnoRouterRequest(body: unknown) {
       }),
     };
   } catch (cause) {
-    return { status: 502, body: { error: cause instanceof Error ? cause.message : String(cause), provider: 'UnoRouter' } };
+    const value = cause as { status?: number };
+    return {
+      status: Number.isInteger(value?.status) ? Number(value.status) : 502,
+      body: { error: cause instanceof Error ? cause.message : String(cause), provider: 'UnoRouter', model: SINGLE_MODEL },
+    };
   }
 }
