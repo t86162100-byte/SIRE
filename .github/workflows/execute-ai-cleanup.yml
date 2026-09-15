@@ -1,4 +1,4 @@
-name: Execute provider-neutral cleanup
+name: Execute final provider-neutral cleanup
 
 on:
   push:
@@ -17,24 +17,22 @@ jobs:
         with:
           ref: render-migration
           fetch-depth: 0
-      - name: Apply final cleanup
-        run: node .github/cleanup-ai-final2.cjs
+      - name: Remove remaining legacy AI implementation
+        run: node .github/cleanup-ai-final3.cjs
       - name: Remove cleanup tooling
-        run: rm -f .github/cleanup-ai-final2.cjs .github/workflows/execute-ai-cleanup.yml
+        run: rm -f .github/cleanup-ai-final.cjs .github/cleanup-ai-final2.cjs .github/cleanup-ai-final3.cjs .github/workflows/execute-ai-cleanup.yml
       - name: Install and build
         run: npm install && npm run build
-      - name: Verify repository is provider-neutral
+      - name: Verify clean provider-neutral repository
         run: |
           set -e
-          if git grep -n -I -E 'openrouter|openai\.com|OPENAI_API_KEY|OPENAI_MODEL|OPENAI_MAX_|nvidia|NVIDIA_API_KEY|gemini|googleapis\.com|generativelanguage|bazaarlink|BazaarLink|OPEN_ROUTER_API_KEY|OPENROUTER_KEY|moonshotai/kimi-k3|deepseek-ai/deepseek-v4-pro-0813|openai/gpt-oss-120b|nvidia/nemotron-3-super-120b-a12b|gpt-5\.6-luna'; then
-            echo 'Provider/model trace remains.'
-            exit 1
-          fi
+          if git grep -n -I -E 'openrouter|openai\.com|OPENAI_API_KEY|OPENAI_MODEL|OPENAI_MAX_|nvidia|NVIDIA_API_KEY|gemini|googleapis\.com|generativelanguage|bazaarlink|BazaarLink|OPEN_ROUTER_API_KEY|OPENROUTER_KEY|moonshotai/kimi-k3|deepseek-ai/deepseek-v4-pro-0813|openai/gpt-oss-120b|nvidia/nemotron-3-super-120b-a12b|gpt-5\.6-luna'; then exit 1; fi
           test ! -e backend/openrouter-team.ts
           test ! -e backend/openrouter-env.mjs
           test ! -e backend/openrouter-native-fetch.mjs
           test ! -e DEPLOY_AI_RUNTIME_2026-09-14.md
-          echo 'Provider-neutral verification passed.'
+          test ! -e .github/workflows/execute-ai-cleanup.yml
+          echo 'Clean provider-neutral repository verified.'
       - name: Commit verified cleanup
         run: |
           git config user.name 'github-actions[bot]'
