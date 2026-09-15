@@ -11,6 +11,15 @@ function hideLegacyToolbar() {
     element.style.setProperty('margin', '0', 'important');
     element.style.setProperty('border', '0', 'important');
   });
+  document.querySelectorAll('.sire-chart-tab .chart-terminal .chart-statusbar').forEach((node) => {
+    const element = node as HTMLElement;
+    element.style.setProperty('display', 'none', 'important');
+    element.style.setProperty('height', '0', 'important');
+    element.style.setProperty('min-height', '0', 'important');
+    element.style.setProperty('padding', '0', 'important');
+    element.style.setProperty('margin', '0', 'important');
+    element.style.setProperty('border', '0', 'important');
+  });
   const floatingToolbar = document.getElementById('sire-chart-bottom-bar');
   if (floatingToolbar) {
     floatingToolbar.style.setProperty('display', 'none', 'important');
@@ -28,6 +37,7 @@ function installCleanup() {
     style.id = CLEANUP_STYLE_ID;
     style.textContent = `
       .sire-chart-tab .chart-terminal .chart-toolbar,
+      .sire-chart-tab .chart-terminal .chart-statusbar,
       .sire-chart-tab .chart-terminal [class*="toolbar"],
       #sire-chart-bottom-bar {
         display:none!important;
