@@ -103,6 +103,34 @@ function injectStyles() {
     .sire-chat-only { padding-bottom: 82px !important; box-sizing: border-box; }
 
     @media (max-width: 520px) {
+      /* Chart tab: the chart starts at the highest possible app level. */
+      .sire-tab-mode.sire-chart-tab .terminal-shell,
+      .sire-tab-mode.sire-chart-tab .terminal-body,
+      .sire-tab-mode.sire-chart-tab .chart-terminal,
+      .sire-tab-mode.sire-chart-tab .chart-stage {
+        position: fixed !important;
+        top: 0 !important;
+        left: 0 !important;
+        right: 0 !important;
+        bottom: 0 !important;
+        width: 100% !important;
+        height: 100dvh !important;
+        min-height: 100dvh !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        box-sizing: border-box !important;
+      }
+      /* True black chart surface instead of the previous dim blue-gray. */
+      .sire-tab-mode.sire-chart-tab,
+      .sire-tab-mode.sire-chart-tab .terminal-shell,
+      .sire-tab-mode.sire-chart-tab .terminal-body,
+      .sire-tab-mode.sire-chart-tab .chart-terminal,
+      .sire-tab-mode.sire-chart-tab .chart-stage,
+      .sire-tab-mode.sire-chart-tab .chart-area,
+      .sire-tab-mode.sire-chart-tab .chart-container {
+        background: #000 !important;
+      }
+      .sire-tab-mode.sire-chart-tab .chart-terminal { z-index: 1 !important; }
       #${NAV_ID} { gap: 7px; bottom: max(6px, env(safe-area-inset-bottom)); width: calc(100vw - 28px); }
       #${NAV_ID} button { flex: 1 1 0; min-width: 0; height: 44px; padding: 0 10px; }
       .sire-chat-only-composer { bottom: 60px !important; }
@@ -149,6 +177,7 @@ function setTab(tab: Tab) {
 
   root.classList.toggle('sire-tab-mode', tab !== 'quote');
   root.classList.toggle('sire-tab-quote', tab === 'quote');
+  root.classList.toggle('sire-chart-tab', tab === 'chart');
   nav.querySelectorAll('button').forEach(button => button.classList.toggle('active', button.dataset.tab === tab));
 
   if (tab === 'sire') {
