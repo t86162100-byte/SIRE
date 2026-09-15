@@ -11,6 +11,15 @@ function hideLegacyToolbar() {
     element.style.setProperty('margin', '0', 'important');
     element.style.setProperty('border', '0', 'important');
   });
+  const floatingToolbar = document.getElementById('sire-chart-bottom-bar');
+  if (floatingToolbar) {
+    floatingToolbar.style.setProperty('display', 'none', 'important');
+    floatingToolbar.style.setProperty('height', '0', 'important');
+    floatingToolbar.style.setProperty('min-height', '0', 'important');
+    floatingToolbar.style.setProperty('padding', '0', 'important');
+    floatingToolbar.style.setProperty('margin', '0', 'important');
+    floatingToolbar.style.setProperty('border', '0', 'important');
+  }
 }
 
 function installCleanup() {
@@ -19,7 +28,8 @@ function installCleanup() {
     style.id = CLEANUP_STYLE_ID;
     style.textContent = `
       .sire-chart-tab .chart-terminal .chart-toolbar,
-      .sire-chart-tab .chart-terminal [class*="toolbar"] {
+      .sire-chart-tab .chart-terminal [class*="toolbar"],
+      #sire-chart-bottom-bar {
         display:none!important;
         height:0!important;
         min-height:0!important;
