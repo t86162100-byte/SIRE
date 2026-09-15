@@ -5,6 +5,7 @@ import { extname, join, normalize } from 'node:path';
 import { WebSocketServer } from 'ws';
 
 const { handler } = await import('./backend/index.ts');
+import { handleGeminiRequest } from './backend/gemini-ai.ts';
 import { ws } from './compat/appdeploy-sdk/index.js';
 import { realtime } from './backend/realtime.ts';
 
@@ -23,11 +24,16 @@ async function serveStatic(req, res) {
   try { const data = await readFile(filePath); res.writeHead(200,{ 'Content-Type': MIME[extname(filePath).toLowerCase()] || 'application/octet-stream', 'Cache-Control': filePath.includes('/assets/') ? 'public, max-age=31536000, immutable' : 'no-cache' }); if (req.method !== 'HEAD') res.end(data); else res.end(); return true; } catch { return false; }
 }
 function toEvent(req, body) { const url = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`); return { httpMethod:req.method, path:url.pathname, rawPath:url.pathname, body, headers:req.headers, requestContext:{ http:{ method:req.method, path:url.pathname } } }; }
-function sendJson(res, statusCode, body) { res.writeHead(statusCode,{ 'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8' }); res.end(JSON.stringify(body ?? {})); }
 const server = http.createServer(async (req,res) => {
   if (req.method === 'OPTIONS') { res.writeHead(204,{ 'Access-Control-Allow-Origin':'*','Access-Control-Allow-Methods':'GET,POST,PUT,DELETE,OPTIONS','Access-Control-Allow-Headers':'Content-Type, Authorization' }); return res.end(); }
   if (await serveStatic(req,res)) return;
   let body=''; req.on('data',chunk=>{body+=chunk;}); req.on('end',async()=>{ try {
+    const pathname = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`).pathname;
+    if (req.method === 'POST' && pathname === '/api/sire/agent/chat') {
+      const parsed = body ? JSON.parse(body) : {};
+      const response = await handleGeminiRequest(parsed);
+      return res.writeHead(response.status,{ 'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8' }).end(JSON.stringify(response.body ?? {}));
+    }
     const response=await handler(toEvent(req,body)); const statusCode=Number.isInteger(response?.statusCode)?response.statusCode:200; const rawBody=response?.body!==undefined?response.body:response; const isString=typeof rawBody==='string'; res.writeHead(statusCode,{ 'Access-Control-Allow-Origin':'*','Cache-Control':'no-store',...(isString?{}:{'Content-Type':'application/json; charset=utf-8'}),...(response?.headers||{}) }); res.end(isString?rawBody:JSON.stringify(rawBody??{}));
   } catch(cause) { const message=cause instanceof Error?cause.message:String(cause); console.error('[HTTP ERROR]',req.method,req.url,message); res.writeHead(500,{'Content-Type':'application/json','Access-Control-Allow-Origin':'*'}); res.end(JSON.stringify({error:message})); } });
 });
