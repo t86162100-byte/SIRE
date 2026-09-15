@@ -27,7 +27,14 @@ async function serveStatic(req, res) {
   try { const info = await stat(filePath); if (!info.isFile()) throw new Error('not a file'); } catch { filePath = join(DIST,'index.html'); }
   try { const data = await readFile(filePath); res.writeHead(200,{ 'Content-Type': MIME[extname(filePath).toLowerCase()] || 'application/octet-stream', 'Cache-Control': filePath.includes('/assets/') ? 'public, max-age=31536000, immutable' : 'no-cache' }); if (req.method !== 'HEAD') res.end(data); else res.end(); return true; } catch { return false; }
 }
-function toEvent(req, body) { const url = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`); return { httpMethod:req.method, path:url.pathname, rawPath:url.pathname, body, headers:req.headers, requestContext:{ http:{ method:req.method, path:url.pathname } } }; }
+
+// Preserve the query string when forwarding requests to the appdeploy-compatible
+// router. The router parses symbol, timeframe and other API parameters from it.
+function toEvent(req, body) {
+  const url = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`);
+  const routedPath = `${url.pathname}${url.search}`;
+  return { httpMethod:req.method, path:routedPath, rawPath:routedPath, body, headers:req.headers, requestContext:{ http:{ method:req.method, path:routedPath } } };
+}
 
 function shouldSearchWeb(query) {
   const q = query.toLowerCase();
