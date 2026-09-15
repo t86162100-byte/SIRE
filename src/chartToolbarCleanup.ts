@@ -40,6 +40,33 @@ function installCleanup() {
         border:0!important;
         overflow:hidden!important;
       }
+
+      /* With the obsolete bottom toolbar gone, the chart itself owns the full viewport. */
+      @media(max-width:520px){
+        .sire-tab-mode.sire-chart-tab .terminal-shell,
+        .sire-tab-mode.sire-chart-tab .terminal-body,
+        .sire-tab-mode.sire-chart-tab .chart-terminal,
+        .sire-tab-mode.sire-chart-tab .chart-stage{
+          position:fixed!important;
+          inset:0!important;
+          width:100%!important;
+          height:100dvh!important;
+          min-height:100dvh!important;
+          max-height:none!important;
+          margin:0!important;
+          padding:0!important;
+          box-sizing:border-box!important;
+        }
+        .sire-tab-mode.sire-chart-tab .terminal-body,
+        .sire-tab-mode.sire-chart-tab .chart-terminal,
+        .sire-tab-mode.sire-chart-tab .chart-stage,
+        .sire-tab-mode.sire-chart-tab .chart-area,
+        .sire-tab-mode.sire-chart-tab .chart-container{
+          padding-bottom:0!important;
+          margin-bottom:0!important;
+        }
+        .sire-tab-mode.sire-chart-tab .chart-stage{overflow:hidden!important;}
+      }
     `;
     document.head.appendChild(style);
   }
