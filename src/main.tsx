@@ -9,6 +9,7 @@ import './removeMobileChartControls';
 import './glassActionBar';
 import './glassInstrumentBridge';
 import './glassInstrumentSwipeFix';
+import './glassInstrumentHold';
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
