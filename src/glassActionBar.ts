@@ -19,7 +19,6 @@ let currentSymbolLabel: HTMLSpanElement | null = null;
 let nextSymbolLabel: HTMLSpanElement | null = null;
 let swipeStartY: number | null = null;
 let swipeStartX: number | null = null;
-let swipeDeltaY = 0;
 let animating = false;
 
 function instrumentAt(index: number) {
@@ -49,6 +48,7 @@ function resetSymbolPosition() {
 }
 
 function prepareNext(delta: number) {
+  if (!instrumentItems.length) return;
   const nextIndex = (instrumentIndex + delta + instrumentItems.length) % instrumentItems.length;
   setSymbolLabels(instrumentAt(instrumentIndex), instrumentAt(nextIndex));
   if (!currentSymbolLabel || !nextSymbolLabel) return;
@@ -64,7 +64,10 @@ function finishInstrumentChange(delta: number) {
   const nextIndex = (instrumentIndex + delta + instrumentItems.length) % instrumentItems.length;
   prepareNext(delta);
   requestAnimationFrame(() => {
-    if (!currentSymbolLabel || !nextSymbolLabel) return;
+    if (!currentSymbolLabel || !nextSymbolLabel) {
+      animating = false;
+      return;
+    }
     currentSymbolLabel.style.transition = 'transform 180ms cubic-bezier(.22,.75,.2,1)';
     nextSymbolLabel.style.transition = 'transform 180ms cubic-bezier(.22,.75,.2,1)';
     currentSymbolLabel.style.transform = delta > 0 ? 'translate3d(0,-100%,0)' : 'translate3d(0,100%,0)';
@@ -87,12 +90,10 @@ function updateSwipe(deltaY: number) {
   const direction = deltaY < 0 ? 1 : -1;
   prepareNext(direction);
   const distance = Math.min(Math.abs(deltaY), 90);
-  const progress = distance / 90;
   const currentOffset = direction > 0 ? -distance : distance;
   const nextOffset = direction > 0 ? 90 - distance : -90 + distance;
   currentSymbolLabel.style.transform = `translate3d(0,${currentOffset}px,0)`;
   nextSymbolLabel.style.transform = `translate3d(0,${nextOffset}px,0)`;
-  symbolViewport?.setAttribute('data-swipe-progress', progress.toFixed(2));
 }
 
 function announceInstrument() {
@@ -163,8 +164,8 @@ function installStyles() {
     #${BAR_ID} .glass-action-label{overflow:visible;text-overflow:clip;display:block}
     #${BAR_ID} .glass-action[data-action="symbol"]{min-width:126px;padding:0 13px;overflow:hidden}
     #${BAR_ID} .glass-action[data-action="symbol"] .glass-action-icon{display:none}
-    #${BAR_ID} .symbol-viewport{position:relative;display:block;height:22px;line-height:22px;min-width:0;overflow:hidden;font-weight:800;letter-spacing:.02em}
-    #${BAR_ID} .symbol-viewport .glass-action-label{position:absolute;left:0;right:0;top:0;white-space:nowrap;text-align:center;will-change:transform}
+    #${BAR_ID} .symbol-viewport{position:relative;display:block;flex:1 1 auto;width:100%;height:22px;line-height:22px;min-width:0;overflow:hidden;font-weight:800;letter-spacing:.02em}
+    #${BAR_ID} .symbol-viewport .glass-action-label{position:absolute;left:0;right:0;top:0;width:100%;white-space:nowrap;text-align:center;will-change:transform}
     #${BAR_ID} .symbol-viewport .symbol-next{transform:translate3d(0,100%,0)}
     @media(max-width:520px){#${BAR_ID}{bottom:calc(max(6px,env(safe-area-inset-bottom)) + 56px);width:calc(100vw - 20px);height:48px;padding:4px 5px;border-radius:16px;gap:3px}#${BAR_ID} .glass-action{height:38px;padding:0 10px;gap:4px;font-size:8px;letter-spacing:.06em}#${BAR_ID} .glass-action-icon{font-size:14px}#${BAR_ID} .glass-action[data-action="symbol"]{min-width:126px;padding:0 10px}#${BAR_ID} .symbol-viewport{font-size:9px}}
   `;
@@ -194,7 +195,6 @@ function mountBar() {
         if (animating) return;
         swipeStartY = event.clientY;
         swipeStartX = event.clientX;
-        swipeDeltaY = 0;
         button.setPointerCapture?.(event.pointerId);
       });
       button.addEventListener('pointermove', event => {
@@ -202,7 +202,6 @@ function mountBar() {
         const dx = event.clientX - swipeStartX;
         const dy = event.clientY - swipeStartY;
         if (Math.abs(dy) <= Math.abs(dx)) return;
-        swipeDeltaY = dy;
         updateSwipe(dy);
       });
       button.addEventListener('pointerup', event => {
@@ -210,7 +209,6 @@ function mountBar() {
         const dy = event.clientY - swipeStartY;
         swipeStartY = null;
         swipeStartX = null;
-        swipeDeltaY = 0;
         if (Math.abs(dy) >= 28) {
           stepInstrument(dy < 0 ? 1 : -1);
           return;
@@ -221,7 +219,6 @@ function mountBar() {
       button.addEventListener('pointercancel', () => {
         swipeStartY = null;
         swipeStartX = null;
-        swipeDeltaY = 0;
         resetSymbolPosition();
       });
     } else {
