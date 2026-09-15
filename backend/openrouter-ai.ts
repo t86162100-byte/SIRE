@@ -1,6 +1,6 @@
 type ChatMessage = { role: 'user' | 'assistant'; content: string };
 
-const MODEL = 'openai/gpt-oss-20b:free';
+const MODEL = 'openai/gpt-oss-20b';
 const API_URL = 'https://openrouter.ai/api/v1/chat/completions';
 const REQUEST_TIMEOUT_MS = 30000;
 const MAX_OUTPUT_CHARS = 12000;
