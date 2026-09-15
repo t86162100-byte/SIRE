@@ -6,6 +6,7 @@ import './mobile.css';
 import './tabNavigation';
 import './chartToolbarCleanup';
 import './removeMobileChartControls';
+import './glassActionBar';
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
