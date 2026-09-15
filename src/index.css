@@ -98,3 +98,6 @@ button:disabled { opacity: 0.45; cursor: not-allowed; }
 
 /* Keep the rest of the application stylesheet available to the terminal UI. */
 .app-shell { min-height: 100vh; padding: 22px; }
+
+/* Hide only the legacy chart status/toolbar strip below the chart. */
+.chart-statusbar { display: none !important; }
