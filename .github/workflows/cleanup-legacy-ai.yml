@@ -1,0 +1,159 @@
+name: Cleanup legacy AI integrations
+
+on:
+  push:
+    branches: [render-migration]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: render-migration
+          fetch-depth: 0
+
+      - name: Remove legacy AI integrations
+        shell: bash
+        run: |
+          npm install --no-save --no-package-lock typescript@5.7.5
+          cat > /tmp/cleanup-ai.cjs <<'NODE'
+          const fs = require('fs');
+          const path = require('path');
+          const ts = require('typescript');
+          const root = process.cwd();
+          const banned = [
+            'openrouter','OPENROUTER','openai.com','OPENAI_API_KEY','OPENAI_MODEL','OPENAI_MAX_',
+            'nvidia','NVIDIA','NVIDIA_API_KEY','gemini','GEMINI','googleapis.com','generativelanguage',
+            'bazaar','Bazaar','bazaarlink','BazaarLink','OPEN_ROUTER_API_KEY','OPENROUTER_KEY',
+            'moonshotai/kimi-k3','deepseek-ai/deepseek-v4-pro-0813','openai/gpt-oss-120b',
+            'nvidia/nemotron-3-super-120b-a12b','gpt-5.6-luna'
+          ];
+          const removeNames = new Set([
+            'AI_MODELS','OPENAI_MODEL','OPENAI_MAX_STEPS','OPENAI_MAX_TICKS','OPENAI_MAX_ANALYSIS_TICKS',
+            'SIRE_MAX_STEPS','SIRE_MAX_TICKS','SIRE_MAX_ANALYSIS_TICKS','OPENAI_SYSTEM_INSTRUCTION',
+            'SIRE_FUNCTIONS','OPENAI_FUNCTION_TOOLS','OPENAI_SYSTEM_PROMPT','OPENAI_TOOLS',
+            'runOpenAIChatUnlocked','runOpenAIChat','runSIREConversation','runSimple','runRound',
+            'deliberate','synthesize','callOpenAI','callOpenRouter','callNvidia','callGemini',
+            'discoverFreeModels','getOpenRouterModels','buildCouncil','runCouncil','aiStatus',
+            'legacyAIHandler','legacyHandler'
+          ]);
+          const routeHints = [
+            '/api/sire/agent/chat','/api/sire/gpt/tool','/api/sire/ai/status','/api/sire/chat',
+            '/api/ai','/api/openrouter','/api/nvidia','/api/gemini','/api/bazaar'
+          ];
+
+          function textOf(node, source) { return source.slice(node.getStart(), node.getEnd()); }
+          function collectTopLevel(source, file) {
+            const sf = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+            const ranges = [];
+            for (const node of sf.statements) {
+              let name = null;
+              if (ts.isFunctionDeclaration(node) && node.name) name = node.name.text;
+              else if (ts.isVariableStatement(node)) {
+                for (const d of node.declarationList.declarations) {
+                  if (ts.isIdentifier(d.name)) {
+                    const t = textOf(d, source);
+                    if (removeNames.has(d.name.text) || banned.some(x => t.includes(x))) ranges.push([node.getStart(), node.getEnd()]);
+                  }
+                }
+              }
+              if (ts.isFunctionDeclaration(node) && (removeNames.has(name) || banned.some(x => textOf(node, source).includes(x)))) ranges.push([node.getStart(), node.getEnd()]);
+            }
+            return ranges;
+          }
+
+          function cleanIndex(file) {
+            let source = fs.readFileSync(file, 'utf8');
+            const sf = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+            const remove = [];
+            for (const node of sf.statements) {
+              if (ts.isVariableStatement(node)) {
+                const decls = node.declarationList.declarations;
+                if (decls.some(d => ts.isIdentifier(d.name) && removeNames.has(d.name.text))) remove.push([node.getStart(), node.getEnd()]);
+                else if (decls.some(d => banned.some(x => textOf(d, source).includes(x)))) remove.push([node.getStart(), node.getEnd()]);
+                else if (decls.some(d => ts.isIdentifier(d.name) && d.name.text === 'handler')) {
+                  const init = decls.find(d => ts.isIdentifier(d.name) && d.name.text === 'handler')?.initializer;
+                  if (init && ts.isCallExpression(init) && init.arguments.length && ts.isObjectLiteralExpression(init.arguments[0])) {
+                    const obj = init.arguments[0];
+                    for (const p of obj.properties) {
+                      const pt = textOf(p, source);
+                      const badRoute = routeHints.some(x => pt.includes(x));
+                      const badAI = banned.some(x => pt.includes(x));
+                      if (badRoute || badAI) remove.push([p.getStart(), p.getEnd()]);
+                    }
+                  }
+                }
+              } else if (ts.isFunctionDeclaration(node) && node.name) {
+                const n = node.name.text;
+                if (removeNames.has(n) || banned.some(x => textOf(node, source).includes(x))) remove.push([node.getStart(), node.getEnd()]);
+              }
+            }
+            remove.sort((a,b) => b[0]-a[0]);
+            for (const [s,e] of remove) source = source.slice(0,s) + source.slice(e);
+            source = source.replace(/\n{3,}/g, '\n\n');
+            fs.writeFileSync(file, source);
+          }
+
+          cleanIndex('backend/index.ts');
+
+          const deleteFiles = [
+            'backend/openrouter-team.ts','backend/openrouter-env.mjs','backend/openrouter-native-fetch.mjs',
+            '.github/workflows/fix-ai-model-routing.yml','.github/workflows/fix-nvidia-request.yml',
+            '.github/workflows/fix-sire-tool-calling.yml','.github/workflows/upgrade-sire-intelligence.yml'
+          ];
+          for (const rel of deleteFiles) {
+            const p = path.join(root, rel);
+            if (fs.existsSync(p)) fs.rmSync(p);
+          }
+
+          const textExt = new Set(['.ts','.tsx','.js','.mjs','.cjs','.json','.yml','.yaml','.md','.txt','.toml']);
+          function walk(dir) {
+            const out=[];
+            for (const ent of fs.readdirSync(dir,{withFileTypes:true})) {
+              if (['.git','node_modules'].includes(ent.name)) continue;
+              const p=path.join(dir,ent.name);
+              if (ent.isDirectory()) out.push(...walk(p)); else out.push(p);
+            }
+            return out;
+          }
+          for (const file of walk(root)) {
+            if (!textExt.has(path.extname(file).toLowerCase())) continue;
+            if (file.endsWith('backend/index.ts')) continue;
+            let s;
+            try { s=fs.readFileSync(file,'utf8'); } catch { continue; }
+            if (!banned.some(x=>s.includes(x))) continue;
+            if (file.includes('cleanup-legacy-ai.yml')) continue;
+            if (/package\.json$/.test(file)) {
+              for (const key of ['openai','@google/generative-ai','@google/generative-language','openrouter']) {
+                const re = new RegExp('^\\s*"[^"\\n]*'+key.replace(/[.*+?^${}()|[\\]\\\\]/g,'\\\\$&')+'[^"\\n]*"\\s*:\\s*"[^"]+",?\\s*$', 'gmi');
+                s=s.replace(re,'');
+              }
+              fs.writeFileSync(file,s);
+            } else if (['.yml','.yaml','.md','.txt','.toml','.json'].includes(path.extname(file).toLowerCase())) {
+              s=s.split('\n').filter(line=>!banned.some(x=>line.includes(x))).join('\n');
+              fs.writeFileSync(file,s);
+            } else {
+              const ranges=collectTopLevel(s,file);
+              ranges.sort((a,b)=>b[0]-a[0]);
+              for(const [a,b] of ranges) s=s.slice(0,a)+s.slice(b);
+              fs.writeFileSync(file,s);
+            }
+          }
+          NODE
+          node /tmp/cleanup-ai.cjs
+
+          rm -f .github/workflows/cleanup-legacy-ai.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          if git diff --cached --quiet; then
+            echo 'No legacy AI changes found.'
+            exit 0
+          fi
+          git commit -m 'chore: completely remove legacy AI integrations'
+          git push origin render-migration
