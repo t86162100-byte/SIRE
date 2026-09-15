@@ -27,36 +27,35 @@ async function serveStatic(req, res) {
 function toEvent(req, body) { const url = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`); return { httpMethod:req.method, path:url.pathname, rawPath:url.pathname, body, headers:req.headers, requestContext:{ http:{ method:req.method, path:url.pathname } } }; }
 
 async function handleCouncilRequest(parsed) {
+  const query = String(parsed.query || '');
+  const history = Array.isArray(parsed.history) ? parsed.history : [];
   const gemini = await runGemini({
-    query: String(parsed.query || ''),
+    query,
     symbol: parsed.symbol ? String(parsed.symbol) : undefined,
-    history: Array.isArray(parsed.history) ? parsed.history : [],
+    history,
     runtimeContext: parsed.runtimeContext && typeof parsed.runtimeContext === 'object' ? parsed.runtimeContext : undefined,
   });
 
   try {
-    const gpt = await runOpenRouter({
-      query: String(parsed.query || ''),
-      history: Array.isArray(parsed.history) ? parsed.history : [],
-      councilContext: gemini.text,
-    });
+    const gpt = await runOpenRouter({ query, history, councilContext: gemini.text });
+    const debate = Array.isArray(gpt.council)
+      ? [{ provider: gemini.provider, model: gemini.model, role: 'proposal', text: gemini.text }, ...gpt.council]
+      : [
+          { provider: gemini.provider, model: gemini.model, role: 'proposal', text: gemini.text },
+          { provider: gpt.provider, model: gpt.model, role: 'final', text: gpt.text },
+        ];
     return {
       text: gpt.text,
       responseId: gpt.responseId || gemini.responseId || '',
       model: 'council:' + gemini.model + '+' + gpt.model,
       provider: 'SIRE AI Council',
-      council: [
-        { provider: gemini.provider, model: gemini.model, text: gemini.text },
-        { provider: gpt.provider, model: gpt.model, text: gpt.text },
-      ],
+      council: debate,
     };
   } catch (cause) {
-    // Keep SIRE usable if the optional GPT provider has not been configured or
-    // its free endpoint is temporarily unavailable. Gemini remains the live fallback.
     console.warn('[COUNCIL] GPT member unavailable:', cause instanceof Error ? cause.message : String(cause));
     return {
       ...gemini,
-      council: [{ provider: gemini.provider, model: gemini.model, text: gemini.text }],
+      council: [{ provider: gemini.provider, model: gemini.model, role: 'proposal', text: gemini.text }],
       councilWarning: 'OpenAI GPT council member is unavailable; Gemini answered this turn.',
     };
   }
@@ -65,17 +64,8 @@ async function handleCouncilRequest(parsed) {
 async function handleDirectGptRequest(parsed) {
   const query = String(parsed.query || '').trim();
   if (!query) throw new Error('query is required');
-  const gpt = await runOpenRouter({
-    query,
-    history: Array.isArray(parsed.history) ? parsed.history : [],
-  });
-  return {
-    text: gpt.text,
-    responseId: gpt.responseId || '',
-    model: gpt.model,
-    provider: gpt.provider,
-    directGptTest: true,
-  };
+  const gpt = await runOpenRouter({ query, history: Array.isArray(parsed.history) ? parsed.history : [] });
+  return { text: gpt.text, responseId: gpt.responseId || '', model: gpt.model, provider: gpt.provider, directGptTest: true };
 }
 
 const server = http.createServer(async (req,res) => {
