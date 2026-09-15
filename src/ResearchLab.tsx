@@ -83,12 +83,15 @@ export default function ResearchLab({ symbol, instruments, onClose, onSelectInst
     }]);
 
     try {
-      // SIRE now goes through the council: Gemini gives the first reasoning pass,
-      // then the OpenAI GPT-OSS member reviews, challenges, and improves it.
-      const response = await api.post('/api/sire/agent/council', {
-        query,
+      const directGptTest = query.toLowerCase().startsWith('/gpt ');
+      const actualQuery = directGptTest ? query.slice(5).trim() : query;
+      if (!actualQuery) throw new Error('Use /gpt followed by a message.');
+
+      const endpoint = directGptTest ? '/api/sire/agent/gpt' : '/api/sire/agent/council';
+      const response = await api.post(endpoint, {
+        query: actualQuery,
         symbol: activeSymbol,
-        history: [...chatMessages.map(message => ({ role: message.role, text: message.text })), { role: 'user', text: query }],
+        history: [...chatMessages.map(message => ({ role: message.role, text: message.text })), { role: 'user', text: actualQuery }],
         runtimeContext: buildRuntimeContext(),
       });
 
