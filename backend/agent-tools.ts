@@ -1,5 +1,5 @@
 /* SIRE Agent Tool Layer
- * Generic, authenticated connector registry + web research + workspace operations.
+ * Generic authenticated connector registry + free web research + workspace operations.
  * Secrets stay in environment variables; never persist credentials in SIRE data.
  */
 import { db } from '@appdeploy/sdk';
@@ -17,6 +17,11 @@ export type ConnectorDefinition = {
 
 const CONNECTOR_TABLE = 'sire_connectors_v1';
 const JOB_TABLE = 'sire_agent_jobs_v1';
+const DEFAULT_SEARXNG_INSTANCES = [
+  'https://searx.tiekoetter.com',
+  'https://searx.rhscz.eu',
+  'https://search.mdosch.de',
+];
 
 function envJson<T>(name: string, fallback: T): T {
   try {
@@ -27,11 +32,18 @@ function envJson<T>(name: string, fallback: T): T {
   }
 }
 
+function searxngInstances() {
+  return (process.env.SIRE_SEARXNG_URLS || DEFAULT_SEARXNG_INSTANCES.join(','))
+    .split(',')
+    .map(value => value.trim().replace(/\/$/, ''))
+    .filter(Boolean);
+}
+
 export function discoverConnectors(): ConnectorDefinition[] {
   const configured = envJson<ConnectorDefinition[]>('SIRE_CONNECTORS_JSON', []);
   const out = [...configured];
   const builtins: ConnectorDefinition[] = [
-    { id: 'web-search', name: 'Web Search', kind: 'http', baseUrl: 'https://api.exa.ai', authEnv: 'EXA_API_KEY', permissions: ['read'], enabled: Boolean(process.env.EXA_API_KEY) },
+    { id: 'web-search', name: 'Web Search (SearXNG)', kind: 'http', baseUrl: searxngInstances()[0], permissions: ['read'], enabled: true },
     { id: 'github', name: 'GitHub', kind: 'github', authEnv: 'GITHUB_TOKEN', permissions: ['read', 'write', 'execute'], enabled: Boolean(process.env.GITHUB_TOKEN) },
     { id: 'render', name: 'Render', kind: 'render', authEnv: 'RENDER_API_KEY', permissions: ['read', 'write', 'deploy'], enabled: Boolean(process.env.RENDER_API_KEY) },
     { id: 'sire-data', name: 'SIRE Data', kind: 'database', permissions: ['read', 'write', 'execute'], enabled: true },
@@ -57,16 +69,40 @@ function requireEnv(name?: string) {
 }
 
 export async function webSearch(query: string, limit = 8) {
-  const key = requireEnv('EXA_API_KEY');
-  if (!key) throw new Error('Web search is not configured. Set EXA_API_KEY.');
-  const response = await fetch('https://api.exa.ai/search', {
-    method: 'POST',
-    headers: { 'content-type': 'application/json', authorization: `Bearer ${key}` },
-    body: JSON.stringify({ query, numResults: Math.min(Math.max(limit, 1), 20), contents: { text: true } }),
-  });
-  if (!response.ok) throw new Error(`Web search failed: HTTP ${response.status}`);
-  const data = await response.json() as Record<string, unknown>;
-  return { query, results: Array.isArray(data.results) ? data.results : [] };
+  const urls = searxngInstances();
+  if (!urls.length) throw new Error('No SearXNG search instances are configured');
+  let lastError = 'No SearXNG instance responded';
+
+  for (const baseUrl of urls) {
+    try {
+      const url = new URL('/search', `${baseUrl}/`);
+      url.searchParams.set('q', query);
+      url.searchParams.set('format', 'json');
+      url.searchParams.set('categories', 'general,news');
+      url.searchParams.set('language', 'en');
+      const response = await fetch(url, {
+        method: 'GET',
+        headers: { accept: 'application/json', 'user-agent': 'SIRE-Agent/1.0' },
+        signal: AbortSignal.timeout(12000),
+      });
+      if (!response.ok) {
+        lastError = `${baseUrl}: HTTP ${response.status}`;
+        continue;
+      }
+      const data = await response.json() as Record<string, unknown>;
+      const results = Array.isArray(data.results) ? data.results : [];
+      return {
+        query,
+        provider: 'SearXNG',
+        instance: baseUrl,
+        results: results.slice(0, Math.min(Math.max(limit, 1), 20)),
+      };
+    } catch (error) {
+      lastError = `${baseUrl}: ${error instanceof Error ? error.message : String(error)}`;
+    }
+  }
+
+  throw new Error(`Free web search unavailable. ${lastError}`);
 }
 
 export async function connectorRequest(connectorId: string, path: string, init: RequestInit = {}, required: AgentPermission = 'read') {
@@ -107,7 +143,8 @@ export async function listAgentTasks(limit = 100) {
 }
 
 export const AGENT_CAPABILITIES = {
-  webSearch: Boolean(process.env.EXA_API_KEY),
+  webSearch: true,
+  webSearchProvider: 'SearXNG',
   connectors: discoverConnectors().map(x => ({ id: x.id, name: x.name, permissions: x.permissions })),
   sireData: true,
   workspace: ['code', 'data', 'logs', 'research', 'runtime'],
