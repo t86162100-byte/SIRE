@@ -32,7 +32,20 @@ type AgentResponse = {
   responseId?: string;
   actions?: Array<Record<string, unknown>>;
   council?: CouncilTurn[];
+  councilMode?: string;
+  rounds?: number;
   error?: string;
+};
+
+const councilStage = (role: string) => {
+  switch (role) {
+    case 'proposal': return { title: '1 · Proposal', label: 'Initial position' };
+    case 'challenge': return { title: '2 · Objections & Challenge', label: 'Tests assumptions and disagreements' };
+    case 'rebuttal':
+    case 'response': return { title: '3 · Response', label: 'Answers objections and revises the position' };
+    case 'final': return { title: '4 · Agreement & Conclusion', label: 'Resolves the discussion into the best answer' };
+    default: return { title: role, label: 'Council contribution' };
+  }
 };
 
 export default function ResearchLab({ symbol, instruments, onClose, onSelectInstrument, onSetChartView, onAddMarker, runtimeContext }: Props) {
@@ -169,19 +182,23 @@ export default function ResearchLab({ symbol, instruments, onClose, onSelectInst
                 <div className="sire-chat-only-role">{item.role === 'sire' ? 'SIRE' : 'YOU'}</div>
                 <div className="sire-chat-only-bubble">{item.text}</div>
                 {item.council && item.council.length > 1 && (
-                  <details className="sire-council-debate">
-                    <summary>View council debate</summary>
+                  <details className="sire-council-debate" open>
+                    <summary>Watch council collaboration · {item.council.length} stages</summary>
                     <div className="sire-council-debate-body">
-                      <p className="sire-council-note">Decision-relevant debate summaries are shown here. Private chain-of-thought is not exposed.</p>
-                      {item.council.map((turn, index) => (
-                        <section className="sire-council-turn" key={`${item.id}-${index}`}>
-                          <div className="sire-council-turn-head">
-                            <strong>{turn.role === 'challenge' ? 'GPT · Challenge' : turn.role === 'rebuttal' ? 'Gemini · Rebuttal' : turn.role === 'final' ? 'GPT · Final' : turn.role}</strong>
-                            <span>{turn.model}</span>
-                          </div>
-                          <div>{turn.text}</div>
-                        </section>
-                      ))}
+                      <p className="sire-council-note">SIRE shows concise decision-relevant reasoning summaries, arguments, evidence, assumptions, objections, responses, and conclusions. Private chain-of-thought is never exposed.</p>
+                      {item.council.map((turn, index) => {
+                        const stage = councilStage(turn.role);
+                        return (
+                          <section className="sire-council-turn" key={`${item.id}-${index}`}>
+                            <div className="sire-council-turn-head">
+                              <strong>{stage.title}</strong>
+                              <span>{turn.model}</span>
+                            </div>
+                            <small>{stage.label}</small>
+                            <div className="sire-council-turn-text">{turn.text}</div>
+                          </section>
+                        );
+                      })}
                     </div>
                   </details>
                 )}
