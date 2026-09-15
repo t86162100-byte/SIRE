@@ -83,17 +83,15 @@ export default function ResearchLab({ symbol, instruments, onClose, onSelectInst
     }]);
 
     try {
-      const response = await api.post('/api/sire/agent/chat', {
+      // SIRE now goes through the council: Gemini gives the first reasoning pass,
+      // then the OpenAI GPT-OSS member reviews, challenges, and improves it.
+      const response = await api.post('/api/sire/agent/council', {
         query,
         symbol: activeSymbol,
         history: [...chatMessages.map(message => ({ role: message.role, text: message.text })), { role: 'user', text: query }],
         runtimeContext: buildRuntimeContext(),
       });
 
-      // The Render migration client can return the JSON body directly rather
-      // than an Axios-style { data } wrapper. Normalize both shapes before
-      // reading the response so an undefined .data can never become the
-      // user-facing "reading 'text'" error.
       const rawResponse = response as unknown;
       const data = (
         rawResponse &&
