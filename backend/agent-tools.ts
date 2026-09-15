@@ -1,5 +1,5 @@
 /* SIRE Agent Tool Layer
- * Generic authenticated connector registry + free web research + workspace operations.
+ * Generic authenticated connector registry + resilient free web research + workspace operations.
  * Secrets stay in environment variables; never persist credentials in SIRE data.
  */
 import { db } from '@appdeploy/sdk';
@@ -46,7 +46,7 @@ export function discoverConnectors(): ConnectorDefinition[] {
   const configured = envJson<ConnectorDefinition[]>('SIRE_CONNECTORS_JSON', []);
   const out = [...configured];
   const builtins: ConnectorDefinition[] = [
-    { id: 'web-search', name: 'Web Search (Chrome + SearXNG)', kind: 'http', baseUrl: searxngInstances()[0], permissions: ['read'], enabled: true },
+    { id: 'web-search', name: 'Web Search (SearXNG + free HTTP + Chrome)', kind: 'http', baseUrl: searxngInstances()[0], permissions: ['read'], enabled: true },
     { id: 'github', name: 'GitHub', kind: 'github', authEnv: 'GITHUB_TOKEN', permissions: ['read', 'write', 'execute'], enabled: Boolean(process.env.GITHUB_TOKEN) },
     { id: 'render', name: 'Render', kind: 'render', authEnv: 'RENDER_API_KEY', permissions: ['read', 'write', 'deploy'], enabled: Boolean(process.env.RENDER_API_KEY) },
     { id: 'sire-data', name: 'SIRE Data', kind: 'database', permissions: ['read', 'write', 'execute'], enabled: true },
@@ -71,6 +71,78 @@ function requireEnv(name?: string) {
   return value;
 }
 
+function decodeHtml(value: string) {
+  return value
+    .replace(/<[^>]*>/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&#x27;/gi, "'")
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function absoluteUrl(value: string) {
+  try { return new URL(value, 'https://duckduckgo.com').toString(); } catch { return value; }
+}
+
+async function duckDuckGoSearch(query: string, limit: number) {
+  const url = new URL('https://html.duckduckgo.com/html/');
+  url.searchParams.set('q', query);
+  const response = await fetch(url, {
+    headers: {
+      accept: 'text/html,application/xhtml+xml',
+      'user-agent': 'Mozilla/5.0 (compatible; SIRE-Agent/1.0; +https://sire-rwv9.onrender.com)',
+    },
+    signal: AbortSignal.timeout(10000),
+  });
+  if (!response.ok) throw new Error(`DuckDuckGo: HTTP ${response.status}`);
+  const html = await response.text();
+  const results: Array<{ title: string; url: string; snippet: string; source: string }> = [];
+  const blocks = html.match(/<div[^>]+class=["'][^"']*result[^"']*["'][\s\S]*?<\/div>\s*<\/div>/gi) || [];
+  for (const block of blocks) {
+    const link = block.match(/<a[^>]+class=["'][^"']*result__a[^"']*["'][^>]+href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/i);
+    if (!link) continue;
+    const snippetMatch = block.match(/class=["'][^"']*result__snippet[^"']*["'][^>]*>([\s\S]*?)<\//i);
+    const resultUrl = absoluteUrl(link[1]);
+    try {
+      results.push({ title: decodeHtml(link[2]).slice(0, 240), url: resultUrl, snippet: decodeHtml(snippetMatch?.[1] || '').slice(0, 500), source: new URL(resultUrl).hostname });
+    } catch { /* ignore malformed result */ }
+    if (results.length >= Math.min(Math.max(limit, 1), 10)) break;
+  }
+  if (!results.length) throw new Error('DuckDuckGo returned no usable results');
+  return { query, provider: 'DuckDuckGo HTML', results };
+}
+
+async function bingRssSearch(query: string, limit: number) {
+  const url = new URL('https://www.bing.com/search');
+  url.searchParams.set('q', query);
+  url.searchParams.set('format', 'rss');
+  const response = await fetch(url, {
+    headers: { accept: 'application/rss+xml,application/xml,text/xml', 'user-agent': 'SIRE-Agent/1.0' },
+    signal: AbortSignal.timeout(10000),
+  });
+  if (!response.ok) throw new Error(`Bing RSS: HTTP ${response.status}`);
+  const xml = await response.text();
+  const results: Array<{ title: string; url: string; snippet: string; source: string }> = [];
+  const items = xml.match(/<item>[\s\S]*?<\/item>/gi) || [];
+  for (const item of items) {
+    const title = item.match(/<title>([\s\S]*?)<\/title>/i)?.[1];
+    const link = item.match(/<link>([\s\S]*?)<\/link>/i)?.[1];
+    const description = item.match(/<description>([\s\S]*?)<\/description>/i)?.[1];
+    if (!title || !link) continue;
+    const resultUrl = decodeHtml(link).trim();
+    try {
+      results.push({ title: decodeHtml(title).slice(0, 240), url: resultUrl, snippet: decodeHtml(description || '').slice(0, 500), source: new URL(resultUrl).hostname });
+    } catch { /* ignore malformed result */ }
+    if (results.length >= Math.min(Math.max(limit, 1), 10)) break;
+  }
+  if (!results.length) throw new Error('Bing RSS returned no usable results');
+  return { query, provider: 'Bing RSS', results };
+}
+
 async function searxngSearch(query: string, limit: number) {
   const urls = searxngInstances();
   if (!urls.length) throw new Error('No SearXNG search instances are configured');
@@ -85,10 +157,7 @@ async function searxngSearch(query: string, limit: number) {
       url.searchParams.set('language', 'en');
       const response = await fetch(url, {
         method: 'GET',
-        headers: {
-          accept: 'application/json',
-          'user-agent': 'SIRE-Agent/1.0 (+https://sire-rwv9.onrender.com)',
-        },
+        headers: { accept: 'application/json', 'user-agent': 'SIRE-Agent/1.0 (+https://sire-rwv9.onrender.com)' },
         signal: AbortSignal.timeout(10000),
       });
       if (!response.ok) {
@@ -101,32 +170,27 @@ async function searxngSearch(query: string, limit: number) {
         lastError = `${baseUrl}: no results`;
         continue;
       }
-      return {
-        query,
-        provider: 'SearXNG',
-        instance: baseUrl,
-        results: results.slice(0, Math.min(Math.max(limit, 1), 20)),
-      };
+      return { query, provider: 'SearXNG', instance: baseUrl, results: results.slice(0, Math.min(Math.max(limit, 1), 20)) };
     } catch (error) {
       lastError = `${baseUrl}: ${error instanceof Error ? error.message : String(error)}`;
     }
   }
-
   throw new Error(`SearXNG unavailable. ${lastError}`);
 }
 
 export async function webSearch(query: string, limit = 8) {
-  try {
-    return await searxngSearch(query, limit);
-  } catch (searxError) {
-    const searxMessage = searxError instanceof Error ? searxError.message : String(searxError);
-    try {
-      return await chromeWebSearch(query, limit);
-    } catch (chromeError) {
-      const chromeMessage = chromeError instanceof Error ? chromeError.message : String(chromeError);
-      throw new Error(`Web research unavailable. SearXNG: ${searxMessage}. Chrome: ${chromeMessage}`);
-    }
+  const failures: string[] = [];
+  const providers = [
+    ['SearXNG', () => searxngSearch(query, limit)],
+    ['DuckDuckGo', () => duckDuckGoSearch(query, limit)],
+    ['Bing', () => bingRssSearch(query, limit)],
+    ['Chrome', () => chromeWebSearch(query, limit)],
+  ] as const;
+  for (const [name, search] of providers) {
+    try { return await search(); }
+    catch (error) { failures.push(`${name}: ${error instanceof Error ? error.message : String(error)}`); }
   }
+  throw new Error(`Web research unavailable after all providers failed. ${failures.join(' | ')}`);
 }
 
 export async function connectorRequest(connectorId: string, path: string, init: RequestInit = {}, required: AgentPermission = 'read') {
@@ -147,17 +211,7 @@ export async function connectorRequest(connectorId: string, path: string, init: 
 
 export async function enqueueAgentTask(input: { task: string; priority?: number; continuous?: boolean; metadata?: Record<string, unknown> }) {
   const now = Date.now();
-  const record = {
-    task: input.task,
-    priority: input.priority ?? 0,
-    continuous: Boolean(input.continuous),
-    status: 'queued',
-    metadata: input.metadata || {},
-    createdAt: now,
-    updatedAt: now,
-    attempts: 0,
-    nextRunAt: now,
-  };
+  const record = { task: input.task, priority: input.priority ?? 0, continuous: Boolean(input.continuous), status: 'queued', metadata: input.metadata || {}, createdAt: now, updatedAt: now, attempts: 0, nextRunAt: now };
   const result = await db.add(JOB_TABLE, [record]);
   return { ...record, id: result?.[0]?.id };
 }
@@ -168,7 +222,7 @@ export async function listAgentTasks(limit = 100) {
 
 export const AGENT_CAPABILITIES = {
   webSearch: true,
-  webSearchProvider: 'SearXNG → Chrome/Google',
+  webSearchProvider: 'SearXNG → DuckDuckGo → Bing → Chrome',
   connectors: discoverConnectors().map(x => ({ id: x.id, name: x.name, permissions: x.permissions })),
   sireData: true,
   workspace: ['code', 'data', 'logs', 'research', 'runtime'],
