@@ -1,4 +1,0 @@
-/* Remove only the legacy bottom chart toolbar/status strip. Keep the primary navigation untouched. */
-.chart-statusbar {
-  display: none !important;
-}
