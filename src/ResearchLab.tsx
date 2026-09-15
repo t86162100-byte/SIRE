@@ -11,115 +11,57 @@ type WebSource = { title: string; url: string; publishedDate?: string; author?: 
 type ChatMessage = { id: number; role: 'user' | 'sire'; text: string; meta?: string };
 type AgentResponse = { text?: string; responseId?: string; actions?: Array<Record<string, unknown>>; error?: string; webSearched?: boolean; webSources?: WebSource[] };
 
-const phaseLabel = (phase: string) => {
-  const value = phase.toLowerCase();
-  if (value.includes('propos')) return 'proposing';
-  if (value.includes('research') || value.includes('search')) return 'researching';
-  if (value.includes('plan')) return 'planning';
-  if (value.includes('discuss')) return 'discussing';
-  if (value.includes('respond') || value.includes('revis')) return 'responding';
-  if (value.includes('check') || value.includes('verif')) return 'checking';
-  if (value.includes('conclud')) return 'concluding';
-  if (value.includes('unavailable')) return 'web unavailable';
-  if (value.includes('fallback')) return 'finishing';
-  return phase || 'working';
-};
-
-const escapeText = (value: string) => value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+const phaseLabel = (phase: string) => { const value = phase.toLowerCase(); if (value.includes('propos')) return 'proposing'; if (value.includes('research') || value.includes('search')) return 'researching'; if (value.includes('plan')) return 'planning'; if (value.includes('discuss')) return 'discussing'; if (value.includes('respond') || value.includes('revis')) return 'responding'; if (value.includes('check') || value.includes('verif')) return 'checking'; if (value.includes('conclud')) return 'concluding'; if (value.includes('unavailable')) return 'web unavailable'; if (value.includes('fallback')) return 'finishing'; return phase || 'working'; };
 
 function InlineMarkdown({ text }: { text: string }) {
-  const escaped = escapeText(text);
-  const tokens = escaped.split(/(\*\*[^*]+\*\*|__[^_]+__|`[^`]+`|\[[^\]]+\]\(https?:\/\/[^\s)]+\)|https?:\/\/[^\s<]+)/g);
-  return <>{tokens.map((token, index) => {
-    if (!token) return null;
-    if ((token.startsWith('**') && token.endsWith('**')) || (token.startsWith('__') && token.endsWith('__'))) return <strong key={index}>{token.slice(2, -2)}</strong>;
-    if (token.startsWith('`') && token.endsWith('`')) return <code key={index} className="sire-inline-code">{token.slice(1, -1)}</code>;
-    const markdownLink = token.match(/^\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)$/);
-    if (markdownLink) return <a key={index} href={markdownLink[2]} target="_blank" rel="noreferrer">{markdownLink[1]}</a>;
-    if (/^https?:\/\//.test(token)) return <a key={index} href={token} target="_blank" rel="noreferrer">{token.replace(/^https?:\/\//, '')}</a>;
-    return <span key={index}>{token}</span>;
-  })}</>;
+  const tokens = text.split(/(\*\*[^*]+\*\*|__[^_]+__|`[^`]+`|\*[^*]+\*|_[^_]+_|\[[^\]]+\]\(https?:\/\/[^\s)]+\)|https?:\/\/[^\s<]+)/g);
+  return <>{tokens.map((token, index) => { if (!token) return null; if ((token.startsWith('**') && token.endsWith('**')) || (token.startsWith('__') && token.endsWith('__'))) return <strong key={index}>{token.slice(2, -2)}</strong>; if (token.startsWith('`') && token.endsWith('`')) return <code key={index} className="sire-inline-code">{token.slice(1, -1)}</code>; if ((token.startsWith('*') && token.endsWith('*')) || (token.startsWith('_') && token.endsWith('_'))) return <em key={index}>{token.slice(1, -1)}</em>; const markdownLink = token.match(/^\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)$/); if (markdownLink) return <a key={index} href={markdownLink[2]} target="_blank" rel="noreferrer">{markdownLink[1]}</a>; if (/^https?:\/\//.test(token)) return <a key={index} href={token} target="_blank" rel="noreferrer">{token.replace(/^https?:\/\//, '')}</a>; return <span key={index}>{token}</span>; })}</>;
 }
 
 function RichMessage({ text }: { text: string }) {
   const lines = text.replace(/\r\n?/g, '\n').split('\n');
   const blocks: ReactNode[] = [];
-  let paragraph: string[] = [];
-  let list: { ordered: boolean; text: string }[] = [];
-  let code: string[] | null = null;
-  let codeLanguage = '';
+  let paragraph: string[] = []; let list: { ordered: boolean; text: string }[] = []; let quote: string[] = []; let code: string[] | null = null; let codeLanguage = ''; let table: string[][] = [];
   const flushParagraph = () => { if (!paragraph.length) return; blocks.push(<p key={`p-${blocks.length}`}><InlineMarkdown text={paragraph.join(' ')} /></p>); paragraph = []; };
   const flushList = () => { if (!list.length) return; const ordered = list[0].ordered; const items = list.map((item, index) => <li key={index}><InlineMarkdown text={item.text} /></li>); blocks.push(ordered ? <ol key={`ol-${blocks.length}`}>{items}</ol> : <ul key={`ul-${blocks.length}`}>{items}</ul>); list = []; };
+  const flushQuote = () => { if (!quote.length) return; blocks.push(<blockquote key={`quote-${blocks.length}`}>{quote.map((line, index) => <div key={index}><InlineMarkdown text={line} /></div>)}</blockquote>); quote = []; };
+  const flushTable = () => { if (table.length < 2) { table = []; return; } const header = table[0]; const rows = table.slice(1).filter(row => !row.every(cell => /^\s*:?-{3,}:?\s*$/.test(cell))); blocks.push(<div className="sire-table-wrap" key={`table-${blocks.length}`}><table className="sire-rich-table"><thead><tr>{header.map((cell, index) => <th key={index}><InlineMarkdown text={cell.trim()} /></th>)}</tr></thead><tbody>{rows.map((row, rowIndex) => <tr key={rowIndex}>{header.map((_, cellIndex) => <td key={cellIndex}><InlineMarkdown text={(row[cellIndex] || '').trim()} /></td>)}</tr>)}</tbody></table></div>); table = []; };
   const flushCode = () => { if (code === null) return; const source = code.join('\n'); blocks.push(<pre key={`code-${blocks.length}`} className="sire-code-block"><div className="sire-code-head"><span>{codeLanguage || 'code'}</span><button type="button" onClick={() => void navigator.clipboard?.writeText(source)}><Copy size={13} /><span>Copy</span></button></div><code>{source}</code></pre>); code = null; codeLanguage = ''; };
+  const isTableLine = (line: string) => line.includes('|') && line.trim().split('|').length >= 3;
+  const splitTable = (line: string) => line.trim().replace(/^\|/, '').replace(/\|$/, '').split('|');
   lines.forEach((line, index) => {
-    const fence = line.match(/^\s*```(.*)$/);
-    if (fence) { if (code === null) { flushParagraph(); flushList(); code = []; codeLanguage = fence[1].trim(); } else flushCode(); return; }
+    const fence = line.match(/^\s*```(.*)$/); if (fence) { if (code === null) { flushParagraph(); flushList(); flushQuote(); flushTable(); code = []; codeLanguage = fence[1].trim(); } else flushCode(); return; }
     if (code !== null) { code.push(line); return; }
-    if (!line.trim()) { flushParagraph(); flushList(); return; }
-    const heading = line.match(/^\s*(#{1,3})\s+(.+)$/);
-    if (heading) { flushParagraph(); flushList(); const level = heading[1].length; const content = <InlineMarkdown text={heading[2]} />; blocks.push(level === 1 ? <h2 key={`h-${index}`}>{content}</h2> : level === 2 ? <h3 key={`h-${index}`}>{content}</h3> : <h4 key={`h-${index}`}>{content}</h4>); return; }
-    const bullet = line.match(/^\s*[-*•]\s+(.+)$/);
-    const numbered = line.match(/^\s*\d+[.)]\s+(.+)$/);
-    if (bullet || numbered) { flushParagraph(); const ordered = Boolean(numbered); if (list.length && list[0].ordered !== ordered) flushList(); list.push({ ordered, text: (bullet || numbered)![1] }); return; }
-    flushList(); paragraph.push(line.trim());
+    if (!line.trim()) { flushParagraph(); flushList(); flushQuote(); flushTable(); return; }
+    if (/^\s*([-*_])(?:\s*\1){2,}\s*$/.test(line)) { flushParagraph(); flushList(); flushQuote(); flushTable(); blocks.push(<hr key={`hr-${index}`} />); return; }
+    if (isTableLine(line)) { flushParagraph(); flushList(); flushQuote(); table.push(splitTable(line)); return; }
+    if (table.length) flushTable();
+    const heading = line.match(/^\s*(#{1,4})\s+(.+)$/); if (heading) { flushParagraph(); flushList(); flushQuote(); const level = Math.min(heading[1].length, 4); const content = <InlineMarkdown text={heading[2].replace(/\s+#+\s*$/, '')} />; blocks.push(level === 1 ? <h2 key={`h-${index}`}>{content}</h2> : level === 2 ? <h3 key={`h-${index}`}>{content}</h3> : <h4 key={`h-${index}`}>{content}</h4>); return; }
+    const bullet = line.match(/^\s*[-*•]\s+(.+)$/); const numbered = line.match(/^\s*\d+[.)]\s+(.+)$/); if (bullet || numbered) { flushParagraph(); flushQuote(); const ordered = Boolean(numbered); if (list.length && list[0].ordered !== ordered) flushList(); list.push({ ordered, text: (bullet || numbered)![1] }); return; }
+    if (/^\s*>/.test(line)) { flushParagraph(); flushList(); quote.push(line.replace(/^\s*>\s?/, '')); return; }
+    if (quote.length) flushQuote(); paragraph.push(line.trim());
   });
-  flushParagraph(); flushList(); flushCode();
-  return <div className="sire-rich-text">{blocks}</div>;
+  flushParagraph(); flushList(); flushQuote(); flushTable(); flushCode(); return <div className="sire-rich-text">{blocks}</div>;
 }
 
-function MessageActions({ text }: { text: string }) {
-  const [copied, setCopied] = useState(false);
-  const copy = async () => { try { await navigator.clipboard.writeText(text); setCopied(true); window.setTimeout(() => setCopied(false), 1400); } catch { /* native selection remains available */ } };
-  return <div className="sire-message-actions"><button type="button" onClick={() => void copy()} aria-label="Copy response">{copied ? <Check size={14} /> : <Copy size={14} />}<span>{copied ? 'Copied' : 'Copy'}</span></button></div>;
-}
+function MessageActions({ text }: { text: string }) { const [copied, setCopied] = useState(false); const copy = async () => { try { await navigator.clipboard.writeText(text); setCopied(true); window.setTimeout(() => setCopied(false), 1400); } catch { /* native long-press selection remains available */ } }; return <div className="sire-message-actions"><button type="button" onClick={() => void copy()} aria-label="Copy response">{copied ? <Check size={14} /> : <Copy size={14} />}<span>{copied ? 'Copied' : 'Copy'}</span></button></div>; }
 
 export default function ResearchLab({ symbol, instruments, onClose, onSelectInstrument, onSetChartView, onAddMarker, runtimeContext }: Props) {
-  const [activeSymbol, setActiveSymbol] = useState(symbol);
-  const [chatInput, setChatInput] = useState('');
-  const [chatBusy, setChatBusy] = useState(false);
-  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
-  const [lastPrompt, setLastPrompt] = useState('');
-  const [lastError, setLastError] = useState(false);
-  const [activity, setActivity] = useState<CouncilActivity[]>([]);
-  const [webSources, setWebSources] = useState<WebSource[]>([]);
-  const chatEndRef = useRef<HTMLDivElement | null>(null);
-  const runtimeContextRef = useRef<RuntimeContext | null>(runtimeContext || null);
-
-  useEffect(() => { runtimeContextRef.current = runtimeContext || null; }, [runtimeContext]);
-  useEffect(() => { setActiveSymbol(symbol); }, [symbol]);
-  useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' }); }, [chatMessages, chatBusy, activity, webSources]);
+  const [activeSymbol, setActiveSymbol] = useState(symbol); const [chatInput, setChatInput] = useState(''); const [chatBusy, setChatBusy] = useState(false); const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]); const [lastPrompt, setLastPrompt] = useState(''); const [lastError, setLastError] = useState(false); const [activity, setActivity] = useState<CouncilActivity[]>([]); const [webSources, setWebSources] = useState<WebSource[]>([]);
+  const chatEndRef = useRef<HTMLDivElement | null>(null); const runtimeContextRef = useRef<RuntimeContext | null>(runtimeContext || null);
+  useEffect(() => { runtimeContextRef.current = runtimeContext || null; }, [runtimeContext]); useEffect(() => { setActiveSymbol(symbol); }, [symbol]); useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' }); }, [chatMessages, chatBusy, activity, webSources]);
   const buildRuntimeContext = (): RuntimeContext => runtimeContextRef.current || { symbol: activeSymbol, name: instruments.find(item => item.symbol === activeSymbol)?.name, timeframe: 'unknown', chartMode: 'unknown', latestPrice: null, activeIndicators: [], drawings: [], chartBars: 0, visibleBars: 0, selectedInspection: null };
   const applyActions = (actions: unknown) => { if (!Array.isArray(actions)) return; actions.forEach(action => { const item = action as Record<string, unknown>; const type = String(item.__sireAction || ''); if (type === 'select_instrument') { const requested = String(item.symbol || ''); if (requested && instruments.some(instrument => instrument.symbol === requested)) { setActiveSymbol(requested); onSelectInstrument?.(requested); } } else if (type === 'set_chart_view') onSetChartView?.((item.settings || {}) as Record<string, unknown>); else if (type === 'add_chart_marker') onAddMarker?.(String(item.label || 'SIRE marker')); }); };
-
   const runAgent = async (prompt: string, retrying = false) => {
-    const query = prompt.trim(); if (!query || chatBusy) return;
-    setLastPrompt(query); setChatInput(''); setChatBusy(true); setLastError(false); setActivity([]); setWebSources([]);
-    setChatMessages(previous => [...previous, { id: Date.now(), role: 'user', text: query }]);
-    try {
-      const directGptTest = query.toLowerCase().startsWith('/gpt ');
-      const actualQuery = directGptTest ? query.slice(5).trim() : query;
-      if (!actualQuery) throw new Error('Use /gpt followed by a message.');
-      const history = [...chatMessages.map(message => ({ role: message.role, text: message.text })), { role: 'user', text: actualQuery }];
-      if (directGptTest) {
-        const response = await api.post('/api/sire/agent/gpt', { query: actualQuery, symbol: activeSymbol, history, runtimeContext: buildRuntimeContext() });
-        const raw = response as unknown; const data = ((raw && typeof raw === 'object' && 'data' in raw && (raw as Record<string, unknown>).data !== undefined ? (raw as Record<string, unknown>).data : raw) || {}) as AgentResponse;
-        if (data.error) throw new Error(String(data.error)); applyActions(data.actions); setChatMessages(previous => [...previous, { id: Date.now() + 1, role: 'sire', text: String(data.text || '').trim() || 'I’m here. Tell me more.' }]); return;
-      }
-      const response = await fetch('/api/sire/agent/council/stream', { method: 'POST', headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream' }, body: JSON.stringify({ query: actualQuery, symbol: activeSymbol, history, runtimeContext: buildRuntimeContext() }) });
-      if (!response.ok || !response.body) throw new Error(`SIRE council connection failed (${response.status})`);
-      const reader = response.body.getReader(); const decoder = new TextDecoder(); let buffer = ''; let finalData: AgentResponse | null = null;
-      const consume = (chunk: string) => { buffer += chunk; const events = buffer.split('\n\n'); buffer = events.pop() || ''; events.forEach(event => { let type = ''; let data = ''; event.split('\n').forEach(line => { if (line.startsWith('event:')) type = line.slice(6).trim(); else if (line.startsWith('data:')) data += line.slice(5).trim(); }); if (!data) return; const payload = JSON.parse(data); if (type === 'council.stage') setActivity(previous => [...previous, payload as CouncilActivity]); if (type === 'council.done') finalData = payload as AgentResponse; if (type === 'council.error') throw new Error(String(payload.error || 'Council failed')); }); };
-      while (true) { const { value, done } = await reader.read(); if (value) consume(decoder.decode(value, { stream: !done })); if (done) break; }
-      if (!finalData) throw new Error('The council ended without a final answer.');
-      if (finalData.error) throw new Error(String(finalData.error));
-      if (Array.isArray(finalData.webSources)) setWebSources(finalData.webSources);
-      applyActions(finalData.actions); setChatMessages(previous => [...previous, { id: Date.now() + 1, role: 'sire', text: String(finalData?.text || '').trim() || 'I’m here. Tell me more.' }]);
-    } catch (error) { const detail = error instanceof Error ? error.message : 'Connection failed'; setLastError(true); setChatMessages(previous => [...previous, { id: Date.now() + 1, role: 'sire', text: `I couldn’t complete that message. ${detail}`, meta: 'Retry available' }]); }
-    finally { setChatBusy(false); if (retrying) setLastError(false); }
+    const query = prompt.trim(); if (!query || chatBusy) return; setLastPrompt(query); setChatInput(''); setChatBusy(true); setLastError(false); setActivity([]); setWebSources([]); setChatMessages(previous => [...previous, { id: Date.now(), role: 'user', text: query }]);
+    try { const directGptTest = query.toLowerCase().startsWith('/gpt '); const actualQuery = directGptTest ? query.slice(5).trim() : query; if (!actualQuery) throw new Error('Use /gpt followed by a message.'); const history = [...chatMessages.map(message => ({ role: message.role, text: message.text })), { role: 'user', text: actualQuery }];
+      if (directGptTest) { const response = await api.post('/api/sire/agent/gpt', { query: actualQuery, symbol: activeSymbol, history, runtimeContext: buildRuntimeContext() }); const raw = response as unknown; const data = ((raw && typeof raw === 'object' && 'data' in raw && (raw as Record<string, unknown>).data !== undefined ? (raw as Record<string, unknown>).data : raw) || {}) as AgentResponse; if (data.error) throw new Error(String(data.error)); applyActions(data.actions); setChatMessages(previous => [...previous, { id: Date.now() + 1, role: 'sire', text: String(data.text || '').trim() || 'I’m here. Tell me more.' }]); return; }
+      const response = await fetch('/api/sire/agent/council/stream', { method: 'POST', headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream' }, body: JSON.stringify({ query: actualQuery, symbol: activeSymbol, history, runtimeContext: buildRuntimeContext() }) }); if (!response.ok || !response.body) throw new Error(`SIRE council connection failed (${response.status})`);
+      const reader = response.body.getReader(); const decoder = new TextDecoder(); let buffer = ''; let finalData: AgentResponse | null = null; const consume = (chunk: string) => { buffer += chunk; const events = buffer.split('\n\n'); buffer = events.pop() || ''; events.forEach(event => { let type = ''; let data = ''; event.split('\n').forEach(line => { if (line.startsWith('event:')) type = line.slice(6).trim(); else if (line.startsWith('data:')) data += line.slice(5).trim(); }); if (!data) return; const payload = JSON.parse(data); if (type === 'council.stage') setActivity(previous => [...previous, payload as CouncilActivity]); if (type === 'council.done') finalData = payload as AgentResponse; if (type === 'council.error') throw new Error(String(payload.error || 'Council failed')); }); };
+      while (true) { const { value, done } = await reader.read(); if (value) consume(decoder.decode(value, { stream: !done })); if (done) break; } if (!finalData) throw new Error('The council ended without a final answer.'); if (finalData.error) throw new Error(String(finalData.error)); if (Array.isArray(finalData.webSources)) setWebSources(finalData.webSources); applyActions(finalData.actions); setChatMessages(previous => [...previous, { id: Date.now() + 1, role: 'sire', text: String(finalData?.text || '').trim() || 'I’m here. Tell me more.' }]);
+    } catch (error) { const detail = error instanceof Error ? error.message : 'Connection failed'; setLastError(true); setChatMessages(previous => [...previous, { id: Date.now() + 1, role: 'sire', text: `I couldn’t complete that message. ${detail}`, meta: 'Retry available' }]); } finally { setChatBusy(false); if (retrying) setLastError(false); }
   };
-
   const suggestions = ['Explain this market to me', 'Research the latest news', 'Analyze the current chart'];
-
   return <div className="sire-chat-only-overlay"><section className="sire-chat-only" aria-label="SIRE conversation">
     <header className="sire-chat-only-header"><div className="sire-chat-only-brand"><div className="sire-chat-only-mark"><Sparkles size={16} /></div><span>SIRE</span><i className={chatBusy ? 'sire-live-dot active' : 'sire-live-dot'} /></div><div className="sire-chat-context"><span>{instruments.find(item => item.symbol === activeSymbol)?.name || activeSymbol}</span></div><button className="sire-chat-only-close" onClick={onClose} aria-label="Close SIRE"><X size={18} /></button></header>
     <main className="sire-chat-only-messages"><div className="sire-chat-only-inner">
