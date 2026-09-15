@@ -4,7 +4,7 @@ const STYLE_ID = 'sire-glass-action-bar-style';
 type Instrument = { symbol: string; name: string };
 
 const items = [
-  ['symbol', '', 'SYMBOL'],
+  ['symbol', '', ''],
   ['time', '◷', '1m'],
   ['indicators', '◒', 'INDICATORS'],
   ['draw', '✎', 'DRAW'],
@@ -28,10 +28,33 @@ function instrumentAt(index: number) {
 
 function setSymbolLabels(current: Instrument | null, next: Instrument | null = null) {
   if (!currentSymbolLabel || !nextSymbolLabel || !symbolButton) return;
-  currentSymbolLabel.textContent = current?.name || current?.symbol || 'SYMBOL';
+  currentSymbolLabel.textContent = current?.name || current?.symbol || '';
   nextSymbolLabel.textContent = next?.name || next?.symbol || '';
   symbolButton.title = current ? `${current.name} (${current.symbol}) · swipe up/down to change` : 'Swipe up/down to change instrument';
-  symbolButton.setAttribute('aria-label', current ? `Instrument ${current.name}, ${current.symbol}. Swipe up or down to change` : 'Select instrument');
+  symbolButton.setAttribute('aria-label', current ? `Instrument ${current.name}, ${current.symbol}. Swipe up or down to change` : 'Instrument');
+}
+
+function syncFromChartHeader() {
+  if (!symbolButton) return;
+  const candidates = Array.from(document.querySelectorAll('h1,h2,h3,[class*="chart-title"],[class*="instrument-name"],[class*="symbol-name"]'));
+  for (const node of candidates) {
+    const text = (node.textContent || '').trim();
+    if (!text || text.length > 80 || /^SYMBOL$/i.test(text)) continue;
+    const match = instrumentItems.find(item => item.name === text || item.symbol === text || text.includes(item.name));
+    if (match) {
+      instrumentIndex = instrumentItems.findIndex(item => item.symbol === match.symbol);
+      setSymbolLabels(match, instrumentAt(instrumentIndex + 1));
+      resetSymbolPosition();
+      return;
+    }
+  }
+  const bodyText = document.body.innerText || '';
+  const match = instrumentItems.find(item => item.name && bodyText.includes(item.name));
+  if (match) {
+    instrumentIndex = instrumentItems.findIndex(item => item.symbol === match.symbol);
+    setSymbolLabels(match, instrumentAt(instrumentIndex + 1));
+    resetSymbolPosition();
+  }
 }
 
 function resetSymbolPosition() {
@@ -64,10 +87,7 @@ function finishInstrumentChange(delta: number) {
   const nextIndex = (instrumentIndex + delta + instrumentItems.length) % instrumentItems.length;
   prepareNext(delta);
   requestAnimationFrame(() => {
-    if (!currentSymbolLabel || !nextSymbolLabel) {
-      animating = false;
-      return;
-    }
+    if (!currentSymbolLabel || !nextSymbolLabel) { animating = false; return; }
     currentSymbolLabel.style.transition = 'transform 180ms cubic-bezier(.22,.75,.2,1)';
     nextSymbolLabel.style.transition = 'transform 180ms cubic-bezier(.22,.75,.2,1)';
     currentSymbolLabel.style.transform = delta > 0 ? 'translate3d(0,-100%,0)' : 'translate3d(0,100%,0)';
@@ -78,9 +98,7 @@ function finishInstrumentChange(delta: number) {
       setSymbolLabels(instrument, instrumentAt(instrumentIndex + delta));
       resetSymbolPosition();
       animating = false;
-      if (instrument) {
-        window.dispatchEvent(new CustomEvent('sire:instrument-change', { detail: { symbol: instrument.symbol, name: instrument.name } }));
-      }
+      if (instrument) window.dispatchEvent(new CustomEvent('sire:instrument-change', { detail: { symbol: instrument.symbol, name: instrument.name } }));
     }, 190);
   });
 }
@@ -100,8 +118,7 @@ function announceInstrument() {
   const instrument = instrumentAt(instrumentIndex);
   setSymbolLabels(instrument, instrumentAt(instrumentIndex + 1));
   resetSymbolPosition();
-  if (!instrument) return;
-  window.dispatchEvent(new CustomEvent('sire:instrument-change', { detail: { symbol: instrument.symbol, name: instrument.name } }));
+  if (instrument) window.dispatchEvent(new CustomEvent('sire:instrument-change', { detail: { symbol: instrument.symbol, name: instrument.name } }));
 }
 
 async function loadInstruments() {
@@ -137,7 +154,10 @@ async function loadInstruments() {
       .map(item => ({ symbol: String(item.underlying_symbol || item.symbol || ''), name: String(item.underlying_symbol_name || item.display_name || item.underlying_symbol || item.symbol || '') }))
       .filter(item => item.symbol)
       .sort((a, b) => a.name.localeCompare(b.name));
-    if (instrumentItems.length) announceInstrument();
+    if (instrumentItems.length) {
+      syncFromChartHeader();
+      if (!currentSymbolLabel?.textContent) announceInstrument();
+    }
   } catch {
     // Keep the rest of the SIRE interface working if the public catalogue is unavailable.
   }
@@ -185,12 +205,11 @@ function mountBar() {
     button.className = 'glass-action';
     button.dataset.action = action;
     if (action === 'symbol') {
-      button.innerHTML = `<span class="symbol-viewport"><span class="glass-action-label symbol-current">${label}</span><span class="glass-action-label symbol-next"></span></span>`;
+      button.innerHTML = `<span class="symbol-viewport"><span class="glass-action-label symbol-current"></span><span class="glass-action-label symbol-next"></span></span>`;
       symbolButton = button;
       symbolViewport = button.querySelector('.symbol-viewport');
       currentSymbolLabel = button.querySelector('.symbol-current');
       nextSymbolLabel = button.querySelector('.symbol-next');
-
       button.addEventListener('pointerdown', event => {
         if (animating) return;
         swipeStartY = event.clientY;
@@ -209,28 +228,20 @@ function mountBar() {
         const dy = event.clientY - swipeStartY;
         swipeStartY = null;
         swipeStartX = null;
-        if (Math.abs(dy) >= 28) {
-          stepInstrument(dy < 0 ? 1 : -1);
-          return;
-        }
+        if (Math.abs(dy) >= 28) { stepInstrument(dy < 0 ? 1 : -1); return; }
         resetSymbolPosition();
         window.dispatchEvent(new CustomEvent('sire:glass-action', { detail: { action: 'symbol' } }));
       });
-      button.addEventListener('pointercancel', () => {
-        swipeStartY = null;
-        swipeStartX = null;
-        resetSymbolPosition();
-      });
+      button.addEventListener('pointercancel', () => { swipeStartY = null; swipeStartX = null; resetSymbolPosition(); });
     } else {
       button.innerHTML = `<span class="glass-action-icon" aria-hidden="true">${icon}</span><span class="glass-action-label">${label}</span>`;
-      button.addEventListener('click', () => {
-        window.dispatchEvent(new CustomEvent('sire:glass-action', { detail: { action } }));
-      });
+      button.addEventListener('click', () => window.dispatchEvent(new CustomEvent('sire:glass-action', { detail: { action } })));
     }
     bar.appendChild(button);
   });
   document.body.appendChild(bar);
   void loadInstruments();
+  window.setInterval(syncFromChartHeader, 1000);
 }
 
 if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', mountBar, { once: true });
