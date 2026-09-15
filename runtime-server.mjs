@@ -7,6 +7,8 @@ import { WebSocketServer } from 'ws';
 const { handler } = await import('./backend/index.ts');
 import { handleGeminiRequest, runGemini } from './backend/gemini-ai.ts';
 import { runOpenRouter } from './backend/openrouter-ai.ts';
+import { runAgent } from './backend/sire-agent-gateway.ts';
+import { startAgentWorker } from './workers/sire-agent-worker.ts';
 import { ws } from './compat/appdeploy-sdk/index.js';
 import { realtime } from './backend/realtime.ts';
 
@@ -56,11 +58,22 @@ async function handleDirectGptRequest(parsed) {
   return { text: gpt.text, responseId: gpt.responseId || '', model: gpt.model, provider: gpt.provider, directGptTest: true };
 }
 
+startAgentWorker().catch(error => console.error('[SIRE agent worker]', error));
+
 const server = http.createServer(async (req,res) => {
   if (req.method === 'OPTIONS') { res.writeHead(204,{ 'Access-Control-Allow-Origin':'*','Access-Control-Allow-Methods':'GET,POST,PUT,DELETE,OPTIONS','Access-Control-Allow-Headers':'Content-Type, Authorization' }); return res.end(); }
   if (await serveStatic(req,res)) return;
   let body=''; req.on('data',chunk=>{body+=chunk;}); req.on('end',async()=>{ try {
     const pathname = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`).pathname;
+    if (req.method === 'POST' && pathname === '/api/sire/autonomous') {
+      const parsed = body ? JSON.parse(body) : {};
+      if (!String(parsed.task || '').trim()) return res.writeHead(400,{ 'Access-Control-Allow-Origin':'*','Content-Type':'application/json; charset=utf-8' }).end(JSON.stringify({ error:'task is required' }));
+      try { const response = await runAgent(String(parsed.task)); return res.writeHead(200,{ 'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8' }).end(JSON.stringify(response)); }
+      catch (cause) { const message = cause instanceof Error ? cause.message : String(cause); console.error('[AUTONOMOUS AGENT]', message); return res.writeHead(502,{ 'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8' }).end(JSON.stringify({ error:message })); }
+    }
+    if (req.method === 'GET' && pathname === '/api/sire/autonomous/health') {
+      return res.writeHead(200,{ 'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8' }).end(JSON.stringify({ ok:true, service:'sire-autonomous-runtime', gateway:'127.0.0.1:10001', continuousWorker:true }));
+    }
     if (req.method === 'POST' && pathname === '/api/sire/agent/chat') {
       const parsed = body ? JSON.parse(body) : {};
       const response = await handleGeminiRequest(parsed);
