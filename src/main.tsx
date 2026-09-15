@@ -8,6 +8,7 @@ import './chartToolbarCleanup';
 import './removeMobileChartControls';
 import './glassActionBar';
 import './glassInstrumentBridge';
+import './glassSymbolTouchFix';
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
