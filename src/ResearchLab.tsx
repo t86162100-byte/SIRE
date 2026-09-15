@@ -30,6 +30,7 @@ type AgentResponse = {
   text?: string;
   responseId?: string;
   actions?: Array<Record<string, unknown>>;
+  error?: string;
 };
 
 export default function ResearchLab({ symbol, instruments, onClose, onSelectInstrument, onSetChartView, onAddMarker, runtimeContext }: Props) {
@@ -88,10 +89,25 @@ export default function ResearchLab({ symbol, instruments, onClose, onSelectInst
         history: [...chatMessages.map(message => ({ role: message.role, text: message.text })), { role: 'user', text: query }],
         runtimeContext: buildRuntimeContext(),
       });
-      const data = response.data as AgentResponse;
-      const text = String(data.text || '').trim() || 'I’m here. Tell me more.';
 
-      const actions = Array.isArray(data.actions) ? data.actions : [];
+      // The Render migration client can return the JSON body directly rather
+      // than an Axios-style { data } wrapper. Normalize both shapes before
+      // reading the response so an undefined .data can never become the
+      // user-facing "reading 'text'" error.
+      const rawResponse = response as unknown;
+      const data = (
+        rawResponse &&
+        typeof rawResponse === 'object' &&
+        'data' in rawResponse &&
+        (rawResponse as Record<string, unknown>).data !== undefined
+          ? (rawResponse as Record<string, unknown>).data
+          : rawResponse
+      ) as AgentResponse | undefined;
+
+      if (data?.error) throw new Error(String(data.error));
+
+      const text = String(data?.text || '').trim() || 'I’m here. Tell me more.';
+      const actions = Array.isArray(data?.actions) ? data.actions : [];
       actions.forEach(action => {
         const type = String(action.__sireAction || '');
         if (type === 'select_instrument') {
