@@ -26,43 +26,26 @@ async function serveStatic(req, res) {
 }
 function toEvent(req, body) { const url = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`); return { httpMethod:req.method, path:url.pathname, rawPath:url.pathname, body, headers:req.headers, requestContext:{ http:{ method:req.method, path:url.pathname } } }; }
 
-async function handleCouncilRequest(parsed) {
+async function handleCouncilRequest(parsed, onEvent) {
   const query = String(parsed.query || '').trim();
   const history = Array.isArray(parsed.history) ? parsed.history : [];
   const shared = { symbol: parsed.symbol ? String(parsed.symbol) : undefined, runtimeContext: parsed.runtimeContext && typeof parsed.runtimeContext === 'object' ? parsed.runtimeContext : undefined };
+  const emit = async (actor, phase, text) => { if (onEvent) await onEvent({ actor, phase, text }); };
 
-  // Gemini supplies the first position. runOpenRouter then performs the
-  // remaining collaborative rounds itself: GPT challenge -> Gemini rebuttal -> GPT final.
+  await emit('Gemini', 'proposing', 'Working on an initial approach.');
   const geminiProposal = await runGemini({ query, history, ...shared, debateRole: 'proposal' });
   const debate = [{ provider: geminiProposal.provider, model: geminiProposal.model, role: 'proposal', text: geminiProposal.text }];
+  await emit('Gemini', 'proposed', geminiProposal.text);
 
   try {
-    const council = await runOpenRouter({
-      query,
-      history,
-      councilContext: geminiProposal.text,
-    });
+    const council = await runOpenRouter({ query, history, councilContext: geminiProposal.text, onEvent });
     if (Array.isArray(council.council)) debate.push(...council.council);
-    return {
-      text: council.text,
-      responseId: council.responseId || geminiProposal.responseId || '',
-      model: 'council:' + geminiProposal.model + '+' + council.model,
-      provider: 'SIRE AI Council',
-      council: debate,
-      councilMode: 'multi-round-collaboration',
-      rounds: debate.length,
-    };
+    await emit('SIRE', 'conclusion', 'Combining the team’s work into the final response.');
+    return { text: council.text, responseId: council.responseId || geminiProposal.responseId || '', model: 'council:' + geminiProposal.model + '+' + council.model, provider: 'SIRE AI Council', council: debate, councilMode: 'multi-round-collaboration', rounds: debate.length };
   } catch (cause) {
     console.warn('[COUNCIL] Collaborative debate stopped:', cause instanceof Error ? cause.message : String(cause));
-    return {
-      text: geminiProposal.text,
-      responseId: geminiProposal.responseId || '',
-      model: geminiProposal.model,
-      provider: 'SIRE AI Council',
-      council: debate,
-      councilMode: 'degraded-single-member',
-      councilWarning: 'The full debate could not complete this turn; SIRE returned the available council contribution.',
-    };
+    await emit('SIRE', 'fallback', 'The full collaboration was interrupted, so SIRE is using the available contribution.');
+    return { text: geminiProposal.text, responseId: geminiProposal.responseId || '', model: geminiProposal.model, provider: 'SIRE AI Council', council: debate, councilMode: 'degraded-single-member', councilWarning: 'The full debate could not complete this turn; SIRE returned the available council contribution.' };
   }
 }
 
@@ -89,20 +72,22 @@ const server = http.createServer(async (req,res) => {
       const response = await handleCouncilRequest(parsed);
       return res.writeHead(200,{ 'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8' }).end(JSON.stringify(response));
     }
+    if (req.method === 'POST' && pathname === '/api/sire/agent/council/stream') {
+      const parsed = body ? JSON.parse(body) : {};
+      if (!String(parsed.query || '').trim()) return res.writeHead(400,{ 'Access-Control-Allow-Origin':'*','Content-Type':'application/json; charset=utf-8' }).end(JSON.stringify({ error:'query is required' }));
+      res.writeHead(200,{ 'Access-Control-Allow-Origin':'*','Cache-Control':'no-cache, no-transform','Content-Type':'text/event-stream; charset=utf-8','Connection':'keep-alive','X-Accel-Buffering':'no' });
+      const send = (type, payload) => { if (!res.writableEnded) res.write(`event: ${type}\ndata: ${JSON.stringify(payload)}\n\n`); };
+      try { const response = await handleCouncilRequest(parsed, event => send('council.stage', event)); send('council.done', response); } catch (cause) { send('council.error', { error: cause instanceof Error ? cause.message : String(cause) }); }
+      return res.end();
+    }
     if (req.method === 'POST' && pathname === '/api/sire/agent/gpt') {
       const parsed = body ? JSON.parse(body) : {};
       if (!String(parsed.query || '').trim()) return res.writeHead(400,{ 'Access-Control-Allow-Origin':'*','Content-Type':'application/json; charset=utf-8' }).end(JSON.stringify({ error:'query is required' }));
-      try {
-        const response = await handleDirectGptRequest(parsed);
-        return res.writeHead(200,{ 'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8' }).end(JSON.stringify(response));
-      } catch (cause) {
-        const message = cause instanceof Error ? cause.message : String(cause);
-        console.error('[DIRECT GPT]', message);
-        return res.writeHead(502,{ 'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8' }).end(JSON.stringify({ error:`Direct GPT test failed: ${message}` }));
-      }
+      try { const response = await handleDirectGptRequest(parsed); return res.writeHead(200,{ 'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8' }).end(JSON.stringify(response)); }
+      catch (cause) { const message = cause instanceof Error ? cause.message : String(cause); console.error('[DIRECT GPT]', message); return res.writeHead(502,{ 'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8' }).end(JSON.stringify({ error:`Direct GPT test failed: ${message}` })); }
     }
     const response=await handler(toEvent(req,body)); const statusCode=Number.isInteger(response?.statusCode)?response.statusCode:200; const rawBody=response?.body!==undefined?response.body:response; const isString=typeof rawBody==='string'; res.writeHead(statusCode,{ 'Access-Control-Allow-Origin':'*','Cache-Control':'no-store',...(isString?{}:{'Content-Type':'application/json; charset=utf-8'}),...(response?.headers||{}) }); res.end(isString?rawBody:JSON.stringify(rawBody??{}));
-  } catch(cause) { const message=cause instanceof Error?cause.message:String(cause); console.error('[HTTP ERROR]',req.method,req.url,message); res.writeHead(500,{'Content-Type':'application/json','Access-Control-Allow-Origin':'*'}); res.end(JSON.stringify({error:message})); } });
+  } catch(cause) { const message=cause instanceof Error?cause.message:String(cause); console.error('[HTTP ERROR]',req.method,req.url,message); if (!res.headersSent) res.writeHead(500,{'Content-Type':'application/json','Access-Control-Allow-Origin':'*'}); res.end(JSON.stringify({error:message})); } });
 });
 const wss = new WebSocketServer({ noServer:true });
 server.on('upgrade',(req,socket,head)=>{ const url=new URL(req.url||'/',`http://${req.headers.host||'localhost'}`); if(url.pathname!=='/ws'){socket.destroy();return;} wss.handleUpgrade(req,socket,head,wsSocket=>{ const connectionId=url.searchParams.get('connection_id')||randomUUID(); ws.register(connectionId,wsSocket); wsSocket.send(JSON.stringify({type:'system.connected',payload:{connection_id:connectionId}})); wsSocket.on('close',async()=>{ws.unregister(connectionId); await realtime({body:JSON.stringify({type:'system.disconnected',payload:{connection_id:connectionId}})});}); }); });
