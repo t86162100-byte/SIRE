@@ -101,3 +101,6 @@ button:disabled { opacity: 0.45; cursor: not-allowed; }
 
 /* Hide only the legacy chart status/toolbar strip below the chart. */
 .chart-statusbar { display: none !important; }
+
+/* The SIRE chat tab must not show the chart controls/timeframe strip. */
+.sire-tab-sire .chart-toolbar { display: none !important; }
