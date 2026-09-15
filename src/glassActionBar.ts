@@ -1,6 +1,8 @@
 const BAR_ID = 'sire-glass-action-bar';
 const STYLE_ID = 'sire-glass-action-bar-style';
 
+type Instrument = { symbol: string; name: string };
+
 const items = [
   ['symbol', '⌕', 'SYMBOL'],
   ['time', '◷', '1m'],
@@ -8,6 +10,74 @@ const items = [
   ['draw', '✎', 'DRAW'],
   ['tools', '◇', 'TOOLS'],
 ] as const;
+
+let instrumentItems: Instrument[] = [];
+let instrumentIndex = 0;
+let symbolButton: HTMLButtonElement | null = null;
+let swipeStartY: number | null = null;
+
+function setSymbolLabel(instrument: Instrument | null) {
+  if (!symbolButton) return;
+  const label = symbolButton.querySelector('.glass-action-label');
+  if (label) label.textContent = instrument?.symbol || instrument?.name || 'SYMBOL';
+  symbolButton.title = instrument ? `${instrument.name} (${instrument.symbol}) · swipe up/down to change` : 'Swipe up/down to change instrument';
+  symbolButton.setAttribute('aria-label', instrument ? `Instrument ${instrument.name}, ${instrument.symbol}. Swipe up or down to change` : 'Select instrument');
+}
+
+function announceInstrument() {
+  const instrument = instrumentItems[instrumentIndex] || null;
+  setSymbolLabel(instrument);
+  if (!instrument) return;
+  window.dispatchEvent(new CustomEvent('sire:instrument-change', { detail: { symbol: instrument.symbol, name: instrument.name } }));
+}
+
+async function loadInstruments() {
+  try {
+    const ws = new WebSocket('wss://ws.binaryws.com/websockets/v3');
+    await new Promise<void>((resolve, reject) => {
+      const timer = window.setTimeout(() => reject(new Error('timeout')), 8000);
+      ws.addEventListener('open', () => { window.clearTimeout(timer); resolve(); }, { once: true });
+      ws.addEventListener('error', () => { window.clearTimeout(timer); reject(new Error('connection failed')); }, { once: true });
+    });
+    const requestId = Math.floor(Math.random() * 900000000) + 100000000;
+    ws.send(JSON.stringify({ active_symbols: 'brief', product_type: 'basic', req_id: requestId }));
+    const response = await new Promise<Record<string, unknown>>((resolve, reject) => {
+      const timer = window.setTimeout(() => reject(new Error('timeout')), 10000);
+      ws.addEventListener('message', event => {
+        try {
+          const data = JSON.parse(event.data) as Record<string, unknown>;
+          if (Number(data.req_id) !== requestId) return;
+          window.clearTimeout(timer);
+          resolve(data);
+        } catch { /* ignore malformed packets */ }
+      });
+    });
+    ws.close();
+    const active = Array.isArray(response.active_symbols) ? response.active_symbols : [];
+    instrumentItems = active
+      .filter((item): item is Record<string, unknown> => Boolean(item && typeof item === 'object'))
+      .filter(item => {
+        const symbol = String(item.underlying_symbol || item.symbol || '');
+        const text = `${symbol} ${String(item.display_name || '')} ${String(item.market || '')} ${String(item.submarket || '')}`.toLowerCase();
+        return /synthetic index|volatility|boom|crash|jump|step|drift|range break|daily reset|random index/.test(text) || /^(R_|1HZ|BOOM|CRASH|STEP|JUMP|DRIFT|RANGE_BREAK|BULL|BEAR)/i.test(symbol);
+      })
+      .map(item => ({ symbol: String(item.underlying_symbol || item.symbol || ''), name: String(item.underlying_symbol_name || item.display_name || item.underlying_symbol || item.symbol || '') }))
+      .filter(item => item.symbol)
+      .sort((a, b) => a.name.localeCompare(b.name));
+    if (instrumentItems.length) announceInstrument();
+  } catch {
+    // The main SIRE app remains the source of truth if catalogue discovery is unavailable.
+  }
+}
+
+function stepInstrument(delta: number) {
+  if (!instrumentItems.length) {
+    window.dispatchEvent(new CustomEvent('sire:glass-action', { detail: { action: 'symbol' } }));
+    return;
+  }
+  instrumentIndex = (instrumentIndex + delta + instrumentItems.length) % instrumentItems.length;
+  announceInstrument();
+}
 
 function installStyles() {
   if (document.getElementById(STYLE_ID)) return;
@@ -23,7 +93,8 @@ function installStyles() {
     #${BAR_ID} .glass-action:active{transform:scale(.97);background:rgba(255,255,255,.09);color:#fff}
     #${BAR_ID} .glass-action.active{background:rgba(255,255,255,.075);border-color:rgba(255,255,255,.22);color:#fff;box-shadow:inset 0 0 14px rgba(255,255,255,.035),0 0 12px rgba(255,255,255,.05)}
     #${BAR_ID} .glass-action-icon{font-size:15px;line-height:1;letter-spacing:0;opacity:.9}
-    #${BAR_ID} .glass-action-label{overflow:visible;text-overflow:clip}
+    #${BAR_ID} .glass-action-label{overflow:visible;text-overflow:clip;max-width:190px;display:block}
+    #${BAR_ID} .glass-action[data-action="symbol"] .glass-action-label{max-width:190px;overflow:hidden;text-overflow:ellipsis}
     @media(max-width:520px){#${BAR_ID}{bottom:calc(max(6px,env(safe-area-inset-bottom)) + 56px);width:calc(100vw - 20px);height:48px;padding:4px 5px;border-radius:16px;gap:3px}#${BAR_ID} .glass-action{height:38px;padding:0 10px;gap:4px;font-size:8px;letter-spacing:.06em}#${BAR_ID} .glass-action-icon{font-size:14px}}
   `;
   document.head.appendChild(style);
@@ -42,14 +113,36 @@ function mountBar() {
     button.className = 'glass-action';
     button.dataset.action = action;
     button.innerHTML = `<span class="glass-action-icon" aria-hidden="true">${icon}</span><span class="glass-action-label">${label}</span>`;
-    button.addEventListener('click', () => {
-      bar.querySelectorAll('.glass-action').forEach(node => node.classList.remove('active'));
-      button.classList.add('active');
-      window.dispatchEvent(new CustomEvent('sire:glass-action', { detail: { action } }));
-    });
+    if (action === 'symbol') {
+      symbolButton = button;
+      button.addEventListener('pointerdown', event => {
+        swipeStartY = event.clientY;
+        button.setPointerCapture?.(event.pointerId);
+      });
+      button.addEventListener('pointerup', event => {
+        if (swipeStartY === null) return;
+        const deltaY = event.clientY - swipeStartY;
+        swipeStartY = null;
+        if (Math.abs(deltaY) >= 28) {
+          stepInstrument(deltaY < 0 ? 1 : -1);
+          return;
+        }
+        bar.querySelectorAll('.glass-action').forEach(node => node.classList.remove('active'));
+        button.classList.add('active');
+        window.dispatchEvent(new CustomEvent('sire:glass-action', { detail: { action: 'symbol' } }));
+      });
+      button.addEventListener('pointercancel', () => { swipeStartY = null; });
+    } else {
+      button.addEventListener('click', () => {
+        bar.querySelectorAll('.glass-action').forEach(node => node.classList.remove('active'));
+        button.classList.add('active');
+        window.dispatchEvent(new CustomEvent('sire:glass-action', { detail: { action } }));
+      });
+    }
     bar.appendChild(button);
   });
   document.body.appendChild(bar);
+  void loadInstruments();
 }
 
 if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', mountBar, { once: true });
