@@ -45,7 +45,7 @@ async function researchForCouncil(query, emit) {
       url: String(item.url || item.link || ''),
       publishedDate: item.publishedDate ? String(item.publishedDate) : undefined,
       author: item.author ? String(item.author) : undefined,
-      text: String(item.text || item.snippet || '').slice(0, 1400),
+      text: String(item.text || item.content || item.snippet || '').slice(0, 1400),
     })).filter(item => item.url);
     await emit('Web', 'searched', `Found ${sources.length} web sources.`);
     return { sources, context: sources.map((s, i) => `[Web source ${i + 1}] ${s.title}\nURL: ${s.url}\n${s.text}`).join('\n\n') };
@@ -102,7 +102,7 @@ const server = http.createServer(async (req,res) => {
       catch (cause) { const message = cause instanceof Error ? cause.message : String(cause); console.error('[AUTONOMOUS AGENT]', message); return res.writeHead(502,{ 'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8' }).end(JSON.stringify({ error:message })); }
     }
     if (req.method === 'GET' && pathname === '/api/sire/autonomous/health') {
-      return res.writeHead(200,{ 'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8' }).end(JSON.stringify({ ok:true, service:'sire-autonomous-runtime', gateway:'127.0.0.1:10001', continuousWorker:true, webSearch:Boolean(process.env.EXA_API_KEY) }));
+      return res.writeHead(200,{ 'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8' }).end(JSON.stringify({ ok:true, service:'sire-autonomous-runtime', gateway:'127.0.0.1:10001', continuousWorker:true, webSearch:true, webSearchProvider:'SearXNG', webSearchFree:true }));
     }
     if (req.method === 'POST' && pathname === '/api/sire/agent/chat') {
       const parsed = body ? JSON.parse(body) : {};
