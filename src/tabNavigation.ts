@@ -42,6 +42,7 @@ function setTab(tab: Tab) {
   if (!root || !nav) return;
 
   root.classList.toggle('sire-tab-mode', tab !== 'quote');
+  root.classList.toggle('sire-tab-sire', tab === 'sire');
   root.classList.toggle('sire-tab-quote', tab === 'quote');
   nav.querySelectorAll('button').forEach(button => button.classList.toggle('active', button.dataset.tab === tab));
 
