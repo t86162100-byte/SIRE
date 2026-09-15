@@ -3,6 +3,7 @@
  * Secrets stay in environment variables; never persist credentials in SIRE data.
  */
 import { db } from '@appdeploy/sdk';
+import { chromeWebSearch } from './chrome-web-search';
 
 export type AgentPermission = 'read' | 'write' | 'execute' | 'deploy';
 export type ConnectorDefinition = {
@@ -18,9 +19,6 @@ export type ConnectorDefinition = {
 const CONNECTOR_TABLE = 'sire_connectors_v1';
 const JOB_TABLE = 'sire_agent_jobs_v1';
 
-// Public SearXNG instances can rate-limit automated traffic. Keep several
-// independent fallbacks and allow Render env configuration through
-// SIRE_SEARXNG_URLS. A 429 is treated as an instance failure and SIRE moves on.
 const DEFAULT_SEARXNG_INSTANCES = [
   'https://searx.debnerd.in',
   'https://search.wdpserver.com',
@@ -48,7 +46,7 @@ export function discoverConnectors(): ConnectorDefinition[] {
   const configured = envJson<ConnectorDefinition[]>('SIRE_CONNECTORS_JSON', []);
   const out = [...configured];
   const builtins: ConnectorDefinition[] = [
-    { id: 'web-search', name: 'Web Search (SearXNG)', kind: 'http', baseUrl: searxngInstances()[0], permissions: ['read'], enabled: true },
+    { id: 'web-search', name: 'Web Search (Chrome + SearXNG)', kind: 'http', baseUrl: searxngInstances()[0], permissions: ['read'], enabled: true },
     { id: 'github', name: 'GitHub', kind: 'github', authEnv: 'GITHUB_TOKEN', permissions: ['read', 'write', 'execute'], enabled: Boolean(process.env.GITHUB_TOKEN) },
     { id: 'render', name: 'Render', kind: 'render', authEnv: 'RENDER_API_KEY', permissions: ['read', 'write', 'deploy'], enabled: Boolean(process.env.RENDER_API_KEY) },
     { id: 'sire-data', name: 'SIRE Data', kind: 'database', permissions: ['read', 'write', 'execute'], enabled: true },
@@ -73,7 +71,7 @@ function requireEnv(name?: string) {
   return value;
 }
 
-export async function webSearch(query: string, limit = 8) {
+async function searxngSearch(query: string, limit: number) {
   const urls = searxngInstances();
   if (!urls.length) throw new Error('No SearXNG search instances are configured');
   let lastError = 'No SearXNG instance responded';
@@ -114,7 +112,21 @@ export async function webSearch(query: string, limit = 8) {
     }
   }
 
-  throw new Error(`Free web search unavailable. ${lastError}`);
+  throw new Error(`SearXNG unavailable. ${lastError}`);
+}
+
+export async function webSearch(query: string, limit = 8) {
+  try {
+    return await searxngSearch(query, limit);
+  } catch (searxError) {
+    const searxMessage = searxError instanceof Error ? searxError.message : String(searxError);
+    try {
+      return await chromeWebSearch(query, limit);
+    } catch (chromeError) {
+      const chromeMessage = chromeError instanceof Error ? chromeError.message : String(chromeError);
+      throw new Error(`Web research unavailable. SearXNG: ${searxMessage}. Chrome: ${chromeMessage}`);
+    }
+  }
 }
 
 export async function connectorRequest(connectorId: string, path: string, init: RequestInit = {}, required: AgentPermission = 'read') {
@@ -156,7 +168,7 @@ export async function listAgentTasks(limit = 100) {
 
 export const AGENT_CAPABILITIES = {
   webSearch: true,
-  webSearchProvider: 'SearXNG',
+  webSearchProvider: 'SearXNG → Chrome/Google',
   connectors: discoverConnectors().map(x => ({ id: x.id, name: x.name, permissions: x.permissions })),
   sireData: true,
   workspace: ['code', 'data', 'logs', 'research', 'runtime'],
