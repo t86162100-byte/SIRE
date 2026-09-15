@@ -1,6 +1,7 @@
-import { runGemini } from './gemini-ai.ts';
-
 type ChatMessage = { role: 'user' | 'assistant'; content: string };
+
+type CouncilTurn = { provider: string; model: string; role: string; text: string };
+type CouncilEvent = (event: { actor: string; phase: string; text: string }) => void | Promise<void>;
 
 const MODEL = 'openai/gpt-oss-20b';
 const API_URL = 'https://openrouter.ai/api/v1/chat/completions';
@@ -18,10 +19,7 @@ function cleanHistory(history: unknown): ChatMessage[] {
   return history.slice(-20).flatMap((item: any) => {
     const content = String(item?.text || item?.content || '').trim();
     if (!content) return [];
-    return [{
-      role: item?.role === 'assistant' || item?.role === 'model' || item?.role === 'sire' ? 'assistant' : 'user',
-      content,
-    } as ChatMessage];
+    return [{ role: item?.role === 'assistant' || item?.role === 'model' || item?.role === 'sire' ? 'assistant' : 'user', content } as ChatMessage];
   });
 }
 
@@ -37,52 +35,33 @@ async function callOpenRouter(messages: ChatMessage[], temperature = 0.7) {
   const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
   try {
     const response = await fetch(API_URL, {
-      method: 'POST',
-      signal: controller.signal,
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${getApiKey()}`,
-        'HTTP-Referer': 'https://sire-rwv9.onrender.com',
-        'X-Title': 'SIRE AI Council',
-      },
+      method: 'POST', signal: controller.signal,
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${getApiKey()}`, 'HTTP-Referer': 'https://sire-rwv9.onrender.com', 'X-Title': 'SIRE AI Council' },
       body: JSON.stringify({ model: MODEL, messages, temperature, max_tokens: 2048 }),
     });
     const raw = await response.text();
     let data: any = {};
     try { data = raw ? JSON.parse(raw) : {}; } catch { data = { error: raw }; }
-    if (!response.ok) {
-      const error = new Error(data?.error?.message || `OpenRouter HTTP ${response.status}`);
-      (error as any).status = response.status;
-      throw error;
-    }
+    if (!response.ok) { const error = new Error(data?.error?.message || `OpenRouter HTTP ${response.status}`); (error as any).status = response.status; throw error; }
     const text = textFromResponse(data);
-    if (!text) {
-      const error = new Error('OpenAI GPT council returned no text');
-      (error as any).status = 502;
-      throw error;
-    }
+    if (!text) { const error = new Error('OpenAI GPT council returned no text'); (error as any).status = 502; throw error; }
     return { text: text.slice(0, MAX_OUTPUT_CHARS), responseId: typeof data?.id === 'string' ? data.id : '' };
-  } finally {
-    clearTimeout(timer);
-  }
+  } finally { clearTimeout(timer); }
 }
 
 function systemPrompt() {
   return [
-    'You are SIRE, the user-facing AI assistant.',
-    'Your name is SIRE. Never identify yourself as ChatGPT, OpenAI, Gemini, GPT, GPT-OSS, or another assistant.',
-    'If the user asks your name, say that you are SIRE.',
-    'Only discuss the underlying model or provider if the user explicitly asks what model or technology powers you.',
-    'You are a full-fledged general conversational AI, not a trading-only assistant.',
-    'Answer naturally and intelligently across everyday conversation, questions, explanations, brainstorming, writing, planning, and technical topics.',
-    'Do not assume the user wants to trade, research markets, inspect charts, or perform a task unless their message actually calls for it.',
-    'Preserve conversation context and respond to the meaning of what the user says rather than treating every message as a separate task.',
-    'Do not invent facts, live data, tool results, or actions.',
-    'For collaboration, challenge ideas when warranted, ask meaningful questions of the other council member, correct mistakes, and build on useful ideas.',
-    'Never reveal private chain-of-thought. The council UI may show concise decision-relevant summaries instead.',
-    'When participating in a visible council round, organize the response with short labeled sections when they are useful: Arguments, Evidence, Assumptions, Objections, Response, Agreement/Disagreement, and Conclusion. Do not force empty sections.',
-    'Keep collaboration substantive: refer to the other member\'s actual position, identify specific points you accept or reject, explain why briefly, and add new useful information.',
-    'Do not mention internal council mechanics unless the user asks.',
+    'You are SIRE, the user-facing AI assistant and one member of a capable AI team.',
+    'Your name is SIRE. Never identify yourself as ChatGPT, OpenAI, Gemini, GPT, GPT-OSS, or another assistant unless the user explicitly asks what technology powers SIRE.',
+    'You are a full-fledged general conversational AI. Handle greetings, small talk, questions, explanations, brainstorming, writing, planning, coding and technical topics naturally.',
+    'Do not assume every message is a task or a market/trading request.',
+    'Preserve conversation context and answer the actual user intent.',
+    'You are collaborating with another capable AI. Treat it like a teammate, not an opponent. You may agree, disagree, ask it questions, propose ideas, split responsibilities, verify its work, combine complementary ideas, or change your mind.',
+    'Do not manufacture disagreement. If the other member is correct, say so and build on it. If both approaches are useful, divide the work and combine them.',
+    'When useful, suggest concrete next steps, checks, research questions, plans, or tool calls. If tools are actually supplied by the runtime, use their results rather than inventing them.',
+    'Never claim to have browsed, searched, verified, executed, or changed something unless the runtime actually did it.',
+    'For the visible council stream, provide short decision-relevant summaries of what you are doing, such as proposing, checking, discussing, planning, researching, agreeing, revising, or concluding. Do not expose private chain-of-thought.',
+    'Do not force labels such as Arguments, Evidence, Assumptions, Objections, or Conclusion. Use whatever structure naturally fits the current discussion.',
   ].join('\n');
 }
 
@@ -91,62 +70,53 @@ export async function runOpenRouter(input: {
   history?: Array<{ role: string; text?: string; content?: string }>;
   system?: string;
   councilContext?: string;
+  onEvent?: CouncilEvent;
 }) {
   const query = input.query.trim();
   if (!query) throw new Error('query is required');
-
   const system = input.system || systemPrompt();
   const history = cleanHistory(input.history);
   const initialContext = input.councilContext?.trim() || '';
-  const debate: Array<{ provider: string; model: string; role: string; text: string }> = [];
+  const debate: CouncilTurn[] = [];
+  const emit = async (actor: string, phase: string, text: string) => { if (input.onEvent) await input.onEvent({ actor, phase, text }); };
 
   if (!initialContext) {
-    const result = await callOpenRouter([
-      { role: 'system', content: system },
-      ...history,
-      { role: 'user', content: query },
-    ]);
-    return {
-      text: result.text,
-      responseId: result.responseId,
-      model: MODEL,
-      provider: 'OpenAI via OpenRouter',
-    };
+    const result = await callOpenRouter([{ role: 'system', content: system }, ...history, { role: 'user', content: query }]);
+    return { text: result.text, responseId: result.responseId, model: MODEL, provider: 'OpenAI via OpenRouter' };
   }
 
-  // Round 1: GPT sees Gemini's proposal and actively challenges it instead of merely rewriting it.
+  await emit('GPT', 'discussing', 'Reading Gemini’s contribution and deciding how to help.');
   const challenge = await callOpenRouter([
-    { role: 'system', content: `${system}\n\nYou are the challenging council member in a collaborative debate. Do not produce the final answer yet. Give a concise critique using useful sections such as Arguments, Evidence, Assumptions, Objections, Response, Agreement/Disagreement, and Conclusion. Identify what is strong, what may be wrong or missing, what question you would ask the other member, and what you would change. Keep it decision-relevant and do not expose private chain-of-thought.` },
+    { role: 'system', content: `${system}\n\nYou are joining an active team discussion. First understand the other member's proposal. Then contribute whatever is most useful: validate it, question it, improve it, add a missing idea, propose a different approach, or divide the work. Do not disagree just to create debate. Do not produce the final user answer yet. Give a concise collaboration summary.` },
     ...history,
     { role: 'user', content: query },
-    { role: 'assistant', content: `Gemini's current proposal:\n\n${initialContext}` },
-    { role: 'user', content: 'Challenge this proposal. Question the other member where necessary and state your corrected position.' },
+    { role: 'assistant', content: `Gemini's current contribution:\n\n${initialContext}` },
+    { role: 'user', content: 'Continue the team discussion. Decide what contribution would move the work forward most.' },
   ]);
-  debate.push({ provider: 'OpenAI via OpenRouter', model: MODEL, role: 'challenge', text: challenge.text });
+  debate.push({ provider: 'OpenAI via OpenRouter', model: MODEL, role: 'discussion', text: challenge.text });
+  await emit('GPT', 'discussing', challenge.text);
 
-  // Round 2: Gemini gets both sides and responds to the GPT challenge.
+  await emit('Gemini', 'responding', 'Considering GPT’s contribution and deciding whether to agree, refine, divide work, or change direction.');
   const rebuttal = await runGemini({
-    query: `We are collaborating on the user's request below. Another council member proposed an initial answer, then GPT challenged it. Respond to the challenge and refine your position. You are not writing the final user answer yet. Use concise decision-relevant sections when useful: Arguments, Evidence, Assumptions, Objections, Response, Agreement/Disagreement, and Conclusion. State what you agree with, what you reject, what you would correct, and the position you now recommend. Do not reveal private chain-of-thought.\n\nUSER REQUEST:\n${query}\n\nINITIAL GEMINI PROPOSAL:\n${initialContext}\n\nGPT CHALLENGE:\n${challenge.text}`,
+    query,
     history,
+    councilContext: `USER REQUEST:\n${query}\n\nMY PREVIOUS CONTRIBUTION:\n${initialContext}\n\nGPT TEAMMATE CONTRIBUTION:\n${challenge.text}`,
     debateRole: 'response',
+    onEvent: input.onEvent,
   });
-  debate.push({ provider: rebuttal.provider, model: rebuttal.model, role: 'rebuttal', text: rebuttal.text });
+  debate.push({ provider: rebuttal.provider, model: rebuttal.model, role: 'discussion', text: rebuttal.text });
+  await emit('Gemini', 'discussing', rebuttal.text);
 
-  // Round 3: GPT sees the whole exchange and makes the collaborative final answer.
+  await emit('GPT', 'concluding', 'Combining the useful work from both members into one answer.');
   const final = await callOpenRouter([
-    { role: 'system', content: `${system}\n\nYou are the final decision member of a two-model collaboration. You have seen the initial proposal, a challenge, and a rebuttal. Resolve disagreements, keep correct ideas from each side, reject weak claims, and answer the user directly as SIRE. Do not mention that you are GPT. Do not expose private chain-of-thought. The final answer should stand on its own. Before the answer, you may provide a compact Conclusion/Decision summary, but do not dump the debate into the user-facing answer.` },
+    { role: 'system', content: `${system}\n\nYou are the final member of the team. Review the complete discussion, resolve genuine differences, preserve agreements, combine complementary ideas, and produce the best direct answer to the user as SIRE. Do not mention internal council mechanics unless asked. Do not expose private chain-of-thought. The final answer must stand on its own.` },
     ...history,
     { role: 'user', content: query },
-    { role: 'assistant', content: `INITIAL GEMINI PROPOSAL:\n${initialContext}\n\nGPT CHALLENGE:\n${challenge.text}\n\nGEMINI REBUTTAL:\n${rebuttal.text}` },
-    { role: 'user', content: 'Now resolve the debate and provide the best final answer to the user.' },
+    { role: 'assistant', content: `TEAM DISCUSSION:\n\nGEMINI:\n${initialContext}\n\nGPT:\n${challenge.text}\n\nGEMINI:\n${rebuttal.text}` },
+    { role: 'user', content: 'Conclude the team discussion and answer the user directly.' },
   ]);
-  debate.push({ provider: 'OpenAI via OpenRouter', model: MODEL, role: 'final', text: final.text });
+  debate.push({ provider: 'OpenAI via OpenRouter', model: MODEL, role: 'conclusion', text: final.text });
+  await emit('GPT', 'conclusion', 'The team has reached a conclusion.');
 
-  return {
-    text: final.text,
-    responseId: final.responseId || rebuttal.responseId || challenge.responseId || '',
-    model: MODEL,
-    provider: 'OpenAI via OpenRouter',
-    council: debate,
-  };
+  return { text: final.text, responseId: final.responseId || rebuttal.responseId || challenge.responseId || '', model: MODEL, provider: 'OpenAI via OpenRouter', council: debate };
 }
