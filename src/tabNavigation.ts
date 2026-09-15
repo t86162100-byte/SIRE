@@ -21,13 +21,29 @@ function injectStyles() {
     .sire-tab-quote .symbol-row.active { border-color: rgba(255,255,255,.72); background: rgba(255,255,255,.07); box-shadow: 0 0 18px rgba(255,255,255,.08); }
     .sire-tab-quote .catalogue-refresh { width: min(760px, 100%); margin: 12px auto 0; }
 
+    /* SIRE is intentionally clean: no duplicate instrument title or cancel control. */
+    .sire-chat-only-header .sire-chat-context,
+    .sire-chat-only-header .sire-chat-only-close { display: none !important; }
+
+    /* Keep the composer fully above the three primary tabs by default. */
+    .sire-chat-only-composer {
+      bottom: 62px !important;
+      transition: transform .22s ease, opacity .22s ease;
+    }
+    /* While the user scrolls down, let the composer travel behind the tab bar and off-screen. */
+    .sire-chat-only-composer.is-scroll-hidden {
+      transform: translateY(calc(100% + 22px)) !important;
+      opacity: 0 !important;
+      pointer-events: none !important;
+    }
+
     /* The navigation itself has no hit-area/container except for its three buttons. */
     #${NAV_ID} {
       position: fixed;
       z-index: 9999;
       left: 50%;
       right: auto;
-      bottom: max(16px, calc(env(safe-area-inset-bottom) + 12px));
+      bottom: max(6px, env(safe-area-inset-bottom));
       transform: translateX(-50%);
       display: flex;
       align-items: center;
@@ -79,8 +95,9 @@ function injectStyles() {
     .sire-chat-only { padding-bottom: 82px !important; box-sizing: border-box; }
 
     @media (max-width: 520px) {
-      #${NAV_ID} { gap: 7px; bottom: max(14px, calc(env(safe-area-inset-bottom) + 10px)); width: calc(100vw - 28px); }
+      #${NAV_ID} { gap: 7px; bottom: max(6px, env(safe-area-inset-bottom)); width: calc(100vw - 28px); }
       #${NAV_ID} button { flex: 1 1 0; min-width: 0; height: 44px; padding: 0 10px; }
+      .sire-chat-only-composer { bottom: 60px !important; }
     }
 
     @media (min-width: 800px) {
@@ -99,6 +116,24 @@ function findChatCloseButton() {
   return document.querySelector('.sire-chat-only-close') as HTMLButtonElement | null;
 }
 
+function wireChatComposer() {
+  const messages = document.querySelector('.sire-chat-only-messages') as HTMLElement | null;
+  const composer = document.querySelector('.sire-chat-only-composer') as HTMLElement | null;
+  if (!messages || !composer || composer.dataset.scrollWired === 'true') return;
+
+  composer.dataset.scrollWired = 'true';
+  composer.classList.remove('is-scroll-hidden');
+  let previousTop = messages.scrollTop;
+  messages.addEventListener('scroll', () => {
+    const nextTop = messages.scrollTop;
+    const delta = nextTop - previousTop;
+    if (Math.abs(delta) >= 4) {
+      composer.classList.toggle('is-scroll-hidden', delta > 0 && nextTop > 12);
+      previousTop = nextTop;
+    }
+  }, { passive: true });
+}
+
 function setTab(tab: Tab) {
   const root = document.getElementById('root');
   const nav = document.getElementById(NAV_ID);
@@ -110,6 +145,7 @@ function setTab(tab: Tab) {
 
   if (tab === 'sire') {
     findSireOpenButton()?.click();
+    window.setTimeout(wireChatComposer, 0);
   } else {
     findChatCloseButton()?.click();
   }
@@ -144,5 +180,6 @@ else mountNavigation();
 
 const observer = new MutationObserver(() => {
   if (!document.getElementById(NAV_ID)) mountNavigation();
+  if (document.querySelector('.sire-chat-only-composer')) wireChatComposer();
 });
 observer.observe(document.documentElement, { childList: true, subtree: true });
