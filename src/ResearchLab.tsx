@@ -1,14 +1,15 @@
 import { useEffect, useRef, useState } from 'react';
 import { api } from '@appdeploy/client';
-import { Send, Sparkles, X } from 'lucide-react';
+import { Send, Sparkles, X, Globe2 } from 'lucide-react';
 import './sire-council.css';
 
 type Instrument = { symbol: string; name: string };
 type RuntimeContext = { symbol: string; name?: string; timeframe?: string; chartMode?: string; latestPrice?: number | null; activeIndicators?: string[]; drawings?: Array<Record<string, unknown>>; chartBars?: number; visibleBars?: number; selectedInspection?: { epoch: number; price: number } | null };
 type Props = { symbol: string; instruments: Instrument[]; onClose: () => void; onSelectInstrument?: (symbol: string) => void; onSetChartView?: (settings: Record<string, unknown>) => void; onAddMarker?: (label: string) => void; runtimeContext?: RuntimeContext };
 type CouncilActivity = { actor: string; phase: string; text: string };
+type WebSource = { title: string; url: string; publishedDate?: string; author?: string; text?: string };
 type ChatMessage = { id: number; role: 'user' | 'sire'; text: string; meta?: string };
-type AgentResponse = { text?: string; responseId?: string; actions?: Array<Record<string, unknown>>; error?: string };
+type AgentResponse = { text?: string; responseId?: string; actions?: Array<Record<string, unknown>>; error?: string; webSearched?: boolean; webSources?: WebSource[] };
 
 const phaseLabel = (phase: string) => {
   const value = phase.toLowerCase();
@@ -19,6 +20,7 @@ const phaseLabel = (phase: string) => {
   if (value.includes('respond') || value.includes('revis')) return 'responding';
   if (value.includes('check') || value.includes('verif')) return 'checking';
   if (value.includes('conclud')) return 'concluding';
+  if (value.includes('unavailable')) return 'web unavailable';
   if (value.includes('fallback')) return 'finishing';
   return phase || 'working';
 };
@@ -31,19 +33,20 @@ export default function ResearchLab({ symbol, instruments, onClose, onSelectInst
   const [lastPrompt, setLastPrompt] = useState('');
   const [lastError, setLastError] = useState(false);
   const [activity, setActivity] = useState<CouncilActivity[]>([]);
+  const [webSources, setWebSources] = useState<WebSource[]>([]);
   const chatEndRef = useRef<HTMLDivElement | null>(null);
   const runtimeContextRef = useRef<RuntimeContext | null>(runtimeContext || null);
 
   useEffect(() => { runtimeContextRef.current = runtimeContext || null; }, [runtimeContext]);
   useEffect(() => { setActiveSymbol(symbol); }, [symbol]);
-  useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' }); }, [chatMessages, chatBusy, activity]);
+  useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' }); }, [chatMessages, chatBusy, activity, webSources]);
 
   const buildRuntimeContext = (): RuntimeContext => runtimeContextRef.current || { symbol: activeSymbol, name: instruments.find(item => item.symbol === activeSymbol)?.name, timeframe: 'unknown', chartMode: 'unknown', latestPrice: null, activeIndicators: [], drawings: [], chartBars: 0, visibleBars: 0, selectedInspection: null };
   const applyActions = (actions: unknown) => { if (!Array.isArray(actions)) return; actions.forEach(action => { const item = action as Record<string, unknown>; const type = String(item.__sireAction || ''); if (type === 'select_instrument') { const requested = String(item.symbol || ''); if (requested && instruments.some(instrument => instrument.symbol === requested)) { setActiveSymbol(requested); onSelectInstrument?.(requested); } } else if (type === 'set_chart_view') onSetChartView?.((item.settings || {}) as Record<string, unknown>); else if (type === 'add_chart_marker') onAddMarker?.(String(item.label || 'SIRE marker')); }); };
 
   const runAgent = async (prompt: string, retrying = false) => {
     const query = prompt.trim(); if (!query || chatBusy) return;
-    setLastPrompt(query); setChatInput(''); setChatBusy(true); setLastError(false); setActivity([]);
+    setLastPrompt(query); setChatInput(''); setChatBusy(true); setLastError(false); setActivity([]); setWebSources([]);
     setChatMessages(previous => [...previous, { id: Date.now(), role: 'user', text: query }]);
     try {
       const directGptTest = query.toLowerCase().startsWith('/gpt ');
@@ -61,7 +64,9 @@ export default function ResearchLab({ symbol, instruments, onClose, onSelectInst
       const consume = (chunk: string) => { buffer += chunk; const events = buffer.split('\n\n'); buffer = events.pop() || ''; events.forEach(event => { let type = ''; let data = ''; event.split('\n').forEach(line => { if (line.startsWith('event:')) type = line.slice(6).trim(); else if (line.startsWith('data:')) data += line.slice(5).trim(); }); if (!data) return; const payload = JSON.parse(data); if (type === 'council.stage') setActivity(previous => [...previous, payload as CouncilActivity]); if (type === 'council.done') finalData = payload as AgentResponse; if (type === 'council.error') throw new Error(String(payload.error || 'Council failed')); }); };
       while (true) { const { value, done } = await reader.read(); if (value) consume(decoder.decode(value, { stream: !done })); if (done) break; }
       if (!finalData) throw new Error('The council ended without a final answer.');
-      if (finalData.error) throw new Error(String(finalData.error)); applyActions(finalData.actions); setChatMessages(previous => [...previous, { id: Date.now() + 1, role: 'sire', text: String(finalData?.text || '').trim() || 'I’m here. Tell me more.' }]);
+      if (finalData.error) throw new Error(String(finalData.error));
+      if (Array.isArray(finalData.webSources)) setWebSources(finalData.webSources);
+      applyActions(finalData.actions); setChatMessages(previous => [...previous, { id: Date.now() + 1, role: 'sire', text: String(finalData?.text || '').trim() || 'I’m here. Tell me more.' }]);
     } catch (error) { const detail = error instanceof Error ? error.message : 'Connection failed'; setLastError(true); setChatMessages(previous => [...previous, { id: Date.now() + 1, role: 'sire', text: `I couldn’t complete that message. ${detail}`, meta: 'Retry available' }]); }
     finally { setChatBusy(false); if (retrying) setLastError(false); }
   };
@@ -71,7 +76,8 @@ export default function ResearchLab({ symbol, instruments, onClose, onSelectInst
     <main className="sire-chat-only-messages"><div className="sire-chat-only-inner">
       {chatMessages.length === 0 && <div className="sire-chat-only-empty" aria-hidden="true"><div className="sire-chat-only-empty-mark"><Sparkles size={22} /></div><span>SIRE</span></div>}
       {chatMessages.map(item => <article className={`sire-chat-only-message ${item.role}`} key={item.id}><div className="sire-chat-only-role">{item.role === 'sire' ? 'SIRE' : 'YOU'}</div><div className="sire-chat-only-bubble">{item.text}</div>{item.meta && <small>{item.meta}</small>}</article>)}
-      {chatBusy && <article className="sire-council-live" aria-live="polite"><div className="sire-council-live-head"><span className="sire-council-live-pulse" /><strong>SIRE is working</strong><small>live</small></div><div className="sire-council-live-stream">{activity.slice(-5).map((item, index) => <div className="sire-council-live-event" key={`${index}-${item.actor}-${item.phase}`}><span className="sire-council-live-actor">{item.actor}</span><span className="sire-council-live-phase">{phaseLabel(item.phase)}</span><p>{item.text}</p></div>)}<div className="sire-council-live-cursor"><i /><i /><i /></div></div></article>}
+      {chatBusy && <article className="sire-council-live" aria-live="polite"><div className="sire-council-live-head"><span className="sire-council-live-pulse" /><strong>SIRE is working</strong><small>live</small></div><div className="sire-council-live-stream">{activity.slice(-8).map((item, index) => <div className="sire-council-live-event" key={`${index}-${item.actor}-${item.phase}`}><span className="sire-council-live-actor">{item.actor}</span><span className="sire-council-live-phase">{phaseLabel(item.phase)}</span><p>{item.text}</p></div>)}<div className="sire-council-live-cursor"><i /><i /><i /></div></div></article>}
+      {webSources.length > 0 && <section className="sire-web-sources" aria-label="Web sources"><div className="sire-web-sources-head"><Globe2 size={13} /><strong>Web sources searched</strong><span>{webSources.length}</span></div><div className="sire-web-sources-list">{webSources.map((source, index) => <a key={`${source.url}-${index}`} href={source.url} target="_blank" rel="noreferrer" className="sire-web-source"><span className="sire-web-source-index">{index + 1}</span><span className="sire-web-source-body"><strong>{source.title}</strong><small>{new URL(source.url).hostname}</small></span></a>)}</div></section>}
       {lastError && !chatBusy && <button className="sire-chat-only-retry" onClick={() => void runAgent(lastPrompt, true)}>Retry</button>}
       <div ref={chatEndRef} />
     </div></main>
