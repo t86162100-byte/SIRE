@@ -79,7 +79,9 @@ function systemPrompt() {
     'Preserve conversation context and respond to the meaning of what the user says rather than treating every message as a separate task.',
     'Do not invent facts, live data, tool results, or actions.',
     'For collaboration, challenge ideas when warranted, ask meaningful questions of the other council member, correct mistakes, and build on useful ideas.',
-    'Never reveal private chain-of-thought. When deliberation is shown to the user, provide only a concise decision-relevant rationale, objections, evidence, and conclusions.',
+    'Never reveal private chain-of-thought. The council UI may show concise decision-relevant summaries instead.',
+    'When participating in a visible council round, organize the response with short labeled sections when they are useful: Arguments, Evidence, Assumptions, Objections, Response, Agreement/Disagreement, and Conclusion. Do not force empty sections.',
+    'Keep collaboration substantive: refer to the other member\'s actual position, identify specific points you accept or reject, explain why briefly, and add new useful information.',
     'Do not mention internal council mechanics unless the user asks.',
   ].join('\n');
 }
@@ -112,10 +114,9 @@ export async function runOpenRouter(input: {
     };
   }
 
-  // Round 1: GPT sees Gemini's proposal and actively challenges it instead of
-  // merely rewriting it. This is a visible collaboration summary, not hidden CoT.
+  // Round 1: GPT sees Gemini's proposal and actively challenges it instead of merely rewriting it.
   const challenge = await callOpenRouter([
-    { role: 'system', content: `${system}\n\nYou are the challenging council member in a collaborative debate. Do not produce the final answer yet. Give a concise critique: what is strong, what may be wrong or missing, what question you would ask the other member, and what you would change. Keep it decision-relevant.` },
+    { role: 'system', content: `${system}\n\nYou are the challenging council member in a collaborative debate. Do not produce the final answer yet. Give a concise critique using useful sections such as Arguments, Evidence, Assumptions, Objections, Response, Agreement/Disagreement, and Conclusion. Identify what is strong, what may be wrong or missing, what question you would ask the other member, and what you would change. Keep it decision-relevant and do not expose private chain-of-thought.` },
     ...history,
     { role: 'user', content: query },
     { role: 'assistant', content: `Gemini's current proposal:\n\n${initialContext}` },
@@ -125,14 +126,15 @@ export async function runOpenRouter(input: {
 
   // Round 2: Gemini gets both sides and responds to the GPT challenge.
   const rebuttal = await runGemini({
-    query: `We are collaborating on the user's request below. Another council member proposed an initial answer, then GPT challenged it. Respond to the challenge and refine your position. You are not writing the final user answer yet. Give a concise, decision-relevant rebuttal: what you agree with, what you reject, what you would correct, and the position you now recommend. Do not reveal private chain-of-thought.\n\nUSER REQUEST:\n${query}\n\nINITIAL GEMINI PROPOSAL:\n${initialContext}\n\nGPT CHALLENGE:\n${challenge.text}`,
+    query: `We are collaborating on the user's request below. Another council member proposed an initial answer, then GPT challenged it. Respond to the challenge and refine your position. You are not writing the final user answer yet. Use concise decision-relevant sections when useful: Arguments, Evidence, Assumptions, Objections, Response, Agreement/Disagreement, and Conclusion. State what you agree with, what you reject, what you would correct, and the position you now recommend. Do not reveal private chain-of-thought.\n\nUSER REQUEST:\n${query}\n\nINITIAL GEMINI PROPOSAL:\n${initialContext}\n\nGPT CHALLENGE:\n${challenge.text}`,
     history,
+    debateRole: 'response',
   });
   debate.push({ provider: rebuttal.provider, model: rebuttal.model, role: 'rebuttal', text: rebuttal.text });
 
   // Round 3: GPT sees the whole exchange and makes the collaborative final answer.
   const final = await callOpenRouter([
-    { role: 'system', content: `${system}\n\nYou are the final decision member of a two-model collaboration. You have seen the initial proposal, a challenge, and a rebuttal. Resolve disagreements, keep correct ideas from each side, reject weak claims, and answer the user directly as SIRE. Do not mention that you are GPT. Do not expose private chain-of-thought. The final answer should stand on its own.` },
+    { role: 'system', content: `${system}\n\nYou are the final decision member of a two-model collaboration. You have seen the initial proposal, a challenge, and a rebuttal. Resolve disagreements, keep correct ideas from each side, reject weak claims, and answer the user directly as SIRE. Do not mention that you are GPT. Do not expose private chain-of-thought. The final answer should stand on its own. Before the answer, you may provide a compact Conclusion/Decision summary, but do not dump the debate into the user-facing answer.` },
     ...history,
     { role: 'user', content: query },
     { role: 'assistant', content: `INITIAL GEMINI PROPOSAL:\n${initialContext}\n\nGPT CHALLENGE:\n${challenge.text}\n\nGEMINI REBUTTAL:\n${rebuttal.text}` },
