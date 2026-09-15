@@ -8,7 +8,8 @@
     "build": "vite build",
     "preview": "vite preview",
     "agent:worker": "tsx workers/sire-agent-worker.ts",
-    "agent:gateway": "tsx backend/sire-agent-gateway.ts"
+    "agent:gateway": "tsx backend/sire-agent-gateway.ts",
+    "agent:runtime": "tsx backend/sire-agent-runtime.ts"
   },
   "dependencies": {
     "lucide-react": "^0.469.0",
