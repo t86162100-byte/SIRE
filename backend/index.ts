@@ -96,32 +96,32 @@ async function researchContext(symbol: string) {
   return { symbol, source: 'Deriv', coverage, availableTicks: coverage?.storedTicks || recentTicks.length, oldestEpoch: coverage?.oldestEpoch ?? recentTicks[0]?.epoch ?? null, newestEpoch: coverage?.newestEpoch ?? recentTicks[recentTicks.length - 1]?.epoch ?? null, operations: ['summary', 'returns', 'returns_series', 'prices', 'volatility', 'rolling_volatility', 'drawdown', 'runs', 'autocorrelation', 'entropy', 'sequence', 'distribution', 'ohlc', 'quality', 'features'], replay: true, rawTicks: true, comparison: true, latest: recentTicks[recentTicks.length - 1] || null, provenance: 'Genuine Deriv tick data stored by SIRE' };
 }
 
-const GPT_TOOL_MANIFEST = {
+const RESEARCH_TOOL_MANIFEST = {
   name: 'SIRE Research Gateway',
   version: 1,
   source: 'Deriv',
   purpose: 'Programmatic research access to SIRE Synthetic Index data without UI interaction.',
   primaryExample: 'BOOM1000',
   tools: [
-    { name: 'workspace', method: 'GET', path: '/api/sire/gpt/workspace', required: [], optional: ['symbol'] },
-    { name: 'research', method: 'POST', path: '/api/sire/gpt/research', required: ['steps'], optional: ['symbol'] },
-    { name: 'audit', method: 'GET', path: '/api/sire/gpt/audit', required: [] },
-    { name: 'catalogue', method: 'GET', path: '/api/sire/gpt/catalogue', required: [] },
-    { name: 'latest', method: 'GET', path: '/api/sire/gpt/latest', required: ['symbol'] },
+    { name: 'workspace', method: 'GET', path: '/api/sire/research/workspace', required: [], optional: ['symbol'] },
+    { name: 'research', method: 'POST', path: '/api/sire/research/research', required: ['steps'], optional: ['symbol'] },
+    { name: 'audit', method: 'GET', path: '/api/sire/research/audit', required: [] },
+    { name: 'catalogue', method: 'GET', path: '/api/sire/research/catalogue', required: [] },
+    { name: 'latest', method: 'GET', path: '/api/sire/research/latest', required: ['symbol'] },
     { name: 'ticks', method: 'GET', path: '/api/sire/history', required: ['symbol'], optional: ['limit'] },
-    { name: 'analyze', method: 'GET', path: '/api/sire/gpt/query', required: ['symbol'], optional: ['operation', 'startEpoch', 'endEpoch', 'limit', 'sequenceLength', 'reversalHorizon', 'lag', 'bins', 'includeTicks'] },
-    { name: 'compare', method: 'GET', path: '/api/sire/gpt/compare', required: ['symbolA', 'symbolB'], optional: ['startEpoch', 'endEpoch', 'limit'] },
-    { name: 'ohlc', method: 'GET', path: '/api/sire/gpt/ohlc', required: ['symbol'], optional: ['startEpoch', 'endEpoch', 'limit', 'timeframeSeconds'] },
-    { name: 'quality', method: 'GET', path: '/api/sire/gpt/quality', required: ['symbol'], optional: ['limit'] },
-    { name: 'replay', method: 'GET', path: '/api/sire/gpt/replay', required: ['symbol'], optional: ['startEpoch', 'endEpoch', 'limit'] },
-    { name: 'save_experiment', method: 'POST', path: '/api/sire/gpt/experiments', required: ['name', 'symbol'], optional: ['hypothesis', 'methodology', 'result'] },
-    { name: 'experiments', method: 'GET', path: '/api/sire/gpt/experiments', required: ['symbol'] },
+    { name: 'analyze', method: 'GET', path: '/api/sire/research/query', required: ['symbol'], optional: ['operation', 'startEpoch', 'endEpoch', 'limit', 'sequenceLength', 'reversalHorizon', 'lag', 'bins', 'includeTicks'] },
+    { name: 'compare', method: 'GET', path: '/api/sire/research/compare', required: ['symbolA', 'symbolB'], optional: ['startEpoch', 'endEpoch', 'limit'] },
+    { name: 'ohlc', method: 'GET', path: '/api/sire/research/ohlc', required: ['symbol'], optional: ['startEpoch', 'endEpoch', 'limit', 'timeframeSeconds'] },
+    { name: 'quality', method: 'GET', path: '/api/sire/research/quality', required: ['symbol'], optional: ['limit'] },
+    { name: 'replay', method: 'GET', path: '/api/sire/research/replay', required: ['symbol'], optional: ['startEpoch', 'endEpoch', 'limit'] },
+    { name: 'save_experiment', method: 'POST', path: '/api/sire/research/experiments', required: ['name', 'symbol'], optional: ['hypothesis', 'methodology', 'result'] },
+    { name: 'experiments', method: 'GET', path: '/api/sire/research/experiments', required: ['symbol'] },
   ],
   operations: ['summary', 'returns', 'returns_series', 'prices', 'volatility', 'rolling_volatility', 'drawdown', 'runs', 'autocorrelation', 'entropy', 'sequence', 'distribution', 'ohlc', 'quality', 'features'],
   guarantees: ['exact epoch timestamps', 'persistent Deriv source provenance', 'bounded raw tick access', 'configurable analysis parameters', 'historical replay', 'persistent research memory'],
 };
 
-async function gptTool(tool: string, args: Record<string, unknown>) {
+async function researchTool(tool: string, args: Record<string, unknown>) {
   const symbol = String(args.symbol || '');
   if (tool === 'workspace') {
     const environment = await environmentSnapshot(args);
@@ -147,21 +147,21 @@ async function gptTool(tool: string, args: Record<string, unknown>) {
   }
   if (tool === 'catalogue') { const rows = await db.list<Record<string, unknown>>(CATALOGUE_TABLE, { limit: 1000 }); return { source: 'Deriv', instruments: rows.items }; }
   if (tool === 'latest') { const ticks = await loadTicks(symbol, undefined, undefined, 10); return { source: 'Deriv', symbol, latest: ticks[ticks.length - 1] || null, recent: ticks }; }
-  if (tool === 'ticks') { const limit = Math.min(SIRE_MAX_TICKS, Number(args.limit || 1000)); const ticks = await loadTicks(symbol, args.startEpoch === undefined ? undefined : Number(args.startEpoch), args.endEpoch === undefined ? undefined : Number(args.endEpoch), limit); return { source: 'Deriv', symbol, ticks, count: ticks.length }; }
-  if (tool === 'analyze') { const limit = Math.min(SIRE_MAX_ANALYSIS_TICKS, Number(args.limit || 10000)); const ticks = await loadTicks(symbol, args.startEpoch === undefined ? undefined : Number(args.startEpoch), args.endEpoch === undefined ? undefined : Number(args.endEpoch), limit); const result = analyzeTicks(ticks, String(args.operation || 'summary'), { sequenceLength: Number(args.sequenceLength || 37), reversalHorizon: Number(args.reversalHorizon || 10), lag: Number(args.lag || 1), bins: Number(args.bins || 10), timeframeSeconds: Number(args.timeframeSeconds || 60), window: Number(args.window || 20) }); return { source: 'Deriv', symbol, sampleCount: ticks.length, result, provenance: 'SIRE persistent Deriv tick store' }; }
+  if (tool === 'ticks') { const limit = Math.min(MAX_TICKS, Number(args.limit || 1000)); const ticks = await loadTicks(symbol, args.startEpoch === undefined ? undefined : Number(args.startEpoch), args.endEpoch === undefined ? undefined : Number(args.endEpoch), limit); return { source: 'Deriv', symbol, ticks, count: ticks.length }; }
+  if (tool === 'analyze') { const limit = Math.min(BACKTEST_MAX_TICKS, Number(args.limit || 10000)); const ticks = await loadTicks(symbol, args.startEpoch === undefined ? undefined : Number(args.startEpoch), args.endEpoch === undefined ? undefined : Number(args.endEpoch), limit); const result = analyzeTicks(ticks, String(args.operation || 'summary'), { sequenceLength: Number(args.sequenceLength || 37), reversalHorizon: Number(args.reversalHorizon || 10), lag: Number(args.lag || 1), bins: Number(args.bins || 10), timeframeSeconds: Number(args.timeframeSeconds || 60), window: Number(args.window || 20) }); return { source: 'Deriv', symbol, sampleCount: ticks.length, result, provenance: 'SIRE persistent Deriv tick store' }; }
   if (tool === 'backtest') { if (!symbol) throw new Error('symbol is required'); const strategy = (args.strategy || {}) as StrategySpec; const ticks = await loadTicks(symbol, args.startEpoch === undefined ? undefined : Number(args.startEpoch), args.endEpoch === undefined ? undefined : Number(args.endEpoch), Math.min(BACKTEST_MAX_TICKS, Number(args.limit || BACKTEST_MAX_TICKS))); if (ticks.length < 50) return { source: 'Deriv', symbol, insufficientData: true, sampleTicks: ticks.length, minimumTicks: 50 }; return { source: 'Deriv', symbol, result: simulateBacktest(ticks, strategy), provenance: 'SIRE chronological Deriv tick store' }; }
   if (tool === 'walk_forward') { if (!symbol) throw new Error('symbol is required'); const strategy = (args.strategy || {}) as StrategySpec; const ticks = await loadTicks(symbol, undefined, undefined, Math.min(BACKTEST_MAX_TICKS, Number(args.limit || BACKTEST_MAX_TICKS))); const train = Math.max(50, Math.floor(Number(args.trainTicks || 10000))); const validation = Math.max(25, Math.floor(Number(args.validationTicks || 2500))); const test = Math.max(25, Math.floor(Number(args.testTicks || 2500))); const step = Math.max(1, Math.floor(Number(args.stepTicks || test))); const windows: Array<Record<string, unknown>> = []; for (let start = 0; start + train + validation + test <= ticks.length; start += step) { const trainTicks = ticks.slice(start, start + train); const validationTicks = ticks.slice(start + train, start + train + validation); const testTicks = ticks.slice(start + train + validation, start + train + validation + test); const validationResult = simulateBacktest(validationTicks, strategy); const testResult = simulateBacktest(testTicks, strategy); windows.push({ trainRange: [trainTicks[0]?.epoch, trainTicks[trainTicks.length - 1]?.epoch], validationRange: [validationTicks[0]?.epoch, validationTicks[validationTicks.length - 1]?.epoch], testRange: [testTicks[0]?.epoch, testTicks[testTicks.length - 1]?.epoch], validation: { trades: validationResult.trades, pnl: validationResult.totalPnl, expectancy: validationResult.expectancy, drawdown: validationResult.maxDrawdown }, unseenTest: { trades: testResult.trades, pnl: testResult.totalPnl, expectancy: testResult.expectancy, drawdown: testResult.maxDrawdown, winRate: testResult.winRate } }); } const testPnls = windows.map(w => Number((w.unseenTest as Record<string, unknown>).pnl || 0)); return { source: 'Deriv', symbol, windows, windowsPassed: windows.filter(w => Number((w.unseenTest as Record<string, unknown>).pnl || 0) > 0).length, totalWindows: windows.length, unseenTestPnl: testPnls.reduce((a, b) => a + b, 0), methodology: 'Rolling train/validation/unseen-test windows with strictly chronological ranges.' }; }
   if (tool === 'robustness') { if (!symbol) throw new Error('symbol is required'); const strategy = (args.strategy || {}) as StrategySpec; const ticks = await loadTicks(symbol, undefined, undefined, Math.min(BACKTEST_MAX_TICKS, Number(args.limit || BACKTEST_MAX_TICKS))); const baseline = simulateBacktest(ticks, strategy); const observed = baseline.totalPnl; const permutations = Math.min(2000, Math.max(100, Math.floor(Number(args.permutations || 500)))); const diff = returns(ticks); let extreme = 0; const samples: number[] = []; for (let i = 0; i < permutations; i += 1) { const shuffled = seededShuffle(diff, i + 19); const synthetic: StoredTick[] = []; let price = ticks[0]?.quote || 0; for (let j = 0; j < shuffled.length; j += 1) { price += shuffled[j]; synthetic.push({ symbol, quote: price, epoch: ticks[Math.min(ticks.length - 1, j + 1)]?.epoch || 0, source: 'Deriv' }); } const result = simulateBacktest([ticks[0], ...synthetic], strategy); samples.push(result.totalPnl); if (result.totalPnl >= observed) extreme += 1; } const sorted = [...samples].sort((a, b) => a - b); const q = (p: number) => sorted[Math.min(sorted.length - 1, Math.floor((sorted.length - 1) * p))]; return { source: 'Deriv', symbol, observedPnl: observed, permutationCount: permutations, randomizedPnlQuantiles: { p05: q(.05), p50: q(.5), p95: q(.95) }, permutationPValue: (extreme + 1) / (permutations + 1), bootstrap: bootstrapMean(samples), warning: 'Permutation testing reduces but does not eliminate data-mining risk. Searching many hypotheses still requires multiple-testing correction and independent confirmation.' }; }
   if (tool === 'paper_trade') { if (!symbol) throw new Error('symbol is required'); const [id] = await db.add(PAPER_TABLE, [{ symbol, action: String(args.action || ''), expectedEntry: args.expectedEntry ?? null, actualQuote: args.actualQuote ?? null, spread: args.spread ?? null, executionDelayMs: args.executionDelayMs ?? null, strategy: String(args.strategy || ''), result: args.result ?? null, createdAt: Date.now() }]); return { saved: Boolean(id), id, symbol }; }
   if (tool === 'paper_trade_report') { if (!symbol) throw new Error('symbol is required'); const rows = await db.list<Record<string, unknown>>(PAPER_TABLE, { limit: 1000 }); const records = rows.items.filter(row => row.symbol === symbol); const results = records.map(row => Number(row.result)).filter(Number.isFinite); const wins = results.filter(v => v > 0).length; return { symbol, records: records.length, settledResults: results.length, totalPnl: results.reduce((a, b) => a + b, 0), winRate: results.length ? wins / results.length : 0, meanResult: results.length ? results.reduce((a, b) => a + b, 0) / results.length : 0, recent: records.slice(-100) }; }
   if (tool === 'risk_limits') { if (!symbol) throw new Error('symbol is required'); const table = 'sire_risk_limits_v1'; const rows = await db.list<Record<string, unknown>>(table, { limit: 1000 }); const existing = rows.items.find(row => row.symbol === symbol); const record = { symbol, maxExposure: Number(args.maxExposure ?? 1), maxDailyLoss: Number(args.maxDailyLoss ?? 1), maxDrawdown: Number(args.maxDrawdown ?? 1), maxConcentration: Number(args.maxConcentration ?? 1), updatedAt: Date.now() }; if (existing) await db.update(table, [{ id: existing.id, record }]); else await db.add(table, [record]); return { saved: true, ...record }; }
-  if (tool === 'compare') { const symbolA = String(args.symbolA || ''); const symbolB = String(args.symbolB || ''); const start = args.startEpoch === undefined ? undefined : Number(args.startEpoch); const end = args.endEpoch === undefined ? undefined : Number(args.endEpoch); const limit = Math.min(SIRE_MAX_ANALYSIS_TICKS, Number(args.limit || 10000)); const [a, b] = await Promise.all([loadTicks(symbolA, start, end, limit), loadTicks(symbolB, start, end, limit)]); const n = Math.min(a.length, b.length); const ap = a.slice(-n).map(t => t.quote); const bp = b.slice(-n).map(t => t.quote); const ar = returns(a).slice(-Math.max(0, n - 1)); const br = returns(b).slice(-Math.max(0, n - 1)); return { source: 'Deriv', symbolA, symbolB, sampleCount: n, priceCorrelation: pearson(ap, bp), returnCorrelation: pearson(ar, br), statsA: stats(ar), statsB: stats(br) }; }
-  if (tool === 'ohlc') { const limit = Math.min(SIRE_MAX_ANALYSIS_TICKS, Number(args.limit || 10000)); const ticks = await loadTicks(symbol, args.startEpoch === undefined ? undefined : Number(args.startEpoch), args.endEpoch === undefined ? undefined : Number(args.endEpoch), limit); const timeframeSeconds = Math.max(1, Number(args.timeframeSeconds || 60)); return { source: 'Deriv', symbol, timeframeSeconds, candles: ohlc(ticks, timeframeSeconds) }; }
-  if (tool === 'quality') { const limit = Math.min(SIRE_MAX_ANALYSIS_TICKS, Number(args.limit || 10000)); const ticks = await loadTicks(symbol, args.startEpoch === undefined ? undefined : Number(args.startEpoch), args.endEpoch === undefined ? undefined : Number(args.endEpoch), limit); return { source: 'Deriv', symbol, quality: quality(ticks) }; }
-  if (tool === 'replay') { const limit = Math.min(SIRE_MAX_TICKS, Number(args.limit || 1000)); const ticks = await loadTicks(symbol, args.startEpoch === undefined ? undefined : Number(args.startEpoch), args.endEpoch === undefined ? undefined : Number(args.endEpoch), limit); return { source: 'Deriv', symbol, ticks, replay: { step: true, pause: true, speeds: [0.25, 0.5, 1, 2, 5, 20] } }; }
+  if (tool === 'compare') { const symbolA = String(args.symbolA || ''); const symbolB = String(args.symbolB || ''); const start = args.startEpoch === undefined ? undefined : Number(args.startEpoch); const end = args.endEpoch === undefined ? undefined : Number(args.endEpoch); const limit = Math.min(BACKTEST_MAX_TICKS, Number(args.limit || 10000)); const [a, b] = await Promise.all([loadTicks(symbolA, start, end, limit), loadTicks(symbolB, start, end, limit)]); const n = Math.min(a.length, b.length); const ap = a.slice(-n).map(t => t.quote); const bp = b.slice(-n).map(t => t.quote); const ar = returns(a).slice(-Math.max(0, n - 1)); const br = returns(b).slice(-Math.max(0, n - 1)); return { source: 'Deriv', symbolA, symbolB, sampleCount: n, priceCorrelation: pearson(ap, bp), returnCorrelation: pearson(ar, br), statsA: stats(ar), statsB: stats(br) }; }
+  if (tool === 'ohlc') { const limit = Math.min(BACKTEST_MAX_TICKS, Number(args.limit || 10000)); const ticks = await loadTicks(symbol, args.startEpoch === undefined ? undefined : Number(args.startEpoch), args.endEpoch === undefined ? undefined : Number(args.endEpoch), limit); const timeframeSeconds = Math.max(1, Number(args.timeframeSeconds || 60)); return { source: 'Deriv', symbol, timeframeSeconds, candles: ohlc(ticks, timeframeSeconds) }; }
+  if (tool === 'quality') { const limit = Math.min(BACKTEST_MAX_TICKS, Number(args.limit || 10000)); const ticks = await loadTicks(symbol, args.startEpoch === undefined ? undefined : Number(args.startEpoch), args.endEpoch === undefined ? undefined : Number(args.endEpoch), limit); return { source: 'Deriv', symbol, quality: quality(ticks) }; }
+  if (tool === 'replay') { const limit = Math.min(MAX_TICKS, Number(args.limit || 1000)); const ticks = await loadTicks(symbol, args.startEpoch === undefined ? undefined : Number(args.startEpoch), args.endEpoch === undefined ? undefined : Number(args.endEpoch), limit); return { source: 'Deriv', symbol, ticks, replay: { step: true, pause: true, speeds: [0.25, 0.5, 1, 2, 5, 20] } }; }
   if (tool === 'save_experiment') { if (!args.name || !symbol) throw new Error('name and symbol are required'); const [id] = await db.add(RESEARCH_TABLE, [{ name: String(args.name), symbol, hypothesis: String(args.hypothesis || ''), methodology: String(args.methodology || ''), result: args.result || {}, createdAt: Date.now() }]); return { id, saved: true, symbol }; }
   if (tool === 'experiments') { const rows = await db.list<Record<string, unknown>>(RESEARCH_TABLE, { limit: 100 }); return { symbol, experiments: rows.items.filter(row => row.symbol === symbol).sort((a, b) => Number(b.createdAt || 0) - Number(a.createdAt || 0)) }; }
-  if (tool === 'research') { const steps = Array.isArray(args.steps) ? args.steps : []; if (!steps.length) throw new Error('steps[] is required'); const outputs: unknown[] = []; for (let i = 0; i < Math.min(25, steps.length); i += 1) { const step = steps[i] as Record<string, unknown>; const stepTool = String(step.tool || ''); if (stepTool === 'research' || stepTool === 'audit') throw new Error('Nested research/audit tools are not allowed'); outputs.push({ index: i, tool: stepTool, result: await gptTool(stepTool, (step.args || {}) as Record<string, unknown>) }); } return { stepsRun: outputs.length, outputs }; }
+  if (tool === 'research') { const steps = Array.isArray(args.steps) ? args.steps : []; if (!steps.length) throw new Error('steps[] is required'); const outputs: unknown[] = []; for (let i = 0; i < Math.min(25, steps.length); i += 1) { const step = steps[i] as Record<string, unknown>; const stepTool = String(step.tool || ''); if (stepTool === 'research' || stepTool === 'audit') throw new Error('Nested research/audit tools are not allowed'); outputs.push({ index: i, tool: stepTool, result: await researchTool(stepTool, (step.args || {}) as Record<string, unknown>) }); } return { stepsRun: outputs.length, outputs }; }
   if (tool === 'audit') {
     const snapshot = await environmentSnapshot({ includeMarketState: true, includeDataCoverage: true });
     return {
@@ -335,7 +335,7 @@ export const handler = router({
       return json({ ok: true, source: 'Deriv', discovered: instruments.length, added, updated, persisted: added + updated });
     },
   ],
-  'POST /api/sire/gpt/catalogue': [
+  'POST /api/sire/research/catalogue': [
     async ({ body }) => {
       const payload = (body || {}) as Record<string, unknown>;
       const instruments = Array.isArray(payload.instruments)
@@ -356,26 +356,26 @@ export const handler = router({
       return json({ ok: true, stored: instruments.length, source: 'Deriv' });
     },
   ],
-  'GET /api/sire/gpt/latest': [
+  'GET /api/sire/research/latest': [
     async ({ query }) => { const symbol = String(query.symbol || ''); if (!symbol) return error('symbol is required', 400); const batches = await allBatches(symbol); const ticks = numericTicks(batches, symbol, undefined, undefined, 10); return json({ ok: true, source: 'Deriv', symbol, latest: ticks[ticks.length - 1] || null, recent: ticks }); },
   ],
-  'GET /api/sire/gpt/quality': [
+  'GET /api/sire/research/quality': [
     async ({ query }) => { const symbol = String(query.symbol || ''); if (!symbol) return error('symbol is required', 400); const batches = await allBatches(symbol); const ticks = numericTicks(batches, symbol, undefined, undefined, Number(query.limit || 100000)); return json({ ok: true, symbol, source: 'Deriv', quality: quality(ticks) }); },
   ],
-  'GET /api/sire/gpt/ohlc': [
+  'GET /api/sire/research/ohlc': [
     async ({ query }) => { const symbol = String(query.symbol || ''); if (!symbol) return error('symbol is required', 400); const batches = await allBatches(symbol); const ticks = numericTicks(batches, symbol, query.startEpoch === undefined ? undefined : Number(query.startEpoch), query.endEpoch === undefined ? undefined : Number(query.endEpoch), Number(query.limit || 100000)); const timeframeSeconds = Math.max(1, Number(query.timeframeSeconds || 60)); return json({ ok: true, symbol, source: 'Deriv', timeframeSeconds, candles: ohlc(ticks, timeframeSeconds) }); },
   ],
-  'GET /api/sire/gpt/compare': [
+  'GET /api/sire/research/compare': [
     async ({ query }) => { const symbolA = String(query.symbolA || ''); const symbolB = String(query.symbolB || ''); if (!symbolA || !symbolB) return error('symbolA and symbolB are required', 400); const start = query.startEpoch === undefined ? undefined : Number(query.startEpoch); const end = query.endEpoch === undefined ? undefined : Number(query.endEpoch); const [aBatches, bBatches] = await Promise.all([allBatches(symbolA), allBatches(symbolB)]); const a = numericTicks(aBatches, symbolA, start, end, Number(query.limit || 100000)); const b = numericTicks(bBatches, symbolB, start, end, Number(query.limit || 100000)); const n = Math.min(a.length, b.length); const ap = a.slice(-n).map(t => t.quote); const bp = b.slice(-n).map(t => t.quote); const ar = returns(a).slice(-Math.max(0, n - 1)); const br = returns(b).slice(-Math.max(0, n - 1)); return json({ ok: true, source: 'Deriv', symbolA, symbolB, sampleCount: n, priceCorrelation: pearson(ap, bp), returnCorrelation: pearson(ar, br), statsA: stats(ar), statsB: stats(br) }); },
   ],
-  'GET /api/sire/gpt/context': [
+  'GET /api/sire/research/context': [
     async ({ query }) => {
       const symbol = String(query.symbol || '');
       if (!symbol) return error('symbol is required', 400);
       return json(await researchContext(symbol));
     },
   ],
-  'GET /api/sire/gpt/query': [
+  'GET /api/sire/research/query': [
     async ({ query }) => {
       const symbol = String(query.symbol || ''); const operation = String(query.operation || 'summary');
       if (!symbol) return error('symbol is required', 400);
@@ -386,7 +386,7 @@ export const handler = router({
       return json({ ok: true, source: 'Deriv', symbol, startEpoch: start ?? ticks[0]?.epoch ?? null, endEpoch: end ?? ticks[ticks.length - 1]?.epoch ?? null, sampleCount: ticks.length, result, ticks: query.includeTicks === '1' ? ticks.slice(-Math.min(5000, ticks.length)) : undefined, provenance: 'SIRE persistent Deriv tick store' });
     },
   ],
-  'POST /api/sire/gpt/query': [
+  'POST /api/sire/research/query': [
     async ({ body }) => {
       const payload = (body || {}) as Record<string, unknown>;
       const symbol = String(payload.symbol || ''); const operation = String(payload.operation || 'summary');
@@ -398,40 +398,40 @@ export const handler = router({
       return json({ ok: true, source: 'Deriv', symbol, startEpoch: start ?? ticks[0]?.epoch ?? null, endEpoch: end ?? ticks[ticks.length - 1]?.epoch ?? null, sampleCount: ticks.length, result, ticks: payload.includeTicks ? ticks.slice(-Math.min(5000, ticks.length)) : undefined, provenance: 'SIRE persistent Deriv tick store' });
     },
   ],
-  'GET /api/sire/gpt/environment': [
+  'GET /api/sire/research/environment': [
     async ({ query }) => json({ ok: true, result: await environmentSnapshot({ includeMarketState: query.includeMarketState !== '0', includeDataCoverage: query.includeDataCoverage !== '0' }) }),
   ],
-  'GET /api/sire/gpt/workspace': [
+  'GET /api/sire/research/workspace': [
     async ({ query }) => {
       const symbol = query.symbol ? String(query.symbol) : '';
       const context = symbol ? await researchContext(symbol) : null;
       const rows = await db.list<Record<string, unknown>>(RESEARCH_TABLE, { limit: 100 });
       const catalogue = await db.list<Record<string, unknown>>(CATALOGUE_TABLE, { limit: 1000 });
       const experiments = symbol ? rows.items.filter(row => row.symbol === symbol) : rows.items;
-      return json({ ok: true, workspace: { source: 'Deriv', selectedSymbol: symbol || null, context, catalogue: catalogue.items, experiments: experiments.sort((a, b) => Number(b.createdAt || 0) - Number(a.createdAt || 0)), tools: GPT_TOOL_MANIFEST.tools, operations: GPT_TOOL_MANIFEST.operations, controls: { analysis: true, rawTicks: true, replay: true, comparison: true, persistentMemory: true, programmaticAccess: true, catalogue: true, latest: true, quality: true, ohlc: true, multiStepResearch: true, audit: true } } });
+      return json({ ok: true, workspace: { source: 'Deriv', selectedSymbol: symbol || null, context, catalogue: catalogue.items, experiments: experiments.sort((a, b) => Number(b.createdAt || 0) - Number(a.createdAt || 0)), tools: RESEARCH_TOOL_MANIFEST.tools, operations: RESEARCH_TOOL_MANIFEST.operations, controls: { analysis: true, rawTicks: true, replay: true, comparison: true, persistentMemory: true, programmaticAccess: true, catalogue: true, latest: true, quality: true, ohlc: true, multiStepResearch: true, audit: true } } });
     },
   ],
-  'POST /api/sire/gpt/research': [
-    async ({ body }) => { const payload = (body || {}) as Record<string, unknown>; try { return json({ ok: true, tool: 'research', result: await gptTool('research', payload), provenance: 'SIRE GPT Research Gateway' }); } catch (cause) { return error(cause instanceof Error ? cause.message : String(cause), 400); } },
+  'POST /api/sire/research/research': [
+    async ({ body }) => { const payload = (body || {}) as Record<string, unknown>; try { return json({ ok: true, tool: 'research', result: await researchTool('research', payload), provenance: 'SIRE Research Gateway' }); } catch (cause) { return error(cause instanceof Error ? cause.message : String(cause), 400); } },
   ],
-  'GET /api/sire/gpt/audit': [
-    async () => json({ ok: true, result: await gptTool('audit', {}) }),
+  'GET /api/sire/research/audit': [
+    async () => json({ ok: true, result: await researchTool('audit', {}) }),
   ],
-  'GET /api/sire/gpt/replay': [
+  'GET /api/sire/research/replay': [
     async ({ query }) => {
       const symbol = String(query.symbol || ''); if (!symbol) return error('symbol is required', 400);
       const start = query.startEpoch === undefined ? undefined : Number(query.startEpoch); const end = query.endEpoch === undefined ? undefined : Number(query.endEpoch); const batches = await allBatches(symbol); const ticks = numericTicks(batches, symbol, start, end, Number(query.limit || 5000));
       return json({ ok: true, symbol, source: 'Deriv', ticks, replay: { step: true, pause: true, speeds: [0.25, 0.5, 1, 2, 5, 20] } });
     },
   ],
-  'POST /api/sire/gpt/experiments': [
+  'POST /api/sire/research/experiments': [
     async ({ body }) => {
       const payload = (body || {}) as Record<string, unknown>; if (!payload.name || !payload.symbol) return error('name and symbol are required', 400);
       const [id] = await db.add(RESEARCH_TABLE, [{ name: String(payload.name), symbol: String(payload.symbol), hypothesis: String(payload.hypothesis || ''), methodology: String(payload.methodology || ''), result: payload.result || {}, createdAt: Date.now() }]);
       return json({ ok: true, id, experiment: payload });
     },
   ],
-  'GET /api/sire/gpt/experiments': [
+  'GET /api/sire/research/experiments': [
     async ({ query }) => { const rows = await db.list<Record<string, unknown>>(RESEARCH_TABLE, { limit: 100 }); const symbol = query.symbol ? String(query.symbol) : ''; return json({ experiments: rows.items.filter(row => !symbol || row.symbol === symbol).sort((a, b) => Number(b.createdAt || 0) - Number(a.createdAt || 0)) }); },
   ],
 });
