@@ -16,6 +16,7 @@
     "@appdeploy/sdk": "file:./compat/appdeploy-sdk",
     "lucide-react": "^0.469.0",
     "pg": "^8.13.1",
+    "puppeteer": "^24.20.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "ws": "^8.18.0"
