@@ -6,6 +6,8 @@ let startY = 0;
 let startX = 0;
 let tracking = false;
 let busy = false;
+let longPressTimer: number | null = null;
+let longPressTriggered = false;
 let activeButton: HTMLElement | null = null;
 let activeViewport: HTMLElement | null = null;
 let activeCurrent: HTMLElement | null = null;
@@ -67,8 +69,6 @@ function prepare(els: NonNullable<ReturnType<typeof getEls>>, direction: number,
 }
 
 function selectRow(item: Instrument) {
-  // The real React selector already owns instrument state. Clicking its existing
-  // row updates selected, the live Deriv stream, history, chart and header.
   item.row.click();
 }
 
@@ -130,6 +130,19 @@ function begin(x: number, y: number) {
   startX = x;
   startY = y;
   tracking = true;
+  longPressTriggered = false;
+  if (longPressTimer !== null) window.clearTimeout(longPressTimer);
+  longPressTimer = window.setTimeout(() => {
+    if (!tracking || busy) return;
+    longPressTriggered = true;
+    tracking = false;
+    const els = getEls();
+    if (els) {
+      els.button.dataset.swiping = 'false';
+      reset(els);
+    }
+    window.dispatchEvent(new CustomEvent('sire:glass-action', { detail: { action: 'symbol', openSearch: true } }));
+  }, 550);
   const els = getEls();
   if (els) els.button.dataset.swiping = 'true';
 }
@@ -139,12 +152,20 @@ function move(x: number, y: number, event?: Event) {
   const dx = x - startX;
   const dy = y - startY;
   if (Math.abs(dy) <= Math.abs(dx) || Math.abs(dy) < 5) return;
+  if (longPressTimer !== null) {
+    window.clearTimeout(longPressTimer);
+    longPressTimer = null;
+  }
   event?.preventDefault();
   event?.stopImmediatePropagation?.();
   updateSwipe(dy);
 }
 
 function end(x: number, y: number) {
+  if (longPressTimer !== null) {
+    window.clearTimeout(longPressTimer);
+    longPressTimer = null;
+  }
   if (!tracking) return;
   const dy = y - startY;
   const dx = x - startX;
@@ -165,10 +186,24 @@ function bind() {
   if (!els || els.button.dataset.swipeFixBound === 'true') return;
   els.button.dataset.swipeFixBound = 'true';
   els.button.style.touchAction = 'none';
+  els.button.style.userSelect = 'none';
+  els.button.style.webkitUserSelect = 'none';
+  els.button.style.webkitTouchCallout = 'none';
+  els.button.setAttribute('unselectable', 'on');
+
+  els.button.addEventListener('contextmenu', event => {
+    event.preventDefault();
+    event.stopImmediatePropagation();
+  });
+  els.button.addEventListener('selectstart', event => {
+    event.preventDefault();
+    event.stopImmediatePropagation();
+  });
 
   els.button.addEventListener('touchstart', event => {
     const t = event.changedTouches[0];
     if (!t) return;
+    event.preventDefault();
     event.stopImmediatePropagation();
     begin(t.clientX, t.clientY);
   }, { passive: false });
@@ -182,23 +217,29 @@ function bind() {
   els.button.addEventListener('touchend', event => {
     const t = event.changedTouches[0];
     if (!t) return;
+    event.preventDefault();
     event.stopImmediatePropagation();
     end(t.clientX, t.clientY);
   }, { passive: false });
 
   els.button.addEventListener('touchcancel', event => {
+    event.preventDefault();
     event.stopImmediatePropagation();
+    if (longPressTimer !== null) window.clearTimeout(longPressTimer);
+    longPressTimer = null;
     tracking = false;
     const now = getEls();
     if (now) { now.button.dataset.swiping = 'false'; reset(now); }
   }, { passive: false });
 
-  // Pointer fallback for non-touch devices. Touch devices use the touch handlers
-  // above so the original bar's pointer gesture cannot compete with this one.
   els.button.addEventListener('pointerdown', event => begin(event.clientX, event.clientY));
   els.button.addEventListener('pointermove', event => move(event.clientX, event.clientY, event));
   els.button.addEventListener('pointerup', event => end(event.clientX, event.clientY));
-  els.button.addEventListener('pointercancel', () => { tracking = false; });
+  els.button.addEventListener('pointercancel', () => {
+    if (longPressTimer !== null) window.clearTimeout(longPressTimer);
+    longPressTimer = null;
+    tracking = false;
+  });
 }
 
 function install() {
