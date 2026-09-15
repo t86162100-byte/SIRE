@@ -4,7 +4,7 @@ const STYLE_ID = 'sire-glass-action-bar-style';
 type Instrument = { symbol: string; name: string };
 
 const items = [
-  ['symbol', '⌕', 'SYMBOL'],
+  ['symbol', '', 'SYMBOL'],
   ['time', '◷', '1m'],
   ['indicators', '◒', 'INDICATORS'],
   ['draw', '✎', 'DRAW'],
@@ -14,19 +14,91 @@ const items = [
 let instrumentItems: Instrument[] = [];
 let instrumentIndex = 0;
 let symbolButton: HTMLButtonElement | null = null;
+let symbolViewport: HTMLSpanElement | null = null;
+let currentSymbolLabel: HTMLSpanElement | null = null;
+let nextSymbolLabel: HTMLSpanElement | null = null;
 let swipeStartY: number | null = null;
+let swipeStartX: number | null = null;
+let swipeDeltaY = 0;
+let animating = false;
 
-function setSymbolLabel(instrument: Instrument | null) {
-  if (!symbolButton) return;
-  const label = symbolButton.querySelector('.glass-action-label');
-  if (label) label.textContent = instrument?.symbol || instrument?.name || 'SYMBOL';
-  symbolButton.title = instrument ? `${instrument.name} (${instrument.symbol}) · swipe up/down to change` : 'Swipe up/down to change instrument';
-  symbolButton.setAttribute('aria-label', instrument ? `Instrument ${instrument.name}, ${instrument.symbol}. Swipe up or down to change` : 'Select instrument');
+function instrumentAt(index: number) {
+  if (!instrumentItems.length) return null;
+  return instrumentItems[(index + instrumentItems.length) % instrumentItems.length] || null;
+}
+
+function setSymbolLabels(current: Instrument | null, next: Instrument | null = null) {
+  if (!currentSymbolLabel || !nextSymbolLabel || !symbolButton) return;
+  currentSymbolLabel.textContent = current?.name || current?.symbol || 'SYMBOL';
+  nextSymbolLabel.textContent = next?.name || next?.symbol || '';
+  symbolButton.title = current ? `${current.name} (${current.symbol}) · swipe up/down to change` : 'Swipe up/down to change instrument';
+  symbolButton.setAttribute('aria-label', current ? `Instrument ${current.name}, ${current.symbol}. Swipe up or down to change` : 'Select instrument');
+}
+
+function resetSymbolPosition() {
+  if (!currentSymbolLabel || !nextSymbolLabel) return;
+  currentSymbolLabel.style.transition = 'none';
+  nextSymbolLabel.style.transition = 'none';
+  currentSymbolLabel.style.transform = 'translate3d(0,0,0)';
+  nextSymbolLabel.style.transform = 'translate3d(0,100%,0)';
+  requestAnimationFrame(() => {
+    if (!currentSymbolLabel || !nextSymbolLabel) return;
+    currentSymbolLabel.style.transition = '';
+    nextSymbolLabel.style.transition = '';
+  });
+}
+
+function prepareNext(delta: number) {
+  const nextIndex = (instrumentIndex + delta + instrumentItems.length) % instrumentItems.length;
+  setSymbolLabels(instrumentAt(instrumentIndex), instrumentAt(nextIndex));
+  if (!currentSymbolLabel || !nextSymbolLabel) return;
+  currentSymbolLabel.style.transition = 'none';
+  nextSymbolLabel.style.transition = 'none';
+  currentSymbolLabel.style.transform = 'translate3d(0,0,0)';
+  nextSymbolLabel.style.transform = delta > 0 ? 'translate3d(0,100%,0)' : 'translate3d(0,-100%,0)';
+}
+
+function finishInstrumentChange(delta: number) {
+  if (!instrumentItems.length || animating) return;
+  animating = true;
+  const nextIndex = (instrumentIndex + delta + instrumentItems.length) % instrumentItems.length;
+  prepareNext(delta);
+  requestAnimationFrame(() => {
+    if (!currentSymbolLabel || !nextSymbolLabel) return;
+    currentSymbolLabel.style.transition = 'transform 180ms cubic-bezier(.22,.75,.2,1)';
+    nextSymbolLabel.style.transition = 'transform 180ms cubic-bezier(.22,.75,.2,1)';
+    currentSymbolLabel.style.transform = delta > 0 ? 'translate3d(0,-100%,0)' : 'translate3d(0,100%,0)';
+    nextSymbolLabel.style.transform = 'translate3d(0,0,0)';
+    window.setTimeout(() => {
+      instrumentIndex = nextIndex;
+      const instrument = instrumentAt(instrumentIndex);
+      setSymbolLabels(instrument, instrumentAt(instrumentIndex + delta));
+      resetSymbolPosition();
+      animating = false;
+      if (instrument) {
+        window.dispatchEvent(new CustomEvent('sire:instrument-change', { detail: { symbol: instrument.symbol, name: instrument.name } }));
+      }
+    }, 190);
+  });
+}
+
+function updateSwipe(deltaY: number) {
+  if (!instrumentItems.length || !currentSymbolLabel || !nextSymbolLabel || animating) return;
+  const direction = deltaY < 0 ? 1 : -1;
+  prepareNext(direction);
+  const distance = Math.min(Math.abs(deltaY), 90);
+  const progress = distance / 90;
+  const currentOffset = direction > 0 ? -distance : distance;
+  const nextOffset = direction > 0 ? 90 - distance : -90 + distance;
+  currentSymbolLabel.style.transform = `translate3d(0,${currentOffset}px,0)`;
+  nextSymbolLabel.style.transform = `translate3d(0,${nextOffset}px,0)`;
+  symbolViewport?.setAttribute('data-swipe-progress', progress.toFixed(2));
 }
 
 function announceInstrument() {
-  const instrument = instrumentItems[instrumentIndex] || null;
-  setSymbolLabel(instrument);
+  const instrument = instrumentAt(instrumentIndex);
+  setSymbolLabels(instrument, instrumentAt(instrumentIndex + 1));
+  resetSymbolPosition();
   if (!instrument) return;
   window.dispatchEvent(new CustomEvent('sire:instrument-change', { detail: { symbol: instrument.symbol, name: instrument.name } }));
 }
@@ -66,17 +138,13 @@ async function loadInstruments() {
       .sort((a, b) => a.name.localeCompare(b.name));
     if (instrumentItems.length) announceInstrument();
   } catch {
-    // The main SIRE app remains the source of truth if catalogue discovery is unavailable.
+    // Keep the rest of the SIRE interface working if the public catalogue is unavailable.
   }
 }
 
 function stepInstrument(delta: number) {
-  if (!instrumentItems.length) {
-    window.dispatchEvent(new CustomEvent('sire:glass-action', { detail: { action: 'symbol' } }));
-    return;
-  }
-  instrumentIndex = (instrumentIndex + delta + instrumentItems.length) % instrumentItems.length;
-  announceInstrument();
+  if (!instrumentItems.length || animating) return;
+  finishInstrumentChange(delta > 0 ? 1 : -1);
 }
 
 function installStyles() {
@@ -91,11 +159,14 @@ function installStyles() {
     #${BAR_ID} .glass-action{position:relative;z-index:1;flex:0 0 auto;min-width:max-content;height:38px;border:1px solid transparent;border-radius:11px;background:rgba(255,255,255,.025);color:rgba(235,240,244,.68);display:flex;align-items:center;justify-content:center;gap:6px;padding:0 12px;font:700 9px/1 system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;letter-spacing:.08em;white-space:nowrap;cursor:pointer;touch-action:manipulation;-webkit-tap-highlight-color:transparent;transition:background .16s ease,border-color .16s ease,color .16s ease,box-shadow .16s ease,transform .12s ease}
     #${BAR_ID} .glass-action:hover{background:rgba(255,255,255,.065);border-color:rgba(255,255,255,.10);color:#fff}
     #${BAR_ID} .glass-action:active{transform:scale(.97);background:rgba(255,255,255,.09);color:#fff}
-    #${BAR_ID} .glass-action.active{background:rgba(255,255,255,.075);border-color:rgba(255,255,255,.22);color:#fff;box-shadow:inset 0 0 14px rgba(255,255,255,.035),0 0 12px rgba(255,255,255,.05)}
     #${BAR_ID} .glass-action-icon{font-size:15px;line-height:1;letter-spacing:0;opacity:.9}
-    #${BAR_ID} .glass-action-label{overflow:visible;text-overflow:clip;max-width:190px;display:block}
-    #${BAR_ID} .glass-action[data-action="symbol"] .glass-action-label{max-width:190px;overflow:hidden;text-overflow:ellipsis}
-    @media(max-width:520px){#${BAR_ID}{bottom:calc(max(6px,env(safe-area-inset-bottom)) + 56px);width:calc(100vw - 20px);height:48px;padding:4px 5px;border-radius:16px;gap:3px}#${BAR_ID} .glass-action{height:38px;padding:0 10px;gap:4px;font-size:8px;letter-spacing:.06em}#${BAR_ID} .glass-action-icon{font-size:14px}}
+    #${BAR_ID} .glass-action-label{overflow:visible;text-overflow:clip;display:block}
+    #${BAR_ID} .glass-action[data-action="symbol"]{min-width:126px;padding:0 13px;overflow:hidden}
+    #${BAR_ID} .glass-action[data-action="symbol"] .glass-action-icon{display:none}
+    #${BAR_ID} .symbol-viewport{position:relative;display:block;height:22px;line-height:22px;min-width:0;overflow:hidden;font-weight:800;letter-spacing:.02em}
+    #${BAR_ID} .symbol-viewport .glass-action-label{position:absolute;left:0;right:0;top:0;white-space:nowrap;text-align:center;will-change:transform}
+    #${BAR_ID} .symbol-viewport .symbol-next{transform:translate3d(0,100%,0)}
+    @media(max-width:520px){#${BAR_ID}{bottom:calc(max(6px,env(safe-area-inset-bottom)) + 56px);width:calc(100vw - 20px);height:48px;padding:4px 5px;border-radius:16px;gap:3px}#${BAR_ID} .glass-action{height:38px;padding:0 10px;gap:4px;font-size:8px;letter-spacing:.06em}#${BAR_ID} .glass-action-icon{font-size:14px}#${BAR_ID} .glass-action[data-action="symbol"]{min-width:126px;padding:0 10px}#${BAR_ID} .symbol-viewport{font-size:9px}}
   `;
   document.head.appendChild(style);
 }
@@ -112,30 +183,50 @@ function mountBar() {
     button.type = 'button';
     button.className = 'glass-action';
     button.dataset.action = action;
-    button.innerHTML = `<span class="glass-action-icon" aria-hidden="true">${icon}</span><span class="glass-action-label">${label}</span>`;
     if (action === 'symbol') {
+      button.innerHTML = `<span class="symbol-viewport"><span class="glass-action-label symbol-current">${label}</span><span class="glass-action-label symbol-next"></span></span>`;
       symbolButton = button;
+      symbolViewport = button.querySelector('.symbol-viewport');
+      currentSymbolLabel = button.querySelector('.symbol-current');
+      nextSymbolLabel = button.querySelector('.symbol-next');
+
       button.addEventListener('pointerdown', event => {
+        if (animating) return;
         swipeStartY = event.clientY;
+        swipeStartX = event.clientX;
+        swipeDeltaY = 0;
         button.setPointerCapture?.(event.pointerId);
       });
+      button.addEventListener('pointermove', event => {
+        if (swipeStartY === null || swipeStartX === null || animating) return;
+        const dx = event.clientX - swipeStartX;
+        const dy = event.clientY - swipeStartY;
+        if (Math.abs(dy) <= Math.abs(dx)) return;
+        swipeDeltaY = dy;
+        updateSwipe(dy);
+      });
       button.addEventListener('pointerup', event => {
-        if (swipeStartY === null) return;
-        const deltaY = event.clientY - swipeStartY;
+        if (swipeStartY === null || swipeStartX === null) return;
+        const dy = event.clientY - swipeStartY;
         swipeStartY = null;
-        if (Math.abs(deltaY) >= 28) {
-          stepInstrument(deltaY < 0 ? 1 : -1);
+        swipeStartX = null;
+        swipeDeltaY = 0;
+        if (Math.abs(dy) >= 28) {
+          stepInstrument(dy < 0 ? 1 : -1);
           return;
         }
-        bar.querySelectorAll('.glass-action').forEach(node => node.classList.remove('active'));
-        button.classList.add('active');
+        resetSymbolPosition();
         window.dispatchEvent(new CustomEvent('sire:glass-action', { detail: { action: 'symbol' } }));
       });
-      button.addEventListener('pointercancel', () => { swipeStartY = null; });
+      button.addEventListener('pointercancel', () => {
+        swipeStartY = null;
+        swipeStartX = null;
+        swipeDeltaY = 0;
+        resetSymbolPosition();
+      });
     } else {
+      button.innerHTML = `<span class="glass-action-icon" aria-hidden="true">${icon}</span><span class="glass-action-label">${label}</span>`;
       button.addEventListener('click', () => {
-        bar.querySelectorAll('.glass-action').forEach(node => node.classList.remove('active'));
-        button.classList.add('active');
         window.dispatchEvent(new CustomEvent('sire:glass-action', { detail: { action } }));
       });
     }
