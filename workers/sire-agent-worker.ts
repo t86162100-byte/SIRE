@@ -1,23 +1,19 @@
-/* Long-running SIRE autonomous worker.
- * Render runs this as a background worker. It polls the durable SIRE job table,
- * checkpoints failures, and can resume continuous tasks after restarts/deploys.
- */
+/* Long-running SIRE autonomous worker. */
 import { db } from '@appdeploy/sdk';
 
 const JOB_TABLE = 'sire_agent_jobs_v1';
 const POLL_MS = Math.max(1000, Number(process.env.SIRE_AGENT_POLL_MS || 5000));
 const LEASE_MS = Math.max(30000, Number(process.env.SIRE_AGENT_LEASE_MS || 120000));
-const EXECUTOR_URL = process.env.SIRE_AGENT_EXECUTOR_URL;
+const EXECUTOR_URL = process.env.SIRE_AGENT_EXECUTOR_URL || `http://127.0.0.1:${process.env.PORT || 10000}/agent`;
 let stopping = false;
 
 function sleep(ms: number) { return new Promise(resolve => setTimeout(resolve, ms)); }
 
 async function execute(job: Record<string, unknown>) {
-  if (!EXECUTOR_URL) throw new Error('SIRE_AGENT_EXECUTOR_URL is not configured');
   const response = await fetch(EXECUTOR_URL, {
     method: 'POST',
     headers: { 'content-type': 'application/json', ...(process.env.SIRE_AGENT_EXECUTOR_TOKEN ? { authorization: `Bearer ${process.env.SIRE_AGENT_EXECUTOR_TOKEN}` } : {}) },
-    body: JSON.stringify({ job }),
+    body: JSON.stringify({ task: String(job.task || ''), job }),
   });
   const text = await response.text();
   if (!response.ok) throw new Error(`Executor HTTP ${response.status}: ${text.slice(0, 500)}`);
@@ -37,8 +33,7 @@ async function claimOne() {
   await db.update(JOB_TABLE, [{ id: job.id, record: claimed }]);
   try {
     const result = await execute(claimed);
-    const completed = { ...claimed, status: claimed.continuous ? 'running' : 'completed', leaseUntil: null, updatedAt: Date.now(), lastResult: result, lastError: null, nextRunAt: claimed.continuous ? Date.now() + POLL_MS : null };
-    await db.update(JOB_TABLE, [{ id: job.id, record: completed }]);
+    await db.update(JOB_TABLE, [{ id: job.id, record: { ...claimed, status: claimed.continuous ? 'running' : 'completed', leaseUntil: null, updatedAt: Date.now(), lastResult: result, lastError: null, nextRunAt: claimed.continuous ? Date.now() + POLL_MS : null } }]);
   } catch (error) {
     const attempts = Number(claimed.attempts || 1);
     const delay = Math.min(300000, Math.max(5000, 1000 * 2 ** Math.min(attempts, 8)));
@@ -47,9 +42,8 @@ async function claimOne() {
   return true;
 }
 
-async function main() {
+export async function startAgentWorker() {
   console.log('[SIRE agent worker] started');
-  if (!EXECUTOR_URL) console.warn('[SIRE agent worker] SIRE_AGENT_EXECUTOR_URL is missing; jobs will remain queued until configured.');
   while (!stopping) {
     try { await claimOne(); } catch (error) { console.error('[SIRE agent worker] loop error', error); }
     await sleep(POLL_MS);
@@ -58,4 +52,5 @@ async function main() {
 
 process.on('SIGTERM', () => { stopping = true; });
 process.on('SIGINT', () => { stopping = true; });
-main().catch(error => { console.error(error); process.exit(1); });
+
+if (process.env.SIRE_AGENT_WORKER_STANDALONE === 'true') startAgentWorker().catch(error => { console.error(error); process.exit(1); });
