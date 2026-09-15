@@ -49,6 +49,9 @@ async function fetchJson(path: string, init: RequestInit = {}) {
         ...(init.headers || {}),
       },
     });
+    if (!response || typeof response.text !== 'function') {
+      throw new Error('UnoRouter returned an invalid HTTP response');
+    }
     const text = await response.text();
     let data: unknown = {};
     try { data = text ? JSON.parse(text) : {}; } catch { data = { error: text }; }
@@ -58,6 +61,7 @@ async function fetchJson(path: string, init: RequestInit = {}) {
         : `UnoRouter HTTP ${response.status}`;
       throw new Error(message);
     }
+    if (!data || typeof data !== 'object') throw new Error('UnoRouter returned an invalid JSON response');
     return data as Record<string, unknown>;
   } finally {
     clearTimeout(timer);
@@ -74,6 +78,26 @@ export async function listFreeModels() {
     .slice(0, MAX_MODELS);
 }
 
+function extractMessageText(value: unknown): string {
+  if (typeof value === 'string') return value;
+  if (Array.isArray(value)) {
+    return value.map(item => {
+      if (typeof item === 'string') return item;
+      if (item && typeof item === 'object') {
+        const part = item as Record<string, unknown>;
+        return typeof part.text === 'string' ? part.text : typeof part.content === 'string' ? part.content : '';
+      }
+      return '';
+    }).filter(Boolean).join('\n');
+  }
+  if (value && typeof value === 'object') {
+    const part = value as Record<string, unknown>;
+    if (typeof part.text === 'string') return part.text;
+    if (typeof part.content === 'string') return part.content;
+  }
+  return '';
+}
+
 async function callModel(model: string, messages: ChatMessage[], temperature = 0.2) {
   const data = await fetchJson('/chat/completions', {
     method: 'POST',
@@ -86,8 +110,13 @@ async function callModel(model: string, messages: ChatMessage[], temperature = 0
     }),
   });
   const choices = Array.isArray(data.choices) ? data.choices as Array<Record<string, unknown>> : [];
-  const first = choices[0]?.message as Record<string, unknown> | undefined;
-  return String(first?.content || '').trim().slice(0, MAX_OUTPUT_CHARS_PER_MODEL);
+  const first = choices[0];
+  const message = first && typeof first.message === 'object' ? first.message as Record<string, unknown> : undefined;
+  const content = extractMessageText(message?.content);
+  const fallback = extractMessageText(first?.text);
+  const result = (content || fallback).trim();
+  if (!result) throw new Error(`UnoRouter model ${model} returned no text`);
+  return result.slice(0, MAX_OUTPUT_CHARS_PER_MODEL);
 }
 
 async function mapWithConcurrency<T, R>(items: T[], limit: number, fn: (item: T, index: number) => Promise<R>) {
