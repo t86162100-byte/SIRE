@@ -19,10 +19,6 @@ function injectStyles() {
     .sire-tab-quote .symbol-row { min-height: 82px; padding: 14px !important; border: 1px solid rgba(255,255,255,.08); border-radius: 14px; background: rgba(255,255,255,.025); text-align: left; }
     .sire-tab-quote .symbol-row.active { border-color: rgba(120,190,255,.65); background: rgba(80,150,220,.09); }
     .sire-tab-quote .catalogue-refresh { width: min(760px, 100%); margin: 12px auto 0; }
-    @media (max-width: 799px) {
-      /* The old research/control toolbar left an empty rounded panel above the primary tabs. */
-      .research-controls { display: none !important; }
-    }
     #${NAV_ID} { position: fixed; z-index: 9999; left: 0; right: 0; bottom: 0; height: 68px; display: grid; grid-template-columns: repeat(3, 1fr); padding: 8px max(12px, env(safe-area-inset-left)) max(8px, env(safe-area-inset-bottom)); gap: 6px; box-sizing: border-box; background: rgba(8,11,17,.96); border-top: 1px solid rgba(255,255,255,.09); backdrop-filter: blur(18px); }
     #${NAV_ID} button { border: 0; border-radius: 12px; background: transparent; color: rgba(255,255,255,.55); font: 700 11px/1 system-ui,sans-serif; letter-spacing: .08em; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 5px; cursor: pointer; }
     #${NAV_ID} button.active { color: #fff; background: rgba(255,255,255,.09); }
