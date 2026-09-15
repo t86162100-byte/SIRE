@@ -7,6 +7,7 @@ import './tabNavigation';
 import './chartToolbarCleanup';
 import './removeMobileChartControls';
 import './glassActionBar';
+import './glassInstrumentBridge';
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
