@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { api } from '@appdeploy/client';
-import { Send, Sparkles, X } from 'lucide-react';
+import { Check, Copy, Send, Sparkles, X } from 'lucide-react';
 
 type Instrument = { symbol: string; name: string };
 type RuntimeContext = {
@@ -32,6 +32,110 @@ type AgentResponse = {
   actions?: Array<Record<string, unknown>>;
 };
 
+function inlineMarkdown(value: string) {
+  const tokens = /(\*\*[^*]+\*\*|__[^_]+__|`[^`]+`|\*[^*]+\*|_[^_]+_|\[[^\]]+\]\([^\s)]+\))/g;
+  const parts = value.split(tokens).filter(Boolean);
+  return parts.map((part, index) => {
+    if (/^\*\*.*\*\*$/.test(part) || /^__.*__$/.test(part)) {
+      return <strong key={index}>{part.slice(2, -2)}</strong>;
+    }
+    if (/^`.*`$/.test(part)) {
+      return <code className="sire-inline-code" key={index}>{part.slice(1, -1)}</code>;
+    }
+    if (/^\*.*\*$/.test(part) || /^_.*_$/.test(part)) {
+      return <em key={index}>{part.slice(1, -1)}</em>;
+    }
+    const link = part.match(/^\[([^\]]+)\]\(([^\s)]+)\)$/);
+    if (link) {
+      return <a key={index} href={link[2]} target="_blank" rel="noreferrer">{link[1]}</a>;
+    }
+    return <span key={index}>{part}</span>;
+  });
+}
+
+function RichMessage({ text }: { text: string }) {
+  const lines = text.replace(/\r\n/g, '\n').split('\n');
+  const blocks: JSX.Element[] = [];
+  let paragraph: string[] = [];
+  let list: string[] = [];
+  let ordered = false;
+  let quote: string[] = [];
+  let code: string[] = [];
+  let inCode = false;
+
+  const flushParagraph = () => {
+    if (!paragraph.length) return;
+    blocks.push(<p key={`p-${blocks.length}`}>{inlineMarkdown(paragraph.join(' '))}</p>);
+    paragraph = [];
+  };
+  const flushList = () => {
+    if (!list.length) return;
+    const Tag = ordered ? 'ol' : 'ul';
+    blocks.push(<Tag key={`l-${blocks.length}`}>{list.map((item, index) => <li key={index}>{inlineMarkdown(item)}</li>)}</Tag>);
+    list = [];
+    ordered = false;
+  };
+  const flushQuote = () => {
+    if (!quote.length) return;
+    blocks.push(<blockquote key={`q-${blocks.length}`}>{quote.map((line, index) => <div key={index}>{inlineMarkdown(line)}</div>)}</blockquote>);
+    quote = [];
+  };
+  const flushCode = () => {
+    blocks.push(<pre key={`c-${blocks.length}`}><code>{code.join('\n')}</code></pre>);
+    code = [];
+  };
+
+  lines.forEach((line) => {
+    if (line.trim().startsWith('```')) {
+      if (inCode) flushCode();
+      else { flushParagraph(); flushList(); flushQuote(); }
+      inCode = !inCode;
+      return;
+    }
+    if (inCode) { code.push(line); return; }
+
+    if (!line.trim()) {
+      flushParagraph();
+      flushList();
+      flushQuote();
+      return;
+    }
+    const heading = line.match(/^#{1,3}\s+(.+)$/);
+    if (heading) {
+      flushParagraph(); flushList(); flushQuote();
+      const level = line.match(/^#+/)?.[0].length || 1;
+      const Tag = level === 1 ? 'h2' : level === 2 ? 'h3' : 'h4';
+      blocks.push(<Tag key={`h-${blocks.length}`}>{inlineMarkdown(heading[1])}</Tag>);
+      return;
+    }
+    const bullet = line.match(/^\s*[-*•]\s+(.+)$/);
+    const numbered = line.match(/^\s*\d+[.)]\s+(.+)$/);
+    if (bullet || numbered) {
+      flushParagraph(); flushQuote();
+      const nextOrdered = Boolean(numbered);
+      if (list.length && ordered !== nextOrdered) flushList();
+      ordered = nextOrdered;
+      list.push((bullet || numbered)![1]);
+      return;
+    }
+    if (/^>\s?/.test(line)) {
+      flushParagraph(); flushList();
+      quote.push(line.replace(/^>\s?/, ''));
+      return;
+    }
+    flushList();
+    if (quote.length) flushQuote();
+    paragraph.push(line.trim());
+  });
+
+  if (inCode) flushCode();
+  flushParagraph();
+  flushList();
+  flushQuote();
+
+  return <div className="sire-rich-content">{blocks}</div>;
+}
+
 export default function ResearchLab({ symbol, instruments, onClose, onSelectInstrument, onSetChartView, onAddMarker, runtimeContext }: Props) {
   const [activeSymbol, setActiveSymbol] = useState(symbol);
   const [chatInput, setChatInput] = useState('');
@@ -39,6 +143,7 @@ export default function ResearchLab({ symbol, instruments, onClose, onSelectInst
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [lastPrompt, setLastPrompt] = useState('');
   const [lastError, setLastError] = useState(false);
+  const [copiedId, setCopiedId] = useState<number | null>(null);
   const chatEndRef = useRef<HTMLDivElement | null>(null);
   const runtimeContextRef = useRef<RuntimeContext | null>(runtimeContext || null);
 
@@ -65,6 +170,16 @@ export default function ResearchLab({ symbol, instruments, onClose, onSelectInst
     chartBars: 0,
     visibleBars: 0,
     selectedInspection: null,
+  };
+
+  const copyMessage = async (message: ChatMessage) => {
+    try {
+      await navigator.clipboard.writeText(message.text);
+      setCopiedId(message.id);
+      window.setTimeout(() => setCopiedId(current => current === message.id ? null : current), 1400);
+    } catch {
+      // Native long-press text selection remains available as a fallback.
+    }
   };
 
   const runAgent = async (prompt: string, retrying = false) => {
@@ -154,7 +269,19 @@ export default function ResearchLab({ symbol, instruments, onClose, onSelectInst
             {chatMessages.map(item => (
               <article className={`sire-chat-only-message ${item.role}`} key={item.id}>
                 <div className="sire-chat-only-role">{item.role === 'sire' ? 'SIRE' : 'YOU'}</div>
-                <div className="sire-chat-only-bubble">{item.text}</div>
+                <div className="sire-chat-only-message-row">
+                  <div className="sire-chat-only-bubble" aria-label={`${item.role === 'sire' ? 'SIRE' : 'You'} message`}>
+                    {item.role === 'sire' ? <RichMessage text={item.text} /> : <div className="sire-user-content">{item.text}</div>}
+                  </div>
+                  <button
+                    className="sire-chat-only-copy"
+                    onClick={() => void copyMessage(item)}
+                    aria-label={copiedId === item.id ? 'Copied' : 'Copy message'}
+                    title={copiedId === item.id ? 'Copied' : 'Copy'}
+                  >
+                    {copiedId === item.id ? <Check size={14} /> : <Copy size={14} />}
+                  </button>
+                </div>
                 {item.meta && <small>{item.meta}</small>}
               </article>
             ))}
