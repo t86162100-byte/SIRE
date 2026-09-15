@@ -125,26 +125,36 @@ function updateSwipe(deltaY: number) {
   els.next.style.transform = `translate3d(0,${direction > 0 ? 90 - distance : -90 + distance}px,0)`;
 }
 
+function openInstrumentPicker() {
+  const picker = document.querySelector<HTMLButtonElement>('.instrument-picker');
+  if (picker) {
+    picker.click();
+    return;
+  }
+  window.dispatchEvent(new CustomEvent('sire:glass-action', { detail: { action: 'symbol', openSearch: true } }));
+}
+
 function begin(x: number, y: number) {
-  if (busy || getInstruments().length < 2) return;
+  if (busy) return;
   startX = x;
   startY = y;
   tracking = true;
   longPressTriggered = false;
+  const els = getEls();
+  if (els) els.button.dataset.swiping = 'true';
   if (longPressTimer !== null) window.clearTimeout(longPressTimer);
   longPressTimer = window.setTimeout(() => {
     if (!tracking || busy) return;
     longPressTriggered = true;
     tracking = false;
-    const els = getEls();
-    if (els) {
-      els.button.dataset.swiping = 'false';
-      reset(els);
+    const current = getEls();
+    if (current) {
+      current.button.dataset.swiping = 'false';
+      current.button.dataset.longPressTriggered = 'true';
+      reset(current);
     }
-    window.dispatchEvent(new CustomEvent('sire:glass-action', { detail: { action: 'symbol', openSearch: true } }));
+    openInstrumentPicker();
   }, 550);
-  const els = getEls();
-  if (els) els.button.dataset.swiping = 'true';
 }
 
 function move(x: number, y: number, event?: Event) {
@@ -234,7 +244,15 @@ function bind() {
 
   els.button.addEventListener('pointerdown', event => begin(event.clientX, event.clientY));
   els.button.addEventListener('pointermove', event => move(event.clientX, event.clientY, event));
-  els.button.addEventListener('pointerup', event => end(event.clientX, event.clientY));
+  els.button.addEventListener('pointerup', event => {
+    if (longPressTriggered) {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      longPressTriggered = false;
+      return;
+    }
+    end(event.clientX, event.clientY);
+  });
   els.button.addEventListener('pointercancel', () => {
     if (longPressTimer !== null) window.clearTimeout(longPressTimer);
     longPressTimer = null;
