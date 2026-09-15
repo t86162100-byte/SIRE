@@ -4,13 +4,7 @@ import { readFile, stat } from 'node:fs/promises';
 import { extname, join, normalize } from 'node:path';
 import { WebSocketServer } from 'ws';
 
-// Normalize OpenRouter credentials and install the native HTTPS transport before
-// importing the AI council. This guarantees the Authorization header is attached
-// directly to requests sent to OpenRouter and avoids any fetch transport behavior.
-await import('./backend/openrouter-env.mjs');
-await import('./backend/openrouter-native-fetch.mjs');
-
-const { handler } = await import('./backend/openrouter-team.ts');
+const { handler } = await import('./backend/index.ts');
 import { ws } from './compat/appdeploy-sdk/index.js';
 import { realtime } from './backend/realtime.ts';
 
