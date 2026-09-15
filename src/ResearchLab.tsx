@@ -1,6 +1,6 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { api } from '@appdeploy/client';
-import { Copy, Check, Send, Sparkles, X, Globe2 } from 'lucide-react';
+import { Check, Copy, Globe2, Plus, Send, Sparkles, X } from 'lucide-react';
 import './sire-council.css';
 
 type Instrument = { symbol: string; name: string };
@@ -42,62 +42,35 @@ function InlineMarkdown({ text }: { text: string }) {
 }
 
 function RichMessage({ text }: { text: string }) {
-  const normalized = text.replace(/\r\n?/g, '\n');
-  const lines = normalized.split('\n');
-  const blocks: React.ReactNode[] = [];
+  const lines = text.replace(/\r\n?/g, '\n').split('\n');
+  const blocks: ReactNode[] = [];
   let paragraph: string[] = [];
   let list: { ordered: boolean; text: string }[] = [];
   let code: string[] | null = null;
   let codeLanguage = '';
-
-  const flushParagraph = () => {
-    if (!paragraph.length) return;
-    blocks.push(<p key={`p-${blocks.length}`}><InlineMarkdown text={paragraph.join(' ')} /></p>);
-    paragraph = [];
-  };
-  const flushList = () => {
-    if (!list.length) return;
-    const ordered = list[0].ordered;
-    const items = list.map((item, index) => <li key={index}><InlineMarkdown text={item.text} /></li>);
-    blocks.push(ordered ? <ol key={`ol-${blocks.length}`}>{items}</ol> : <ul key={`ul-${blocks.length}`}>{items}</ul>);
-    list = [];
-  };
-  const flushCode = () => {
-    if (code === null) return;
-    blocks.push(<pre key={`code-${blocks.length}`} className="sire-code-block"><div className="sire-code-head"><span>{codeLanguage || 'code'}</span><button type="button" onClick={() => void navigator.clipboard?.writeText(code!.join('\n'))}><Copy size={13} /><span>Copy</span></button></div><code>{code.join('\n')}</code></pre>);
-    code = null;
-    codeLanguage = '';
-  };
-
+  const flushParagraph = () => { if (!paragraph.length) return; blocks.push(<p key={`p-${blocks.length}`}><InlineMarkdown text={paragraph.join(' ')} /></p>); paragraph = []; };
+  const flushList = () => { if (!list.length) return; const ordered = list[0].ordered; const items = list.map((item, index) => <li key={index}><InlineMarkdown text={item.text} /></li>); blocks.push(ordered ? <ol key={`ol-${blocks.length}`}>{items}</ol> : <ul key={`ul-${blocks.length}`}>{items}</ul>); list = []; };
+  const flushCode = () => { if (code === null) return; const source = code.join('\n'); blocks.push(<pre key={`code-${blocks.length}`} className="sire-code-block"><div className="sire-code-head"><span>{codeLanguage || 'code'}</span><button type="button" onClick={() => void navigator.clipboard?.writeText(source)}><Copy size={13} /><span>Copy</span></button></div><code>{source}</code></pre>); code = null; codeLanguage = ''; };
   lines.forEach((line, index) => {
     const fence = line.match(/^\s*```(.*)$/);
-    if (fence) {
-      if (code === null) { flushParagraph(); flushList(); code = []; codeLanguage = fence[1].trim(); }
-      else flushCode();
-      return;
-    }
+    if (fence) { if (code === null) { flushParagraph(); flushList(); code = []; codeLanguage = fence[1].trim(); } else flushCode(); return; }
     if (code !== null) { code.push(line); return; }
-    if (!line.trim()) { flushParagraph(); flushList(); blocks.push(<div key={`space-${blocks.length}`} className="sire-message-spacer" />); return; }
+    if (!line.trim()) { flushParagraph(); flushList(); return; }
     const heading = line.match(/^\s*(#{1,3})\s+(.+)$/);
-    if (heading) { flushParagraph(); flushList(); const level = heading[1].length; const content = <InlineMarkdown text={heading[2]} />; if (level === 1) blocks.push(<h2 key={`h-${index}`}>{content}</h2>); else if (level === 2) blocks.push(<h3 key={`h-${index}`}>{content}</h3>); else blocks.push(<h4 key={`h-${index}`}>{content}</h4>); return; }
+    if (heading) { flushParagraph(); flushList(); const level = heading[1].length; const content = <InlineMarkdown text={heading[2]} />; blocks.push(level === 1 ? <h2 key={`h-${index}`}>{content}</h2> : level === 2 ? <h3 key={`h-${index}`}>{content}</h3> : <h4 key={`h-${index}`}>{content}</h4>); return; }
     const bullet = line.match(/^\s*[-*•]\s+(.+)$/);
     const numbered = line.match(/^\s*\d+[.)]\s+(.+)$/);
     if (bullet || numbered) { flushParagraph(); const ordered = Boolean(numbered); if (list.length && list[0].ordered !== ordered) flushList(); list.push({ ordered, text: (bullet || numbered)![1] }); return; }
-    flushList();
-    paragraph.push(line.trim());
+    flushList(); paragraph.push(line.trim());
   });
-  flushParagraph();
-  flushList();
-  flushCode();
+  flushParagraph(); flushList(); flushCode();
   return <div className="sire-rich-text">{blocks}</div>;
 }
 
 function MessageActions({ text }: { text: string }) {
   const [copied, setCopied] = useState(false);
-  const copy = async () => {
-    try { await navigator.clipboard.writeText(text); setCopied(true); window.setTimeout(() => setCopied(false), 1400); } catch { /* native long-press selection remains available */ }
-  };
-  return <div className="sire-message-actions"><button type="button" onClick={() => void copy()} aria-label="Copy message">{copied ? <Check size={14} /> : <Copy size={14} />}<span>{copied ? 'Copied' : 'Copy'}</span></button></div>;
+  const copy = async () => { try { await navigator.clipboard.writeText(text); setCopied(true); window.setTimeout(() => setCopied(false), 1400); } catch { /* native selection remains available */ } };
+  return <div className="sire-message-actions"><button type="button" onClick={() => void copy()} aria-label="Copy response">{copied ? <Check size={14} /> : <Copy size={14} />}<span>{copied ? 'Copied' : 'Copy'}</span></button></div>;
 }
 
 export default function ResearchLab({ symbol, instruments, onClose, onSelectInstrument, onSetChartView, onAddMarker, runtimeContext }: Props) {
@@ -115,7 +88,6 @@ export default function ResearchLab({ symbol, instruments, onClose, onSelectInst
   useEffect(() => { runtimeContextRef.current = runtimeContext || null; }, [runtimeContext]);
   useEffect(() => { setActiveSymbol(symbol); }, [symbol]);
   useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' }); }, [chatMessages, chatBusy, activity, webSources]);
-
   const buildRuntimeContext = (): RuntimeContext => runtimeContextRef.current || { symbol: activeSymbol, name: instruments.find(item => item.symbol === activeSymbol)?.name, timeframe: 'unknown', chartMode: 'unknown', latestPrice: null, activeIndicators: [], drawings: [], chartBars: 0, visibleBars: 0, selectedInspection: null };
   const applyActions = (actions: unknown) => { if (!Array.isArray(actions)) return; actions.forEach(action => { const item = action as Record<string, unknown>; const type = String(item.__sireAction || ''); if (type === 'select_instrument') { const requested = String(item.symbol || ''); if (requested && instruments.some(instrument => instrument.symbol === requested)) { setActiveSymbol(requested); onSelectInstrument?.(requested); } } else if (type === 'set_chart_view') onSetChartView?.((item.settings || {}) as Record<string, unknown>); else if (type === 'add_chart_marker') onAddMarker?.(String(item.label || 'SIRE marker')); }); };
 
@@ -146,16 +118,18 @@ export default function ResearchLab({ symbol, instruments, onClose, onSelectInst
     finally { setChatBusy(false); if (retrying) setLastError(false); }
   };
 
+  const suggestions = ['Explain this market to me', 'Research the latest news', 'Analyze the current chart'];
+
   return <div className="sire-chat-only-overlay"><section className="sire-chat-only" aria-label="SIRE conversation">
-    <header className="sire-chat-only-header"><div className="sire-chat-only-brand"><div className="sire-chat-only-mark"><Sparkles size={16} /></div><span>SIRE</span><i className={chatBusy ? 'sire-live-dot active' : 'sire-live-dot'} /></div><button className="sire-chat-only-close" onClick={onClose} aria-label="Close SIRE"><X size={18} /></button></header>
+    <header className="sire-chat-only-header"><div className="sire-chat-only-brand"><div className="sire-chat-only-mark"><Sparkles size={16} /></div><span>SIRE</span><i className={chatBusy ? 'sire-live-dot active' : 'sire-live-dot'} /></div><div className="sire-chat-context"><span>{instruments.find(item => item.symbol === activeSymbol)?.name || activeSymbol}</span></div><button className="sire-chat-only-close" onClick={onClose} aria-label="Close SIRE"><X size={18} /></button></header>
     <main className="sire-chat-only-messages"><div className="sire-chat-only-inner">
-      {chatMessages.length === 0 && <div className="sire-chat-only-empty" aria-hidden="true"><div className="sire-chat-only-empty-mark"><Sparkles size={22} /></div><span>SIRE</span><p>Ask anything. SIRE will reason, research, and respond.</p></div>}
-      {chatMessages.map(item => <article className={`sire-chat-only-message ${item.role}`} key={item.id}><div className="sire-chat-only-role">{item.role === 'sire' ? 'SIRE' : 'YOU'}</div><div className="sire-chat-only-bubble">{item.role === 'sire' ? <RichMessage text={item.text} /> : <div className="sire-user-text">{item.text}</div>}</div>{item.role === 'sire' && <MessageActions text={item.text} />}{item.meta && <small>{item.meta}</small>}</article>)}
-      {chatBusy && <article className="sire-council-live" aria-live="polite"><div className="sire-council-live-head"><span className="sire-council-live-pulse" /><strong>SIRE is working</strong><small>live</small></div><div className="sire-council-live-stream">{activity.slice(-8).map((item, index) => <div className="sire-council-live-event" key={`${index}-${item.actor}-${item.phase}`}><span className="sire-council-live-actor">{item.actor}</span><span className="sire-council-live-phase">{phaseLabel(item.phase)}</span><p>{item.text}</p></div>)}<div className="sire-council-live-cursor"><i /><i /><i /></div></div></article>}
-      {webSources.length > 0 && <section className="sire-web-sources" aria-label="Web sources"><div className="sire-web-sources-head"><Globe2 size={13} /><strong>Web sources searched</strong><span>{webSources.length}</span></div><div className="sire-web-sources-list">{webSources.map((source, index) => <a key={`${source.url}-${index}`} href={source.url} target="_blank" rel="noreferrer" className="sire-web-source"><span className="sire-web-source-index">{index + 1}</span><span className="sire-web-source-body"><strong>{source.title}</strong><small>{new URL(source.url).hostname}</small></span></a>)}</div></section>}
-      {lastError && !chatBusy && <button className="sire-chat-only-retry" onClick={() => void runAgent(lastPrompt, true)}>Retry</button>}
+      {chatMessages.length === 0 && <div className="sire-chat-only-empty"><div className="sire-chat-only-empty-orbit"><div className="sire-chat-only-empty-mark"><Sparkles size={23} /></div></div><h1>What can I help you explore?</h1><p>Ask SIRE to research, reason through a problem, or work with your market context.</p><div className="sire-suggestion-grid">{suggestions.map((suggestion, index) => <button key={suggestion} type="button" onClick={() => void runAgent(suggestion)}><span>{index === 0 ? 'Explore' : index === 1 ? 'Research' : 'Analyze'}</span><strong>{suggestion}</strong></button>)}</div></div>}
+      {chatMessages.map(item => <article className={`sire-chat-only-message ${item.role}`} key={item.id}><div className="sire-chat-only-bubble">{item.role === 'sire' ? <RichMessage text={item.text} /> : <div className="sire-user-text">{item.text}</div>}</div>{item.role === 'sire' && <MessageActions text={item.text} />}{item.meta && <small>{item.meta}</small>}</article>)}
+      {chatBusy && <article className="sire-council-live" aria-live="polite"><div className="sire-council-live-head"><span className="sire-council-live-pulse" /><strong>SIRE is thinking</strong><small>live</small></div><div className="sire-council-live-stream">{activity.slice(-8).map((item, index) => <div className="sire-council-live-event" key={`${index}-${item.actor}-${item.phase}`}><span className="sire-council-live-actor">{item.actor}</span><span className="sire-council-live-phase">{phaseLabel(item.phase)}</span><p>{item.text}</p></div>)}<div className="sire-council-live-cursor"><i /><i /><i /></div></div></article>}
+      {webSources.length > 0 && <section className="sire-web-sources" aria-label="Web sources"><div className="sire-web-sources-head"><Globe2 size={13} /><strong>Sources</strong><span>{webSources.length}</span></div><div className="sire-web-sources-list">{webSources.map((source, index) => <a key={`${source.url}-${index}`} href={source.url} target="_blank" rel="noreferrer" className="sire-web-source"><span className="sire-web-source-index">{index + 1}</span><span className="sire-web-source-body"><strong>{source.title}</strong><small>{new URL(source.url).hostname}</small></span></a>)}</div></section>}
+      {lastError && !chatBusy && <button className="sire-chat-only-retry" onClick={() => void runAgent(lastPrompt, true)}>Retry response</button>}
       <div ref={chatEndRef} />
     </div></main>
-    <footer className="sire-chat-only-composer"><div className="sire-chat-only-input-wrap"><textarea value={chatInput} onChange={event => setChatInput(event.target.value)} onKeyDown={event => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); void runAgent(chatInput); } }} placeholder="Message SIRE" rows={1} disabled={chatBusy} aria-label="Message SIRE" /><button onClick={() => void runAgent(chatInput)} disabled={chatBusy || !chatInput.trim()} aria-label="Send message"><Send size={17} /></button></div></footer>
+    <footer className="sire-chat-only-composer"><div className="sire-chat-only-input-wrap"><button className="sire-composer-add" type="button" aria-label="Add context"><Plus size={18} /></button><textarea value={chatInput} onChange={event => setChatInput(event.target.value)} onKeyDown={event => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); void runAgent(chatInput); } }} placeholder="Message SIRE" rows={1} disabled={chatBusy} aria-label="Message SIRE" /><div className="sire-composer-right"><span className="sire-composer-hint">Enter to send</span><button className="sire-composer-send" onClick={() => void runAgent(chatInput)} disabled={chatBusy || !chatInput.trim()} aria-label="Send message"><Send size={17} /></button></div></div><div className="sire-composer-disclaimer">SIRE can make mistakes. Verify important information.</div></footer>
   </section></div>;
 }
