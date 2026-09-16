@@ -40,6 +40,8 @@ export default function NativeMarketChart({ candles, latest, autoScale = true }:
 
     let disposed = false;
     let frame = 0;
+    let timer = 0;
+    let navObserver: MutationObserver | null = null;
 
     const syncBottomSpace = () => {
       if (disposed) return;
@@ -47,10 +49,13 @@ export default function NativeMarketChart({ candles, latest, autoScale = true }:
       const hostRect = host.getBoundingClientRect();
       let bottom = 8;
 
-      if (nav && !nav.classList.contains('nav-auto-hidden')) {
+      if (nav) {
         const navRect = nav.getBoundingClientRect();
-        const gap = 8;
-        bottom = Math.max(8, hostRect.bottom - navRect.top + gap);
+        const navVisible = nav.getClientRects().length > 0 && navRect.height > 0 && navRect.bottom > hostRect.top;
+        if (navVisible) {
+          const gap = 8;
+          bottom = Math.max(8, hostRect.bottom - navRect.top + gap);
+        }
       }
 
       bar.style.bottom = `${bottom}px`;
@@ -61,24 +66,36 @@ export default function NativeMarketChart({ candles, latest, autoScale = true }:
       frame = window.requestAnimationFrame(syncBottomSpace);
     };
 
-    const observer = new MutationObserver(scheduleSync);
-    observer.observe(document.documentElement, { childList: true, subtree: true, attributes: true, attributeFilter: ['class', 'style'] });
+    const observeNav = () => {
+      if (navObserver) navObserver.disconnect();
+      const nav = document.getElementById('sire-bottom-tabs');
+      if (nav) {
+        navObserver = new MutationObserver(scheduleSync);
+        navObserver.observe(nav, { attributes: true, attributeFilter: ['class', 'style'] });
+        scheduleSync();
+      }
+    };
+
+    const observer = new MutationObserver(() => {
+      observeNav();
+      scheduleSync();
+    });
+    observer.observe(document.documentElement, { childList: true, subtree: true });
+    observeNav();
+
     const resizeObserver = new ResizeObserver(scheduleSync);
     resizeObserver.observe(host);
-    const nav = document.getElementById('sire-bottom-tabs');
-    if (nav) resizeObserver.observe(nav);
     window.addEventListener('resize', scheduleSync);
 
-    // Keep the bar synchronized with the nav during its fade/slide animation,
-    // and also recover if the nav is recreated by React.
-    const syncTimer = window.setInterval(scheduleSync, 100);
-    syncBottomSpace();
+    timer = window.setInterval(scheduleSync, 50);
+    scheduleSync();
 
     return () => {
       disposed = true;
       window.cancelAnimationFrame(frame);
-      window.clearInterval(syncTimer);
+      window.clearInterval(timer);
       observer.disconnect();
+      navObserver?.disconnect();
       resizeObserver.disconnect();
       window.removeEventListener('resize', scheduleSync);
     };
