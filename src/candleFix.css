@@ -1,0 +1,34 @@
+/* Crisp financial-chart candle rendering.
+   Keep candle geometry from App.tsx, but prevent adjacent bodies from visually
+   touching when the viewport contains many bars. */
+.market-svg .candle-body,
+.placement-loupe .candle-body {
+  transform-box: fill-box;
+  transform-origin: center;
+  transform: scaleX(0.68);
+  shape-rendering: crispEdges;
+  vector-effect: non-scaling-stroke;
+  paint-order: stroke fill;
+  stroke: #050608;
+  stroke-width: 0.85;
+  stroke-linejoin: miter;
+  stroke-linecap: butt;
+}
+
+.market-svg .candle-wick,
+.market-svg .candle-open,
+.market-svg .candle-close,
+.placement-loupe .candle-wick {
+  shape-rendering: crispEdges;
+  vector-effect: non-scaling-stroke;
+  stroke-width: 1;
+  stroke-linecap: butt;
+}
+
+.market-svg .candle-body {
+  rx: 0;
+}
+
+.placement-loupe .candle-body {
+  rx: 0;
+}
