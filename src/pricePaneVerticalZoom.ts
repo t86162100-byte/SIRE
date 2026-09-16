@@ -26,6 +26,17 @@ function installStyle() {
       transform-origin: 50% 50%;
       will-change: transform;
     }
+    .chart-stage .market-svg .candle-body {
+      shape-rendering: crispEdges;
+      vector-effect: non-scaling-stroke;
+      paint-order: stroke fill;
+    }
+    .chart-stage .market-svg .candle-wick,
+    .chart-stage .market-svg .candle-open,
+    .chart-stage .market-svg .candle-close {
+      shape-rendering: crispEdges;
+      vector-effect: non-scaling-stroke;
+    }
   `;
   document.head.appendChild(style);
 }
@@ -40,6 +51,15 @@ function findSvg(target: EventTarget | null): SVGElement | null {
 function findPane(svg: SVGElement): HTMLElement | null {
   const stage = svg.closest('.chart-stage');
   return stage instanceof HTMLElement ? stage : null;
+}
+
+function isPriceAxisTouch(touch: Touch, stage: HTMLElement) {
+  const rect = stage.getBoundingClientRect();
+  const axisWidth = Math.max(55, Math.min(72, rect.width * 0.18));
+  const axisLeft = rect.right - axisWidth;
+  const axisTop = rect.top + 12;
+  const axisBottom = rect.bottom - 26;
+  return touch.clientX >= axisLeft && touch.clientX <= rect.right && touch.clientY >= axisTop && touch.clientY <= axisBottom;
 }
 
 function distance(a: Touch, b: Touch) {
@@ -74,7 +94,6 @@ function clearGesture() {
 function onTouchStart(event: TouchEvent) {
   const svg = findSvg(event.target);
   if (!svg) return;
-
   const pane = findPane(svg);
   if (!pane) return;
 
@@ -91,11 +110,14 @@ function onTouchStart(event: TouchEvent) {
   }
 
   if (event.touches.length !== 1) return;
+  const touch = event.touches[0];
+  if (!isPriceAxisTouch(touch, pane)) return;
+
   activePane = pane;
   activeSvg = svg;
   gesture = null;
-  startX = event.touches[0].clientX;
-  startY = event.touches[0].clientY;
+  startX = touch.clientX;
+  startY = touch.clientY;
   baseY = getScale(svg, 'y');
   baseX = getScale(svg, 'x');
 }
