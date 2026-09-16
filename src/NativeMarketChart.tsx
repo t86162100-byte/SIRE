@@ -84,7 +84,13 @@ export default function NativeMarketChart({ candles, latest, autoScale = true }:
     const timeframeCurrent = surface.querySelector<HTMLElement>('.native-bottom-timeframe-current');
     const timeframePrevious = surface.querySelector<HTMLElement>('.native-bottom-timeframe-previous');
     const timeframeNext = surface.querySelector<HTMLElement>('.native-bottom-timeframe-next');
-    if (!bar || !viewport || !track || !currentLabel || !previousLabel || !nextLabel || !timeframeViewport || !timeframeTrack || !timeframeCurrent || !timeframePrevious || !timeframeNext) return;
+    if (!bar || !viewport || !track || !currentLabel || !previousLabel || !nextLabel) return;
+    const timeframeHost = document.querySelector<HTMLElement>('.native-bottom-timeframe-viewport');
+    const timeframeTrackHost = document.querySelector<HTMLElement>('.native-bottom-timeframe-track');
+    const timeframeCurrentHost = document.querySelector<HTMLElement>('.native-bottom-timeframe-current');
+    const timeframePreviousHost = document.querySelector<HTMLElement>('.native-bottom-timeframe-previous');
+    const timeframeNextHost = document.querySelector<HTMLElement>('.native-bottom-timeframe-next');
+    if (!timeframeHost || !timeframeTrackHost || !timeframeCurrentHost || !timeframePreviousHost || !timeframeNextHost) return;
 
     let startY = 0;
     let startX = 0;
@@ -239,24 +245,24 @@ export default function NativeMarketChart({ candles, latest, autoScale = true }:
       window.setTimeout(() => bar.classList.remove('instrument-swiping'), 210);
     };
 
-    const getTimeframes = () => Array.from(surface.querySelectorAll<HTMLButtonElement>('.native-timeframes button')).map(button => ({ value: button.textContent?.trim() || '', button })).filter(item => item.value);
+    const getTimeframes = () => Array.from(document.querySelectorAll<HTMLButtonElement>('.native-timeframes button')).map(button => ({ value: button.textContent?.trim() || '', button })).filter(item => item.value);
     const currentTimeframeIndex = () => {
       const frames = getTimeframes();
       const index = frames.findIndex(item => item.button.classList.contains('active'));
       return { frames, index };
     };
     const setTimeframeTrack = (offset: number, animated = false) => {
-      timeframeTrack.style.transition = animated ? 'transform 180ms cubic-bezier(.22,.8,.24,1)' : 'none';
-      timeframeTrack.style.transform = `translate3d(0, calc(-48px + ${offset}px), 0)`;
+      timeframeTrackHost.style.transition = animated ? 'transform 180ms cubic-bezier(.22,.8,.24,1)' : 'none';
+      timeframeTrackHost.style.transform = `translate3d(0, calc(-48px + ${offset}px), 0)`;
     };
     const renderTimeframePreview = () => {
       const { frames, index } = currentTimeframeIndex();
       const current = index >= 0 ? frames[index]?.value : '1m';
-      timeframeCurrent.textContent = current;
-      timeframePrevious.textContent = index > 0 ? frames[index - 1].value : '';
-      timeframeNext.textContent = index >= 0 && index < frames.length - 1 ? frames[index + 1].value : '';
-      timeframePrevious.style.opacity = index > 0 ? '1' : '0';
-      timeframeNext.style.opacity = index >= 0 && index < frames.length - 1 ? '1' : '0';
+      timeframeCurrentHost.textContent = current;
+      timeframePreviousHost.textContent = index > 0 ? frames[index - 1].value : '';
+      timeframeNextHost.textContent = index >= 0 && index < frames.length - 1 ? frames[index + 1].value : '';
+      timeframePreviousHost.style.opacity = index > 0 ? '1' : '0';
+      timeframeNextHost.style.opacity = index >= 0 && index < frames.length - 1 ? '1' : '0';
       setTimeframeTrack(0);
     };
     const selectTimeframeOffset = (direction: -1 | 1) => {
@@ -314,7 +320,7 @@ export default function NativeMarketChart({ candles, latest, autoScale = true }:
       timeframeTracking = true;
       timeframeLongPressTriggered = false;
       cancelTimeframeHold();
-      timeframeViewport.setPointerCapture?.(event.pointerId);
+      timeframeHost.setPointerCapture?.(event.pointerId);
       bar.classList.add('timeframe-swiping');
       timeframeLongPressTimer = window.setTimeout(() => {
         if (!timeframeTracking) return;
@@ -346,7 +352,7 @@ export default function NativeMarketChart({ candles, latest, autoScale = true }:
       const dy = event.clientY - timeframeStartY;
       const dx = event.clientX - timeframeStartX;
       const vertical = Math.abs(dy) >= Math.abs(dx) * 1.05;
-      const threshold = Math.max(18, timeframeViewport.clientHeight * .42);
+      const threshold = Math.max(18, timeframeHost.clientHeight * .42);
       if (!vertical || Math.abs(dy) < threshold) setTimeframeTrack(0, true);
       else selectTimeframeOffset(dy < 0 ? 1 : -1);
       window.setTimeout(() => bar.classList.remove('timeframe-swiping'), 210);
@@ -356,15 +362,15 @@ export default function NativeMarketChart({ candles, latest, autoScale = true }:
     viewport.addEventListener('pointermove', onPointerMove, { passive: false });
     viewport.addEventListener('pointerup', onPointerUp, { passive: false });
     viewport.addEventListener('pointercancel', onPointerUp, { passive: false });
-    timeframeViewport.addEventListener('pointerdown', onTimeframeDown, { passive: false });
-    timeframeViewport.addEventListener('pointermove', onTimeframeMove, { passive: false });
-    timeframeViewport.addEventListener('pointerup', onTimeframeUp, { passive: false });
-    timeframeViewport.addEventListener('pointercancel', onTimeframeUp, { passive: false });
+    timeframeHost.addEventListener('pointerdown', onTimeframeDown, { passive: false });
+    timeframeHost.addEventListener('pointermove', onTimeframeMove, { passive: false });
+    timeframeHost.addEventListener('pointerup', onTimeframeUp, { passive: false });
+    timeframeHost.addEventListener('pointercancel', onTimeframeUp, { passive: false });
 
     const observer = new MutationObserver(() => { updateFromSource(); renderTimeframePreview(); });
     const pickerText = document.querySelector('.native-instrument-picker strong');
     if (pickerText) observer.observe(pickerText, { childList: true, characterData: true, subtree: true });
-    const timeframeBar = surface.querySelector('.native-timeframes');
+    const timeframeBar = document.querySelector('.native-timeframes');
     if (timeframeBar) observer.observe(timeframeBar, { childList: true, subtree: true, attributes: true, attributeFilter: ['class'] });
     updateFromSource();
     renderTimeframePreview();
@@ -380,10 +386,10 @@ export default function NativeMarketChart({ candles, latest, autoScale = true }:
       viewport.removeEventListener('pointermove', onPointerMove);
       viewport.removeEventListener('pointerup', onPointerUp);
       viewport.removeEventListener('pointercancel', onPointerUp);
-      timeframeViewport.removeEventListener('pointerdown', onTimeframeDown);
-      timeframeViewport.removeEventListener('pointermove', onTimeframeMove);
-      timeframeViewport.removeEventListener('pointerup', onTimeframeUp);
-      timeframeViewport.removeEventListener('pointercancel', onTimeframeUp);
+      timeframeHost.removeEventListener('pointerdown', onTimeframeDown);
+      timeframeHost.removeEventListener('pointermove', onTimeframeMove);
+      timeframeHost.removeEventListener('pointerup', onTimeframeUp);
+      timeframeHost.removeEventListener('pointercancel', onTimeframeUp);
       observer.disconnect();
       document.querySelector('.native-bottom-timeframe-overlay')?.remove();
       document.body.classList.remove('sire-swipe-probing');
