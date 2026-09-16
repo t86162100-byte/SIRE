@@ -5,10 +5,10 @@ import { extname, join, normalize } from 'node:path';
 import { WebSocketServer } from 'ws';
 
 const { handler } = await import('./backend/index.ts');
-import { handleGeminiRequest, runGemini } from './backend/gemini-ai.ts';
+import { handleGeminiRequest } from './backend/gemini-ai.ts';
+import { runAiTeam } from './backend/ai-team.ts';
 import { runOpenRouter } from './backend/openrouter-ai.ts';
 import { runAgent } from './backend/sire-agent-gateway.ts';
-import { webSearch } from './backend/agent-tools.ts';
 import { startAgentWorker } from './workers/sire-agent-worker.ts';
 import { ws } from './compat/appdeploy-sdk/index.js';
 import { realtime } from './backend/realtime.ts';
@@ -22,70 +22,31 @@ async function serveStatic(req, res) {
   if (!req.url || !['GET','HEAD'].includes(req.method || '')) return false;
   const requestPath = decodeURIComponent(new URL(req.url, 'http://sire.local').pathname);
   if (requestPath.startsWith('/api/') || requestPath === '/ws') return false;
-  const candidate = requestPath === '/' ? join(DIST,'index.html') : join(DIST, normalize(requestPath).replace(/^[/\\\\]+/,''));
+  const candidate = requestPath === '/' ? join(DIST,'index.html') : join(DIST, normalize(requestPath).replace(/^[/\\]+/,''));
   let filePath = candidate;
   try { const info = await stat(filePath); if (!info.isFile()) throw new Error('not a file'); } catch { filePath = join(DIST,'index.html'); }
   try { const data = await readFile(filePath); res.writeHead(200,{ 'Content-Type': MIME[extname(filePath).toLowerCase()] || 'application/octet-stream', 'Cache-Control': filePath.includes('/assets/') ? 'public, max-age=31536000, immutable' : 'no-cache' }); if (req.method !== 'HEAD') res.end(data); else res.end(); return true; } catch { return false; }
 }
 
-// Preserve the query string when forwarding requests to the appdeploy-compatible
-// router. The router parses symbol, timeframe and other API parameters from it.
 function toEvent(req, body) {
   const url = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`);
   const routedPath = `${url.pathname}${url.search}`;
   return { httpMethod:req.method, path:routedPath, rawPath:routedPath, body, headers:req.headers, requestContext:{ http:{ method:req.method, path:routedPath } } };
 }
 
-function shouldSearchWeb(query) {
-  const q = query.toLowerCase();
-  return /\b(latest|today|current|now|recent|recently|news|price|prices|market|weather|score|scores|schedule|release|released|version|update|updates|who is|what happened|when is|where is|how much|how many|research|search|look up|according to|source|sources|compare|comparison|this week|this month|2026|2025)\b/.test(q) || /https?:\/\//.test(q);
-}
-
-async function researchForCouncil(query, emit) {
-  if (!shouldSearchWeb(query)) return { sources: [], context: '' };
-  await emit('Web', 'searching', `Searching the web for: ${query}`);
-  try {
-    const result = await webSearch(query, 8);
-    const raw = Array.isArray(result.results) ? result.results : [];
-    const sources = raw.map((item) => ({
-      title: String(item.title || item.name || item.url || 'Web source'),
-      url: String(item.url || item.link || ''),
-      publishedDate: item.publishedDate ? String(item.publishedDate) : undefined,
-      author: item.author ? String(item.author) : undefined,
-      text: String(item.text || item.content || item.snippet || '').slice(0, 1400),
-    })).filter(item => item.url);
-    await emit('Web', 'searched', `Found ${sources.length} web sources.`);
-    return { sources, context: sources.map((s, i) => `[Web source ${i + 1}] ${s.title}\nURL: ${s.url}\n${s.text}`).join('\n\n') };
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    await emit('Web', 'unavailable', `Web search was requested but is unavailable: ${message}`);
-    return { sources: [], context: '' };
-  }
-}
-
-async function handleCouncilRequest(parsed, onEvent) {
+async function handleTeamRequest(parsed, onEvent) {
   const query = String(parsed.query || '').trim();
-  const history = Array.isArray(parsed.history) ? parsed.history : [];
-  const shared = { symbol: parsed.symbol ? String(parsed.symbol) : undefined, runtimeContext: parsed.runtimeContext && typeof parsed.runtimeContext === 'object' ? parsed.runtimeContext : undefined };
-  const emit = async (actor, phase, text) => { if (onEvent) await onEvent({ actor, phase, text }); };
-  const web = await researchForCouncil(query, emit);
-  const webContext = web.context ? `\n\nLIVE WEB RESEARCH (use this evidence for current facts; do not invent sources):\n${web.context}` : '';
-
-  await emit('Gemini', 'proposing', 'Working on an initial approach.');
-  const geminiProposal = await runGemini({ query: query + webContext, history, ...shared, debateRole: 'proposal' });
-  const debate = [{ provider: geminiProposal.provider, model: geminiProposal.model, role: 'proposal', text: geminiProposal.text }];
-  await emit('Gemini', 'proposed', geminiProposal.text);
-
-  try {
-    const council = await runOpenRouter({ query: query + webContext, history, councilContext: geminiProposal.text, onEvent });
-    if (Array.isArray(council.council)) debate.push(...council.council);
-    await emit('SIRE', 'conclusion', 'Combining the team’s work into the final response.');
-    return { text: council.text, responseId: council.responseId || geminiProposal.responseId || '', model: 'council:' + geminiProposal.model + '+' + council.model, provider: 'SIRE AI Council', council: debate, councilMode: 'multi-round-collaboration', rounds: debate.length, webSearched: web.sources.length > 0, webSources: web.sources };
-  } catch (cause) {
-    console.warn('[COUNCIL] Collaborative debate stopped:', cause instanceof Error ? cause.message : String(cause));
-    await emit('SIRE', 'fallback', 'The full collaboration was interrupted, so SIRE is using the available contribution.');
-    return { text: geminiProposal.text, responseId: geminiProposal.responseId || '', model: geminiProposal.model, provider: 'SIRE AI Council', council: debate, councilMode: 'degraded-single-member', councilWarning: 'The full debate could not complete this turn; SIRE returned the available council contribution.', webSearched: web.sources.length > 0, webSources: web.sources };
-  }
+  if (!query) throw new Error('query is required');
+  const response = await runAiTeam({
+    query,
+    workspaceId: parsed.workspaceId || parsed.workspace || parsed.sessionId || 'default',
+    history: Array.isArray(parsed.history) ? parsed.history : [],
+    symbol: parsed.symbol ? String(parsed.symbol) : undefined,
+    runtimeContext: parsed.runtimeContext && typeof parsed.runtimeContext === 'object' ? parsed.runtimeContext : undefined,
+    execute: Boolean(parsed.execute),
+    onEvent,
+  });
+  return { ...response, councilMode: 'shared-workspace-team', rounds: response.activity.length };
 }
 
 async function handleDirectGptRequest(parsed) {
@@ -119,15 +80,15 @@ const server = http.createServer(async (req,res) => {
     if (req.method === 'POST' && pathname === '/api/sire/agent/council') {
       const parsed = body ? JSON.parse(body) : {};
       if (!String(parsed.query || '').trim()) return res.writeHead(400,{ 'Access-Control-Allow-Origin':'*','Content-Type':'application/json; charset=utf-8' }).end(JSON.stringify({ error:'query is required' }));
-      const response = await handleCouncilRequest(parsed);
-      return res.writeHead(200,{ 'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8' }).end(JSON.stringify(response));
+      try { const response = await handleTeamRequest(parsed); return res.writeHead(200,{ 'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8' }).end(JSON.stringify(response)); }
+      catch (cause) { const message = cause instanceof Error ? cause.message : String(cause); console.error('[AI TEAM]', message); return res.writeHead(502,{ 'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8' }).end(JSON.stringify({ error:message, teamMode:'shared-workspace-team' })); }
     }
     if (req.method === 'POST' && pathname === '/api/sire/agent/council/stream') {
       const parsed = body ? JSON.parse(body) : {};
       if (!String(parsed.query || '').trim()) return res.writeHead(400,{ 'Access-Control-Allow-Origin':'*','Content-Type':'application/json; charset=utf-8' }).end(JSON.stringify({ error:'query is required' }));
       res.writeHead(200,{ 'Access-Control-Allow-Origin':'*','Cache-Control':'no-cache, no-transform','Content-Type':'text/event-stream; charset=utf-8','Connection':'keep-alive','X-Accel-Buffering':'no' });
       const send = (type, payload) => { if (!res.writableEnded) res.write(`event: ${type}\ndata: ${JSON.stringify(payload)}\n\n`); };
-      try { const response = await handleCouncilRequest(parsed, event => send('council.stage', event)); send('council.done', response); } catch (cause) { send('council.error', { error: cause instanceof Error ? cause.message : String(cause) }); }
+      try { const response = await handleTeamRequest(parsed, event => send('council.stage', event)); send('council.done', response); } catch (cause) { send('council.error', { error: cause instanceof Error ? cause.message : String(cause) }); }
       return res.end();
     }
     if (req.method === 'POST' && pathname === '/api/sire/agent/gpt') {
