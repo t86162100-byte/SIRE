@@ -10,7 +10,6 @@ import './quoteLogoHeader';
 import './quoteLogoPositionFix';
 import './quoteInstrumentCards';
 import './quoteListFullHeight';
-import './chartDefaults';
 import './sireLoadingOverlay';
 import './sireChatLoader';
 
