@@ -26,11 +26,13 @@ class TradingViewDrawingRenderer implements IPrimitivePaneRenderer {
       const height = scope.mediaSize.height;
       ctx.save();
       try {
-        for (const drawing of this.source.state().drawings) {
+        const state = this.source.state();
+        for (const drawing of state.drawings) {
           this.drawShape(ctx, width, height, drawing.tool, drawing.a, drawing.b, false);
         }
-        const preview = this.source.state().preview;
-        if (preview) this.drawShape(ctx, width, height, preview.tool, preview.a, preview.b, true);
+        if (state.preview) {
+          this.drawShape(ctx, width, height, state.preview.tool, state.preview.a, state.preview.b, true);
+        }
       } finally {
         ctx.restore();
       }
@@ -87,8 +89,7 @@ class TradingViewDrawingRenderer implements IPrimitivePaneRenderer {
       } else {
         const targetX = dx > 0 ? width : 0;
         const factor = (targetX - x1) / dx;
-        const targetY = y1 + dy * factor;
-        ctx.lineTo(targetX, targetY);
+        ctx.lineTo(targetX, y1 + dy * factor);
       }
       ctx.stroke();
       this.anchor(ctx, x1, y1, preview);
@@ -114,14 +115,9 @@ class TradingViewDrawingRenderer implements IPrimitivePaneRenderer {
 }
 
 class TradingViewDrawingPaneView implements IPrimitivePaneView {
-  private current: RendererTarget | null = null;
-
   constructor(private readonly source: TradingViewDrawingPrimitive) {}
 
-  update() {
-    // Coordinates are resolved lazily by the renderer so pan/zoom always uses
-    // Lightweight Charts' current time and price scales.
-  }
+  update() {}
 
   renderer() {
     return new TradingViewDrawingRenderer(this.source);
@@ -206,7 +202,7 @@ class TradingViewDrawingPrimitive {
     this.invalidate();
   }
 
-  private invalidate() {
+  invalidate() {
     this.view.update();
     this.requestUpdate?.();
   }
@@ -243,9 +239,6 @@ export function attachSireTradingViewDrawingController(
   const status = surface.querySelector<HTMLElement>('[data-sire-drawing-status]');
   const undo = surface.querySelector<HTMLButtonElement>('[data-sire-drawing-undo]');
   const clear = surface.querySelector<HTMLButtonElement>('[data-sire-drawing-clear]');
-  if (!toggle || !palette) {
-    return { destroy: () => pane.detachPrimitive(primitive) };
-  }
 
   let armed = false;
   let firstPoint: Point | null = null;
@@ -257,35 +250,32 @@ export function attachSireTradingViewDrawingController(
     if (status) status.textContent = text;
   };
 
-  const closePaletteIfIdle = () => {
-    if (!primitive.getTool()) {
-      palette.hidden = true;
-      toggle.setAttribute('aria-expanded', 'false');
-    }
+  const syncButtons = () => {
+    const active = primitive.getTool();
+    toolButtons.forEach(button => button.classList.toggle('active', button.dataset.sireDrawingTool === active));
+    toggle.classList.toggle('active', Boolean(active));
+    toggle.setAttribute('aria-expanded', active ? 'true' : String(!palette.hidden));
   };
 
-  const resetPlacement = (keepTool = true) => {
+  const resetPlacement = () => {
     armed = false;
     firstPoint = null;
     pendingPoint = null;
     primitive.clearPreview();
-    if (!keepTool) primitive.setTool(null);
-    if (keepTool) setStatus('Tap chart to show the crosshair.');
   };
 
   const chooseTool = (tool: DrawingTool) => {
     const active = primitive.getTool() === tool ? null : tool;
     primitive.setTool(active);
-    resetPlacement(true);
-    toolButtons.forEach(button => button.classList.toggle('active', button.dataset.sireDrawingTool === active));
-    toggle.classList.toggle('active', Boolean(active));
-    toggle.setAttribute('aria-expanded', active ? 'true' : palette.hidden ? 'false' : 'true');
+    resetPlacement();
+    syncButtons();
     if (active) {
       palette.hidden = false;
       setStatus('Tap chart to show the crosshair.');
     } else {
       chart.clearCrosshairPosition();
-      closePaletteIfIdle();
+      palette.hidden = true;
+      toggle.setAttribute('aria-expanded', 'false');
     }
   };
 
@@ -295,7 +285,8 @@ export function attachSireTradingViewDrawingController(
       toggle.setAttribute('aria-expanded', 'true');
       setStatus(primitive.getTool() ? 'Tap chart to show the crosshair.' : 'Choose a drawing tool.');
     } else if (primitive.getTool()) {
-      chooseTool(primitive.getTool() as DrawingTool);
+      palette.hidden = true;
+      toggle.setAttribute('aria-expanded', 'false');
     } else {
       palette.hidden = true;
       toggle.setAttribute('aria-expanded', 'false');
@@ -311,7 +302,7 @@ export function attachSireTradingViewDrawingController(
     event.stopPropagation();
     pointerActive = true;
     pointerId = event.pointerId;
-    try { surface.setPointerCapture(event.pointerId); } catch { /* noop */ }
+    try { element.setPointerCapture(event.pointerId); } catch { /* noop */ }
     chart.setCrosshairPosition(point.price, point.time, series);
 
     if (!armed) {
@@ -332,11 +323,9 @@ export function attachSireTradingViewDrawingController(
     if (event.pointerType !== 'mouse' && !pointerActive) return;
     const point = pointFromEvent(chart, series, event);
     if (!point) return;
-    if (pointerActive || event.pointerType === 'mouse') {
-      chart.setCrosshairPosition(point.price, point.time, series);
-      pendingPoint = point;
-      primitive.setPreview(firstPoint ?? point, point);
-    }
+    chart.setCrosshairPosition(point.price, point.time, series);
+    pendingPoint = point;
+    primitive.setPreview(firstPoint ?? point, point);
     if (pointerActive) {
       event.preventDefault();
       event.stopPropagation();
@@ -348,7 +337,7 @@ export function attachSireTradingViewDrawingController(
     const point = pointFromEvent(chart, series, event) ?? pendingPoint;
     pointerActive = false;
     if (pointerId >= 0) {
-      try { surface.releasePointerCapture(pointerId); } catch { /* noop */ }
+      try { element.releasePointerCapture(pointerId); } catch { /* noop */ }
     }
     pointerId = -1;
     if (!point) return;
@@ -361,7 +350,7 @@ export function attachSireTradingViewDrawingController(
       pendingPoint = point;
       if (primitive.getTool() === 'horizontal') {
         primitive.add(point, point);
-        resetPlacement(true);
+        resetPlacement();
         setStatus('Horizontal line placed. Tap again to place another.');
       } else {
         primitive.setPreview(point, point);
@@ -371,14 +360,14 @@ export function attachSireTradingViewDrawingController(
     }
 
     primitive.add(firstPoint, point);
-    resetPlacement(true);
+    resetPlacement();
     setStatus('Drawing placed. Tap chart to start another.');
   };
 
   const onPointerCancel = (event: PointerEvent) => {
-    if (pointerActive) onPointerUp(event);
-    else {
-      pointerActive = false;
+    if (pointerActive) {
+      onPointerUp(event);
+    } else {
       pendingPoint = null;
       primitive.clearPreview();
     }
@@ -386,21 +375,25 @@ export function attachSireTradingViewDrawingController(
 
   const onUndo = () => {
     primitive.undo();
+    resetPlacement();
     setStatus('Last drawing removed.');
   };
 
   const onClear = () => {
     primitive.clear();
-    resetPlacement(true);
+    resetPlacement();
     setStatus('Drawings cleared.');
   };
 
+  const toolHandlers = new Map<HTMLButtonElement, EventListener>();
   toggle.addEventListener('click', onToggle);
   toolButtons.forEach(button => {
-    button.addEventListener('click', () => {
+    const handler: EventListener = () => {
       const tool = button.dataset.sireDrawingTool as DrawingTool | undefined;
       if (tool) chooseTool(tool);
-    });
+    };
+    toolHandlers.set(button, handler);
+    button.addEventListener('click', handler);
   });
   undo?.addEventListener('click', onUndo);
   clear?.addEventListener('click', onClear);
@@ -415,10 +408,12 @@ export function attachSireTradingViewDrawingController(
   chart.timeScale().subscribeVisibleLogicalRangeChange(redraw);
   chart.timeScale().subscribeSizeChange(redraw);
 
+  syncButtons();
+
   return {
     destroy() {
       toggle.removeEventListener('click', onToggle);
-      toolButtons.forEach(button => button.replaceWith(button.cloneNode(true)));
+      toolHandlers.forEach((handler, button) => button.removeEventListener('click', handler));
       undo?.removeEventListener('click', onUndo);
       clear?.removeEventListener('click', onClear);
       element.removeEventListener('pointerdown', onPointerDown);
