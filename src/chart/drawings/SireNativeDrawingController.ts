@@ -11,7 +11,6 @@ import type {
 type DrawingTool = 'trend' | 'horizontal' | 'ray' | 'rectangle';
 type Point = { time: Time; price: number };
 type Drawing = { id: number; tool: DrawingTool; a: Point; b?: Point };
-
 type Controller = { destroy: () => void };
 
 const TOOL_LABELS: Record<DrawingTool, string> = {
@@ -212,7 +211,13 @@ export function attachSireNativeDrawingController(
     event.stopPropagation();
     const opening = palette.hidden;
     setPalette(opening);
-    if (opening && !activeTool) setStatus('Choose a drawing tool');
+    if (opening) {
+      if (!activeTool) setStatus('Choose a drawing tool');
+    } else {
+      // Closing the palette also exits drawing mode. This prevents a hidden
+      // palette from leaving the chart armed for accidental taps.
+      setTool(null);
+    }
   };
 
   const onTool = (event: Event) => {
