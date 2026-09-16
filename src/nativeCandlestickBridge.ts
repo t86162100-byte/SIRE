@@ -99,11 +99,11 @@ function sync(bridge: Bridge, stage: HTMLElement, svg: SVGElement) {
     group.style.visibility = 'hidden';
   });
 
-  // The old SIRE price axis is only retained as an invisible OHLC calibration
-  // source. The visible price pane is now the native Lightweight Charts scale.
-  stage.querySelectorAll<HTMLElement>('.price-axis').forEach(axis => {
-    axis.style.opacity = '0';
-    axis.style.pointerEvents = 'none';
+  // Keep the old axis in the layout because it is still used to translate the
+  // existing SVG OHLC geometry into prices, but remove every old price visual.
+  stage.querySelectorAll<HTMLElement>('.price-axis, .last-price, .live-prices').forEach(element => {
+    element.style.visibility = 'hidden';
+    element.style.pointerEvents = 'none';
   });
 
   const bars = readBars(stage, svg);
@@ -127,6 +127,14 @@ function sync(bridge: Bridge, stage: HTMLElement, svg: SVGElement) {
     lockVisibleTimeRangeOnResize: true,
     rightBarStaysOnScroll: true,
     shiftVisibleRangeOnNewBar: true,
+  });
+
+  const last = bars[bars.length - 1];
+  bridge.series.applyOptions({
+    priceLineVisible: true,
+    lastValueVisible: true,
+    priceLineColor: last.close >= last.open ? '#26a69a' : '#ef5350',
+    priceLineWidth: 1,
   });
 
   if (!bridge.initialized || !previousRange) {
@@ -159,6 +167,7 @@ function mount(stage: HTMLElement, svg: SVGElement) {
     overflow: 'hidden',
     touchAction: 'none',
     userSelect: 'none',
+    background: 'transparent',
   });
 
   stage.appendChild(host);
@@ -167,7 +176,8 @@ function mount(stage: HTMLElement, svg: SVGElement) {
     autoSize: true,
     layout: {
       background: { type: 'solid', color: 'transparent' },
-      textColor: 'transparent',
+      textColor: '#b7bdc8',
+      fontSize: 12,
     },
     grid: {
       vertLines: { visible: false },
@@ -177,10 +187,13 @@ function mount(stage: HTMLElement, svg: SVGElement) {
     rightPriceScale: {
       visible: true,
       borderVisible: true,
-      minimumWidth: 64,
+      borderColor: '#242832',
+      textColor: '#b7bdc8',
+      minimumWidth: 78,
       alignLabels: true,
-      ticksVisible: false,
+      ticksVisible: true,
       autoScale: true,
+      scaleMargins: { top: 0.08, bottom: 0.08 },
     },
     timeScale: {
       visible: false,
@@ -205,7 +218,7 @@ function mount(stage: HTMLElement, svg: SVGElement) {
     handleScale: {
       mouseWheel: true,
       pinch: true,
-      axisPressedMouseMove: true,
+      axisPressedMouseMove: { time: false, price: true },
       axisDoubleClickReset: true,
     },
     kineticScroll: {
@@ -223,8 +236,11 @@ function mount(stage: HTMLElement, svg: SVGElement) {
     wickVisible: true,
     wickUpColor: '#26a69a',
     wickDownColor: '#ef5350',
-    priceLineVisible: false,
+    priceLineVisible: true,
+    priceLineColor: '#26a69a',
+    priceLineWidth: 1,
     lastValueVisible: true,
+    priceFormat: { type: 'price', precision: 3, minMove: 0.001 },
   });
 
   const bridge: Bridge = {
