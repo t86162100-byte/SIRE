@@ -11,6 +11,7 @@ import './glassInstrumentBridge';
 import './glassInstrumentSwipeFix';
 import './glassInstrumentHold';
 import './glassTimeframeSwipe';
+import './glassTimeframeDisplayFix';
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
