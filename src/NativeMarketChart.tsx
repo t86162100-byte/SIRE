@@ -36,7 +36,7 @@ export default function NativeMarketChart({ candles, latest, autoScale = true }:
   useEffect(() => {
     const bar = barRef.current;
     if (!bar) return;
-    bar.style.bottom = '0px';
+    bar.style.bottom = '-28px';
     bar.style.display = 'block';
     bar.style.visibility = 'visible';
     bar.style.opacity = '1';
