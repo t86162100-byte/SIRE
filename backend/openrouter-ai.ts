@@ -3,6 +3,8 @@ type ChatMessage = { role: 'user' | 'assistant'; content: string };
 type CouncilTurn = { provider: string; model: string; role: string; text: string };
 type CouncilEvent = (event: { actor: string; phase: string; text: string }) => void | Promise<void>;
 
+import { runGemini } from './gemini-ai.ts';
+
 const MODEL = 'openai/gpt-oss-20b';
 const API_URL = 'https://openrouter.ai/api/v1/chat/completions';
 const REQUEST_TIMEOUT_MS = 30000;
