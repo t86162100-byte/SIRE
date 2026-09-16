@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react';
+import { attachSireNativeDrawingController } from './chart/drawings/SireNativeDrawingController';
 import {
   CandlestickSeries,
   CrosshairMode,
@@ -47,10 +48,11 @@ export default function NativeMarketChart({ candles, latest, autoScale = true }:
       handleScale: { axisPressedMouseMove: { time: true, price: true }, axisDoubleClickReset: true, mouseWheel: true, pinch: true },
     });
     const series = chart.addSeries(CandlestickSeries, { upColor: '#22c55e', downColor: '#ef4444', borderUpColor: '#22c55e', borderDownColor: '#ef4444', wickUpColor: '#22c55e', wickDownColor: '#ef4444', priceLineVisible: true, lastValueVisible: true, priceLineWidth: 1 });
+    const drawingController = attachSireNativeDrawingController(chart, series, host.parentElement ?? host);
     chartRef.current = chart;
     seriesRef.current = series;
     initializedRef.current = true;
-    return () => { chart.remove(); chartRef.current = null; seriesRef.current = null; initializedRef.current = false; firstDataRef.current = false; };
+    return () => { drawingController.destroy(); chart.remove(); chartRef.current = null; seriesRef.current = null; initializedRef.current = false; firstDataRef.current = false; };
   }, [autoScale]);
 
   useEffect(() => {
@@ -398,7 +400,7 @@ export default function NativeMarketChart({ candles, latest, autoScale = true }:
 
   return <div className="native-chart-touch-surface">
     <div ref={hostRef} className="sire-native-chart" aria-label="SIRE native market chart" />
-    <div className="native-bottom-glass-bar" aria-hidden="true">
+    <div className="native-bottom-glass-bar">
       <div className="native-bottom-instrument-viewport">
         <div className="native-bottom-instrument-track">
           <span className="native-bottom-instrument-side native-bottom-instrument-previous" />
@@ -411,6 +413,20 @@ export default function NativeMarketChart({ candles, latest, autoScale = true }:
           <span className="native-bottom-timeframe-side native-bottom-timeframe-previous" />
           <span className="native-bottom-timeframe-current">1m</span>
           <span className="native-bottom-timeframe-side native-bottom-timeframe-next" />
+        </div>
+      </div>
+      <button type="button" className="sire-drawing-toggle" data-sire-drawing-toggle aria-label="Drawing tools" aria-expanded="false">✎</button>
+      <div className="sire-drawing-palette" data-sire-drawing-palette hidden>
+        <div className="sire-drawing-palette-tools">
+          <button type="button" data-sire-drawing-tool="trend">Trend</button>
+          <button type="button" data-sire-drawing-tool="horizontal">H-Line</button>
+          <button type="button" data-sire-drawing-tool="ray">Ray</button>
+          <button type="button" data-sire-drawing-tool="rectangle">Box</button>
+        </div>
+        <div className="sire-drawing-palette-actions">
+          <span data-sire-drawing-status />
+          <button type="button" data-sire-drawing-undo>Undo</button>
+          <button type="button" data-sire-drawing-clear>Clear</button>
         </div>
       </div>
     </div>
