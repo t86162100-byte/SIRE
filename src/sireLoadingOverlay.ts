@@ -21,19 +21,14 @@ function installStyles() {
     #${OVERLAY_ID}.is-visible{opacity:1;visibility:visible}
     #${OVERLAY_ID} .sire-loader{display:flex;align-items:center;justify-content:center;min-width:155px;height:78px}
     #${OVERLAY_ID} .sire-logo-orbit{position:relative;width:70px;height:70px;display:grid;place-items:center;flex:0 0 70px}
-    #${OVERLAY_ID} .sire-logo-orbit::before{content:'';position:absolute;inset:3px;border:1px solid rgba(112,174,255,.30);border-radius:50%;animation:sire-orbit 1.55s linear infinite;box-shadow:0 0 20px rgba(72,145,255,.16)}
-    #${OVERLAY_ID} .sire-logo-mark{position:relative;z-index:2;display:grid;place-items:center;width:46px;height:46px;color:#fff;font-size:41px;font-weight:900;line-height:1;text-shadow:0 0 14px rgba(130,190,255,.92);animation:sire-star 1.15s cubic-bezier(.45,0,.55,1) infinite;transform-origin:center}
-    #${OVERLAY_ID} .sire-logo-mark::after{content:'';position:absolute;inset:-9px;border-radius:50%;border:1px solid rgba(112,174,255,.20);animation:sire-pulse 1.15s ease-out infinite}
-    #${OVERLAY_ID} .sire-loader-name{display:block;width:0;overflow:hidden;opacity:0;transform:translateX(-24px);margin-left:0;white-space:nowrap;font-size:25px;font-weight:900;letter-spacing:.15em;color:#fff;text-shadow:0 0 12px rgba(110,175,255,.25);transition:width .75s cubic-bezier(.16,1,.3,1),opacity .45s ease,transform .75s cubic-bezier(.16,1,.3,1),margin-left .75s cubic-bezier(.16,1,.3,1)}
+    #${OVERLAY_ID} .sire-logo-mark{position:relative;z-index:2;display:grid;place-items:center;width:46px;height:46px;color:#fff;font-size:41px;font-weight:900;line-height:1;text-shadow:none;animation:sire-star 1.15s cubic-bezier(.45,0,.55,1) infinite;transform-origin:center}
+    #${OVERLAY_ID} .sire-logo-mark::after{display:none}
+    #${OVERLAY_ID} .sire-loader-name{display:block;width:0;overflow:hidden;opacity:0;transform:translateX(-24px);margin-left:0;white-space:nowrap;font-size:25px;font-weight:900;letter-spacing:.15em;color:#fff;text-shadow:none;transition:width .75s cubic-bezier(.16,1,.3,1),opacity .45s ease,transform .75s cubic-bezier(.16,1,.3,1),margin-left .75s cubic-bezier(.16,1,.3,1)}
     #${OVERLAY_ID}.is-complete .sire-logo-mark{animation:sire-finish .65s cubic-bezier(.22,1,.36,1) forwards}
-    #${OVERLAY_ID}.is-complete .sire-logo-orbit::before{animation:sire-finish-ring .65s ease-out forwards}
     #${OVERLAY_ID}.is-complete .sire-loader-name{width:78px;opacity:1;transform:translateX(0);margin-left:15px}
     #${OVERLAY_ID} .sire-loader-message,#${OVERLAY_ID} .sire-loader-line{display:none}
-    @keyframes sire-orbit{to{transform:rotate(360deg)}}
-    @keyframes sire-star{0%{transform:rotate(0deg) scale(.82);opacity:.78}45%{transform:rotate(165deg) scale(1.10);opacity:1}100%{transform:rotate(360deg) scale(.82);opacity:.78}}
-    @keyframes sire-pulse{0%{transform:scale(.7);opacity:.7}100%{transform:scale(1.38);opacity:0}}
+    @keyframes sire-star{0%{transform:rotate(0deg) scale(.82);opacity:.88}45%{transform:rotate(165deg) scale(1.10);opacity:1}100%{transform:rotate(360deg) scale(.82);opacity:.88}}
     @keyframes sire-finish{0%{transform:rotate(0deg) scale(.92)}55%{transform:rotate(180deg) scale(1.08)}100%{transform:rotate(360deg) scale(1)}}
-    @keyframes sire-finish-ring{0%{transform:scale(1);opacity:.42}100%{transform:scale(1.55);opacity:0}}
     @media(prefers-reduced-motion:reduce){#${OVERLAY_ID} *{animation:none!important;transition:none!important}}
   `;
   document.head.appendChild(style);
@@ -67,7 +62,6 @@ function sync() {
   scheduled = false;
   const el = ensureOverlay();
   const active = manualLoading || shouldAutoLoad();
-
   if (active) {
     wasLoading = true;
     finishing = false;
@@ -76,8 +70,6 @@ function sync() {
     el.classList.add('is-visible', SHOW_CLASS);
     return;
   }
-
-  // Once loading finishes, always show the star-to-SIRE reveal before removing the overlay.
   if (wasLoading && !finishing) {
     wasLoading = false;
     finishing = true;
@@ -91,8 +83,6 @@ function sync() {
     }, 1800);
     return;
   }
-
-  // Ignore mutation-observer passes during the completion animation.
   if (finishing) return;
   el.classList.remove('is-visible', 'is-complete', SHOW_CLASS);
 }
