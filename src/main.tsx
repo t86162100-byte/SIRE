@@ -2,7 +2,6 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import App from './App';
 import './index.css';
-import './candleFix.css';
 import './mobile.css';
 import './tabNavigation';
 import './chartToolbarCleanup';
@@ -28,7 +27,7 @@ import './chartDefaults';
 import './sireLoadingOverlay';
 import './sireChatLoader';
 import './pricePaneVerticalZoom';
-import './candleRendererFix';
+import './nativeCandlestickBridge';
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
