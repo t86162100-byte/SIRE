@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   CandlestickSeries,
   CrosshairMode,
@@ -31,6 +31,19 @@ export default function NativeMarketChart({ candles, latest, autoScale = true }:
   const seriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null);
   const initializedRef = useRef(false);
   const firstDataRef = useRef(false);
+  const navigationTimerRef = useRef<number | null>(null);
+  const [navigationActive, setNavigationActive] = useState(false);
+
+  useEffect(() => () => { if (navigationTimerRef.current !== null) window.clearTimeout(navigationTimerRef.current); }, []);
+
+  const showNavigationSpace = () => {
+    setNavigationActive(true);
+    if (navigationTimerRef.current !== null) window.clearTimeout(navigationTimerRef.current);
+    navigationTimerRef.current = window.setTimeout(() => {
+      setNavigationActive(false);
+      navigationTimerRef.current = null;
+    }, 2600);
+  };
 
   useEffect(() => {
     const host = hostRef.current;
@@ -69,5 +82,8 @@ export default function NativeMarketChart({ candles, latest, autoScale = true }:
     series.update({ time: candleTime as UTCTimestamp, open: last.open, high: Math.max(last.high, latest.quote), low: Math.min(last.low, latest.quote), close: latest.quote });
   }, [latest, candles]);
 
-  return <div ref={hostRef} className="sire-native-chart" aria-label="SIRE native market chart" />;
+  return <div className="native-chart-touch-surface" onTouchStart={showNavigationSpace} onTouchMove={showNavigationSpace}>
+    <div ref={hostRef} className="sire-native-chart" aria-label="SIRE native market chart" />
+    <div className={`native-bottom-glass-bar${navigationActive ? ' navigation-active' : ''}`} aria-hidden="true" />
+  </div>;
 }
