@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef } from 'react';
 import {
   CandlestickSeries,
   CrosshairMode,
@@ -27,59 +27,54 @@ function toSeriesData(candles: Candle[]): CandlestickData[] {
 
 export default function NativeMarketChart({ candles, latest, autoScale = true }: Props) {
   const hostRef = useRef<HTMLDivElement | null>(null);
+  const barRef = useRef<HTMLDivElement | null>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const seriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null);
   const initializedRef = useRef(false);
   const firstDataRef = useRef(false);
-  const [navigationActive, setNavigationActive] = useState(false);
-  const [navigationBottom, setNavigationBottom] = useState(8);
 
   useEffect(() => {
     const host = hostRef.current;
-    if (!host) return;
+    const bar = barRef.current;
+    if (!host || !bar) return;
 
     let disposed = false;
-    let observer: MutationObserver | null = null;
-    let resizeObserver: ResizeObserver | null = null;
     let frame = 0;
 
-    const syncNavigationSpace = () => {
+    const syncBottomSpace = () => {
       if (disposed) return;
       const nav = document.getElementById('sire-bottom-tabs');
-      const visible = Boolean(nav && !nav.classList.contains('nav-auto-hidden'));
-      setNavigationActive(visible);
+      const hostRect = host.getBoundingClientRect();
+      let bottom = 8;
 
-      if (!nav || !visible) {
-        setNavigationBottom(8);
-        return;
+      if (nav && !nav.classList.contains('nav-auto-hidden')) {
+        const navRect = nav.getBoundingClientRect();
+        const gap = 8;
+        bottom = Math.max(8, hostRect.bottom - navRect.top + gap);
       }
 
-      const hostRect = host.getBoundingClientRect();
-      const navRect = nav.getBoundingClientRect();
-      const gap = 8;
-      const bottom = Math.max(8, hostRect.bottom - navRect.top + gap);
-      setNavigationBottom(bottom);
+      bar.style.bottom = `${bottom}px`;
     };
 
     const scheduleSync = () => {
       window.cancelAnimationFrame(frame);
-      frame = window.requestAnimationFrame(syncNavigationSpace);
+      frame = window.requestAnimationFrame(syncBottomSpace);
     };
 
-    syncNavigationSpace();
-    observer = new MutationObserver(scheduleSync);
+    const observer = new MutationObserver(scheduleSync);
     observer.observe(document.documentElement, { childList: true, subtree: true, attributes: true, attributeFilter: ['class', 'style'] });
-    resizeObserver = new ResizeObserver(scheduleSync);
+    const resizeObserver = new ResizeObserver(scheduleSync);
     resizeObserver.observe(host);
     const nav = document.getElementById('sire-bottom-tabs');
     if (nav) resizeObserver.observe(nav);
     window.addEventListener('resize', scheduleSync);
+    syncBottomSpace();
 
     return () => {
       disposed = true;
       window.cancelAnimationFrame(frame);
-      observer?.disconnect();
-      resizeObserver?.disconnect();
+      observer.disconnect();
+      resizeObserver.disconnect();
       window.removeEventListener('resize', scheduleSync);
     };
   }, []);
@@ -93,7 +88,7 @@ export default function NativeMarketChart({ candles, latest, autoScale = true }:
       grid: { vertLines: { color: '#151b23' }, horzLines: { color: '#151b23' } },
       crosshair: { mode: CrosshairMode.Normal, vertLine: { color: '#66717f', width: 1, style: 3, labelBackgroundColor: '#202833' }, horzLine: { color: '#66717f', width: 1, style: 3, labelBackgroundColor: '#202833' } },
       rightPriceScale: { visible: true, borderVisible: true, borderColor: '#29313c', textColor: '#b5bec9', ticksVisible: true, minimumWidth: 76, autoScale },
-      timeScale: { visible: true, borderVisible: true, borderColor: '#29313c', timeVisible: true, secondsVisible: true, rightOffset: 6, barSpacing: 8, minBarSpacing: 2 },
+      timeScale: { visible: true, borderVisible: true, timeVisible: true, secondsVisible: true, rightOffset: 6, barSpacing: 8, minBarSpacing: 2 },
       handleScroll: { mouseWheel: true, pressedMouseMove: true, horzTouchDrag: true, vertTouchDrag: true },
       handleScale: { axisPressedMouseMove: { time: true, price: true }, axisDoubleClickReset: true, mouseWheel: true, pinch: true },
     });
@@ -123,6 +118,6 @@ export default function NativeMarketChart({ candles, latest, autoScale = true }:
 
   return <div className="native-chart-touch-surface">
     <div ref={hostRef} className="sire-native-chart" aria-label="SIRE native market chart" />
-    <div className={`native-bottom-glass-bar${navigationActive ? ' navigation-active' : ''}`} style={{ bottom: `${navigationBottom}px` }} aria-hidden="true" />
+    <div ref={barRef} className="native-bottom-glass-bar" aria-hidden="true" />
   </div>;
 }
