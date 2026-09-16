@@ -54,10 +54,8 @@ function readBars(stage: HTMLElement, svg: SVGElement): Bar[] {
 
   const svgRect = svg.getBoundingClientRect();
   const viewBox = svg.viewBox.baseVal;
-  const scaleX = viewBox.width ? svgRect.width / viewBox.width : 1;
   const scaleY = viewBox.height ? svgRect.height / viewBox.height : 1;
   const groups = Array.from(svg.querySelectorAll<SVGGElement>('g.candle-up, g.candle-down'));
-
   const bars: Bar[] = [];
 
   groups.forEach((group, index) => {
