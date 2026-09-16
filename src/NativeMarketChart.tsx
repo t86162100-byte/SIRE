@@ -9,25 +9,11 @@ import {
   type UTCTimestamp,
 } from 'lightweight-charts';
 
-type Candle = {
-  epoch: number;
-  open: number;
-  high: number;
-  low: number;
-  close: number;
-};
-
-type Props = {
-  candles: Candle[];
-  latest?: { epoch: number; quote: number; bid?: number; ask?: number } | null;
-  autoScale?: boolean;
-};
+type Candle = { epoch: number; open: number; high: number; low: number; close: number };
+type Props = { candles: Candle[]; latest?: { epoch: number; quote: number; bid?: number; ask?: number } | null; autoScale?: boolean };
 
 function toSeriesData(candles: Candle[]): CandlestickData[] {
-  const sorted = candles
-    .filter(candle => Number.isFinite(candle.epoch) && Number.isFinite(candle.open) && Number.isFinite(candle.high) && Number.isFinite(candle.low) && Number.isFinite(candle.close))
-    .slice()
-    .sort((a, b) => a.epoch - b.epoch);
+  const sorted = candles.filter(candle => Number.isFinite(candle.epoch) && Number.isFinite(candle.open) && Number.isFinite(candle.high) && Number.isFinite(candle.low) && Number.isFinite(candle.close)).slice().sort((a, b) => a.epoch - b.epoch);
   const unique: CandlestickData[] = [];
   let lastTime = -1;
   for (const candle of sorted) {
@@ -57,15 +43,13 @@ export default function NativeMarketChart({ candles, latest, autoScale = true }:
       rightPriceScale: { visible: true, borderVisible: true, borderColor: '#29313c', textColor: '#b5bec9', ticksVisible: true, minimumWidth: 76, autoScale },
       timeScale: { visible: true, borderVisible: true, borderColor: '#29313c', timeVisible: true, secondsVisible: true, rightOffset: 6, barSpacing: 8, minBarSpacing: 2 },
       handleScroll: { mouseWheel: true, pressedMouseMove: true, horzTouchDrag: true, vertTouchDrag: true },
-      handleScale: { axisPressedMouseMove: { time: true, price: true }, axisDoubleClickReset: true, mouseWheel: true, pinch: true, mode: true },
+      handleScale: { axisPressedMouseMove: { time: true, price: true }, axisDoubleClickReset: true, mouseWheel: true, pinch: true },
     });
     const series = chart.addSeries(CandlestickSeries, { upColor: '#22c55e', downColor: '#ef4444', borderUpColor: '#22c55e', borderDownColor: '#ef4444', wickUpColor: '#22c55e', wickDownColor: '#ef4444', priceLineVisible: true, lastValueVisible: true, priceLineWidth: 1 });
     chartRef.current = chart;
     seriesRef.current = series;
     initializedRef.current = true;
-    const resizeObserver = new ResizeObserver(() => chart.resize(host.clientWidth, host.clientHeight));
-    resizeObserver.observe(host);
-    return () => { resizeObserver.disconnect(); chart.remove(); chartRef.current = null; seriesRef.current = null; initializedRef.current = false; firstDataRef.current = false; };
+    return () => { chart.remove(); chartRef.current = null; seriesRef.current = null; initializedRef.current = false; firstDataRef.current = false; };
   }, [autoScale]);
 
   useEffect(() => {
