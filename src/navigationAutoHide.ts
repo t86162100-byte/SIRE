@@ -3,6 +3,8 @@ const STYLE_ID = 'sire-navigation-auto-hide-style';
 const HIDE_AFTER = 2600;
 
 let hideTimer: number | undefined;
+let lastRevealAt = 0;
+let navInitialized = false;
 let touchStartX: number | null = null;
 let touchStartY: number | null = null;
 let touchRevealed = false;
@@ -24,12 +26,21 @@ function style() {
 function reveal(ms = HIDE_AFTER) {
   const nav = document.getElementById(NAV_ID);
   if (!nav) return;
+  lastRevealAt = Date.now();
   nav.classList.remove('nav-auto-hidden');
   if (hideTimer !== undefined) window.clearTimeout(hideTimer);
   hideTimer = window.setTimeout(() => {
     const current = document.getElementById(NAV_ID);
     if (current) current.classList.add('nav-auto-hidden');
   }, ms);
+}
+
+function enforceAutoHide() {
+  const nav = document.getElementById(NAV_ID);
+  if (!nav) return;
+  if (lastRevealAt > 0 && Date.now() - lastRevealAt >= HIDE_AFTER) {
+    nav.classList.add('nav-auto-hidden');
+  }
 }
 
 function isSwipeSurface(target: EventTarget | null) {
@@ -105,15 +116,25 @@ function bind() {
   nav.dataset.autoHideBound = 'true';
   nav.addEventListener('pointerdown', () => reveal(), { passive: true });
   nav.addEventListener('click', () => reveal(), { passive: true });
-  reveal();
+
+  if (!navInitialized) {
+    navInitialized = true;
+    reveal();
+  } else {
+    // If React recreates the navigation while Quote is rendering, preserve
+    // the auto-hidden state instead of making the new copy stay visible.
+    nav.classList.add('nav-auto-hidden');
+  }
 }
 
 function install() {
+  style();
   bind();
   wireTouchSwipe();
   wirePointerSwipe();
   const observer = new MutationObserver(() => bind());
   observer.observe(document.documentElement, { childList: true, subtree: true });
+  window.setInterval(enforceAutoHide, 300);
 }
 
 if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', install, { once: true });
