@@ -86,6 +86,8 @@ export default function NativeMarketChart({ candles, latest, autoScale = true }:
     let dragOffset = 0;
     let tracking = false;
     let raf = 0;
+    let longPressTimer = 0;
+    let longPressTriggered = false;
     let instruments: InstrumentPreview[] = [];
     let activeIndex = -1;
 
@@ -104,6 +106,12 @@ export default function NativeMarketChart({ candles, latest, autoScale = true }:
       previousLabel.style.opacity = previous ? '1' : '0';
       nextLabel.style.opacity = next ? '1' : '0';
       setTrack(0);
+    };
+
+    const openPicker = () => {
+      const picker = document.querySelector<HTMLButtonElement>('.native-instrument-picker');
+      if (!picker) return;
+      picker.click();
     };
 
     const closePickerSilently = () => {
@@ -172,21 +180,38 @@ export default function NativeMarketChart({ candles, latest, autoScale = true }:
       }, 35);
     };
 
+    const cancelLongPress = () => {
+      if (longPressTimer) window.clearTimeout(longPressTimer);
+      longPressTimer = 0;
+    };
+
     const onPointerDown = (event: PointerEvent) => {
       if (event.pointerType === 'mouse') return;
       startX = event.clientX;
       startY = event.clientY;
       dragOffset = 0;
       tracking = true;
+      longPressTriggered = false;
+      cancelLongPress();
       viewport.setPointerCapture?.(event.pointerId);
       if (!instruments.length) void readPicker();
       bar.classList.add('instrument-swiping');
+      longPressTimer = window.setTimeout(() => {
+        if (!tracking) return;
+        longPressTriggered = true;
+        tracking = false;
+        if (raf) cancelAnimationFrame(raf);
+        setTrack(0, true);
+        bar.classList.remove('instrument-swiping');
+        openPicker();
+      }, 600);
     };
 
     const onPointerMove = (event: PointerEvent) => {
       if (!tracking) return;
       const dy = event.clientY - startY;
       const dx = event.clientX - startX;
+      if (Math.hypot(dx, dy) > 12) cancelLongPress();
       if (Math.abs(dy) < Math.abs(dx) * 1.05) return;
       dragOffset = Math.max(-44, Math.min(44, dy));
       if (raf) cancelAnimationFrame(raf);
@@ -195,6 +220,8 @@ export default function NativeMarketChart({ candles, latest, autoScale = true }:
     };
 
     const onPointerUp = (event: PointerEvent) => {
+      cancelLongPress();
+      if (longPressTriggered) { longPressTriggered = false; return; }
       if (!tracking) return;
       tracking = false;
       if (raf) cancelAnimationFrame(raf);
@@ -220,6 +247,7 @@ export default function NativeMarketChart({ candles, latest, autoScale = true }:
 
     return () => {
       window.clearTimeout(primeTimer);
+      cancelLongPress();
       if (raf) cancelAnimationFrame(raf);
       viewport.removeEventListener('pointerdown', onPointerDown);
       viewport.removeEventListener('pointermove', onPointerMove);
