@@ -32,17 +32,56 @@ export default function NativeMarketChart({ candles, latest, autoScale = true }:
   const initializedRef = useRef(false);
   const firstDataRef = useRef(false);
   const [navigationActive, setNavigationActive] = useState(false);
+  const [navigationBottom, setNavigationBottom] = useState(8);
 
   useEffect(() => {
+    const host = hostRef.current;
+    if (!host) return;
+
+    let disposed = false;
+    let observer: MutationObserver | null = null;
+    let resizeObserver: ResizeObserver | null = null;
+    let frame = 0;
+
+    const syncNavigationSpace = () => {
+      if (disposed) return;
+      const nav = document.getElementById('sire-bottom-tabs');
+      const visible = Boolean(nav && !nav.classList.contains('nav-auto-hidden'));
+      setNavigationActive(visible);
+
+      if (!nav || !visible) {
+        setNavigationBottom(8);
+        return;
+      }
+
+      const hostRect = host.getBoundingClientRect();
+      const navRect = nav.getBoundingClientRect();
+      const gap = 8;
+      const bottom = Math.max(8, hostRect.bottom - navRect.top + gap);
+      setNavigationBottom(bottom);
+    };
+
+    const scheduleSync = () => {
+      window.cancelAnimationFrame(frame);
+      frame = window.requestAnimationFrame(syncNavigationSpace);
+    };
+
+    syncNavigationSpace();
+    observer = new MutationObserver(scheduleSync);
+    observer.observe(document.documentElement, { childList: true, subtree: true, attributes: true, attributeFilter: ['class', 'style'] });
+    resizeObserver = new ResizeObserver(scheduleSync);
+    resizeObserver.observe(host);
     const nav = document.getElementById('sire-bottom-tabs');
-    if (!nav) return;
+    if (nav) resizeObserver.observe(nav);
+    window.addEventListener('resize', scheduleSync);
 
-    const syncNavigation = () => setNavigationActive(!nav.classList.contains('nav-auto-hidden'));
-    syncNavigation();
-
-    const observer = new MutationObserver(syncNavigation);
-    observer.observe(nav, { attributes: true, attributeFilter: ['class'] });
-    return () => observer.disconnect();
+    return () => {
+      disposed = true;
+      window.cancelAnimationFrame(frame);
+      observer?.disconnect();
+      resizeObserver?.disconnect();
+      window.removeEventListener('resize', scheduleSync);
+    };
   }, []);
 
   useEffect(() => {
@@ -84,6 +123,6 @@ export default function NativeMarketChart({ candles, latest, autoScale = true }:
 
   return <div className="native-chart-touch-surface">
     <div ref={hostRef} className="sire-native-chart" aria-label="SIRE native market chart" />
-    <div className={`native-bottom-glass-bar${navigationActive ? ' navigation-active' : ''}`} aria-hidden="true" />
+    <div className={`native-bottom-glass-bar${navigationActive ? ' navigation-active' : ''}`} style={{ bottom: `${navigationBottom}px` }} aria-hidden="true" />
   </div>;
 }
