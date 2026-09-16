@@ -3,13 +3,13 @@ const STYLE_ID = 'sire-navigation-auto-hide-style';
 const HIDE_AFTER = 2600;
 
 let hideTimer: number | undefined;
+let lastInteractionAt = Date.now();
 let touchStartX: number | null = null;
 let touchStartY: number | null = null;
 let touchRevealed = false;
 let pointerStartX: number | null = null;
 let pointerStartY: number | null = null;
 let pointerRevealed = false;
-let bound = false;
 
 function style() {
   if (document.getElementById(STYLE_ID)) return;
@@ -22,19 +22,26 @@ function style() {
   document.head.appendChild(el);
 }
 
-function reveal(ms = HIDE_AFTER) {
-  const nav = document.getElementById(NAV_ID);
-  if (!nav) return;
-  nav.classList.remove('nav-auto-hidden');
-  if (hideTimer !== undefined) window.clearTimeout(hideTimer);
-  hideTimer = window.setTimeout(() => {
-    const current = document.getElementById(NAV_ID);
-    if (current) current.classList.add('nav-auto-hidden');
-  }, ms);
+function currentNav() {
+  return document.getElementById(NAV_ID);
 }
 
-function hideNow() {
-  const nav = document.getElementById(NAV_ID);
+function reveal(ms = HIDE_AFTER) {
+  lastInteractionAt = Date.now();
+  const nav = currentNav();
+  if (nav) nav.classList.remove('nav-auto-hidden');
+  if (hideTimer !== undefined) window.clearTimeout(hideTimer);
+  hideTimer = window.setTimeout(() => hideIfInactive(), ms);
+}
+
+function hideIfInactive() {
+  const elapsed = Date.now() - lastInteractionAt;
+  if (elapsed < HIDE_AFTER) {
+    if (hideTimer !== undefined) window.clearTimeout(hideTimer);
+    hideTimer = window.setTimeout(hideIfInactive, HIDE_AFTER - elapsed);
+    return;
+  }
+  const nav = currentNav();
   if (nav) nav.classList.add('nav-auto-hidden');
 }
 
@@ -94,23 +101,40 @@ function wirePointerSwipe() {
 
 function bindNav() {
   style();
-  const nav = document.getElementById(NAV_ID);
-  if (!nav || nav.dataset.autoHideBound === 'true') return;
-  nav.dataset.autoHideBound = 'true';
-  nav.addEventListener('pointerdown', () => reveal(), { passive: true });
-  nav.addEventListener('click', () => reveal(), { passive: true });
+  const nav = currentNav();
+  if (!nav) return;
+  if (nav.dataset.autoHideBound !== 'true') {
+    nav.dataset.autoHideBound = 'true';
+    nav.addEventListener('pointerdown', () => reveal(), { passive: true });
+    nav.addEventListener('click', () => reveal(), { passive: true });
+  }
+
+  // React may recreate the nav while Quote is mounting. Preserve the timer state.
+  if (Date.now() - lastInteractionAt >= HIDE_AFTER) {
+    nav.classList.add('nav-auto-hidden');
+  } else {
+    nav.classList.remove('nav-auto-hidden');
+  }
 }
 
 function install() {
   style();
   bindNav();
-  wireTouchSwipe();
-  wirePointerSwipe();
-  // Start hidden after initial render, including Quote.
-  window.setTimeout(hideNow, HIDE_AFTER);
-  const observer = new MutationObserver(() => bindNav());
-  observer.observe(document.documentElement, { childList: true, subtree: true });
 }
 
-if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', install, { once: true });
-else install();
+function start() {
+  install();
+  wireTouchSwipe();
+  wirePointerSwipe();
+  hideTimer = window.setTimeout(hideIfInactive, HIDE_AFTER);
+
+  const observer = new MutationObserver(() => bindNav());
+  observer.observe(document.documentElement, { childList: true, subtree: true });
+  window.setInterval(() => {
+    bindNav();
+    hideIfInactive();
+  }, 300);
+}
+
+if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start, { once: true });
+else start();
