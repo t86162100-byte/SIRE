@@ -13,6 +13,11 @@ function installStyles() {
       display: none !important;
     }
 
+    /* Quote is a clean instrument list: remove the old selected AUD Basket/live header row. */
+    body.sire-active-quote .sidebar-meta {
+      display: none !important;
+    }
+
     /* With navigation visible, keep the action bar above it. */
     body.sire-active-chart:not(.sire-nav-hidden) #${BAR_ID} {
       bottom: calc(max(6px, env(safe-area-inset-bottom)) + 57px) !important;
