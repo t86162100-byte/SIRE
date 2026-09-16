@@ -1,12 +1,4 @@
-import type {
-  IChartApi,
-  IPrimitivePaneRenderer,
-  IPrimitivePaneView,
-  ISeriesApi,
-  ISeriesPrimitive,
-  MouseEventParams,
-  Time,
-} from 'lightweight-charts';
+import type { IChartApi, ISeriesApi, Time } from 'lightweight-charts';
 
 type DrawingTool = 'trend' | 'horizontal' | 'ray' | 'rectangle';
 type Point = { time: Time; price: number };
@@ -20,163 +12,11 @@ const TOOL_LABELS: Record<DrawingTool, string> = {
   rectangle: 'Rectangle',
 };
 
-class DrawingPrimitive implements ISeriesPrimitive<unknown> {
-  private drawings: Drawing[] = [];
-  private requestUpdate: (() => void) | null = null;
-  private nextId = 1;
-  private view: IPrimitivePaneView;
-
-  constructor(
-    private readonly chart: IChartApi,
-    private readonly series: ISeriesApi<'Candlestick'>,
-  ) {
-    const owner = this;
-    this.view = {
-      zOrder: 'top',
-      renderer: {
-        draw(target) {
-          target.useMediaCoordinateSpace(scope => {
-            const ctx = scope.context;
-            const width = scope.mediaSize.width;
-            const height = scope.mediaSize.height;
-            ctx.save();
-            try {
-              ctx.lineWidth = 1.5;
-              ctx.strokeStyle = 'rgba(93, 178, 255, 0.96)';
-              ctx.fillStyle = 'rgba(48, 126, 196, 0.10)';
-              ctx.setLineDash([]);
-
-              for (const drawing of owner.drawings) {
-                const ax = owner.x(drawing.a.time);
-                const ay = owner.y(drawing.a.price);
-                if (ax == null || ay == null || !Number.isFinite(ax) || !Number.isFinite(ay)) continue;
-
-                if (drawing.tool === 'horizontal') {
-                  ctx.beginPath();
-                  ctx.moveTo(0, ay);
-                  ctx.lineTo(width, ay);
-                  ctx.stroke();
-                  continue;
-                }
-
-                const b = drawing.b;
-                if (!b) continue;
-                const bx = owner.x(b.time);
-                const by = owner.y(b.price);
-                if (bx == null || by == null || !Number.isFinite(bx) || !Number.isFinite(by)) continue;
-
-                if (drawing.tool === 'rectangle') {
-                  const left = Math.min(ax, bx);
-                  const top = Math.min(ay, by);
-                  const rectWidth = Math.abs(bx - ax);
-                  const rectHeight = Math.abs(by - ay);
-                  ctx.fillRect(left, top, rectWidth, rectHeight);
-                  ctx.strokeRect(left, top, rectWidth, rectHeight);
-                  continue;
-                }
-
-                if (drawing.tool === 'ray') {
-                  const dx = bx - ax;
-                  const dy = by - ay;
-                  if (Math.abs(dx) < 0.001) {
-                    ctx.beginPath();
-                    ctx.moveTo(ax, 0);
-                    ctx.lineTo(ax, height);
-                    ctx.stroke();
-                  } else {
-                    const endX = dx >= 0 ? width : 0;
-                    const endY = ay + (endX - ax) * (dy / dx);
-                    ctx.beginPath();
-                    ctx.moveTo(ax, ay);
-                    ctx.lineTo(endX, endY);
-                    ctx.stroke();
-                  }
-                  continue;
-                }
-
-                ctx.beginPath();
-                ctx.moveTo(ax, ay);
-                ctx.lineTo(bx, by);
-                ctx.stroke();
-              }
-            } finally {
-              ctx.restore();
-            }
-          });
-        },
-      } satisfies IPrimitivePaneRenderer,
-    };
-  }
-
-  attached({ requestUpdate }: { requestUpdate: () => void }) {
-    this.requestUpdate = requestUpdate;
-  }
-
-  detached() {
-    this.requestUpdate = null;
-  }
-
-  paneViews(): readonly IPrimitivePaneView[] {
-    return [this.view];
-  }
-
-  updateAllViews() {}
-
-  add(tool: DrawingTool, a: Point, b?: Point) {
-    this.drawings.push({ id: this.nextId++, tool, a, b });
-    this.requestUpdate?.();
-  }
-
-  removeLast() {
-    if (!this.drawings.length) return;
-    this.drawings.pop();
-    this.requestUpdate?.();
-  }
-
-  clear() {
-    if (!this.drawings.length) return;
-    this.drawings = [];
-    this.requestUpdate?.();
-  }
-
-  x(time: Time) {
-    return this.chart.timeScale().timeToCoordinate(time);
-  }
-
-  y(price: number) {
-    return this.series.priceToCoordinate(price);
-  }
-}
-
-function pointFromEvent(
-  chart: IChartApi,
-  series: ISeriesApi<'Candlestick'>,
-  param: MouseEventParams,
-): Point | null {
-  if (!param.point) return null;
-  const time = chart.timeScale().coordinateToTime(param.point.x);
-  const price = series.coordinateToPrice(param.point.y);
-  if (time == null || price == null || !Number.isFinite(param.point.x) || !Number.isFinite(param.point.y)) return null;
-  return { time, price };
-}
-
 export function attachSireNativeDrawingController(
   chart: IChartApi,
   series: ISeriesApi<'Candlestick'>,
   root: HTMLElement,
 ): Controller {
-  // Do not attach a custom primitive during the core chart mount. The chart
-  // must be able to render its native candlesticks independently. The drawing
-  // primitive is created only after the user explicitly chooses a tool.
-  let primitive: DrawingPrimitive | null = null;
-  const ensurePrimitive = () => {
-    if (!primitive) {
-      primitive = new DrawingPrimitive(chart, series);
-      series.attachPrimitive(primitive);
-    }
-    return primitive;
-  };
-
   const button = root.querySelector<HTMLButtonElement>('[data-sire-drawing-toggle]');
   const palette = root.querySelector<HTMLElement>('[data-sire-drawing-palette]');
   const status = root.querySelector<HTMLElement>('[data-sire-drawing-status]');
@@ -184,34 +24,245 @@ export function attachSireNativeDrawingController(
   const clear = root.querySelector<HTMLButtonElement>('[data-sire-drawing-clear]');
   const toolButtons = Array.from(root.querySelectorAll<HTMLButtonElement>('[data-sire-drawing-tool]'));
 
-  if (!button || !palette || !status || !undo || !clear) {
-    return { destroy: () => undefined };
-  }
+  if (!button || !palette || !status || !undo || !clear) return { destroy: () => undefined };
+
+  // Drawings live on a separate transparent canvas. This deliberately does not
+  // attach a Lightweight Charts primitive: attaching a primitive during a
+  // live mobile chart interaction was able to invalidate the candle renderer.
+  // Coordinates still come exclusively from Lightweight Charts' public time /
+  // price conversion APIs, so drawings follow pan and zoom correctly.
+  const chartElement = chart.chartElement();
+  chartElement.style.position = chartElement.style.position || 'relative';
+  const canvas = document.createElement('canvas');
+  canvas.setAttribute('aria-hidden', 'true');
+  Object.assign(canvas.style, {
+    position: 'absolute',
+    left: '0',
+    top: '0',
+    width: '0',
+    height: '0',
+    pointerEvents: 'none',
+    zIndex: '5',
+  });
+  chartElement.appendChild(canvas);
+  const ctx = canvas.getContext('2d');
 
   let activeTool: DrawingTool | null = null;
   let firstPoint: Point | null = null;
+  let previewPoint: Point | null = null;
+  let pointerActive = false;
   let destroyed = false;
+  let nextId = 1;
+  let drawings: Drawing[] = [];
+  let raf = 0;
+
+  const paneSize = () => chart.paneSize(0);
+
+  const resizeCanvas = () => {
+    if (!ctx || destroyed) return;
+    const size = paneSize();
+    const width = Math.max(0, size.width);
+    const height = Math.max(0, size.height);
+    const dpr = Math.max(1, window.devicePixelRatio || 1);
+    canvas.style.width = `${width}px`;
+    canvas.style.height = `${height}px`;
+    const pixelWidth = Math.max(1, Math.round(width * dpr));
+    const pixelHeight = Math.max(1, Math.round(height * dpr));
+    if (canvas.width !== pixelWidth || canvas.height !== pixelHeight) {
+      canvas.width = pixelWidth;
+      canvas.height = pixelHeight;
+    }
+    draw();
+  };
+
+  const toCoordinates = (point: Point) => {
+    const x = chart.timeScale().timeToCoordinate(point.time);
+    const y = series.priceToCoordinate(point.price);
+    if (x == null || y == null || !Number.isFinite(x) || !Number.isFinite(y)) return null;
+    return { x, y };
+  };
+
+  const drawSegment = (a: { x: number; y: number }, b: { x: number; y: number }, ray: boolean) => {
+    if (!ctx) return;
+    const size = paneSize();
+    let endX = b.x;
+    let endY = b.y;
+    if (ray) {
+      const dx = b.x - a.x;
+      const dy = b.y - a.y;
+      if (Math.abs(dx) < 0.001) {
+        endX = a.x;
+        endY = b.y >= a.y ? size.height : 0;
+      } else {
+        endX = dx >= 0 ? size.width : 0;
+        endY = a.y + (endX - a.x) * (dy / dx);
+      }
+    }
+    ctx.beginPath();
+    ctx.moveTo(a.x, a.y);
+    ctx.lineTo(endX, endY);
+    ctx.stroke();
+  };
+
+  const draw = () => {
+    if (!ctx || destroyed) return;
+    const size = paneSize();
+    const dpr = Math.max(1, window.devicePixelRatio || 1);
+    const width = Math.max(0, size.width);
+    const height = Math.max(0, size.height);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, width, height);
+    ctx.save();
+    ctx.lineWidth = 1.5;
+    ctx.strokeStyle = 'rgba(93, 178, 255, 0.96)';
+    ctx.fillStyle = 'rgba(48, 126, 196, 0.10)';
+    ctx.setLineDash([]);
+
+    const renderDrawing = (drawing: Drawing) => {
+      const a = toCoordinates(drawing.a);
+      if (!a) return;
+      if (drawing.tool === 'horizontal') {
+        ctx.beginPath();
+        ctx.moveTo(0, a.y);
+        ctx.lineTo(width, a.y);
+        ctx.stroke();
+        return;
+      }
+      if (!drawing.b) return;
+      const b = toCoordinates(drawing.b);
+      if (!b) return;
+      if (drawing.tool === 'rectangle') {
+        const left = Math.min(a.x, b.x);
+        const top = Math.min(a.y, b.y);
+        ctx.fillRect(left, top, Math.abs(b.x - a.x), Math.abs(b.y - a.y));
+        ctx.strokeRect(left, top, Math.abs(b.x - a.x), Math.abs(b.y - a.y));
+      } else {
+        drawSegment(a, b, drawing.tool === 'ray');
+      }
+    };
+
+    drawings.forEach(renderDrawing);
+    if (activeTool && firstPoint && previewPoint) {
+      const a = toCoordinates(firstPoint);
+      const b = toCoordinates(previewPoint);
+      if (a && b) {
+        ctx.save();
+        ctx.setLineDash([5, 4]);
+        ctx.strokeStyle = 'rgba(150, 205, 255, 0.85)';
+        if (activeTool === 'horizontal') {
+          ctx.beginPath();
+          ctx.moveTo(0, a.y);
+          ctx.lineTo(width, a.y);
+          ctx.stroke();
+        } else if (activeTool === 'rectangle') {
+          ctx.strokeRect(Math.min(a.x, b.x), Math.min(a.y, b.y), Math.abs(b.x - a.x), Math.abs(b.y - a.y));
+        } else {
+          drawSegment(a, b, activeTool === 'ray');
+        }
+        ctx.restore();
+      }
+    }
+    ctx.restore();
+  };
+
+  const scheduleDraw = () => {
+    if (raf) return;
+    raf = window.requestAnimationFrame(() => {
+      raf = 0;
+      draw();
+    });
+  };
 
   const setPalette = (open: boolean) => {
     palette.hidden = !open;
     button.setAttribute('aria-expanded', String(open));
   };
 
-  const setStatus = (text: string) => {
-    status.textContent = text;
-  };
+  const setStatus = (text: string) => { status.textContent = text; };
 
   const setTool = (tool: DrawingTool | null) => {
     activeTool = tool;
     firstPoint = null;
-    toolButtons.forEach(item => item.classList.toggle('active', item.dataset.sireDrawingTool === tool));
+    previewPoint = null;
     if (!tool) {
-      setStatus('');
+      chart.clearCrosshairPosition();
       button.classList.remove('active');
+      toolButtons.forEach(item => item.classList.remove('active'));
+      setStatus('');
+    } else {
+      button.classList.add('active');
+      toolButtons.forEach(item => item.classList.toggle('active', item.dataset.sireDrawingTool === tool));
+      setStatus(`${TOOL_LABELS[tool]}: tap the chart`);
+    }
+    scheduleDraw();
+  };
+
+  const pointFromXY = (x: number, y: number): Point | null => {
+    const time = chart.timeScale().coordinateToTime(x);
+    const price = series.coordinateToPrice(y);
+    if (time == null || price == null || !Number.isFinite(price)) return null;
+    return { time, price };
+  };
+
+  const updateCrosshair = (point: Point) => {
+    chart.setCrosshairPosition(point.price, point.time, series);
+    previewPoint = point;
+    scheduleDraw();
+  };
+
+  const onPointerDown = (event: PointerEvent) => {
+    if (destroyed || !activeTool || event.pointerType === 'mouse' && event.button !== 0) return;
+    const rect = chartElement.getBoundingClientRect();
+    const x = event.clientX - rect.left;
+    const y = event.clientY - rect.top;
+    const size = paneSize();
+    if (x < 0 || y < 0 || x > size.width || y > size.height) return;
+    const point = pointFromXY(x, y);
+    if (!point) return;
+    event.preventDefault();
+    event.stopPropagation();
+    pointerActive = true;
+    chartElement.setPointerCapture?.(event.pointerId);
+    updateCrosshair(point);
+
+    if (activeTool === 'horizontal') {
+      drawings.push({ id: nextId++, tool: activeTool, a: point });
+      firstPoint = null;
+      setStatus('Horizontal line placed');
+      scheduleDraw();
       return;
     }
-    button.classList.add('active');
-    setStatus(`${TOOL_LABELS[tool]}: tap ${tool === 'horizontal' ? 'the chart' : 'the first point'}`);
+
+    if (!firstPoint) {
+      firstPoint = point;
+      setStatus(`${TOOL_LABELS[activeTool]}: tap the second point`);
+      scheduleDraw();
+    }
+  };
+
+  const onPointerMove = (event: PointerEvent) => {
+    if (destroyed || !activeTool || !pointerActive && event.pointerType !== 'mouse') return;
+    const rect = chartElement.getBoundingClientRect();
+    const x = event.clientX - rect.left;
+    const y = event.clientY - rect.top;
+    const size = paneSize();
+    if (x < 0 || y < 0 || x > size.width || y > size.height) return;
+    const point = pointFromXY(x, y);
+    if (!point) return;
+    updateCrosshair(point);
+  };
+
+  const onPointerUp = (event: PointerEvent) => {
+    if (!pointerActive || !activeTool) return;
+    pointerActive = false;
+    const rect = chartElement.getBoundingClientRect();
+    const point = pointFromXY(event.clientX - rect.left, event.clientY - rect.top);
+    if (point && firstPoint) {
+      drawings.push({ id: nextId++, tool: activeTool, a: firstPoint, b: point });
+      firstPoint = null;
+      setStatus(`${TOOL_LABELS[activeTool]} placed — tap again to draw another`);
+      scheduleDraw();
+    }
   };
 
   const onToggle = (event: Event) => {
@@ -235,66 +286,60 @@ export function attachSireNativeDrawingController(
     setPalette(true);
   };
 
-  const onChartClick = (param: MouseEventParams) => {
-    if (destroyed || !activeTool) return;
-    const point = pointFromEvent(chart, series, param);
-    if (!point) return;
-    const drawing = ensurePrimitive();
-
-    if (activeTool === 'horizontal') {
-      drawing.add(activeTool, point);
-      setStatus('Horizontal line placed');
-      return;
-    }
-
-    if (!firstPoint) {
-      firstPoint = point;
-      setStatus(`${TOOL_LABELS[activeTool]}: tap the second point`);
-      return;
-    }
-
-    drawing.add(activeTool, firstPoint, point);
-    firstPoint = null;
-    setStatus(`${TOOL_LABELS[activeTool]} placed — tap again to draw another`);
-  };
-
   const onUndo = (event: Event) => {
     event.preventDefault();
     event.stopPropagation();
     firstPoint = null;
-    primitive?.removeLast();
+    drawings = drawings.slice(0, -1);
     setStatus(activeTool ? `${TOOL_LABELS[activeTool]}: ready` : '');
+    scheduleDraw();
   };
 
   const onClear = (event: Event) => {
     event.preventDefault();
     event.stopPropagation();
     firstPoint = null;
-    primitive?.clear();
+    drawings = [];
     setStatus(activeTool ? `${TOOL_LABELS[activeTool]}: ready` : '');
+    scheduleDraw();
   };
+
+  const onRangeChange = () => scheduleDraw();
+  const onSizeChange = () => resizeCanvas();
 
   button.addEventListener('click', onToggle);
   toolButtons.forEach(item => item.addEventListener('click', onTool));
   undo.addEventListener('click', onUndo);
   clear.addEventListener('click', onClear);
-  chart.subscribeClick(onChartClick);
+  chartElement.addEventListener('pointerdown', onPointerDown, { passive: false });
+  chartElement.addEventListener('pointermove', onPointerMove, { passive: false });
+  chartElement.addEventListener('pointerup', onPointerUp, { passive: false });
+  chartElement.addEventListener('pointercancel', onPointerUp, { passive: false });
+  chart.timeScale().subscribeVisibleLogicalRangeChange(onRangeChange);
+  chart.timeScale().subscribeSizeChange(onSizeChange);
+  window.addEventListener('resize', onSizeChange);
+  resizeCanvas();
 
   return {
     destroy() {
       if (destroyed) return;
       destroyed = true;
-      chart.unsubscribeClick(onChartClick);
+      if (raf) window.cancelAnimationFrame(raf);
+      chart.timeScale().unsubscribeVisibleLogicalRangeChange(onRangeChange);
+      chart.timeScale().unsubscribeSizeChange(onSizeChange);
+      window.removeEventListener('resize', onSizeChange);
       button.removeEventListener('click', onToggle);
       toolButtons.forEach(item => item.removeEventListener('click', onTool));
       undo.removeEventListener('click', onUndo);
       clear.removeEventListener('click', onClear);
-      if (primitive) {
-        series.detachPrimitive(primitive);
-        primitive = null;
-      }
-      setTool(null);
+      chartElement.removeEventListener('pointerdown', onPointerDown);
+      chartElement.removeEventListener('pointermove', onPointerMove);
+      chartElement.removeEventListener('pointerup', onPointerUp);
+      chartElement.removeEventListener('pointercancel', onPointerUp);
+      chart.clearCrosshairPosition();
+      canvas.remove();
       setPalette(false);
+      setTool(null);
     },
   };
 }
