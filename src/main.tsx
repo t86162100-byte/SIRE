@@ -26,7 +26,6 @@ import './quoteListFullHeight';
 import './chartDefaults';
 import './sireLoadingOverlay';
 import './sireChatLoader';
-import './pricePaneVerticalZoom';
 import './nativeCandlestickBridge';
 
 createRoot(document.getElementById('root')!).render(
