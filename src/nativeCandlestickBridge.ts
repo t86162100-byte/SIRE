@@ -128,8 +128,6 @@ function sync(bridge: Bridge, stage: HTMLElement, svg: SVGElement) {
   });
 
   if (!bridge.initialized || !previousRange) {
-    // Establish a sensible trading-chart starting view without fitContent().
-    // fitContent() makes a tiny dataset fill the viewport and creates giant candles.
     const visibleSlots = Math.max(24, Math.floor(bridge.host.clientWidth / barSpacing));
     const from = Math.max(-rightPadding, bars.length - visibleSlots);
     const to = bars.length + rightPadding;
@@ -138,8 +136,6 @@ function sync(bridge: Bridge, stage: HTMLElement, svg: SVGElement) {
     return;
   }
 
-  // Preserve the user's zoom/pan across React/SVG updates. If the latest bar was
-  // visible at the right edge, move the range forward with newly appended bars.
   const delta = bars.length - previousCount;
   const shift = wasAtRightEdge && delta > 0 ? delta : 0;
   timeScale.setVisibleLogicalRange({
@@ -200,8 +196,6 @@ function mount(stage: HTMLElement, svg: SVGElement) {
       shiftVisibleRangeOnNewBar: true,
     },
     crosshair: { mode: 0 },
-    // Trading-chart style interaction: mouse drag pans, wheel zooms the
-    // horizontal candle spacing, and touch pinch zooms while swiping pans.
     handleScroll: {
       mouseWheel: false,
       pressedMouseMove: true,
@@ -245,6 +239,84 @@ function mount(stage: HTMLElement, svg: SVGElement) {
     initialized: false,
     barCount: 0,
   };
+
+  // Lightweight Charts owns the actual horizontal and vertical scale behavior.
+  // The right-edge gesture strip uses the official price-scale range API so the
+  // old SVG transform/scale implementation is not involved at all.
+  const priceGesture = document.createElement('div');
+  priceGesture.className = 'sire-native-price-scale-gesture';
+  Object.assign(priceGesture.style, {
+    position: 'absolute',
+    top: '0',
+    right: '0',
+    width: '56px',
+    height: 'calc(100% - 24px)',
+    pointerEvents: 'auto',
+    touchAction: 'none',
+    background: 'transparent',
+    cursor: 'ns-resize',
+    zIndex: '5',
+  });
+
+  let dragStartY = 0;
+  let dragRange: { from: number; to: number } | null = null;
+  let dragging = false;
+
+  const priceScale = () => bridge.series.priceScale();
+
+  const beginPriceDrag = (event: PointerEvent) => {
+    const range = priceScale().getVisibleRange();
+    if (!range) return;
+    priceScale().setAutoScale(false);
+    dragStartY = event.clientY;
+    dragRange = { from: range.from, to: range.to };
+    dragging = true;
+    priceGesture.setPointerCapture(event.pointerId);
+    event.preventDefault();
+  };
+
+  const movePriceDrag = (event: PointerEvent) => {
+    if (!dragging || !dragRange) return;
+    const span = Math.max(Math.abs(dragRange.to - dragRange.from), Number.EPSILON);
+    const factor = Math.max(0.25, Math.min(4, Math.exp((event.clientY - dragStartY) / 220)));
+    const center = (dragRange.from + dragRange.to) / 2;
+    const nextSpan = span * factor;
+    priceScale().setVisibleRange({
+      from: center - nextSpan / 2,
+      to: center + nextSpan / 2,
+    });
+  };
+
+  const endPriceDrag = (event: PointerEvent) => {
+    if (!dragging) return;
+    dragging = false;
+    dragRange = null;
+    if (priceGesture.hasPointerCapture(event.pointerId)) priceGesture.releasePointerCapture(event.pointerId);
+  };
+
+  priceGesture.addEventListener('pointerdown', beginPriceDrag);
+  priceGesture.addEventListener('pointermove', movePriceDrag);
+  priceGesture.addEventListener('pointerup', endPriceDrag);
+  priceGesture.addEventListener('pointercancel', endPriceDrag);
+  priceGesture.addEventListener('dblclick', () => priceScale().setAutoScale(true));
+  priceGesture.addEventListener('wheel', event => {
+    const range = priceScale().getVisibleRange();
+    if (!range) return;
+    event.preventDefault();
+    priceScale().setAutoScale(false);
+    const span = Math.max(Math.abs(range.to - range.from), Number.EPSILON);
+    const factor = Math.exp(event.deltaY * 0.0015);
+    const nextSpan = Math.max(span * 0.2, Math.min(span * 5, span * factor));
+    const rect = priceGesture.getBoundingClientRect();
+    const ratio = Math.max(0, Math.min(1, (event.clientY - rect.top) / Math.max(rect.height, 1)));
+    const anchor = range.to - (range.to - range.from) * ratio;
+    priceScale().setVisibleRange({
+      from: anchor - nextSpan * (1 - ratio),
+      to: anchor + nextSpan * ratio,
+    });
+  }, { passive: false });
+
+  host.appendChild(priceGesture);
 
   bridges.set(svg, bridge);
   bridge.observer.observe(svg, {
