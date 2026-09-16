@@ -1,5 +1,8 @@
 const STYLE_ID = 'sire-quote-instrument-cards-style';
-const WS_URL = 'wss://ws.binaryws.com/websockets/v3';
+const WS_URLS = [
+  'wss://api.derivws.com/trading/v1/options/ws/public',
+  'wss://ws.binaryws.com/websockets/v3',
+];
 
 type QuoteState = {
   quote: number;
@@ -11,6 +14,7 @@ type QuoteState = {
 
 const quotes = new Map<string, QuoteState>();
 let socket: WebSocket | null = null;
+let socketUrlIndex = 0;
 let reconnectTimer = 0;
 let observer: MutationObserver | null = null;
 
@@ -44,16 +48,16 @@ function installStyles() {
       border-radius: inherit;
       pointer-events: none;
       border: 1px solid transparent;
-      opacity: .85;
+      opacity: .9;
       transition: border-color .22s ease, box-shadow .22s ease !important;
     }
     .sire-tab-quote .symbol-list .symbol-row[data-price-state="up"]::before {
-      border-color: rgba(45,235,139,.82);
-      box-shadow: 0 0 14px rgba(45,235,139,.28), 0 0 32px rgba(45,235,139,.12) inset;
+      border-color: rgba(45,235,139,.88);
+      box-shadow: 0 0 16px rgba(45,235,139,.34), 0 0 34px rgba(45,235,139,.14) inset;
     }
     .sire-tab-quote .symbol-list .symbol-row[data-price-state="down"]::before {
-      border-color: rgba(255,72,88,.82);
-      box-shadow: 0 0 14px rgba(255,72,88,.28), 0 0 32px rgba(255,72,88,.12) inset;
+      border-color: rgba(255,72,88,.88);
+      box-shadow: 0 0 16px rgba(255,72,88,.34), 0 0 34px rgba(255,72,88,.14) inset;
     }
     .sire-tab-quote .symbol-list .symbol-row[data-price-state="flat"]::before {
       border-color: rgba(110,150,255,.32);
@@ -88,14 +92,16 @@ function installStyles() {
       grid-row: 1;
       align-self: start;
       text-align: right;
-      font-size: 18px;
-      font-weight: 850;
-      line-height: 1.15;
+      min-width: 82px;
+      font-size: 18px !important;
+      font-weight: 900 !important;
+      line-height: 1.15 !important;
       font-variant-numeric: tabular-nums;
       white-space: nowrap;
     }
-    .sire-tab-quote .symbol-list .symbol-row[data-price-state="up"] .sire-quote-price { color: #52f39a; }
-    .sire-tab-quote .symbol-list .symbol-row[data-price-state="down"] .sire-quote-price { color: #ff6674; }
+    .sire-tab-quote .symbol-list .symbol-row[data-price-state="up"] .sire-quote-price { color: #52f39a !important; }
+    .sire-tab-quote .symbol-list .symbol-row[data-price-state="down"] .sire-quote-price { color: #ff6674 !important; }
+    .sire-tab-quote .symbol-list .symbol-row[data-price-state="flat"] .sire-quote-price { color: rgba(245,249,255,.92) !important; }
     .sire-tab-quote .symbol-list .symbol-row .sire-quote-details {
       grid-column: 1 / -1;
       grid-row: 2;
@@ -110,8 +116,8 @@ function installStyles() {
       font-variant-numeric: tabular-nums;
     }
     .sire-tab-quote .symbol-list .symbol-row .sire-quote-details b {
-      color: rgba(235,240,250,.86);
-      font-weight: 750;
+      color: rgba(235,240,250,.9);
+      font-weight: 800;
     }
     .sire-tab-quote .symbol-list .symbol-row > em {
       position: absolute !important;
@@ -127,7 +133,9 @@ function installStyles() {
 }
 
 function formatPrice(value: number | undefined) {
-  return Number.isFinite(value) ? Number(value).toLocaleString(undefined, { maximumFractionDigits: 8 }) : '—';
+  return Number.isFinite(value)
+    ? Number(value).toLocaleString(undefined, { maximumFractionDigits: 8 })
+    : '—';
 }
 
 function symbolsFromRows() {
@@ -136,56 +144,98 @@ function symbolsFromRows() {
     .filter(Boolean);
 }
 
+function ensureCardParts(row: HTMLButtonElement) {
+  let price = row.querySelector<HTMLElement>('.sire-quote-price');
+  let details = row.querySelector<HTMLElement>('.sire-quote-details');
+
+  if (!price) {
+    price = document.createElement('strong');
+    price.className = 'sire-quote-price';
+    price.textContent = '—';
+    row.appendChild(price);
+  }
+  if (!details) {
+    details = document.createElement('div');
+    details.className = 'sire-quote-details';
+    details.innerHTML = '<span>Bid <b>—</b></span><span>Ask <b>—</b></span><span>Live <b>—</b></span>';
+    row.appendChild(details);
+  }
+
+  return { price, details };
+}
+
 function decorateRows() {
   document.querySelectorAll<HTMLButtonElement>('.sire-tab-quote .symbol-list .symbol-row').forEach(row => {
-    if (row.dataset.quoteCardBound !== 'true') {
-      row.dataset.quoteCardBound = 'true';
-      const price = document.createElement('strong');
-      price.className = 'sire-quote-price';
-      price.textContent = '—';
-      const details = document.createElement('div');
-      details.className = 'sire-quote-details';
-      details.innerHTML = '<span>Bid <b>—</b></span><span>Ask <b>—</b></span><span>Live <b>—</b></span>';
-      row.append(price, details);
-    }
+    const { price, details } = ensureCardParts(row);
     const symbol = (row.querySelector('small')?.textContent || '').trim();
     const state = symbol ? quotes.get(symbol) : undefined;
-    const price = row.querySelector<HTMLElement>('.sire-quote-price');
-    const details = row.querySelector<HTMLElement>('.sire-quote-details');
-    if (!price || !details) return;
+
     if (!state) {
-      price.textContent = '—';
+      if (price.textContent !== '—') price.textContent = '—';
       row.removeAttribute('data-price-state');
       return;
     }
-    price.textContent = formatPrice(state.quote);
+
+    const nextPrice = formatPrice(state.quote);
+    if (price.textContent !== nextPrice) price.textContent = nextPrice;
+
     const delta = state.previous === undefined ? 0 : state.quote - state.previous;
-    row.dataset.priceState = delta > 0 ? 'up' : delta < 0 ? 'down' : 'flat';
-    details.innerHTML = `<span>Bid <b>${formatPrice(state.bid ?? state.quote)}</b></span><span>Ask <b>${formatPrice(state.ask ?? state.quote)}</b></span><span>Live <b>${state.epoch ? new Date(state.epoch * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '—'}</b></span>`;
+    const nextState = delta > 0 ? 'up' : delta < 0 ? 'down' : 'flat';
+    if (row.dataset.priceState !== nextState) row.dataset.priceState = nextState;
+
+    const nextDetails = `<span>Bid <b>${formatPrice(state.bid ?? state.quote)}</b></span><span>Ask <b>${formatPrice(state.ask ?? state.quote)}</b></span><span>Live <b>${state.epoch ? new Date(state.epoch * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '—'}</b></span>`;
+    if (details.innerHTML !== nextDetails) details.innerHTML = nextDetails;
   });
+}
+
+function closeSocket() {
+  if (socket) {
+    const current = socket;
+    socket = null;
+    try { current.close(); } catch { /* ignore */ }
+  }
 }
 
 function connect() {
   if (!document.querySelector('.sire-tab-quote .symbol-list')) return;
   if (socket && (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING)) return;
+
+  const url = WS_URLS[socketUrlIndex];
   try {
-    socket = new WebSocket(WS_URL);
+    socket = new WebSocket(url);
   } catch {
+    socket = null;
     return;
   }
+
   socket.onopen = () => {
-    symbolsFromRows().forEach(symbol => {
+    const symbols = Array.from(new Set(symbolsFromRows()));
+    symbols.forEach(symbol => {
       try { socket?.send(JSON.stringify({ ticks: symbol, subscribe: 1 })); } catch { /* ignore */ }
     });
   };
+
   socket.onmessage = event => {
     try {
       const data = JSON.parse(event.data) as Record<string, unknown>;
+      if (data.error) {
+        const error = data.error as Record<string, unknown>;
+        const message = String(error.message || '').toLowerCase();
+        if (message.includes('not authorized') || message.includes('not supported') || message.includes('invalid') || message.includes('ticks')) {
+          socketUrlIndex = (socketUrlIndex + 1) % WS_URLS.length;
+          closeSocket();
+          window.clearTimeout(reconnectTimer);
+          reconnectTimer = window.setTimeout(connect, 250);
+        }
+        return;
+      }
       if (data.msg_type !== 'tick' || !data.tick || typeof data.tick !== 'object') return;
+
       const tick = data.tick as Record<string, unknown>;
-      const symbol = String(tick.symbol || '');
+      const symbol = String(tick.symbol || tick.underlying_symbol || '');
       const quote = Number(tick.quote);
       if (!symbol || !Number.isFinite(quote)) return;
+
       const old = quotes.get(symbol);
       quotes.set(symbol, {
         quote,
@@ -197,18 +247,24 @@ function connect() {
       decorateRows();
     } catch { /* ignore malformed stream messages */ }
   };
+
   socket.onclose = () => {
     socket = null;
     window.clearTimeout(reconnectTimer);
-    reconnectTimer = window.setTimeout(connect, 3500);
+    reconnectTimer = window.setTimeout(connect, 1800);
   };
-  socket.onerror = () => socket?.close();
+
+  socket.onerror = () => {
+    socketUrlIndex = (socketUrlIndex + 1) % WS_URLS.length;
+    try { socket?.close(); } catch { /* ignore */ }
+  };
 }
 
 function install() {
   installStyles();
   decorateRows();
   connect();
+
   if (!observer) {
     observer = new MutationObserver(() => {
       decorateRows();
@@ -218,5 +274,8 @@ function install() {
   }
 }
 
-if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', install, { once: true });
-else install();
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', install, { once: true });
+} else {
+  install();
+}
