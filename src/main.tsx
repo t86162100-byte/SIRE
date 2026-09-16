@@ -11,6 +11,7 @@ import './glassInstrumentBridge';
 import './glassInstrumentSwipeFix';
 import './glassInstrumentHold';
 import './glassTimeframeSafe';
+import './glassIndicatorBridge';
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
