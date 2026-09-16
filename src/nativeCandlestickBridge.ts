@@ -101,22 +101,24 @@ function sync(bridge: Bridge, stage: HTMLElement, svg: SVGElement) {
   if (!bars.length) return;
 
   bridge.series.setData(bars);
-  bridge.chart.timeScale().applyOptions({
-    barSpacing: 6,
-    minBarSpacing: 3,
-    rightOffset: 0,
-    fixLeftEdge: true,
-    fixRightEdge: true,
-  });
-  bridge.chart.timeScale().fitContent();
 
-  const range = bridge.chart.timeScale().getVisibleLogicalRange();
-  if (range) {
-    bridge.chart.timeScale().setVisibleLogicalRange({
-      from: range.from + 0.15,
-      to: range.to - 0.15,
-    });
-  }
+  // Keep a real chart-style bar spacing. Do not call fitContent(): it expands
+  // the time scale to fill the whole viewport when only a few bars are present,
+  // which produces the oversized/stretched candles seen previously.
+  const barSpacing = 8;
+  const visibleSlots = Math.max(24, Math.floor(bridge.host.clientWidth / barSpacing));
+  const rightPadding = 2;
+  const from = Math.max(-rightPadding, bars.length - visibleSlots);
+  const to = bars.length + rightPadding;
+
+  bridge.chart.timeScale().applyOptions({
+    barSpacing,
+    minBarSpacing: 4,
+    rightOffset: rightPadding,
+    fixLeftEdge: false,
+    fixRightEdge: false,
+  });
+  bridge.chart.timeScale().setVisibleLogicalRange({ from, to });
 }
 
 function mount(stage: HTMLElement, svg: SVGElement) {
@@ -127,7 +129,7 @@ function mount(stage: HTMLElement, svg: SVGElement) {
   Object.assign(host.style, {
     position: 'absolute',
     pointerEvents: 'none',
-    zIndex: '2',
+    zIndex: '1',
     overflow: 'hidden',
   });
 
@@ -158,11 +160,11 @@ function mount(stage: HTMLElement, svg: SVGElement) {
     timeScale: {
       visible: false,
       borderVisible: false,
-      barSpacing: 6,
-      minBarSpacing: 3,
-      rightOffset: 0,
-      fixLeftEdge: true,
-      fixRightEdge: true,
+      barSpacing: 8,
+      minBarSpacing: 4,
+      rightOffset: 2,
+      fixLeftEdge: false,
+      fixRightEdge: false,
     },
     crosshair: { mode: 0 },
     handleScroll: false,
