@@ -7,16 +7,18 @@ function num(value: string | null) {
 
 function fixCandleGroup(group: Element) {
   const body = group.querySelector<SVGRectElement>('.candle-body');
-  const wick = group.querySelector<SVGLineElement>('.candle-wick');
+  const wick = group.querySelector<SVGLineElement>('.candle-wick:not(.candle-wick-upper):not(.candle-wick-lower)');
   if (!body || !wick) return;
 
-  const width = num(body.getAttribute('width'));
-  if (width > 0) {
+  const currentWidth = num(body.getAttribute('width'));
+  const originalWidth = num(body.getAttribute('data-candle-original-width')) || currentWidth;
+  if (originalWidth > 0) {
+    body.setAttribute('data-candle-original-width', String(originalWidth));
     const left = num(body.getAttribute('x'));
-    const center = left + width / 2;
-    const cleanWidth = Math.max(0.16, Math.min(width * 0.62, 0.44));
+    const currentCenter = left + currentWidth / 2;
+    const cleanWidth = Math.max(0.16, Math.min(originalWidth * 0.62, 0.44));
     body.setAttribute('width', String(cleanWidth));
-    body.setAttribute('x', String(center - cleanWidth / 2));
+    body.setAttribute('x', String(currentCenter - cleanWidth / 2));
     body.setAttribute('rx', '0');
   }
 
@@ -40,6 +42,7 @@ function fixCandleGroup(group: Element) {
     group.appendChild(lower);
   }
 
+  // SVG y grows downward: high is above the body and low is below it.
   upper.setAttribute('x1', String(x));
   upper.setAttribute('x2', String(x));
   upper.setAttribute('y1', String(yHigh));
