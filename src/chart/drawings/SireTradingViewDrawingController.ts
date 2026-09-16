@@ -241,6 +241,7 @@ export function attachSireTradingViewDrawingController(
   const clear = surface.querySelector<HTMLButtonElement>('[data-sire-drawing-clear]');
 
   let armed = false;
+  let activationTapComplete = false;
   let firstPoint: Point | null = null;
   let pendingPoint: Point | null = null;
   let pointerActive = false;
@@ -259,6 +260,7 @@ export function attachSireTradingViewDrawingController(
 
   const resetPlacement = () => {
     armed = false;
+    activationTapComplete = false;
     firstPoint = null;
     pendingPoint = null;
     primitive.clearPreview();
@@ -305,6 +307,7 @@ export function attachSireTradingViewDrawingController(
     try { element.setPointerCapture(event.pointerId); } catch { /* noop */ }
     chart.setCrosshairPosition(point.price, point.time, series);
     pendingPoint = point;
+    armed = true;
     primitive.setPreview(firstPoint ?? point, point);
   };
 
@@ -323,7 +326,7 @@ export function attachSireTradingViewDrawingController(
   };
 
   const onPointerUp = (event: PointerEvent) => {
-    if (!primitive.getTool() || !pointerActive) return;
+    if (!primitive.getTool() || !armed || !pointerActive) return;
     const point = pointFromEvent(chart, series, event) ?? pendingPoint;
     pointerActive = false;
     if (pointerId >= 0) {
@@ -336,8 +339,8 @@ export function attachSireTradingViewDrawingController(
     chart.setCrosshairPosition(point.price, point.time, series);
     pendingPoint = point;
 
-    if (!armed) {
-      armed = true;
+    if (!activationTapComplete) {
+      activationTapComplete = true;
       primitive.setPreview(point, point);
       setStatus('Crosshair active. Move it, then tap to set the first anchor.');
       return;
