@@ -11,6 +11,8 @@ let manualMessage = '';
 let manualLoading = false;
 let overlay: HTMLElement | null = null;
 let scheduled = false;
+let wasLoading = false;
+let finishTimer: number | undefined;
 
 function installStyles() {
   if (document.getElementById(STYLE_ID)) return;
@@ -18,46 +20,48 @@ function installStyles() {
   style.id = STYLE_ID;
   style.textContent = `
     #${OVERLAY_ID}{
-      position:fixed;left:0;right:0;top:0;bottom:88px;z-index:9990;
-      display:grid;place-items:center;pointer-events:auto;opacity:0;visibility:hidden;
-      background:rgba(4,6,11,.68);-webkit-backdrop-filter:blur(16px) saturate(125%);
-      backdrop-filter:blur(16px) saturate(125%);transition:opacity .35s ease,visibility .35s ease;
+      position:fixed;inset:0;z-index:9990;display:grid;place-items:center;
+      pointer-events:auto;opacity:0;visibility:hidden;
+      background:rgba(3,5,9,.58);-webkit-backdrop-filter:blur(18px) saturate(118%);
+      backdrop-filter:blur(18px) saturate(118%);transition:opacity .32s ease,visibility .32s ease;
       overflow:hidden;
     }
     #${OVERLAY_ID}.is-visible{opacity:1;visibility:visible}
-    #${OVERLAY_ID} .sire-loader{
-      position:relative;width:min(280px,72vw);min-height:180px;display:flex;
-      flex-direction:column;align-items:center;justify-content:center;gap:18px;
-      border:1px solid rgba(255,255,255,.13);border-radius:28px;
-      background:rgba(11,14,22,.46);box-shadow:0 24px 70px rgba(0,0,0,.45),
-      inset 0 1px 0 rgba(255,255,255,.11),0 0 42px rgba(82,145,255,.10);
+    #${OVERLAY_ID} .sire-loader{display:flex;align-items:center;justify-content:center;gap:0;min-width:120px;height:64px}
+    #${OVERLAY_ID} .sire-logo-orbit{position:relative;width:54px;height:54px;display:grid;place-items:center;flex:0 0 54px}
+    #${OVERLAY_ID} .sire-logo-orbit::before{
+      content:'';position:absolute;inset:2px;border:1px solid rgba(112,174,255,.28);border-radius:50%;
+      animation:sire-orbit 1.55s linear infinite;box-shadow:0 0 16px rgba(72,145,255,.14)
     }
-    #${OVERLAY_ID} .sire-logo-orbit{position:relative;width:92px;height:92px;display:grid;place-items:center}
-    #${OVERLAY_ID} .sire-logo-orbit::before,#${OVERLAY_ID} .sire-logo-orbit::after{
-      content:'';position:absolute;border:1px solid rgba(100,169,255,.45);border-radius:50%;
-      animation:sire-orbit 2.8s linear infinite;
-    }
-    #${OVERLAY_ID} .sire-logo-orbit::before{inset:4px;box-shadow:0 0 22px rgba(70,150,255,.25)}
-    #${OVERLAY_ID} .sire-logo-orbit::after{inset:15px;border-color:rgba(255,255,255,.22);animation-duration:1.9s;animation-direction:reverse}
     #${OVERLAY_ID} .sire-logo-mark{
-      position:relative;z-index:2;width:54px;height:54px;display:grid;place-items:center;
-      border-radius:17px;color:#fff;font-size:34px;font-weight:900;line-height:1;
-      background:linear-gradient(145deg,rgba(255,255,255,.16),rgba(255,255,255,.035));
-      border:1px solid rgba(255,255,255,.28);box-shadow:0 0 18px rgba(105,174,255,.40),
-      inset 0 1px 0 rgba(255,255,255,.25);animation:sire-logo-pulse 1.7s ease-in-out infinite;
+      position:relative;z-index:2;display:grid;place-items:center;width:30px;height:30px;
+      color:#fff;font-size:27px;font-weight:900;line-height:1;text-shadow:0 0 10px rgba(130,190,255,.85);
+      animation:sire-star 1.15s cubic-bezier(.45,0,.55,1) infinite;
+      transform-origin:center
     }
-    #${OVERLAY_ID} .sire-logo-mark::after{content:'';position:absolute;inset:-9px;border-radius:22px;
-      border:1px solid rgba(98,165,255,.20);animation:sire-ring 1.7s ease-out infinite}
-    #${OVERLAY_ID} .sire-loader-name{font-size:19px;font-weight:900;letter-spacing:.22em;color:rgba(255,255,255,.94)}
-    #${OVERLAY_ID} .sire-loader-message{font-size:12px;font-weight:650;letter-spacing:.04em;color:rgba(195,210,235,.72);text-align:center;min-height:16px}
-    #${OVERLAY_ID} .sire-loader-line{width:150px;height:2px;overflow:hidden;border-radius:9px;background:rgba(255,255,255,.08)}
-    #${OVERLAY_ID} .sire-loader-line::after{content:'';display:block;width:42%;height:100%;border-radius:inherit;
-      background:rgba(122,181,255,.95);box-shadow:0 0 12px rgba(88,161,255,.75);animation:sire-progress 1.15s ease-in-out infinite}
+    #${OVERLAY_ID} .sire-logo-mark::after{
+      content:'';position:absolute;inset:-7px;border-radius:50%;border:1px solid rgba(112,174,255,.18);
+      animation:sire-pulse 1.15s ease-out infinite
+    }
+    #${OVERLAY_ID} .sire-loader-name{
+      width:0;overflow:hidden;opacity:0;transform:translateX(-12px);margin-left:0;
+      white-space:nowrap;font-size:22px;font-weight:900;letter-spacing:.18em;color:rgba(255,255,255,.96);
+      transition:width .48s cubic-bezier(.22,1,.36,1),opacity .28s ease,transform .48s cubic-bezier(.22,1,.36,1),margin-left .48s ease
+    }
+    #${OVERLAY_ID}.is-complete .sire-logo-mark{animation:sire-finish .55s cubic-bezier(.22,1,.36,1) forwards}
+    #${OVERLAY_ID}.is-complete .sire-logo-orbit::before{animation:sire-finish-ring .55s ease-out forwards}
+    #${OVERLAY_ID}.is-complete .sire-loader-name{width:82px;opacity:1;transform:translateX(0);margin-left:10px}
+    #${OVERLAY_ID} .sire-loader-message,#${OVERLAY_ID} .sire-loader-line{display:none}
     @keyframes sire-orbit{to{transform:rotate(360deg)}}
-    @keyframes sire-ring{0%{transform:scale(.8);opacity:.8}100%{transform:scale(1.3);opacity:0}}
-    @keyframes sire-logo-pulse{0%,100%{transform:scale(.94) rotate(0deg);box-shadow:0 0 18px rgba(105,174,255,.28)}50%{transform:scale(1.06) rotate(4deg);box-shadow:0 0 30px rgba(105,174,255,.58)}}
-    @keyframes sire-progress{0%{transform:translateX(-120%)}100%{transform:translateX(360%)}}
-    @media(prefers-reduced-motion:reduce){#${OVERLAY_ID} *{animation:none!important}}
+    @keyframes sire-star{
+      0%{transform:rotate(0deg) scale(.82);opacity:.78}
+      45%{transform:rotate(165deg) scale(1.08);opacity:1}
+      100%{transform:rotate(360deg) scale(.82);opacity:.78}
+    }
+    @keyframes sire-pulse{0%{transform:scale(.7);opacity:.7}100%{transform:scale(1.35);opacity:0}}
+    @keyframes sire-finish{0%{transform:rotate(0deg) scale(1.04)}100%{transform:rotate(360deg) scale(1)}}
+    @keyframes sire-finish-ring{0%{transform:scale(1);opacity:.4}100%{transform:scale(1.45);opacity:0}}
+    @media(prefers-reduced-motion:reduce){#${OVERLAY_ID} *{animation:none!important;transition:none!important}}
   `;
   document.head.appendChild(style);
 }
@@ -70,10 +74,10 @@ function ensureOverlay() {
     overlay.id = OVERLAY_ID;
     overlay.setAttribute('aria-live', 'polite');
     overlay.innerHTML = `
-      <div class="sire-loader" role="status">
+      <div class="sire-loader" role="status" aria-label="Loading SIRE">
         <div class="sire-logo-orbit"><div class="sire-logo-mark">✦</div></div>
         <div class="sire-loader-name">SIRE</div>
-        <div class="sire-loader-message">Preparing your workspace…</div>
+        <div class="sire-loader-message"></div>
         <div class="sire-loader-line"></div>
       </div>`;
     document.body.appendChild(overlay);
@@ -101,10 +105,32 @@ function sync() {
   scheduled = false;
   const el = ensureOverlay();
   const active = manualLoading || shouldAutoLoad();
-  el.classList.toggle('is-visible', active);
-  el.classList.toggle(SHOW_CLASS, active);
-  const message = el.querySelector<HTMLElement>('.sire-loader-message');
-  if (message) message.textContent = manualMessage || (document.getElementById('root')?.classList.contains('sire-tab-quote') ? 'Loading live instruments…' : 'Opening live market data…');
+
+  if (finishTimer !== undefined && active) {
+    window.clearTimeout(finishTimer);
+    finishTimer = undefined;
+  }
+
+  if (active) {
+    wasLoading = true;
+    el.classList.remove('is-complete');
+    el.classList.add('is-visible', SHOW_CLASS);
+    return;
+  }
+
+  if (wasLoading) {
+    wasLoading = false;
+    el.classList.remove(SHOW_CLASS);
+    el.classList.add('is-visible', 'is-complete');
+    finishTimer = window.setTimeout(() => {
+      const current = document.getElementById(OVERLAY_ID);
+      if (current) current.classList.remove('is-visible', 'is-complete');
+      finishTimer = undefined;
+    }, 850);
+    return;
+  }
+
+  el.classList.remove('is-visible', 'is-complete', SHOW_CLASS);
 }
 
 function scheduleSync() {
@@ -114,8 +140,16 @@ function scheduleSync() {
 }
 
 const api: LoadingApi = {
-  show(message = 'Please wait…') { manualMessage = message; manualLoading = true; scheduleSync(); },
-  hide() { manualLoading = false; manualMessage = ''; scheduleSync(); },
+  show(message = 'Please wait…') {
+    manualMessage = message;
+    manualLoading = true;
+    scheduleSync();
+  },
+  hide() {
+    manualLoading = false;
+    manualMessage = '';
+    scheduleSync();
+  },
 };
 
 (window as Window & { SIRELoading?: LoadingApi }).SIRELoading = api;
@@ -125,7 +159,12 @@ function install() {
   ensureOverlay();
   scheduleSync();
   const observer = new MutationObserver(scheduleSync);
-  observer.observe(document.documentElement, { childList: true, subtree: true, attributes: true, attributeFilter: ['class'] });
+  observer.observe(document.documentElement, {
+    childList: true,
+    subtree: true,
+    attributes: true,
+    attributeFilter: ['class'],
+  });
 }
 
 if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', install, { once: true });
