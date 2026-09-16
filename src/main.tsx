@@ -25,6 +25,7 @@ import './quoteInstrumentCards';
 import './quoteListFullHeight';
 import './chartDefaults';
 import './sireLoadingOverlay';
+import './sireChatLoader';
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
