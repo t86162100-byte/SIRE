@@ -47,14 +47,14 @@ export default function NativeMarketChart({ candles, latest, autoScale = true }:
       if (disposed) return;
       const nav = document.getElementById('sire-bottom-tabs');
       const hostRect = host.getBoundingClientRect();
-      let bottom = 8;
+      let bottom = 0;
 
-      if (nav) {
+      if (nav && !nav.classList.contains('nav-auto-hidden')) {
         const navRect = nav.getBoundingClientRect();
         const navVisible = nav.getClientRects().length > 0 && navRect.height > 0 && navRect.bottom > hostRect.top;
         if (navVisible) {
           const gap = 8;
-          bottom = Math.max(8, hostRect.bottom - navRect.top + gap);
+          bottom = Math.max(0, hostRect.bottom - navRect.top + gap);
         }
       }
 
