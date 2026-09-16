@@ -46,18 +46,14 @@ export default function NativeMarketChart({ candles, latest, autoScale = true }:
     const syncBottomSpace = () => {
       if (disposed) return;
       const nav = document.getElementById('sire-bottom-tabs');
-      const hostRect = host.getBoundingClientRect();
       let bottom = 0;
 
       if (nav) {
         const navRect = nav.getBoundingClientRect();
         const computed = window.getComputedStyle(nav);
         const navHidden = nav.classList.contains('nav-auto-hidden') || computed.opacity === '0' || computed.pointerEvents === 'none';
-        const navVisible = !navHidden && nav.getClientRects().length > 0 && navRect.height > 0 && navRect.bottom > hostRect.top;
-        if (navVisible) {
-          const gap = 8;
-          bottom = Math.max(0, hostRect.bottom - navRect.top + gap);
-        }
+        const navVisible = !navHidden && nav.getClientRects().length > 0 && navRect.height > 0;
+        if (navVisible) bottom = Math.max(0, navRect.height + 8);
       }
 
       bar.style.bottom = `${bottom}px`;
@@ -72,7 +68,7 @@ export default function NativeMarketChart({ candles, latest, autoScale = true }:
     };
 
     const observeNav = () => {
-      if (navObserver) navObserver.disconnect();
+      navObserver?.disconnect();
       const nav = document.getElementById('sire-bottom-tabs');
       if (nav) {
         navObserver = new MutationObserver(scheduleSync);
@@ -91,7 +87,6 @@ export default function NativeMarketChart({ candles, latest, autoScale = true }:
     const resizeObserver = new ResizeObserver(scheduleSync);
     resizeObserver.observe(host);
     window.addEventListener('resize', scheduleSync);
-
     timer = window.setInterval(scheduleSync, 50);
     scheduleSync();
 
