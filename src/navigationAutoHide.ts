@@ -1,8 +1,6 @@
 const NAV_ID = 'sire-bottom-tabs';
 const STYLE_ID = 'sire-navigation-auto-hide-style';
 const HIDE_AFTER = 2600;
-type Tab = 'sire' | 'chart' | 'quote';
-const TABS: Tab[] = ['sire', 'chart', 'quote'];
 
 let hideTimer: number | undefined;
 let startX: number | null = null;
@@ -30,25 +28,11 @@ function reveal(ms = HIDE_AFTER) {
   }, ms);
 }
 
-function currentTab(): Tab {
-  const nav = document.getElementById(NAV_ID);
-  const active = nav?.querySelector('button.active') as HTMLButtonElement | null;
-  const tab = active?.dataset.tab as Tab | undefined;
-  return tab && TABS.includes(tab) ? tab : 'chart';
-}
-
-function goTo(tab: Tab) {
-  const nav = document.getElementById(NAV_ID);
-  const button = nav?.querySelector(`button[data-tab="${tab}"]`) as HTMLButtonElement | null;
-  if (button) button.click();
-}
-
 function bind() {
   style();
   const nav = document.getElementById(NAV_ID);
   if (!nav || nav.dataset.autoHideBound === 'true') return;
   nav.dataset.autoHideBound = 'true';
-
   nav.addEventListener('pointerdown', () => reveal(), { passive: true });
   nav.addEventListener('click', () => reveal(), { passive: true });
   reveal();
@@ -70,15 +54,9 @@ function wireSwipe() {
     startX = null;
     startY = null;
 
+    // Horizontal swipes only reveal the navigation. They NEVER change tabs.
     if (Math.abs(dx) < 55 || Math.abs(dx) <= Math.abs(dy) * 1.25) return;
-
-    const current = currentTab();
-    const index = TABS.indexOf(current);
-    const nextIndex = dx < 0 ? Math.min(index + 1, TABS.length - 1) : Math.max(index - 1, 0);
-
-    // A horizontal swipe is the explicit gesture that brings navigation back.
     reveal(3200);
-    if (nextIndex !== index) goTo(TABS[nextIndex]);
   }, { passive: true });
 }
 
