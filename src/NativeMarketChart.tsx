@@ -11,7 +11,6 @@ import {
 
 type Candle = { epoch: number; open: number; high: number; low: number; close: number };
 type Props = { candles: Candle[]; latest?: { epoch: number; quote: number; bid?: number; ask?: number } | null; autoScale?: boolean };
-
 type InstrumentPreview = { symbol: string; name: string };
 
 function toSeriesData(candles: Candle[]): CandlestickData[] {
@@ -127,19 +126,16 @@ export default function NativeMarketChart({ candles, latest, autoScale = true }:
             const symbol = row.querySelector('small');
             return { name: strong?.textContent?.trim() || '', symbol: symbol?.textContent?.trim() || '' };
           }).filter(item => item.name);
+          const active = rows.findIndex(row => row.classList.contains('active'));
           if (parsed.length) {
             instruments = parsed;
-            const active = rows.findIndex(row => row.classList.contains('active'));
             if (active >= 0) activeIndex = active;
-            renderPreview();
+            if (!selectOffset) renderPreview();
           }
           if (selectOffset && activeIndex >= 0) {
             const target = activeIndex + selectOffset;
             if (target >= 0 && target < rows.length) {
               rows[target].click();
-              activeIndex = target;
-              instruments = parsed;
-              renderPreview();
               window.setTimeout(() => document.body.classList.remove('sire-swipe-probing'), 120);
               resolve(true);
               return;
@@ -168,11 +164,12 @@ export default function NativeMarketChart({ candles, latest, autoScale = true }:
       const target = activeIndex + direction;
       setTrack(direction < 0 ? -48 : 48, true);
       window.setTimeout(() => {
-        void readPicker(direction).then(() => {
+        void readPicker(direction).then(success => {
+          if (!success) { setTrack(0, true); return; }
           activeIndex = target;
-          renderPreview();
+          window.setTimeout(() => renderPreview(), 115);
         });
-      }, 70);
+      }, 35);
     };
 
     const onPointerDown = (event: PointerEvent) => {
