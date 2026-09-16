@@ -165,8 +165,17 @@ export function attachSireNativeDrawingController(
   series: ISeriesApi<'Candlestick'>,
   root: HTMLElement,
 ): Controller {
-  const primitive = new DrawingPrimitive(chart, series);
-  series.attachPrimitive(primitive);
+  // Do not attach a custom primitive during the core chart mount. The chart
+  // must be able to render its native candlesticks independently. The drawing
+  // primitive is created only after the user explicitly chooses a tool.
+  let primitive: DrawingPrimitive | null = null;
+  const ensurePrimitive = () => {
+    if (!primitive) {
+      primitive = new DrawingPrimitive(chart, series);
+      series.attachPrimitive(primitive);
+    }
+    return primitive;
+  };
 
   const button = root.querySelector<HTMLButtonElement>('[data-sire-drawing-toggle]');
   const palette = root.querySelector<HTMLElement>('[data-sire-drawing-palette]');
@@ -176,7 +185,6 @@ export function attachSireNativeDrawingController(
   const toolButtons = Array.from(root.querySelectorAll<HTMLButtonElement>('[data-sire-drawing-tool]'));
 
   if (!button || !palette || !status || !undo || !clear) {
-    series.detachPrimitive(primitive);
     return { destroy: () => undefined };
   }
 
@@ -214,8 +222,6 @@ export function attachSireNativeDrawingController(
     if (opening) {
       if (!activeTool) setStatus('Choose a drawing tool');
     } else {
-      // Closing the palette also exits drawing mode. This prevents a hidden
-      // palette from leaving the chart armed for accidental taps.
       setTool(null);
     }
   };
@@ -233,9 +239,10 @@ export function attachSireNativeDrawingController(
     if (destroyed || !activeTool) return;
     const point = pointFromEvent(chart, series, param);
     if (!point) return;
+    const drawing = ensurePrimitive();
 
     if (activeTool === 'horizontal') {
-      primitive.add(activeTool, point);
+      drawing.add(activeTool, point);
       setStatus('Horizontal line placed');
       return;
     }
@@ -246,7 +253,7 @@ export function attachSireNativeDrawingController(
       return;
     }
 
-    primitive.add(activeTool, firstPoint, point);
+    drawing.add(activeTool, firstPoint, point);
     firstPoint = null;
     setStatus(`${TOOL_LABELS[activeTool]} placed — tap again to draw another`);
   };
@@ -255,7 +262,7 @@ export function attachSireNativeDrawingController(
     event.preventDefault();
     event.stopPropagation();
     firstPoint = null;
-    primitive.removeLast();
+    primitive?.removeLast();
     setStatus(activeTool ? `${TOOL_LABELS[activeTool]}: ready` : '');
   };
 
@@ -263,7 +270,7 @@ export function attachSireNativeDrawingController(
     event.preventDefault();
     event.stopPropagation();
     firstPoint = null;
-    primitive.clear();
+    primitive?.clear();
     setStatus(activeTool ? `${TOOL_LABELS[activeTool]}: ready` : '');
   };
 
@@ -282,7 +289,10 @@ export function attachSireNativeDrawingController(
       toolButtons.forEach(item => item.removeEventListener('click', onTool));
       undo.removeEventListener('click', onUndo);
       clear.removeEventListener('click', onClear);
-      series.detachPrimitive(primitive);
+      if (primitive) {
+        series.detachPrimitive(primitive);
+        primitive = null;
+      }
       setTool(null);
       setPalette(false);
     },
