@@ -69,8 +69,59 @@ export default function NativeMarketChart({ candles, latest, autoScale = true }:
     series.update({ time: candleTime as UTCTimestamp, open: last.open, high: Math.max(last.high, latest.quote), low: Math.min(last.low, latest.quote), close: latest.quote });
   }, [latest, candles]);
 
+  useEffect(() => {
+    const surface = hostRef.current?.parentElement;
+    if (!surface) return;
+    let startY = 0;
+    let startX = 0;
+    let tracking = false;
+    const updateLabel = () => {
+      const label = surface.querySelector<HTMLElement>('.native-bottom-instrument-name');
+      const source = document.querySelector<HTMLElement>('.native-instrument-picker strong');
+      if (label) label.textContent = source?.textContent?.trim() || 'Select instrument';
+    };
+    const changeInstrument = (direction: 1 | -1) => {
+      const picker = document.querySelector<HTMLButtonElement>('.native-instrument-picker');
+      if (!picker) return;
+      picker.click();
+      window.requestAnimationFrame(() => window.requestAnimationFrame(() => {
+        const rows = Array.from(document.querySelectorAll<HTMLButtonElement>('.native-instrument-sheet .sheet-row'));
+        const active = rows.findIndex(row => row.classList.contains('active'));
+        if (active < 0 || !rows.length) return;
+        const next = active + direction;
+        if (next >= 0 && next < rows.length) rows[next].click();
+        window.setTimeout(updateLabel, 0);
+      }));
+    };
+    const onPointerDown = (event: PointerEvent) => {
+      if (event.pointerType === 'mouse') return;
+      startX = event.clientX;
+      startY = event.clientY;
+      tracking = true;
+    };
+    const onPointerUp = (event: PointerEvent) => {
+      if (!tracking) return;
+      tracking = false;
+      const dy = event.clientY - startY;
+      const dx = event.clientX - startX;
+      if (Math.abs(dy) < 45 || Math.abs(dy) < Math.abs(dx) * 1.2) return;
+      changeInstrument(dy < 0 ? 1 : -1);
+    };
+    surface.addEventListener('pointerdown', onPointerDown);
+    surface.addEventListener('pointerup', onPointerUp);
+    const observer = new MutationObserver(updateLabel);
+    const pickerText = document.querySelector('.native-instrument-picker strong');
+    if (pickerText) observer.observe(pickerText, { childList: true, characterData: true, subtree: true });
+    updateLabel();
+    return () => {
+      surface.removeEventListener('pointerdown', onPointerDown);
+      surface.removeEventListener('pointerup', onPointerUp);
+      observer.disconnect();
+    };
+  }, []);
+
   return <div className="native-chart-touch-surface">
     <div ref={hostRef} className="sire-native-chart" aria-label="SIRE native market chart" />
-    <div className="native-bottom-glass-bar" aria-hidden="true" />
+    <div className="native-bottom-glass-bar" aria-hidden="true"><span className="native-bottom-instrument-name">Select instrument</span></div>
   </div>;
 }
