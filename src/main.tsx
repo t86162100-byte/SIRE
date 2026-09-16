@@ -21,6 +21,7 @@ import './navigationAutoHide';
 import './tabLayoutController';
 import './quoteLogoHeader';
 import './quoteLogoPositionFix';
+import './quoteInstrumentCards';
 import './chartDefaults';
 
 createRoot(document.getElementById('root')!).render(
