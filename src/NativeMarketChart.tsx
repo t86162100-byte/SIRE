@@ -31,19 +31,19 @@ export default function NativeMarketChart({ candles, latest, autoScale = true }:
   const seriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null);
   const initializedRef = useRef(false);
   const firstDataRef = useRef(false);
-  const navigationTimerRef = useRef<number | null>(null);
   const [navigationActive, setNavigationActive] = useState(false);
 
-  useEffect(() => () => { if (navigationTimerRef.current !== null) window.clearTimeout(navigationTimerRef.current); }, []);
+  useEffect(() => {
+    const nav = document.getElementById('sire-bottom-tabs');
+    if (!nav) return;
 
-  const showNavigationSpace = () => {
-    setNavigationActive(true);
-    if (navigationTimerRef.current !== null) window.clearTimeout(navigationTimerRef.current);
-    navigationTimerRef.current = window.setTimeout(() => {
-      setNavigationActive(false);
-      navigationTimerRef.current = null;
-    }, 2600);
-  };
+    const syncNavigation = () => setNavigationActive(!nav.classList.contains('nav-auto-hidden'));
+    syncNavigation();
+
+    const observer = new MutationObserver(syncNavigation);
+    observer.observe(nav, { attributes: true, attributeFilter: ['class'] });
+    return () => observer.disconnect();
+  }, []);
 
   useEffect(() => {
     const host = hostRef.current;
@@ -82,7 +82,7 @@ export default function NativeMarketChart({ candles, latest, autoScale = true }:
     series.update({ time: candleTime as UTCTimestamp, open: last.open, high: Math.max(last.high, latest.quote), low: Math.min(last.low, latest.quote), close: latest.quote });
   }, [latest, candles]);
 
-  return <div className="native-chart-touch-surface" onTouchStart={showNavigationSpace} onTouchMove={showNavigationSpace}>
+  return <div className="native-chart-touch-surface">
     <div ref={hostRef} className="sire-native-chart" aria-label="SIRE native market chart" />
     <div className={`native-bottom-glass-bar${navigationActive ? ' navigation-active' : ''}`} aria-hidden="true" />
   </div>;
