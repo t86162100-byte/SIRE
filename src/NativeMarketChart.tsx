@@ -49,9 +49,11 @@ export default function NativeMarketChart({ candles, latest, autoScale = true }:
       const hostRect = host.getBoundingClientRect();
       let bottom = 0;
 
-      if (nav && !nav.classList.contains('nav-auto-hidden')) {
+      if (nav) {
         const navRect = nav.getBoundingClientRect();
-        const navVisible = nav.getClientRects().length > 0 && navRect.height > 0 && navRect.bottom > hostRect.top;
+        const computed = window.getComputedStyle(nav);
+        const navHidden = nav.classList.contains('nav-auto-hidden') || computed.opacity === '0' || computed.pointerEvents === 'none';
+        const navVisible = !navHidden && nav.getClientRects().length > 0 && navRect.height > 0 && navRect.bottom > hostRect.top;
         if (navVisible) {
           const gap = 8;
           bottom = Math.max(0, hostRect.bottom - navRect.top + gap);
@@ -59,6 +61,9 @@ export default function NativeMarketChart({ candles, latest, autoScale = true }:
       }
 
       bar.style.bottom = `${bottom}px`;
+      bar.style.display = 'block';
+      bar.style.visibility = 'visible';
+      bar.style.opacity = '1';
     };
 
     const scheduleSync = () => {
