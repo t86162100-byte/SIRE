@@ -3,14 +3,13 @@ const STYLE_ID = 'sire-navigation-auto-hide-style';
 const HIDE_AFTER = 2600;
 
 let hideTimer: number | undefined;
-let lastRevealAt = 0;
-let navInitialized = false;
 let touchStartX: number | null = null;
 let touchStartY: number | null = null;
 let touchRevealed = false;
 let pointerStartX: number | null = null;
 let pointerStartY: number | null = null;
 let pointerRevealed = false;
+let bound = false;
 
 function style() {
   if (document.getElementById(STYLE_ID)) return;
@@ -26,7 +25,6 @@ function style() {
 function reveal(ms = HIDE_AFTER) {
   const nav = document.getElementById(NAV_ID);
   if (!nav) return;
-  lastRevealAt = Date.now();
   nav.classList.remove('nav-auto-hidden');
   if (hideTimer !== undefined) window.clearTimeout(hideTimer);
   hideTimer = window.setTimeout(() => {
@@ -35,12 +33,9 @@ function reveal(ms = HIDE_AFTER) {
   }, ms);
 }
 
-function enforceAutoHide() {
+function hideNow() {
   const nav = document.getElementById(NAV_ID);
-  if (!nav) return;
-  if (lastRevealAt > 0 && Date.now() - lastRevealAt >= HIDE_AFTER) {
-    nav.classList.add('nav-auto-hidden');
-  }
+  if (nav) nav.classList.add('nav-auto-hidden');
 }
 
 function isSwipeSurface(target: EventTarget | null) {
@@ -63,7 +58,6 @@ function wireTouchSwipe() {
     touchStartY = event.touches[0].clientY;
     touchRevealed = false;
   }, { passive: true });
-
   document.addEventListener('touchmove', event => {
     if (touchStartX === null || touchStartY === null || touchRevealed || event.touches.length !== 1) return;
     const dx = event.touches[0].clientX - touchStartX;
@@ -72,12 +66,7 @@ function wireTouchSwipe() {
     touchRevealed = true;
     reveal(3200);
   }, { passive: true });
-
-  const reset = () => {
-    touchStartX = null;
-    touchStartY = null;
-    touchRevealed = false;
-  };
+  const reset = () => { touchStartX = null; touchStartY = null; touchRevealed = false; };
   document.addEventListener('touchend', reset, { passive: true });
   document.addEventListener('touchcancel', reset, { passive: true });
 }
@@ -89,7 +78,6 @@ function wirePointerSwipe() {
     pointerStartY = event.clientY;
     pointerRevealed = false;
   }, { passive: true });
-
   document.addEventListener('pointermove', event => {
     if (pointerStartX === null || pointerStartY === null || pointerRevealed) return;
     if (event.pointerType !== 'touch' && event.pointerType !== 'pen') return;
@@ -99,42 +87,29 @@ function wirePointerSwipe() {
     pointerRevealed = true;
     reveal(3200);
   }, { passive: true });
-
-  const reset = () => {
-    pointerStartX = null;
-    pointerStartY = null;
-    pointerRevealed = false;
-  };
+  const reset = () => { pointerStartX = null; pointerStartY = null; pointerRevealed = false; };
   document.addEventListener('pointerup', reset, { passive: true });
   document.addEventListener('pointercancel', reset, { passive: true });
 }
 
-function bind() {
+function bindNav() {
   style();
   const nav = document.getElementById(NAV_ID);
   if (!nav || nav.dataset.autoHideBound === 'true') return;
   nav.dataset.autoHideBound = 'true';
   nav.addEventListener('pointerdown', () => reveal(), { passive: true });
   nav.addEventListener('click', () => reveal(), { passive: true });
-
-  if (!navInitialized) {
-    navInitialized = true;
-    reveal();
-  } else {
-    // If React recreates the navigation while Quote is rendering, preserve
-    // the auto-hidden state instead of making the new copy stay visible.
-    nav.classList.add('nav-auto-hidden');
-  }
 }
 
 function install() {
   style();
-  bind();
+  bindNav();
   wireTouchSwipe();
   wirePointerSwipe();
-  const observer = new MutationObserver(() => bind());
+  // Start hidden after initial render, including Quote.
+  window.setTimeout(hideNow, HIDE_AFTER);
+  const observer = new MutationObserver(() => bindNav());
   observer.observe(document.documentElement, { childList: true, subtree: true });
-  window.setInterval(enforceAutoHide, 300);
 }
 
 if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', install, { once: true });
