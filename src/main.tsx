@@ -16,6 +16,7 @@ import './glassIndicatorIconFix';
 import './glassTimeframeStyleFix';
 import './glassDrawIconFix';
 import './glassDrawBridge';
+import './glassToolsBridge';
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
