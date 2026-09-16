@@ -20,6 +20,7 @@ import './glassToolsBridge';
 import './navigationAutoHide';
 import './tabLayoutController';
 import './quoteLogoHeader';
+import './quoteLogoPositionFix';
 import './chartDefaults';
 
 createRoot(document.getElementById('root')!).render(
