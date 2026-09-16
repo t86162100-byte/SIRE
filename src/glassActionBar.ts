@@ -184,10 +184,10 @@ function installStyles() {
     #${BAR_ID} .glass-action-label{overflow:visible;text-overflow:clip;display:block}
     #${BAR_ID} .glass-action[data-action="symbol"]{min-width:126px;padding:0 13px;overflow:hidden}
     #${BAR_ID} .glass-action[data-action="symbol"] .glass-action-icon{display:none}
-    #${BAR_ID} .symbol-viewport{position:relative;display:block;flex:1 1 auto;width:100%;height:22px;line-height:22px;min-width:0;overflow:hidden;font-weight:800;letter-spacing:.02em}
+    #${BAR_ID} .symbol-viewport{position:relative;display:block;flex:1 1 auto;width:100%;height:22px;line-height:22px;min-width:0;overflow:hidden;font-size:18px;font-weight:900;letter-spacing:.01em}
     #${BAR_ID} .symbol-viewport .glass-action-label{position:absolute;left:0;right:0;top:0;width:100%;white-space:nowrap;text-align:center;will-change:transform}
     #${BAR_ID} .symbol-viewport .symbol-next{transform:translate3d(0,100%,0)}
-    @media(max-width:520px){#${BAR_ID}{bottom:calc(max(6px,env(safe-area-inset-bottom)) + 56px);width:calc(100vw - 20px);height:48px;padding:4px 5px;border-radius:16px;gap:3px}#${BAR_ID} .glass-action{height:38px;padding:0 10px;gap:4px;font-size:8px;letter-spacing:.06em}#${BAR_ID} .glass-action-icon{font-size:14px}#${BAR_ID} .glass-action[data-action="symbol"]{min-width:126px;padding:0 10px}#${BAR_ID} .symbol-viewport{font-size:9px}}
+    @media(max-width:520px){#${BAR_ID}{bottom:calc(max(6px,env(safe-area-inset-bottom)) + 56px);width:calc(100vw - 20px);height:48px;padding:4px 5px;border-radius:16px;gap:3px}#${BAR_ID} .glass-action{height:38px;padding:0 10px;gap:4px;font-size:8px;letter-spacing:.06em}#${BAR_ID} .glass-action-icon{font-size:14px}#${BAR_ID} .glass-action[data-action="symbol"]{min-width:126px;padding:0 10px}#${BAR_ID} .symbol-viewport{font-size:18px;font-weight:900}}
   `;
   document.head.appendChild(style);
 }
