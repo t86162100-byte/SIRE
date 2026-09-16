@@ -3,8 +3,12 @@ const STYLE_ID = 'sire-navigation-auto-hide-style';
 const HIDE_AFTER = 2600;
 
 let hideTimer: number | undefined;
-let startX: number | null = null;
-let startY: number | null = null;
+let touchStartX: number | null = null;
+let touchStartY: number | null = null;
+let touchRevealed = false;
+let pointerStartX: number | null = null;
+let pointerStartY: number | null = null;
+let pointerRevealed = false;
 
 function style() {
   if (document.getElementById(STYLE_ID)) return;
@@ -28,6 +32,72 @@ function reveal(ms = HIDE_AFTER) {
   }, ms);
 }
 
+function isSwipeSurface(target: EventTarget | null) {
+  const el = target as HTMLElement | null;
+  if (!el) return false;
+  const quoteCard = el.closest('.sire-tab-quote .symbol-list .symbol-row');
+  if (el.closest(`#${NAV_ID},#sire-glass-action-bar,input,textarea,select`)) return false;
+  if (el.closest('button') && !quoteCard) return false;
+  return true;
+}
+
+function horizontalEnough(dx: number, dy: number) {
+  return Math.abs(dx) >= 48 && Math.abs(dx) > Math.abs(dy) * 1.12;
+}
+
+function wireTouchSwipe() {
+  document.addEventListener('touchstart', event => {
+    if (event.touches.length !== 1 || !isSwipeSurface(event.target)) return;
+    touchStartX = event.touches[0].clientX;
+    touchStartY = event.touches[0].clientY;
+    touchRevealed = false;
+  }, { passive: true });
+
+  document.addEventListener('touchmove', event => {
+    if (touchStartX === null || touchStartY === null || touchRevealed || event.touches.length !== 1) return;
+    const dx = event.touches[0].clientX - touchStartX;
+    const dy = event.touches[0].clientY - touchStartY;
+    if (!horizontalEnough(dx, dy)) return;
+    touchRevealed = true;
+    reveal(3200);
+  }, { passive: true });
+
+  const reset = () => {
+    touchStartX = null;
+    touchStartY = null;
+    touchRevealed = false;
+  };
+  document.addEventListener('touchend', reset, { passive: true });
+  document.addEventListener('touchcancel', reset, { passive: true });
+}
+
+function wirePointerSwipe() {
+  document.addEventListener('pointerdown', event => {
+    if (!isSwipeSurface(event.target)) return;
+    pointerStartX = event.clientX;
+    pointerStartY = event.clientY;
+    pointerRevealed = false;
+  }, { passive: true });
+
+  document.addEventListener('pointermove', event => {
+    if (pointerStartX === null || pointerStartY === null || pointerRevealed) return;
+    if (event.pointerType !== 'touch' && event.pointerType !== 'pen') return;
+    const dx = event.clientX - pointerStartX;
+    const dy = event.clientY - pointerStartY;
+    if (!horizontalEnough(dx, dy)) return;
+    pointerRevealed = true;
+    reveal(3200);
+  }, { passive: true });
+
+  const reset = () => {
+    pointerStartX = null;
+    pointerStartY = null;
+    pointerRevealed = false;
+  };
+  document.addEventListener('pointerup', reset, { passive: true });
+  document.addEventListener('pointercancel', reset, { passive: true });
+}
+
 function bind() {
   style();
   const nav = document.getElementById(NAV_ID);
@@ -38,36 +108,10 @@ function bind() {
   reveal();
 }
 
-function wireSwipe() {
-  document.addEventListener('touchstart', event => {
-    if (event.touches.length !== 1) return;
-    const target = event.target as HTMLElement | null;
-    const quoteCard = target?.closest('.sire-tab-quote .symbol-list .symbol-row');
-
-    // Keep the navigation/action controls isolated, but allow quote-card swipes.
-    if (target?.closest(`#${NAV_ID},#sire-glass-action-bar,input,textarea,select`)) return;
-    if (target?.closest('button') && !quoteCard) return;
-
-    startX = event.touches[0].clientX;
-    startY = event.touches[0].clientY;
-  }, { passive: true });
-
-  document.addEventListener('touchend', event => {
-    if (startX === null || startY === null) return;
-    const dx = event.changedTouches[0].clientX - startX;
-    const dy = event.changedTouches[0].clientY - startY;
-    startX = null;
-    startY = null;
-
-    // Horizontal swipes only reveal the navigation. They NEVER change tabs.
-    if (Math.abs(dx) < 55 || Math.abs(dx) <= Math.abs(dy) * 1.25) return;
-    reveal(3200);
-  }, { passive: true });
-}
-
 function install() {
   bind();
-  wireSwipe();
+  wireTouchSwipe();
+  wirePointerSwipe();
   const observer = new MutationObserver(() => bind());
   observer.observe(document.documentElement, { childList: true, subtree: true });
 }
