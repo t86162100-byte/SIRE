@@ -22,6 +22,7 @@ import './tabLayoutController';
 import './quoteLogoHeader';
 import './quoteLogoPositionFix';
 import './quoteInstrumentCards';
+import './quoteListFullHeight';
 import './chartDefaults';
 
 createRoot(document.getElementById('root')!).render(
