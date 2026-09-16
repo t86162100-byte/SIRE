@@ -28,6 +28,7 @@ import './chartDefaults';
 import './sireLoadingOverlay';
 import './sireChatLoader';
 import './pricePaneVerticalZoom';
+import './candleRendererFix';
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
