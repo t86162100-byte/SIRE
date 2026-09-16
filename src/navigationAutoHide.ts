@@ -42,7 +42,12 @@ function wireSwipe() {
   document.addEventListener('touchstart', event => {
     if (event.touches.length !== 1) return;
     const target = event.target as HTMLElement | null;
-    if (target?.closest(`#${NAV_ID},#sire-glass-action-bar,input,textarea,select,button`)) return;
+    const quoteCard = target?.closest('.sire-tab-quote .symbol-list .symbol-row');
+
+    // Keep the navigation/action controls isolated, but allow quote-card swipes.
+    if (target?.closest(`#${NAV_ID},#sire-glass-action-bar,input,textarea,select`)) return;
+    if (target?.closest('button') && !quoteCard) return;
+
     startX = event.touches[0].clientX;
     startY = event.touches[0].clientY;
   }, { passive: true });
