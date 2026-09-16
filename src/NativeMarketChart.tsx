@@ -12,6 +12,8 @@ import {
 type Candle = { epoch: number; open: number; high: number; low: number; close: number };
 type Props = { candles: Candle[]; latest?: { epoch: number; quote: number; bid?: number; ask?: number } | null; autoScale?: boolean };
 
+type InstrumentPreview = { symbol: string; name: string };
+
 function toSeriesData(candles: Candle[]): CandlestickData[] {
   const sorted = candles.filter(candle => Number.isFinite(candle.epoch) && Number.isFinite(candle.open) && Number.isFinite(candle.high) && Number.isFinite(candle.low) && Number.isFinite(candle.close)).slice().sort((a, b) => a.epoch - b.epoch);
   const unique: CandlestickData[] = [];
@@ -72,56 +74,175 @@ export default function NativeMarketChart({ candles, latest, autoScale = true }:
   useEffect(() => {
     const surface = hostRef.current?.parentElement;
     if (!surface) return;
+    const bar = surface.querySelector<HTMLElement>('.native-bottom-glass-bar');
+    const viewport = surface.querySelector<HTMLElement>('.native-bottom-instrument-viewport');
+    const track = surface.querySelector<HTMLElement>('.native-bottom-instrument-track');
+    const currentLabel = surface.querySelector<HTMLElement>('.native-bottom-instrument-current');
+    const previousLabel = surface.querySelector<HTMLElement>('.native-bottom-instrument-previous');
+    const nextLabel = surface.querySelector<HTMLElement>('.native-bottom-instrument-next');
+    if (!bar || !viewport || !track || !currentLabel || !previousLabel || !nextLabel) return;
+
     let startY = 0;
     let startX = 0;
+    let dragOffset = 0;
     let tracking = false;
-    const updateLabel = () => {
-      const label = surface.querySelector<HTMLElement>('.native-bottom-instrument-name');
-      const source = document.querySelector<HTMLElement>('.native-instrument-picker strong');
-      if (label) label.textContent = source?.textContent?.trim() || 'Select instrument';
+    let raf = 0;
+    let instruments: InstrumentPreview[] = [];
+    let activeIndex = -1;
+
+    const setTrack = (offset: number, animated = false) => {
+      track.style.transition = animated ? 'transform 180ms cubic-bezier(.22,.8,.24,1)' : 'none';
+      track.style.transform = `translate3d(0, calc(-48px + ${offset}px), 0)`;
     };
-    const changeInstrument = (direction: 1 | -1) => {
+
+    const renderPreview = () => {
+      const current = instruments[activeIndex];
+      const previous = activeIndex > 0 ? instruments[activeIndex - 1] : null;
+      const next = activeIndex >= 0 && activeIndex < instruments.length - 1 ? instruments[activeIndex + 1] : null;
+      currentLabel.textContent = current?.name || 'Select instrument';
+      previousLabel.textContent = previous?.name || '';
+      nextLabel.textContent = next?.name || '';
+      previousLabel.style.opacity = previous ? '1' : '0';
+      nextLabel.style.opacity = next ? '1' : '0';
+      setTrack(0);
+    };
+
+    const closePickerSilently = () => {
+      const done = document.querySelector<HTMLButtonElement>('.native-instrument-sheet .sheet-head button');
+      if (done) done.click();
+      else document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+      window.setTimeout(() => document.body.classList.remove('sire-swipe-probing'), 80);
+    };
+
+    const readPicker = (selectOffset?: -1 | 1) => {
       const picker = document.querySelector<HTMLButtonElement>('.native-instrument-picker');
-      if (!picker) return;
+      if (!picker) return Promise.resolve(false);
+      document.body.classList.add('sire-swipe-probing');
       picker.click();
-      window.requestAnimationFrame(() => window.requestAnimationFrame(() => {
-        const rows = Array.from(document.querySelectorAll<HTMLButtonElement>('.native-instrument-sheet .sheet-row'));
-        const active = rows.findIndex(row => row.classList.contains('active'));
-        if (active < 0 || !rows.length) return;
-        const next = active + direction;
-        if (next >= 0 && next < rows.length) rows[next].click();
-        window.setTimeout(updateLabel, 0);
-      }));
+      return new Promise<boolean>(resolve => {
+        window.requestAnimationFrame(() => window.requestAnimationFrame(() => {
+          const rows = Array.from(document.querySelectorAll<HTMLButtonElement>('.native-instrument-sheet .sheet-row'));
+          const parsed = rows.map(row => {
+            const strong = row.querySelector('b');
+            const symbol = row.querySelector('small');
+            return { name: strong?.textContent?.trim() || '', symbol: symbol?.textContent?.trim() || '' };
+          }).filter(item => item.name);
+          if (parsed.length) {
+            instruments = parsed;
+            const active = rows.findIndex(row => row.classList.contains('active'));
+            if (active >= 0) activeIndex = active;
+            renderPreview();
+          }
+          if (selectOffset && activeIndex >= 0) {
+            const target = activeIndex + selectOffset;
+            if (target >= 0 && target < rows.length) {
+              rows[target].click();
+              activeIndex = target;
+              instruments = parsed;
+              renderPreview();
+              window.setTimeout(() => document.body.classList.remove('sire-swipe-probing'), 120);
+              resolve(true);
+              return;
+            }
+          }
+          closePickerSilently();
+          resolve(Boolean(parsed.length));
+        }));
+      });
     };
+
+    const updateFromSource = () => {
+      const source = document.querySelector<HTMLElement>('.native-instrument-picker strong');
+      if (source && activeIndex < 0 && instruments.length) {
+        const index = instruments.findIndex(item => item.name === source.textContent?.trim());
+        if (index >= 0) { activeIndex = index; renderPreview(); }
+      }
+    };
+
+    const finishSwipe = (direction: -1 | 1) => {
+      if (activeIndex < 0 || (direction < 0 && activeIndex <= 0) || (direction > 0 && activeIndex >= instruments.length - 1)) {
+        setTrack(0, true);
+        window.setTimeout(() => setTrack(0), 190);
+        return;
+      }
+      const target = activeIndex + direction;
+      setTrack(direction < 0 ? -48 : 48, true);
+      window.setTimeout(() => {
+        void readPicker(direction).then(() => {
+          activeIndex = target;
+          renderPreview();
+        });
+      }, 70);
+    };
+
     const onPointerDown = (event: PointerEvent) => {
       if (event.pointerType === 'mouse') return;
       startX = event.clientX;
       startY = event.clientY;
+      dragOffset = 0;
       tracking = true;
+      viewport.setPointerCapture?.(event.pointerId);
+      if (!instruments.length) void readPicker();
+      bar.classList.add('instrument-swiping');
     };
+
+    const onPointerMove = (event: PointerEvent) => {
+      if (!tracking) return;
+      const dy = event.clientY - startY;
+      const dx = event.clientX - startX;
+      if (Math.abs(dy) < Math.abs(dx) * 1.05) return;
+      dragOffset = Math.max(-44, Math.min(44, dy));
+      if (raf) cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(() => setTrack(dragOffset));
+      event.preventDefault();
+    };
+
     const onPointerUp = (event: PointerEvent) => {
       if (!tracking) return;
       tracking = false;
+      if (raf) cancelAnimationFrame(raf);
       const dy = event.clientY - startY;
       const dx = event.clientX - startX;
-      if (Math.abs(dy) < 45 || Math.abs(dy) < Math.abs(dx) * 1.2) return;
-      changeInstrument(dy < 0 ? 1 : -1);
+      const vertical = Math.abs(dy) >= Math.abs(dx) * 1.05;
+      const threshold = Math.max(18, viewport.clientHeight * .42);
+      if (!vertical || Math.abs(dy) < threshold) setTrack(0, true);
+      else finishSwipe(dy < 0 ? 1 : -1);
+      window.setTimeout(() => bar.classList.remove('instrument-swiping'), 210);
     };
-    surface.addEventListener('pointerdown', onPointerDown);
-    surface.addEventListener('pointerup', onPointerUp);
-    const observer = new MutationObserver(updateLabel);
+
+    viewport.addEventListener('pointerdown', onPointerDown, { passive: false });
+    viewport.addEventListener('pointermove', onPointerMove, { passive: false });
+    viewport.addEventListener('pointerup', onPointerUp, { passive: false });
+    viewport.addEventListener('pointercancel', onPointerUp, { passive: false });
+
+    const observer = new MutationObserver(updateFromSource);
     const pickerText = document.querySelector('.native-instrument-picker strong');
     if (pickerText) observer.observe(pickerText, { childList: true, characterData: true, subtree: true });
-    updateLabel();
+    updateFromSource();
+    const primeTimer = window.setTimeout(() => void readPicker(), 160);
+
     return () => {
-      surface.removeEventListener('pointerdown', onPointerDown);
-      surface.removeEventListener('pointerup', onPointerUp);
+      window.clearTimeout(primeTimer);
+      if (raf) cancelAnimationFrame(raf);
+      viewport.removeEventListener('pointerdown', onPointerDown);
+      viewport.removeEventListener('pointermove', onPointerMove);
+      viewport.removeEventListener('pointerup', onPointerUp);
+      viewport.removeEventListener('pointercancel', onPointerUp);
       observer.disconnect();
+      document.body.classList.remove('sire-swipe-probing');
     };
   }, []);
 
   return <div className="native-chart-touch-surface">
     <div ref={hostRef} className="sire-native-chart" aria-label="SIRE native market chart" />
-    <div className="native-bottom-glass-bar" aria-hidden="true"><span className="native-bottom-instrument-name">Select instrument</span></div>
+    <div className="native-bottom-glass-bar" aria-hidden="true">
+      <div className="native-bottom-instrument-viewport">
+        <div className="native-bottom-instrument-track">
+          <span className="native-bottom-instrument-side native-bottom-instrument-previous" />
+          <span className="native-bottom-instrument-current">Select instrument</span>
+          <span className="native-bottom-instrument-side native-bottom-instrument-next" />
+        </div>
+      </div>
+    </div>
   </div>;
 }
