@@ -26,6 +26,7 @@ import './quoteListFullHeight';
 import './chartDefaults';
 import './sireLoadingOverlay';
 import './sireChatLoader';
+import './pricePaneVerticalZoom';
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
