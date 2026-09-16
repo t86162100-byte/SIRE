@@ -79,7 +79,12 @@ export default function NativeMarketChart({ candles, latest, autoScale = true }:
     const currentLabel = surface.querySelector<HTMLElement>('.native-bottom-instrument-current');
     const previousLabel = surface.querySelector<HTMLElement>('.native-bottom-instrument-previous');
     const nextLabel = surface.querySelector<HTMLElement>('.native-bottom-instrument-next');
-    if (!bar || !viewport || !track || !currentLabel || !previousLabel || !nextLabel) return;
+    const timeframeViewport = surface.querySelector<HTMLElement>('.native-bottom-timeframe-viewport');
+    const timeframeTrack = surface.querySelector<HTMLElement>('.native-bottom-timeframe-track');
+    const timeframeCurrent = surface.querySelector<HTMLElement>('.native-bottom-timeframe-current');
+    const timeframePrevious = surface.querySelector<HTMLElement>('.native-bottom-timeframe-previous');
+    const timeframeNext = surface.querySelector<HTMLElement>('.native-bottom-timeframe-next');
+    if (!bar || !viewport || !track || !currentLabel || !previousLabel || !nextLabel || !timeframeViewport || !timeframeTrack || !timeframeCurrent || !timeframePrevious || !timeframeNext) return;
 
     let startY = 0;
     let startX = 0;
@@ -234,26 +239,153 @@ export default function NativeMarketChart({ candles, latest, autoScale = true }:
       window.setTimeout(() => bar.classList.remove('instrument-swiping'), 210);
     };
 
+    const getTimeframes = () => Array.from(surface.querySelectorAll<HTMLButtonElement>('.native-timeframes button')).map(button => ({ value: button.textContent?.trim() || '', button })).filter(item => item.value);
+    const currentTimeframeIndex = () => {
+      const frames = getTimeframes();
+      const index = frames.findIndex(item => item.button.classList.contains('active'));
+      return { frames, index };
+    };
+    const setTimeframeTrack = (offset: number, animated = false) => {
+      timeframeTrack.style.transition = animated ? 'transform 180ms cubic-bezier(.22,.8,.24,1)' : 'none';
+      timeframeTrack.style.transform = `translate3d(0, calc(-48px + ${offset}px), 0)`;
+    };
+    const renderTimeframePreview = () => {
+      const { frames, index } = currentTimeframeIndex();
+      const current = index >= 0 ? frames[index]?.value : '1m';
+      timeframeCurrent.textContent = current;
+      timeframePrevious.textContent = index > 0 ? frames[index - 1].value : '';
+      timeframeNext.textContent = index >= 0 && index < frames.length - 1 ? frames[index + 1].value : '';
+      timeframePrevious.style.opacity = index > 0 ? '1' : '0';
+      timeframeNext.style.opacity = index >= 0 && index < frames.length - 1 ? '1' : '0';
+      setTimeframeTrack(0);
+    };
+    const selectTimeframeOffset = (direction: -1 | 1) => {
+      const { frames, index } = currentTimeframeIndex();
+      const target = index + direction;
+      if (index < 0 || target < 0 || target >= frames.length) { setTimeframeTrack(0, true); return; }
+      setTimeframeTrack(direction < 0 ? -48 : 48, true);
+      window.setTimeout(() => {
+        frames[target].button.click();
+        window.setTimeout(renderTimeframePreview, 100);
+      }, 35);
+    };
+    const openTimeframeList = () => {
+      const frames = getTimeframes();
+      if (!frames.length) return;
+      const existing = document.querySelector<HTMLElement>('.native-bottom-timeframe-overlay');
+      existing?.remove();
+      const overlay = document.createElement('div');
+      overlay.className = 'native-bottom-timeframe-overlay';
+      const sheet = document.createElement('div');
+      sheet.className = 'native-bottom-timeframe-sheet';
+      const head = document.createElement('div');
+      head.className = 'native-bottom-timeframe-head';
+      head.innerHTML = '<span>TIMEFRAME</span><button type="button">Done</button>';
+      sheet.appendChild(head);
+      const list = document.createElement('div');
+      list.className = 'native-bottom-timeframe-list';
+      frames.forEach(({ value, button }) => {
+        const item = document.createElement('button');
+        item.type = 'button';
+        item.textContent = value;
+        item.className = button.classList.contains('active') ? 'active' : '';
+        item.addEventListener('click', () => { button.click(); overlay.remove(); window.setTimeout(renderTimeframePreview, 60); });
+        list.appendChild(item);
+      });
+      sheet.appendChild(list);
+      overlay.appendChild(sheet);
+      document.body.appendChild(overlay);
+      overlay.addEventListener('click', event => { if (event.target === overlay) overlay.remove(); });
+      head.querySelector('button')?.addEventListener('click', () => overlay.remove());
+    };
+    let timeframeStartY = 0;
+    let timeframeStartX = 0;
+    let timeframeTracking = false;
+    let timeframeOffset = 0;
+    let timeframeRaf = 0;
+    let timeframeLongPressTimer = 0;
+    let timeframeLongPressTriggered = false;
+    const cancelTimeframeHold = () => { if (timeframeLongPressTimer) window.clearTimeout(timeframeLongPressTimer); timeframeLongPressTimer = 0; };
+    const onTimeframeDown = (event: PointerEvent) => {
+      if (event.pointerType === 'mouse') return;
+      timeframeStartX = event.clientX;
+      timeframeStartY = event.clientY;
+      timeframeOffset = 0;
+      timeframeTracking = true;
+      timeframeLongPressTriggered = false;
+      cancelTimeframeHold();
+      timeframeViewport.setPointerCapture?.(event.pointerId);
+      bar.classList.add('timeframe-swiping');
+      timeframeLongPressTimer = window.setTimeout(() => {
+        if (!timeframeTracking) return;
+        timeframeLongPressTriggered = true;
+        timeframeTracking = false;
+        if (timeframeRaf) cancelAnimationFrame(timeframeRaf);
+        setTimeframeTrack(0, true);
+        bar.classList.remove('timeframe-swiping');
+        openTimeframeList();
+      }, 600);
+    };
+    const onTimeframeMove = (event: PointerEvent) => {
+      if (!timeframeTracking) return;
+      const dy = event.clientY - timeframeStartY;
+      const dx = event.clientX - timeframeStartX;
+      if (Math.hypot(dx, dy) > 12) cancelTimeframeHold();
+      if (Math.abs(dy) < Math.abs(dx) * 1.05) return;
+      timeframeOffset = Math.max(-44, Math.min(44, dy));
+      if (timeframeRaf) cancelAnimationFrame(timeframeRaf);
+      timeframeRaf = requestAnimationFrame(() => setTimeframeTrack(timeframeOffset));
+      event.preventDefault();
+    };
+    const onTimeframeUp = (event: PointerEvent) => {
+      cancelTimeframeHold();
+      if (timeframeLongPressTriggered) { timeframeLongPressTriggered = false; return; }
+      if (!timeframeTracking) return;
+      timeframeTracking = false;
+      if (timeframeRaf) cancelAnimationFrame(timeframeRaf);
+      const dy = event.clientY - timeframeStartY;
+      const dx = event.clientX - timeframeStartX;
+      const vertical = Math.abs(dy) >= Math.abs(dx) * 1.05;
+      const threshold = Math.max(18, timeframeViewport.clientHeight * .42);
+      if (!vertical || Math.abs(dy) < threshold) setTimeframeTrack(0, true);
+      else selectTimeframeOffset(dy < 0 ? 1 : -1);
+      window.setTimeout(() => bar.classList.remove('timeframe-swiping'), 210);
+    };
+
     viewport.addEventListener('pointerdown', onPointerDown, { passive: false });
     viewport.addEventListener('pointermove', onPointerMove, { passive: false });
     viewport.addEventListener('pointerup', onPointerUp, { passive: false });
     viewport.addEventListener('pointercancel', onPointerUp, { passive: false });
+    timeframeViewport.addEventListener('pointerdown', onTimeframeDown, { passive: false });
+    timeframeViewport.addEventListener('pointermove', onTimeframeMove, { passive: false });
+    timeframeViewport.addEventListener('pointerup', onTimeframeUp, { passive: false });
+    timeframeViewport.addEventListener('pointercancel', onTimeframeUp, { passive: false });
 
-    const observer = new MutationObserver(updateFromSource);
+    const observer = new MutationObserver(() => { updateFromSource(); renderTimeframePreview(); });
     const pickerText = document.querySelector('.native-instrument-picker strong');
     if (pickerText) observer.observe(pickerText, { childList: true, characterData: true, subtree: true });
+    const timeframeBar = surface.querySelector('.native-timeframes');
+    if (timeframeBar) observer.observe(timeframeBar, { childList: true, subtree: true, attributes: true, attributeFilter: ['class'] });
     updateFromSource();
+    renderTimeframePreview();
     const primeTimer = window.setTimeout(() => void readPicker(), 160);
 
     return () => {
       window.clearTimeout(primeTimer);
       cancelLongPress();
+      cancelTimeframeHold();
       if (raf) cancelAnimationFrame(raf);
+      if (timeframeRaf) cancelAnimationFrame(timeframeRaf);
       viewport.removeEventListener('pointerdown', onPointerDown);
       viewport.removeEventListener('pointermove', onPointerMove);
       viewport.removeEventListener('pointerup', onPointerUp);
       viewport.removeEventListener('pointercancel', onPointerUp);
+      timeframeViewport.removeEventListener('pointerdown', onTimeframeDown);
+      timeframeViewport.removeEventListener('pointermove', onTimeframeMove);
+      timeframeViewport.removeEventListener('pointerup', onTimeframeUp);
+      timeframeViewport.removeEventListener('pointercancel', onTimeframeUp);
       observer.disconnect();
+      document.querySelector('.native-bottom-timeframe-overlay')?.remove();
       document.body.classList.remove('sire-swipe-probing');
     };
   }, []);
@@ -266,6 +398,13 @@ export default function NativeMarketChart({ candles, latest, autoScale = true }:
           <span className="native-bottom-instrument-side native-bottom-instrument-previous" />
           <span className="native-bottom-instrument-current">Select instrument</span>
           <span className="native-bottom-instrument-side native-bottom-instrument-next" />
+        </div>
+      </div>
+      <div className="native-bottom-timeframe-viewport">
+        <div className="native-bottom-timeframe-track">
+          <span className="native-bottom-timeframe-side native-bottom-timeframe-previous" />
+          <span className="native-bottom-timeframe-current">1m</span>
+          <span className="native-bottom-timeframe-side native-bottom-timeframe-next" />
         </div>
       </div>
     </div>
