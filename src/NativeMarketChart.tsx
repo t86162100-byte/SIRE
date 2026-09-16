@@ -34,71 +34,12 @@ export default function NativeMarketChart({ candles, latest, autoScale = true }:
   const firstDataRef = useRef(false);
 
   useEffect(() => {
-    const host = hostRef.current;
     const bar = barRef.current;
-    if (!host || !bar) return;
-
-    let disposed = false;
-    let frame = 0;
-    let timer = 0;
-    let navObserver: MutationObserver | null = null;
-
-    const syncBottomSpace = () => {
-      if (disposed) return;
-      const nav = document.getElementById('sire-bottom-tabs');
-      let bottom = 0;
-
-      if (nav) {
-        const navRect = nav.getBoundingClientRect();
-        const computed = window.getComputedStyle(nav);
-        const navHidden = nav.classList.contains('nav-auto-hidden') || computed.opacity === '0' || computed.pointerEvents === 'none';
-        const navVisible = !navHidden && nav.getClientRects().length > 0 && navRect.height > 0;
-        if (navVisible) bottom = Math.max(0, navRect.height + 8);
-      }
-
-      bar.style.bottom = `${bottom}px`;
-      bar.style.display = 'block';
-      bar.style.visibility = 'visible';
-      bar.style.opacity = '1';
-    };
-
-    const scheduleSync = () => {
-      window.cancelAnimationFrame(frame);
-      frame = window.requestAnimationFrame(syncBottomSpace);
-    };
-
-    const observeNav = () => {
-      navObserver?.disconnect();
-      const nav = document.getElementById('sire-bottom-tabs');
-      if (nav) {
-        navObserver = new MutationObserver(scheduleSync);
-        navObserver.observe(nav, { attributes: true, attributeFilter: ['class', 'style'] });
-        scheduleSync();
-      }
-    };
-
-    const observer = new MutationObserver(() => {
-      observeNav();
-      scheduleSync();
-    });
-    observer.observe(document.documentElement, { childList: true, subtree: true });
-    observeNav();
-
-    const resizeObserver = new ResizeObserver(scheduleSync);
-    resizeObserver.observe(host);
-    window.addEventListener('resize', scheduleSync);
-    timer = window.setInterval(scheduleSync, 50);
-    scheduleSync();
-
-    return () => {
-      disposed = true;
-      window.cancelAnimationFrame(frame);
-      window.clearInterval(timer);
-      observer.disconnect();
-      navObserver?.disconnect();
-      resizeObserver.disconnect();
-      window.removeEventListener('resize', scheduleSync);
-    };
+    if (!bar) return;
+    bar.style.bottom = '0px';
+    bar.style.display = 'block';
+    bar.style.visibility = 'visible';
+    bar.style.opacity = '1';
   }, []);
 
   useEffect(() => {
