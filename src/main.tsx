@@ -19,6 +19,7 @@ import './glassDrawBridge';
 import './glassToolsBridge';
 import './navigationAutoHide';
 import './tabLayoutController';
+import './quoteLogoHeader';
 import './chartDefaults';
 
 createRoot(document.getElementById('root')!).render(
