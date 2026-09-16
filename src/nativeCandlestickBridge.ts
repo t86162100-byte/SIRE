@@ -99,6 +99,13 @@ function sync(bridge: Bridge, stage: HTMLElement, svg: SVGElement) {
     group.style.visibility = 'hidden';
   });
 
+  // The old SIRE price axis is only retained as an invisible OHLC calibration
+  // source. The visible price pane is now the native Lightweight Charts scale.
+  stage.querySelectorAll<HTMLElement>('.price-axis').forEach(axis => {
+    axis.style.opacity = '0';
+    axis.style.pointerEvents = 'none';
+  });
+
   const bars = readBars(stage, svg);
   if (!bars.length) return;
 
@@ -110,16 +117,11 @@ function sync(bridge: Bridge, stage: HTMLElement, svg: SVGElement) {
   bridge.series.setData(bars);
   bridge.barCount = bars.length;
 
-  const barSpacing = 8;
-  const minBarSpacing = 3;
-  const maxBarSpacing = 32;
-  const rightPadding = 2;
-
   timeScale.applyOptions({
-    barSpacing,
-    minBarSpacing,
-    maxBarSpacing,
-    rightOffset: rightPadding,
+    barSpacing: 8,
+    minBarSpacing: 3,
+    maxBarSpacing: 32,
+    rightOffset: 2,
     fixLeftEdge: false,
     fixRightEdge: false,
     lockVisibleTimeRangeOnResize: true,
@@ -128,9 +130,9 @@ function sync(bridge: Bridge, stage: HTMLElement, svg: SVGElement) {
   });
 
   if (!bridge.initialized || !previousRange) {
-    const visibleSlots = Math.max(24, Math.floor(bridge.host.clientWidth / barSpacing));
-    const from = Math.max(-rightPadding, bars.length - visibleSlots);
-    const to = bars.length + rightPadding;
+    const visibleSlots = Math.max(24, Math.floor(bridge.host.clientWidth / 8));
+    const from = Math.max(-2, bars.length - visibleSlots);
+    const to = bars.length + 2;
     timeScale.setVisibleLogicalRange({ from, to });
     bridge.initialized = true;
     return;
@@ -151,6 +153,7 @@ function mount(stage: HTMLElement, svg: SVGElement) {
   host.className = 'sire-native-candlestick-chart';
   Object.assign(host.style, {
     position: 'absolute',
+    inset: '0',
     pointerEvents: 'auto',
     zIndex: '1',
     overflow: 'hidden',
@@ -158,16 +161,6 @@ function mount(stage: HTMLElement, svg: SVGElement) {
     userSelect: 'none',
   });
 
-  const place = () => {
-    const svgRect = svg.getBoundingClientRect();
-    const stageRect = stage.getBoundingClientRect();
-    host.style.left = `${svgRect.left - stageRect.left}px`;
-    host.style.top = `${svgRect.top - stageRect.top}px`;
-    host.style.width = `${svgRect.width}px`;
-    host.style.height = `${svgRect.height}px`;
-  };
-
-  place();
   stage.appendChild(host);
 
   const chart = createChart(host, {
@@ -181,7 +174,14 @@ function mount(stage: HTMLElement, svg: SVGElement) {
       horzLines: { visible: false },
     },
     leftPriceScale: { visible: false },
-    rightPriceScale: { visible: false },
+    rightPriceScale: {
+      visible: true,
+      borderVisible: true,
+      minimumWidth: 64,
+      alignLabels: true,
+      ticksVisible: false,
+      autoScale: true,
+    },
     timeScale: {
       visible: false,
       borderVisible: false,
@@ -205,7 +205,7 @@ function mount(stage: HTMLElement, svg: SVGElement) {
     handleScale: {
       mouseWheel: true,
       pinch: true,
-      axisPressedMouseMove: false,
+      axisPressedMouseMove: true,
       axisDoubleClickReset: true,
     },
     kineticScroll: {
@@ -224,7 +224,7 @@ function mount(stage: HTMLElement, svg: SVGElement) {
     wickUpColor: '#26a69a',
     wickDownColor: '#ef5350',
     priceLineVisible: false,
-    lastValueVisible: false,
+    lastValueVisible: true,
   });
 
   const bridge: Bridge = {
@@ -232,91 +232,10 @@ function mount(stage: HTMLElement, svg: SVGElement) {
     chart,
     series,
     observer: new MutationObserver(() => requestAnimationFrame(() => sync(bridge, stage, svg))),
-    resize: new ResizeObserver(() => {
-      place();
-      requestAnimationFrame(() => sync(bridge, stage, svg));
-    }),
+    resize: new ResizeObserver(() => requestAnimationFrame(() => sync(bridge, stage, svg))),
     initialized: false,
     barCount: 0,
   };
-
-  // Lightweight Charts owns the actual horizontal and vertical scale behavior.
-  // The right-edge gesture strip uses the official price-scale range API so the
-  // old SVG transform/scale implementation is not involved at all.
-  const priceGesture = document.createElement('div');
-  priceGesture.className = 'sire-native-price-scale-gesture';
-  Object.assign(priceGesture.style, {
-    position: 'absolute',
-    top: '0',
-    right: '0',
-    width: '56px',
-    height: 'calc(100% - 24px)',
-    pointerEvents: 'auto',
-    touchAction: 'none',
-    background: 'transparent',
-    cursor: 'ns-resize',
-    zIndex: '5',
-  });
-
-  let dragStartY = 0;
-  let dragRange: { from: number; to: number } | null = null;
-  let dragging = false;
-
-  const priceScale = () => bridge.series.priceScale();
-
-  const beginPriceDrag = (event: PointerEvent) => {
-    const range = priceScale().getVisibleRange();
-    if (!range) return;
-    priceScale().setAutoScale(false);
-    dragStartY = event.clientY;
-    dragRange = { from: range.from, to: range.to };
-    dragging = true;
-    priceGesture.setPointerCapture(event.pointerId);
-    event.preventDefault();
-  };
-
-  const movePriceDrag = (event: PointerEvent) => {
-    if (!dragging || !dragRange) return;
-    const span = Math.max(Math.abs(dragRange.to - dragRange.from), Number.EPSILON);
-    const factor = Math.max(0.25, Math.min(4, Math.exp((event.clientY - dragStartY) / 220)));
-    const center = (dragRange.from + dragRange.to) / 2;
-    const nextSpan = span * factor;
-    priceScale().setVisibleRange({
-      from: center - nextSpan / 2,
-      to: center + nextSpan / 2,
-    });
-  };
-
-  const endPriceDrag = (event: PointerEvent) => {
-    if (!dragging) return;
-    dragging = false;
-    dragRange = null;
-    if (priceGesture.hasPointerCapture(event.pointerId)) priceGesture.releasePointerCapture(event.pointerId);
-  };
-
-  priceGesture.addEventListener('pointerdown', beginPriceDrag);
-  priceGesture.addEventListener('pointermove', movePriceDrag);
-  priceGesture.addEventListener('pointerup', endPriceDrag);
-  priceGesture.addEventListener('pointercancel', endPriceDrag);
-  priceGesture.addEventListener('dblclick', () => priceScale().setAutoScale(true));
-  priceGesture.addEventListener('wheel', event => {
-    const range = priceScale().getVisibleRange();
-    if (!range) return;
-    event.preventDefault();
-    priceScale().setAutoScale(false);
-    const span = Math.max(Math.abs(range.to - range.from), Number.EPSILON);
-    const factor = Math.exp(event.deltaY * 0.0015);
-    const nextSpan = Math.max(span * 0.2, Math.min(span * 5, span * factor));
-    const rect = priceGesture.getBoundingClientRect();
-    const ratio = Math.max(0, Math.min(1, (event.clientY - rect.top) / Math.max(rect.height, 1)));
-    const anchor = range.to - (range.to - range.from) * ratio;
-    priceScale().setVisibleRange({
-      from: anchor - nextSpan * (1 - ratio),
-      to: anchor + nextSpan * ratio,
-    });
-  }, { passive: false });
-
-  host.appendChild(priceGesture);
 
   bridges.set(svg, bridge);
   bridge.observer.observe(svg, {
