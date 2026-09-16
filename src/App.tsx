@@ -3,6 +3,7 @@ import { api } from '@appdeploy/client';
 import { Calendar, ChevronDown, Maximize2, Search, RotateCcw, Beaker } from 'lucide-react';
 import ResearchLab from './ResearchLab';
 import NativeMarketChart from './NativeMarketChart';
+import './nativeTerminal.css';
 
 type Instrument = {
   symbol: string;
@@ -142,8 +143,7 @@ export default function App() {
   useEffect(() => { timeframeRef.current = timeframe; }, [timeframe]);
 
   const loadCatalog = useCallback(async () => {
-    setStatus('Discovering Deriv Synthetic Indices…');
-    setLastError('');
+    setStatus('Discovering Deriv Synthetic Indices…'); setLastError('');
     const result = await discoverCatalogue();
     setInstruments(result.instruments);
     try { await api.post('/api/sire/catalogue/sync', { instruments: result.allInstruments }); } catch { /* non-blocking */ }
@@ -153,8 +153,7 @@ export default function App() {
   useEffect(() => { void loadCatalog().catch(error => { setStatus('Deriv connection failed'); setLastError(error instanceof Error ? error.message : String(error)); }); }, [loadCatalog, connectionNonce]);
 
   const loadChartHistory = useCallback(async (symbol: string, frame: Timeframe) => {
-    setLoadingHistory(true); setLastError('');
-    let ws: WebSocket | null = null;
+    setLoadingHistory(true); setLastError(''); let ws: WebSocket | null = null;
     try {
       ws = await openDeriv(CURRENT_DERIV_WS).catch(() => openDeriv(LEGACY_DERIV_WS));
       const seconds = TIMEFRAME_SECONDS[frame];
@@ -174,8 +173,7 @@ export default function App() {
         if (frame === '1W' || frame === '1M') {
           const map = new Map<number, Candle>();
           for (const candle of daily) {
-            const epoch = bucketEpoch(candle.epoch, frame);
-            const current = map.get(epoch);
+            const epoch = bucketEpoch(candle.epoch, frame); const current = map.get(epoch);
             if (!current) map.set(epoch, { epoch, open: candle.open, high: candle.high, low: candle.low, close: candle.close });
             else map.set(epoch, { epoch, open: current.open, high: Math.max(current.high, candle.high), low: Math.min(current.low, candle.low), close: candle.close });
           }
@@ -188,8 +186,7 @@ export default function App() {
   useEffect(() => { if (!selected) return; setLatest(null); setCandles([]); liveBuffer.current = []; seen.current = new Set(); void loadChartHistory(selected.symbol, timeframe); }, [selected, timeframe, loadChartHistory]);
 
   const updateLiveCandle = useCallback((tick: Tick) => {
-    const frame = timeframeRef.current;
-    const epoch = frame === 'tick' ? Math.floor(tick.epoch) : bucketEpoch(tick.epoch, frame);
+    const frame = timeframeRef.current; const epoch = frame === 'tick' ? Math.floor(tick.epoch) : bucketEpoch(tick.epoch, frame);
     setCandles(prev => {
       const index = prev.findIndex(candle => candle.epoch === epoch);
       if (index >= 0) { const next = prev.slice(); const current = next[index]; next[index] = { ...current, high: Math.max(current.high, tick.quote), low: Math.min(current.low, tick.quote), close: tick.quote }; return next; }
@@ -230,31 +227,20 @@ export default function App() {
   const currentCandle = candles[candles.length - 1];
   const latestDelta = latest && candles.length > 1 ? latest.quote - candles[candles.length - 2].close : 0;
   const jumpToDateTime = () => {
-    if (!dateInput || !candles.length) return;
-    const target = new Date(dateInput).getTime() / 1000;
-    if (!Number.isFinite(target)) return;
-    const nearest = candles.reduce((best, candle, index) => Math.abs(candle.epoch - target) < Math.abs(candles[best].epoch - target) ? index : best, 0);
+    if (!dateInput || !candles.length) return; const target = new Date(dateInput).getTime() / 1000;
+    if (!Number.isFinite(target)) return; const nearest = candles.reduce((best, candle, index) => Math.abs(candle.epoch - target) < Math.abs(candles[best].epoch - target) ? index : best, 0);
     setStatus(`Jump target · ${new Date(candles[nearest].epoch * 1000).toLocaleString()}`);
   };
 
   return (
     <main className="native-terminal-shell">
-      <header className="native-terminal-topbar">
-        <div className="brand-block"><div className="brand-mark">S</div><div><b>SIRE</b><span>MARKET RESEARCH TERMINAL</span></div></div>
-        <button className="native-instrument-picker" onClick={() => setInstrumentMenuOpen(value => !value)}><span><strong>{selected?.name || 'Select instrument'}</strong><small>{selected?.symbol || 'Synthetic Index'} · Deriv</small></span><ChevronDown size={16} /></button>
-        <div className="native-live-state"><span className="live-dot" />{status.startsWith('Live') ? 'LIVE' : status}</div>
-      </header>
+      <header className="native-terminal-topbar"><div className="brand-block"><div className="brand-mark">S</div><div><b>SIRE</b><span>MARKET RESEARCH TERMINAL</span></div></div><button className="native-instrument-picker" onClick={() => setInstrumentMenuOpen(value => !value)}><span><strong>{selected?.name || 'Select instrument'}</strong><small>{selected?.symbol || 'Synthetic Index'} · Deriv</small></span><ChevronDown size={16} /></button><div className="native-live-state"><span className="live-dot" />{status.startsWith('Live') ? 'LIVE' : status}</div></header>
       {instrumentMenuOpen && <div className="native-instrument-overlay" onClick={() => setInstrumentMenuOpen(false)}><div className="native-instrument-sheet" onClick={event => event.stopPropagation()}><div className="sheet-head"><div><span>CHANGE INSTRUMENT</span><b>{instruments.length} Synthetic Indices</b></div><button onClick={() => setInstrumentMenuOpen(false)}>Done</button></div><div className="sheet-search"><Search size={15} /><input autoFocus value={search} onChange={event => setSearch(event.target.value)} placeholder="Search instrument or symbol" /></div><div className="sheet-list">{filtered.map(item => <button key={item.symbol} className={`sheet-row ${selected?.symbol === item.symbol ? 'active' : ''}`} onClick={() => { setSelected(item); setInstrumentMenuOpen(false); }}><span><b>{item.name}</b><small>{item.symbol}</small></span><em>{selected?.symbol === item.symbol ? 'SELECTED' : item.exchangeOpen === 0 ? 'OFF' : 'LIVE'}</em></button>)}{!filtered.length && <div className="empty-state">No instruments found.</div>}</div></div></div>}
-      <div className="native-terminal-body">
-        <aside className="native-symbol-sidebar"><div className="sidebar-search"><Search size={15} /><input value={search} onChange={event => setSearch(event.target.value)} placeholder="Search" /></div><div className="sidebar-meta"><span>DERIV SYNTHETIC</span><b>{instruments.length}</b></div><div className="native-symbol-list">{filtered.slice(0, 100).map(item => <button key={item.symbol} className={selected?.symbol === item.symbol ? 'active' : ''} onClick={() => setSelected(item)}><span><b>{item.name}</b><small>{item.symbol}</small></span><i>{item.exchangeOpen === 0 ? 'OFF' : 'LIVE'}</i></button>)}</div></aside>
-        <section className="native-chart-panel">
-          <div className="native-chart-toolbar"><div className="native-timeframes">{TIMEFRAME_LIST.map(frame => <button key={frame} className={timeframe === frame ? 'active' : ''} onClick={() => setTimeframe(frame)}>{frame}</button>)}</div><div className="native-chart-actions"><button title="Reload history" onClick={() => selected && void loadChartHistory(selected.symbol, timeframe)}><RotateCcw size={14} /></button><button title="Fullscreen" onClick={() => document.querySelector('.native-chart-stage')?.requestFullscreen?.()}><Maximize2 size={14} /></button><button title="Open GPT research laboratory" onClick={() => setResearchLabOpen(true)}><Beaker size={14} /></button></div></div>
+      <div className="native-terminal-body"><aside className="native-symbol-sidebar"><div className="sidebar-search"><Search size={15} /><input value={search} onChange={event => setSearch(event.target.value)} placeholder="Search" /></div><div className="sidebar-meta"><span>DERIV SYNTHETIC</span><b>{instruments.length}</b></div><div className="native-symbol-list">{filtered.slice(0, 100).map(item => <button key={item.symbol} className={selected?.symbol === item.symbol ? 'active' : ''} onClick={() => setSelected(item)}><span><b>{item.name}</b><small>{item.symbol}</small></span><i>{item.exchangeOpen === 0 ? 'OFF' : 'LIVE'}</i></button>)}</div></aside>
+        <section className="native-chart-panel"><div className="native-chart-toolbar"><div className="native-timeframes">{TIMEFRAME_LIST.map(frame => <button key={frame} className={timeframe === frame ? 'active' : ''} onClick={() => setTimeframe(frame)}>{frame}</button>)}</div><div className="native-chart-actions"><button title="Reload history" onClick={() => selected && void loadChartHistory(selected.symbol, timeframe)}><RotateCcw size={14} /></button><button title="Fullscreen" onClick={() => document.querySelector('.native-chart-stage')?.requestFullscreen?.()}><Maximize2 size={14} /></button><button title="Open GPT research laboratory" onClick={() => setResearchLabOpen(true)}><Beaker size={14} /></button></div></div>
           <div className="native-chart-subbar"><div><b>{selected?.name || 'No instrument'}</b><span>{selected?.symbol || '—'}</span></div><div className="native-ohlc"><span>O <b>{currentCandle ? formatQuote(currentCandle.open) : '—'}</b></span><span>H <b>{currentCandle ? formatQuote(currentCandle.high) : '—'}</b></span><span>L <b>{currentCandle ? formatQuote(currentCandle.low) : '—'}</b></span><span>C <b>{latest ? formatQuote(latest.quote) : currentCandle ? formatQuote(currentCandle.close) : '—'}</b></span></div><div className={latestDelta >= 0 ? 'up' : 'down'}>{latest ? formatQuote(latest.quote) : '—'}</div></div>
-          {lastError && <div className="native-chart-error">{lastError}</div>}
-          <div className="native-research-controls"><div className="date-control"><Calendar size={13} /><input type="datetime-local" value={dateInput} onChange={event => setDateInput(event.target.value)} /><button onClick={jumpToDateTime}>JUMP</button></div><span>{loadingHistory ? `Loading ${timeframe} history…` : 'Native chart navigation active'}</span><span>Drag the right price scale to vertically stretch the chart.</span></div>
-          <div className="native-chart-stage"><NativeMarketChart candles={candles} latest={latest} autoScale /></div>
-        </section>
-      </div>
+          {lastError && <div className="native-chart-error">{lastError}</div>}<div className="native-research-controls"><div className="date-control"><Calendar size={13} /><input type="datetime-local" value={dateInput} onChange={event => setDateInput(event.target.value)} /><button onClick={jumpToDateTime}>JUMP</button></div><span>{loadingHistory ? `Loading ${timeframe} history…` : 'Native chart navigation active'}</span><span>Drag the right price scale to vertically stretch the chart.</span></div><div className="native-chart-stage"><NativeMarketChart candles={candles} latest={latest} autoScale /></div>
+        </section></div>
       {researchLabOpen && selected && <ResearchLab symbol={selected.symbol} instruments={instruments.map(item => ({ symbol: item.symbol, name: item.name }))} onClose={() => setResearchLabOpen(false)} onSelectInstrument={symbol => { const next = instruments.find(item => item.symbol === symbol); if (next) setSelected(next); setResearchLabOpen(false); }} runtimeContext={{ symbol: selected.symbol, name: selected.name, timeframe, latestPrice: latest?.quote ?? null, chartMode: 'candles', chartBars: candles.length, visibleBars: candles.length }} />}
       <button className="native-reconnect" onClick={() => setConnectionNonce(value => value + 1)} aria-label="Reconnect to Deriv">Reconnect</button>
     </main>
