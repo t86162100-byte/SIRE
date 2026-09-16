@@ -24,7 +24,6 @@ function installStyles() {
     body.sire-active-sire:not(.sire-nav-hidden) .sire-chat-only-composer { bottom: 60px !important; }
     body.sire-active-sire.sire-nav-hidden .sire-chat-only-composer { bottom: max(6px, env(safe-area-inset-bottom)) !important; }
 
-    /* Quote header is the same SIRE brand block used by the main terminal, directly above Search. */
     body.sire-active-quote .terminal-topbar {
       min-height: 52px !important;
       height: 52px !important;
@@ -50,19 +49,30 @@ function installStyles() {
     }
     body.sire-active-quote .symbol-sidebar {
       display: flex !important;
+      flex-direction: column !important;
       width: 100% !important;
       height: calc(100vh - 52px) !important;
       border-right: 0 !important;
       padding: 7px 0 108px !important;
       box-sizing: border-box !important;
     }
+
+    /* Quote order: SIRE logo first, then Search, then the instrument list. */
+    body.sire-active-quote #sire-quote-logo-header {
+      order: -2 !important;
+      width: 100% !important;
+      max-width: 760px !important;
+      margin: 0 auto 10px !important;
+    }
     body.sire-active-quote .sidebar-search {
       order: -1 !important;
       width: 100% !important;
       max-width: 760px !important;
       margin: 0 auto 10px !important;
+      flex: 0 0 auto !important;
     }
     body.sire-active-quote .symbol-list {
+      order: 0 !important;
       width: 100% !important;
       max-width: 760px !important;
       margin: 0 auto !important;
@@ -87,6 +97,7 @@ function installStyles() {
       box-shadow: 0 0 18px rgba(255,255,255,.08);
     }
     body.sire-active-quote .catalogue-refresh {
+      order: 1 !important;
       width: min(760px,100%);
       margin: 12px auto 0;
     }
