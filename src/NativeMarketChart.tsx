@@ -1,21 +1,32 @@
-import { useEffect, useRef } from 'react';
-import { attachSireNativeDrawingController } from './chart/drawings/SireNativeDrawingController';
+import { useEffect, useMemo, useRef } from 'react';
+import { attachSireTradingViewDrawingController } from './chart/drawings/SireTradingViewDrawingController';
+import type { TradingViewResolution, TradingViewResolutionOption } from './chart/tradingViewResolutions';
 import {
   CandlestickSeries,
   CrosshairMode,
   createChart,
+  type CandlestickData,
   type IChartApi,
   type ISeriesApi,
-  type CandlestickData,
   type UTCTimestamp,
 } from 'lightweight-charts';
 
 type Candle = { epoch: number; open: number; high: number; low: number; close: number };
-type Props = { candles: Candle[]; latest?: { epoch: number; quote: number; bid?: number; ask?: number } | null; autoScale?: boolean };
 type InstrumentPreview = { symbol: string; name: string };
+type Props = {
+  candles: Candle[];
+  latest?: { epoch: number; quote: number; bid?: number; ask?: number } | null;
+  autoScale?: boolean;
+  timeframe: TradingViewResolution;
+  timeframeOptions: readonly TradingViewResolutionOption[];
+  onTimeframeChange: (value: TradingViewResolution) => void;
+};
 
 function toSeriesData(candles: Candle[]): CandlestickData[] {
-  const sorted = candles.filter(candle => Number.isFinite(candle.epoch) && Number.isFinite(candle.open) && Number.isFinite(candle.high) && Number.isFinite(candle.low) && Number.isFinite(candle.close)).slice().sort((a, b) => a.epoch - b.epoch);
+  const sorted = candles
+    .filter(candle => Number.isFinite(candle.epoch) && Number.isFinite(candle.open) && Number.isFinite(candle.high) && Number.isFinite(candle.low) && Number.isFinite(candle.close))
+    .slice()
+    .sort((a, b) => a.epoch - b.epoch);
   const unique: CandlestickData[] = [];
   let lastTime = -1;
   for (const candle of sorted) {
@@ -27,7 +38,14 @@ function toSeriesData(candles: Candle[]): CandlestickData[] {
   return unique;
 }
 
-export default function NativeMarketChart({ candles, latest, autoScale = true }: Props) {
+export default function NativeMarketChart({
+  candles,
+  latest,
+  autoScale = true,
+  timeframe,
+  timeframeOptions,
+  onTimeframeChange,
+}: Props) {
   const hostRef = useRef<HTMLDivElement | null>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const seriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null);
@@ -36,40 +54,73 @@ export default function NativeMarketChart({ candles, latest, autoScale = true }:
 
   useEffect(() => {
     const host = hostRef.current;
-    if (!host) return;
+    const surface = host?.parentElement;
+    if (!host || !surface) return;
+
     const chart = createChart(host, {
       autoSize: true,
       layout: { background: { color: '#090d12' }, textColor: '#9aa5b1', attributionLogo: false },
       grid: { vertLines: { color: '#151b23' }, horzLines: { color: '#151b23' } },
-      crosshair: { mode: CrosshairMode.Normal, vertLine: { color: '#66717f', width: 1, style: 3, labelBackgroundColor: '#202833' }, horzLine: { color: '#66717f', width: 1, style: 3, labelBackgroundColor: '#202833' } },
+      crosshair: {
+        mode: CrosshairMode.Normal,
+        vertLine: { color: '#66717f', width: 1, style: 3, labelBackgroundColor: '#202833' },
+        horzLine: { color: '#66717f', width: 1, style: 3, labelBackgroundColor: '#202833' },
+      },
       rightPriceScale: { visible: true, borderVisible: true, borderColor: '#29313c', textColor: '#b5bec9', ticksVisible: true, minimumWidth: 76, autoScale },
       timeScale: { visible: true, borderVisible: true, timeVisible: true, secondsVisible: true, rightOffset: 6, barSpacing: 8, minBarSpacing: 2 },
       handleScroll: { mouseWheel: true, pressedMouseMove: true, horzTouchDrag: true, vertTouchDrag: true },
       handleScale: { axisPressedMouseMove: { time: true, price: true }, axisDoubleClickReset: true, mouseWheel: true, pinch: true },
     });
-    const series = chart.addSeries(CandlestickSeries, { upColor: '#22c55e', downColor: '#ef4444', borderUpColor: '#22c55e', borderDownColor: '#ef4444', wickUpColor: '#22c55e', wickDownColor: '#ef4444', priceLineVisible: true, lastValueVisible: true, priceLineWidth: 1 });
-    const drawingController = attachSireNativeDrawingController(chart, series, host.parentElement ?? host);
+    const series = chart.addSeries(CandlestickSeries, {
+      upColor: '#22c55e',
+      downColor: '#ef4444',
+      borderUpColor: '#22c55e',
+      borderDownColor: '#ef4444',
+      wickUpColor: '#22c55e',
+      wickDownColor: '#ef4444',
+      priceLineVisible: true,
+      lastValueVisible: true,
+      priceLineWidth: 1,
+    });
+
+    const drawingController = attachSireTradingViewDrawingController(chart, series, surface);
     chartRef.current = chart;
     seriesRef.current = series;
     initializedRef.current = true;
-    return () => { drawingController.destroy(); chart.remove(); chartRef.current = null; seriesRef.current = null; initializedRef.current = false; firstDataRef.current = false; };
+
+    return () => {
+      drawingController.destroy();
+      chart.remove();
+      chartRef.current = null;
+      seriesRef.current = null;
+      initializedRef.current = false;
+      firstDataRef.current = false;
+    };
   }, [autoScale]);
 
   useEffect(() => {
     if (!initializedRef.current || !seriesRef.current) return;
     const data = toSeriesData(candles);
     seriesRef.current.setData(data);
-    if (!firstDataRef.current && data.length) { chartRef.current?.timeScale().fitContent(); firstDataRef.current = true; }
+    if (!firstDataRef.current && data.length) {
+      chartRef.current?.timeScale().fitContent();
+      firstDataRef.current = true;
+    }
   }, [candles]);
 
   useEffect(() => {
     const series = seriesRef.current;
     if (!series || !latest || !candles.length) return;
     const last = candles[candles.length - 1];
-    const latestTime = Math.floor(latest.epoch);
     const candleTime = Math.floor(last.epoch);
-    if (latestTime < candleTime) return;
-    series.update({ time: candleTime as UTCTimestamp, open: last.open, high: Math.max(last.high, latest.quote), low: Math.min(last.low, latest.quote), close: latest.quote });
+    if (Math.floor(latest.epoch) < candleTime) return;
+    series.update({
+      time: candleTime as UTCTimestamp,
+      open: last.open,
+      high: Math.max(last.high, latest.quote),
+      low: Math.min(last.low, latest.quote),
+      close: latest.quote,
+    });
   }, [latest, candles]);
 
   useEffect(() => {
@@ -86,13 +137,7 @@ export default function NativeMarketChart({ candles, latest, autoScale = true }:
     const timeframeCurrent = surface.querySelector<HTMLElement>('.native-bottom-timeframe-current');
     const timeframePrevious = surface.querySelector<HTMLElement>('.native-bottom-timeframe-previous');
     const timeframeNext = surface.querySelector<HTMLElement>('.native-bottom-timeframe-next');
-    if (!bar || !viewport || !track || !currentLabel || !previousLabel || !nextLabel) return;
-    const timeframeHost = document.querySelector<HTMLElement>('.native-bottom-timeframe-viewport');
-    const timeframeTrackHost = document.querySelector<HTMLElement>('.native-bottom-timeframe-track');
-    const timeframeCurrentHost = document.querySelector<HTMLElement>('.native-bottom-timeframe-current');
-    const timeframePreviousHost = document.querySelector<HTMLElement>('.native-bottom-timeframe-previous');
-    const timeframeNextHost = document.querySelector<HTMLElement>('.native-bottom-timeframe-next');
-    if (!timeframeHost || !timeframeTrackHost || !timeframeCurrentHost || !timeframePreviousHost || !timeframeNextHost) return;
+    if (!bar || !viewport || !track || !currentLabel || !previousLabel || !nextLabel || !timeframeViewport || !timeframeTrack || !timeframeCurrent || !timeframePrevious || !timeframeNext) return;
 
     let startY = 0;
     let startX = 0;
@@ -104,12 +149,12 @@ export default function NativeMarketChart({ candles, latest, autoScale = true }:
     let instruments: InstrumentPreview[] = [];
     let activeIndex = -1;
 
-    const setTrack = (offset: number, animated = false) => {
-      track.style.transition = animated ? 'transform 180ms cubic-bezier(.22,.8,.24,1)' : 'none';
-      track.style.transform = `translate3d(0, calc(-48px + ${offset}px), 0)`;
+    const setTrack = (element: HTMLElement, offset: number, animated = false) => {
+      element.style.transition = animated ? 'transform 180ms cubic-bezier(.22,.8,.24,1)' : 'none';
+      element.style.transform = `translate3d(0, calc(-48px + ${offset}px), 0)`;
     };
 
-    const renderPreview = () => {
+    const renderInstrumentPreview = () => {
       const current = instruments[activeIndex];
       const previous = activeIndex > 0 ? instruments[activeIndex - 1] : null;
       const next = activeIndex >= 0 && activeIndex < instruments.length - 1 ? instruments[activeIndex + 1] : null;
@@ -118,19 +163,13 @@ export default function NativeMarketChart({ candles, latest, autoScale = true }:
       nextLabel.textContent = next?.name || '';
       previousLabel.style.opacity = previous ? '1' : '0';
       nextLabel.style.opacity = next ? '1' : '0';
-      setTrack(0);
+      setTrack(track, 0);
     };
 
-    const openPicker = () => {
-      const picker = document.querySelector<HTMLButtonElement>('.native-instrument-picker');
-      if (!picker) return;
-      picker.click();
-    };
+    const openPicker = () => document.querySelector<HTMLButtonElement>('.native-instrument-picker')?.click();
 
     const closePickerSilently = () => {
-      const done = document.querySelector<HTMLButtonElement>('.native-instrument-sheet .sheet-head button');
-      if (done) done.click();
-      else document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+      document.querySelector<HTMLButtonElement>('.native-instrument-sheet .sheet-head button')?.click();
       window.setTimeout(() => document.body.classList.remove('sire-swipe-probing'), 80);
     };
 
@@ -142,16 +181,15 @@ export default function NativeMarketChart({ candles, latest, autoScale = true }:
       return new Promise<boolean>(resolve => {
         window.requestAnimationFrame(() => window.requestAnimationFrame(() => {
           const rows = Array.from(document.querySelectorAll<HTMLButtonElement>('.native-instrument-sheet .sheet-row'));
-          const parsed = rows.map(row => {
-            const strong = row.querySelector('b');
-            const symbol = row.querySelector('small');
-            return { name: strong?.textContent?.trim() || '', symbol: symbol?.textContent?.trim() || '' };
-          }).filter(item => item.name);
+          const parsed = rows.map(row => ({
+            name: row.querySelector('b')?.textContent?.trim() || '',
+            symbol: row.querySelector('small')?.textContent?.trim() || '',
+          })).filter(item => item.name);
           const active = rows.findIndex(row => row.classList.contains('active'));
           if (parsed.length) {
             instruments = parsed;
             if (active >= 0) activeIndex = active;
-            if (!selectOffset) renderPreview();
+            if (!selectOffset) renderInstrumentPreview();
           }
           if (selectOffset && activeIndex >= 0) {
             const target = activeIndex + selectOffset;
@@ -168,27 +206,32 @@ export default function NativeMarketChart({ candles, latest, autoScale = true }:
       });
     };
 
-    const updateFromSource = () => {
+    const updateInstrumentFromTopBar = () => {
       const source = document.querySelector<HTMLElement>('.native-instrument-picker strong');
-      if (source && activeIndex < 0 && instruments.length) {
+      if (source && instruments.length) {
         const index = instruments.findIndex(item => item.name === source.textContent?.trim());
-        if (index >= 0) { activeIndex = index; renderPreview(); }
+        if (index >= 0 && index !== activeIndex) {
+          activeIndex = index;
+          renderInstrumentPreview();
+        }
       }
     };
 
-    const finishSwipe = (direction: -1 | 1) => {
+    const finishInstrumentSwipe = (direction: -1 | 1) => {
       if (activeIndex < 0 || (direction < 0 && activeIndex <= 0) || (direction > 0 && activeIndex >= instruments.length - 1)) {
-        setTrack(0, true);
-        window.setTimeout(() => setTrack(0), 190);
+        setTrack(track, 0, true);
         return;
       }
       const target = activeIndex + direction;
-      setTrack(direction < 0 ? -48 : 48, true);
+      setTrack(track, direction < 0 ? -48 : 48, true);
       window.setTimeout(() => {
         void readPicker(direction).then(success => {
-          if (!success) { setTrack(0, true); return; }
+          if (!success) {
+            setTrack(track, 0, true);
+            return;
+          }
           activeIndex = target;
-          window.setTimeout(() => renderPreview(), 115);
+          window.setTimeout(() => renderInstrumentPreview(), 115);
         });
       }, 35);
     };
@@ -198,7 +241,7 @@ export default function NativeMarketChart({ candles, latest, autoScale = true }:
       longPressTimer = 0;
     };
 
-    const onPointerDown = (event: PointerEvent) => {
+    const onInstrumentDown = (event: PointerEvent) => {
       if (event.pointerType === 'mouse') return;
       startX = event.clientX;
       startY = event.clientY;
@@ -214,13 +257,13 @@ export default function NativeMarketChart({ candles, latest, autoScale = true }:
         longPressTriggered = true;
         tracking = false;
         if (raf) cancelAnimationFrame(raf);
-        setTrack(0, true);
+        setTrack(track, 0, true);
         bar.classList.remove('instrument-swiping');
         openPicker();
       }, 600);
     };
 
-    const onPointerMove = (event: PointerEvent) => {
+    const onInstrumentMove = (event: PointerEvent) => {
       if (!tracking) return;
       const dy = event.clientY - startY;
       const dx = event.clientX - startX;
@@ -228,13 +271,16 @@ export default function NativeMarketChart({ candles, latest, autoScale = true }:
       if (Math.abs(dy) < Math.abs(dx) * 1.05) return;
       dragOffset = Math.max(-44, Math.min(44, dy));
       if (raf) cancelAnimationFrame(raf);
-      raf = requestAnimationFrame(() => setTrack(dragOffset));
+      raf = requestAnimationFrame(() => setTrack(track, dragOffset));
       event.preventDefault();
     };
 
-    const onPointerUp = (event: PointerEvent) => {
+    const onInstrumentUp = (event: PointerEvent) => {
       cancelLongPress();
-      if (longPressTriggered) { longPressTriggered = false; return; }
+      if (longPressTriggered) {
+        longPressTriggered = false;
+        return;
+      }
       if (!tracking) return;
       tracking = false;
       if (raf) cancelAnimationFrame(raf);
@@ -242,46 +288,38 @@ export default function NativeMarketChart({ candles, latest, autoScale = true }:
       const dx = event.clientX - startX;
       const vertical = Math.abs(dy) >= Math.abs(dx) * 1.05;
       const threshold = Math.max(18, viewport.clientHeight * .42);
-      if (!vertical || Math.abs(dy) < threshold) setTrack(0, true);
-      else finishSwipe(dy < 0 ? 1 : -1);
+      if (!vertical || Math.abs(dy) < threshold) setTrack(track, 0, true);
+      else finishInstrumentSwipe(dy < 0 ? 1 : -1);
       window.setTimeout(() => bar.classList.remove('instrument-swiping'), 210);
     };
 
-    const getTimeframes = () => Array.from(document.querySelectorAll<HTMLButtonElement>('.native-timeframes button')).map(button => ({ value: button.textContent?.trim() || '', button })).filter(item => item.value);
-    const currentTimeframeIndex = () => {
-      const frames = getTimeframes();
-      const index = frames.findIndex(item => item.button.classList.contains('active'));
-      return { frames, index };
-    };
-    const setTimeframeTrack = (offset: number, animated = false) => {
-      timeframeTrackHost.style.transition = animated ? 'transform 180ms cubic-bezier(.22,.8,.24,1)' : 'none';
-      timeframeTrackHost.style.transform = `translate3d(0, calc(-48px + ${offset}px), 0)`;
-    };
+    const currentTimeframeIndex = () => timeframeOptions.findIndex(option => option.value === timeframe);
     const renderTimeframePreview = () => {
-      const { frames, index } = currentTimeframeIndex();
-      const current = index >= 0 ? frames[index]?.value : '1m';
-      timeframeCurrentHost.textContent = current;
-      timeframePreviousHost.textContent = index > 0 ? frames[index - 1].value : '';
-      timeframeNextHost.textContent = index >= 0 && index < frames.length - 1 ? frames[index + 1].value : '';
-      timeframePreviousHost.style.opacity = index > 0 ? '1' : '0';
-      timeframeNextHost.style.opacity = index >= 0 && index < frames.length - 1 ? '1' : '0';
-      setTimeframeTrack(0);
+      const index = currentTimeframeIndex();
+      timeframeCurrent.textContent = timeframeOptions[index]?.label || '1m';
+      timeframePrevious.textContent = index > 0 ? timeframeOptions[index - 1].label : '';
+      timeframeNext.textContent = index >= 0 && index < timeframeOptions.length - 1 ? timeframeOptions[index + 1].label : '';
+      timeframePrevious.style.opacity = index > 0 ? '1' : '0';
+      timeframeNext.style.opacity = index >= 0 && index < timeframeOptions.length - 1 ? '1' : '0';
+      setTrack(timeframeTrack, 0);
     };
+
     const selectTimeframeOffset = (direction: -1 | 1) => {
-      const { frames, index } = currentTimeframeIndex();
+      const index = currentTimeframeIndex();
       const target = index + direction;
-      if (index < 0 || target < 0 || target >= frames.length) { setTimeframeTrack(0, true); return; }
-      setTimeframeTrack(direction < 0 ? -48 : 48, true);
+      if (index < 0 || target < 0 || target >= timeframeOptions.length) {
+        setTrack(timeframeTrack, 0, true);
+        return;
+      }
+      setTrack(timeframeTrack, direction < 0 ? -48 : 48, true);
       window.setTimeout(() => {
-        frames[target].button.click();
-        window.setTimeout(renderTimeframePreview, 100);
+        onTimeframeChange(timeframeOptions[target].value);
+        window.setTimeout(renderTimeframePreview, 80);
       }, 35);
     };
+
     const openTimeframeList = () => {
-      const frames = getTimeframes();
-      if (!frames.length) return;
-      const existing = document.querySelector<HTMLElement>('.native-bottom-timeframe-overlay');
-      existing?.remove();
+      document.querySelector('.native-bottom-timeframe-overlay')?.remove();
       const overlay = document.createElement('div');
       overlay.className = 'native-bottom-timeframe-overlay';
       const sheet = document.createElement('div');
@@ -292,143 +330,160 @@ export default function NativeMarketChart({ candles, latest, autoScale = true }:
       sheet.appendChild(head);
       const list = document.createElement('div');
       list.className = 'native-bottom-timeframe-list';
-      frames.forEach(({ value, button }) => {
+      timeframeOptions.forEach(option => {
         const item = document.createElement('button');
         item.type = 'button';
-        item.textContent = value;
-        item.className = button.classList.contains('active') ? 'active' : '';
-        item.addEventListener('click', () => { button.click(); overlay.remove(); window.setTimeout(renderTimeframePreview, 60); });
+        item.textContent = option.label;
+        item.className = option.value === timeframe ? 'active' : '';
+        item.addEventListener('click', () => {
+          onTimeframeChange(option.value);
+          overlay.remove();
+          window.setTimeout(renderTimeframePreview, 60);
+        });
         list.appendChild(item);
       });
       sheet.appendChild(list);
       overlay.appendChild(sheet);
       document.body.appendChild(overlay);
-      overlay.addEventListener('click', event => { if (event.target === overlay) overlay.remove(); });
+      overlay.addEventListener('click', event => {
+        if (event.target === overlay) overlay.remove();
+      });
       head.querySelector('button')?.addEventListener('click', () => overlay.remove());
     };
+
     let timeframeStartY = 0;
     let timeframeStartX = 0;
     let timeframeTracking = false;
-    let timeframeOffset = 0;
     let timeframeRaf = 0;
-    let timeframeLongPressTimer = 0;
-    let timeframeLongPressTriggered = false;
-    const cancelTimeframeHold = () => { if (timeframeLongPressTimer) window.clearTimeout(timeframeLongPressTimer); timeframeLongPressTimer = 0; };
+    let timeframeHoldTimer = 0;
+    let timeframeHoldTriggered = false;
+
+    const cancelTimeframeHold = () => {
+      if (timeframeHoldTimer) window.clearTimeout(timeframeHoldTimer);
+      timeframeHoldTimer = 0;
+    };
+
     const onTimeframeDown = (event: PointerEvent) => {
       if (event.pointerType === 'mouse') return;
       timeframeStartX = event.clientX;
       timeframeStartY = event.clientY;
-      timeframeOffset = 0;
       timeframeTracking = true;
-      timeframeLongPressTriggered = false;
+      timeframeHoldTriggered = false;
       cancelTimeframeHold();
-      timeframeHost.setPointerCapture?.(event.pointerId);
+      timeframeViewport.setPointerCapture?.(event.pointerId);
       bar.classList.add('timeframe-swiping');
-      timeframeLongPressTimer = window.setTimeout(() => {
+      timeframeHoldTimer = window.setTimeout(() => {
         if (!timeframeTracking) return;
-        timeframeLongPressTriggered = true;
+        timeframeHoldTriggered = true;
         timeframeTracking = false;
         if (timeframeRaf) cancelAnimationFrame(timeframeRaf);
-        setTimeframeTrack(0, true);
+        setTrack(timeframeTrack, 0, true);
         bar.classList.remove('timeframe-swiping');
         openTimeframeList();
       }, 600);
     };
+
     const onTimeframeMove = (event: PointerEvent) => {
       if (!timeframeTracking) return;
       const dy = event.clientY - timeframeStartY;
       const dx = event.clientX - timeframeStartX;
       if (Math.hypot(dx, dy) > 12) cancelTimeframeHold();
       if (Math.abs(dy) < Math.abs(dx) * 1.05) return;
-      timeframeOffset = Math.max(-44, Math.min(44, dy));
       if (timeframeRaf) cancelAnimationFrame(timeframeRaf);
-      timeframeRaf = requestAnimationFrame(() => setTimeframeTrack(timeframeOffset));
+      const offset = Math.max(-44, Math.min(44, dy));
+      timeframeRaf = requestAnimationFrame(() => setTrack(timeframeTrack, offset));
       event.preventDefault();
     };
+
     const onTimeframeUp = (event: PointerEvent) => {
       cancelTimeframeHold();
-      if (timeframeLongPressTriggered) { timeframeLongPressTriggered = false; return; }
+      if (timeframeHoldTriggered) {
+        timeframeHoldTriggered = false;
+        return;
+      }
       if (!timeframeTracking) return;
       timeframeTracking = false;
       if (timeframeRaf) cancelAnimationFrame(timeframeRaf);
       const dy = event.clientY - timeframeStartY;
       const dx = event.clientX - timeframeStartX;
       const vertical = Math.abs(dy) >= Math.abs(dx) * 1.05;
-      const threshold = Math.max(18, timeframeHost.clientHeight * .42);
-      if (!vertical || Math.abs(dy) < threshold) setTimeframeTrack(0, true);
+      const threshold = Math.max(18, timeframeViewport.clientHeight * .42);
+      if (!vertical || Math.abs(dy) < threshold) setTrack(timeframeTrack, 0, true);
       else selectTimeframeOffset(dy < 0 ? 1 : -1);
       window.setTimeout(() => bar.classList.remove('timeframe-swiping'), 210);
     };
 
-    viewport.addEventListener('pointerdown', onPointerDown, { passive: false });
-    viewport.addEventListener('pointermove', onPointerMove, { passive: false });
-    viewport.addEventListener('pointerup', onPointerUp, { passive: false });
-    viewport.addEventListener('pointercancel', onPointerUp, { passive: false });
-    timeframeHost.addEventListener('pointerdown', onTimeframeDown, { passive: false });
-    timeframeHost.addEventListener('pointermove', onTimeframeMove, { passive: false });
-    timeframeHost.addEventListener('pointerup', onTimeframeUp, { passive: false });
-    timeframeHost.addEventListener('pointercancel', onTimeframeUp, { passive: false });
+    renderTimeframePreview();
+    void readPicker();
 
-    const observer = new MutationObserver(() => { updateFromSource(); renderTimeframePreview(); });
+    viewport.addEventListener('pointerdown', onInstrumentDown, { passive: false });
+    viewport.addEventListener('pointermove', onInstrumentMove, { passive: false });
+    viewport.addEventListener('pointerup', onInstrumentUp, { passive: false });
+    viewport.addEventListener('pointercancel', onInstrumentUp, { passive: false });
+    timeframeViewport.addEventListener('pointerdown', onTimeframeDown, { passive: false });
+    timeframeViewport.addEventListener('pointermove', onTimeframeMove, { passive: false });
+    timeframeViewport.addEventListener('pointerup', onTimeframeUp, { passive: false });
+    timeframeViewport.addEventListener('pointercancel', onTimeframeUp, { passive: false });
+
+    const observer = new MutationObserver(() => updateInstrumentFromTopBar());
     const pickerText = document.querySelector('.native-instrument-picker strong');
     if (pickerText) observer.observe(pickerText, { childList: true, characterData: true, subtree: true });
-    const timeframeBar = document.querySelector('.native-timeframes');
-    if (timeframeBar) observer.observe(timeframeBar, { childList: true, subtree: true, attributes: true, attributeFilter: ['class'] });
-    updateFromSource();
-    renderTimeframePreview();
-    const primeTimer = window.setTimeout(() => void readPicker(), 160);
+    updateInstrumentFromTopBar();
 
     return () => {
-      window.clearTimeout(primeTimer);
       cancelLongPress();
       cancelTimeframeHold();
       if (raf) cancelAnimationFrame(raf);
       if (timeframeRaf) cancelAnimationFrame(timeframeRaf);
-      viewport.removeEventListener('pointerdown', onPointerDown);
-      viewport.removeEventListener('pointermove', onPointerMove);
-      viewport.removeEventListener('pointerup', onPointerUp);
-      viewport.removeEventListener('pointercancel', onPointerUp);
-      timeframeHost.removeEventListener('pointerdown', onTimeframeDown);
-      timeframeHost.removeEventListener('pointermove', onTimeframeMove);
-      timeframeHost.removeEventListener('pointerup', onTimeframeUp);
-      timeframeHost.removeEventListener('pointercancel', onTimeframeUp);
+      viewport.removeEventListener('pointerdown', onInstrumentDown);
+      viewport.removeEventListener('pointermove', onInstrumentMove);
+      viewport.removeEventListener('pointerup', onInstrumentUp);
+      viewport.removeEventListener('pointercancel', onInstrumentUp);
+      timeframeViewport.removeEventListener('pointerdown', onTimeframeDown);
+      timeframeViewport.removeEventListener('pointermove', onTimeframeMove);
+      timeframeViewport.removeEventListener('pointerup', onTimeframeUp);
+      timeframeViewport.removeEventListener('pointercancel', onTimeframeUp);
       observer.disconnect();
       document.querySelector('.native-bottom-timeframe-overlay')?.remove();
       document.body.classList.remove('sire-swipe-probing');
     };
-  }, []);
+  }, [timeframe, timeframeOptions, onTimeframeChange]);
 
-  return <div className="native-chart-touch-surface">
-    <div ref={hostRef} className="sire-native-chart" aria-label="SIRE native market chart" />
-    <div className="native-bottom-glass-bar">
-      <div className="native-bottom-instrument-viewport">
-        <div className="native-bottom-instrument-track">
-          <span className="native-bottom-instrument-side native-bottom-instrument-previous" />
-          <span className="native-bottom-instrument-current">Select instrument</span>
-          <span className="native-bottom-instrument-side native-bottom-instrument-next" />
+  const timeframeLabels = useMemo(() => timeframeOptions.map(option => option.label).join(','), [timeframeOptions]);
+
+  return (
+    <div className="native-chart-touch-surface" data-timeframe-options={timeframeLabels}>
+      <div ref={hostRef} className="sire-native-chart" aria-label="TradingView Lightweight Charts market chart" />
+      <div className="native-bottom-glass-bar">
+        <div className="native-bottom-instrument-viewport">
+          <div className="native-bottom-instrument-track">
+            <span className="native-bottom-instrument-side native-bottom-instrument-previous" />
+            <span className="native-bottom-instrument-current">Select instrument</span>
+            <span className="native-bottom-instrument-side native-bottom-instrument-next" />
+          </div>
         </div>
-      </div>
-      <div className="native-bottom-timeframe-viewport">
-        <div className="native-bottom-timeframe-track">
-          <span className="native-bottom-timeframe-side native-bottom-timeframe-previous" />
-          <span className="native-bottom-timeframe-current">1m</span>
-          <span className="native-bottom-timeframe-side native-bottom-timeframe-next" />
+        <div className="native-bottom-timeframe-viewport">
+          <div className="native-bottom-timeframe-track">
+            <span className="native-bottom-timeframe-side native-bottom-timeframe-previous" />
+            <span className="native-bottom-timeframe-current">1m</span>
+            <span className="native-bottom-timeframe-side native-bottom-timeframe-next" />
+          </div>
         </div>
-      </div>
-      <button type="button" className="sire-drawing-toggle" data-sire-drawing-toggle aria-label="Drawing tools" aria-expanded="false">✎</button>
-      <div className="sire-drawing-palette" data-sire-drawing-palette hidden>
-        <div className="sire-drawing-palette-tools">
-          <button type="button" data-sire-drawing-tool="trend">Trend</button>
-          <button type="button" data-sire-drawing-tool="horizontal">H-Line</button>
-          <button type="button" data-sire-drawing-tool="ray">Ray</button>
-          <button type="button" data-sire-drawing-tool="rectangle">Box</button>
-        </div>
-        <div className="sire-drawing-palette-actions">
-          <span data-sire-drawing-status />
-          <button type="button" data-sire-drawing-undo>Undo</button>
-          <button type="button" data-sire-drawing-clear>Clear</button>
+        <button type="button" className="sire-drawing-toggle" data-sire-drawing-toggle aria-label="Drawing tools" aria-expanded="false">✎</button>
+        <div className="sire-drawing-palette" data-sire-drawing-palette hidden>
+          <div className="sire-drawing-palette-tools">
+            <button type="button" data-sire-drawing-tool="trend">Trend</button>
+            <button type="button" data-sire-drawing-tool="horizontal">H-Line</button>
+            <button type="button" data-sire-drawing-tool="ray">Ray</button>
+            <button type="button" data-sire-drawing-tool="rectangle">Box</button>
+          </div>
+          <div className="sire-drawing-palette-actions">
+            <span data-sire-drawing-status />
+            <button type="button" data-sire-drawing-undo>Undo</button>
+            <button type="button" data-sire-drawing-clear>Clear</button>
+          </div>
         </div>
       </div>
     </div>
-  </div>;
+  );
 }
