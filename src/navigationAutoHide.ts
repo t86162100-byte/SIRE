@@ -26,10 +26,18 @@ function currentNav() {
   return document.getElementById(NAV_ID);
 }
 
+function syncGlassBar() {
+  const nav = currentNav();
+  const bar = document.querySelector('.native-bottom-glass-bar');
+  if (!bar) return;
+  bar.classList.toggle('nav-visible', !!nav && !nav.classList.contains('nav-auto-hidden'));
+}
+
 function reveal(ms = HIDE_AFTER) {
   lastInteractionAt = Date.now();
   const nav = currentNav();
   if (nav) nav.classList.remove('nav-auto-hidden');
+  syncGlassBar();
   if (hideTimer !== undefined) window.clearTimeout(hideTimer);
   hideTimer = window.setTimeout(() => hideIfInactive(), ms);
 }
@@ -43,6 +51,7 @@ function hideIfInactive() {
   }
   const nav = currentNav();
   if (nav) nav.classList.add('nav-auto-hidden');
+  syncGlassBar();
 }
 
 function isSwipeSurface(target: EventTarget | null) {
@@ -102,7 +111,10 @@ function wirePointerSwipe() {
 function bindNav() {
   style();
   const nav = currentNav();
-  if (!nav) return;
+  if (!nav) {
+    syncGlassBar();
+    return;
+  }
   if (nav.dataset.autoHideBound !== 'true') {
     nav.dataset.autoHideBound = 'true';
     nav.addEventListener('pointerdown', () => reveal(), { passive: true });
@@ -115,6 +127,7 @@ function bindNav() {
   } else {
     nav.classList.remove('nav-auto-hidden');
   }
+  syncGlassBar();
 }
 
 function install() {
