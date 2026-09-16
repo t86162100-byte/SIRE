@@ -24,6 +24,7 @@ import './quoteLogoPositionFix';
 import './quoteInstrumentCards';
 import './quoteListFullHeight';
 import './chartDefaults';
+import './sireLoadingOverlay';
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
