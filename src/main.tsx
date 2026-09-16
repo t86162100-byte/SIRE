@@ -18,6 +18,7 @@ import './glassDrawIconFix';
 import './glassDrawBridge';
 import './glassToolsBridge';
 import './navigationAutoHide';
+import './chartDefaults';
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
