@@ -1,7 +1,6 @@
 import { CandlestickSeries, createChart, type IChartApi, type ISeriesApi, type Time } from 'lightweight-charts';
 
 type Bar = { time: Time; open: number; high: number; low: number; close: number };
-
 type Bridge = { host: HTMLDivElement; chart: IChartApi; series: ISeriesApi<'Candlestick'>; observer: MutationObserver; resize: ResizeObserver };
 
 const bridges = new WeakMap<SVGElement, Bridge>();
@@ -28,43 +27,53 @@ function readBars(stage: HTMLElement, svg: SVGElement): Bar[] {
   const toPrice = readPriceScale(stage);
   if (!toPrice) return [];
   const groups = Array.from(svg.querySelectorAll<SVGGElement>('g.candle-up, g.candle-down'));
+  const rect = svg.getBoundingClientRect();
+  const viewBox = svg.viewBox.baseVal;
+  const scaleY = rect.height / viewBox.height;
   const bars: Bar[] = [];
+
   groups.forEach((group, index) => {
     const body = group.querySelector<SVGRectElement>('.candle-body');
     const wick = group.querySelector<SVGLineElement>('.candle-wick');
     if (!body || !wick) return;
-    const x = number(wick.getAttribute('x1'));
     const yHigh = number(wick.getAttribute('y1'));
     const yLow = number(wick.getAttribute('y2'));
     const yOpen = number(body.getAttribute('y'));
     const height = number(body.getAttribute('height'));
     const rising = group.classList.contains('candle-up');
-    if (x === null || yHigh === null || yLow === null || yOpen === null || height === null) return;
-    const rect = svg.getBoundingClientRect();
-    const viewBox = svg.viewBox.baseVal;
-    const scaleY = rect.height / viewBox.height;
-    const screenY = (svg.getBoundingClientRect().top + yOpen * scaleY);
+    if (yHigh === null || yLow === null || yOpen === null || height === null) return;
+
+    const screenY = rect.top + yOpen * scaleY;
     const screenBottom = screenY + height * scaleY;
     const openPrice = toPrice(rising ? screenBottom : screenY);
     const closePrice = toPrice(rising ? screenY : screenBottom);
     bars.push({
       time: (index + 1) as Time,
       open: openPrice,
-      high: toPrice(svg.getBoundingClientRect().top + yHigh * scaleY),
-      low: toPrice(svg.getBoundingClientRect().top + yLow * scaleY),
+      high: toPrice(rect.top + yHigh * scaleY),
+      low: toPrice(rect.top + yLow * scaleY),
       close: closePrice,
     });
   });
+
   return bars.filter(bar => [bar.open, bar.high, bar.low, bar.close].every(Number.isFinite));
 }
 
 function sync(bridge: Bridge, stage: HTMLElement, svg: SVGElement) {
+  const candleGroups = svg.querySelectorAll<SVGGElement>('g.candle-up, g.candle-down');
+  candleGroups.forEach(group => { group.style.visibility = 'hidden'; });
   const bars = readBars(stage, svg);
   if (!bars.length) return;
+
   const width = svg.getBoundingClientRect().width;
   const barSpacing = width / bars.length;
   bridge.series.setData(bars);
-  bridge.chart.timeScale().applyOptions({ barSpacing: Math.max(1, barSpacing), rightOffset: 0, minBarSpacing: 1, maxBarSpacing: Math.max(1, barSpacing) });
+  bridge.chart.timeScale().applyOptions({
+    barSpacing: Math.max(1, barSpacing),
+    rightOffset: 0,
+    minBarSpacing: 1,
+    maxBarSpacing: Math.max(1, barSpacing),
+  });
   bridge.chart.timeScale().setVisibleLogicalRange({ from: -0.5, to: bars.length - 0.5 });
   const min = Math.min(...bars.map(bar => bar.low));
   const max = Math.max(...bars.map(bar => bar.high));
@@ -73,6 +82,7 @@ function sync(bridge: Bridge, stage: HTMLElement, svg: SVGElement) {
 
 function mount(stage: HTMLElement, svg: SVGElement) {
   if (bridges.has(svg)) return;
+
   const host = document.createElement('div');
   host.className = 'sire-tradingview-candle-canvas';
   Object.assign(host.style, { position: 'absolute', pointerEvents: 'none', zIndex: '2', overflow: 'hidden' });
@@ -109,7 +119,6 @@ function mount(stage: HTMLElement, svg: SVGElement) {
   const resize = new ResizeObserver(() => requestAnimationFrame(() => sync(bridge, stage, svg)));
   const bridge = { host, chart, series, observer, resize };
   bridges.set(svg, bridge);
-  svg.querySelectorAll<SVGGElement>('g.candle-up, g.candle-down').forEach(group => { group.style.visibility = 'hidden'; });
   observer.observe(svg, { childList: true, subtree: true, attributes: true, attributeFilter: ['x', 'y', 'width', 'height', 'class'] });
   resize.observe(stage);
   sync(bridge, stage, svg);
