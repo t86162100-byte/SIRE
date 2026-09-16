@@ -10,6 +10,7 @@ import './glassActionBar';
 import './glassInstrumentBridge';
 import './glassInstrumentSwipeFix';
 import './glassInstrumentHold';
+import './glassTimeframeSwipe';
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
