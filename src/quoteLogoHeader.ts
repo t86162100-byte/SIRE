@@ -61,9 +61,7 @@ function mount() {
   }
 
   /* Always keep the logo immediately before Search, even after React rerenders Quote. */
-  if (search.previousElementSibling !== header) {
-    sidebar.insertBefore(header, search);
-  }
+  if (search.previousElementSibling !== header) sidebar.insertBefore(header, search);
 }
 
 function install() {
@@ -73,11 +71,17 @@ function install() {
   window.setTimeout(mount, 800);
 }
 
-if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', install, { once: true });
-} else {
-  install();
-}
+if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', install, { once: true });
+else install();
 
-const observer = new MutationObserver(mount);
+const observer = new MutationObserver(() => mount());
 observer.observe(document.documentElement, { childList: true, subtree: true });
+
+// Quote can be activated by a class change after its DOM already exists.
+const rootObserver = new MutationObserver(() => mount());
+rootObserver.observe(document.getElementById('root') || document.documentElement, {
+  attributes: true,
+  attributeFilter: ['class'],
+});
+
+window.setInterval(mount, 300);
