@@ -68,11 +68,16 @@ export default function NativeMarketChart({ candles, latest, autoScale = true }:
     const nav = document.getElementById('sire-bottom-tabs');
     if (nav) resizeObserver.observe(nav);
     window.addEventListener('resize', scheduleSync);
+
+    // Keep the bar synchronized with the nav during its fade/slide animation,
+    // and also recover if the nav is recreated by React.
+    const syncTimer = window.setInterval(scheduleSync, 100);
     syncBottomSpace();
 
     return () => {
       disposed = true;
       window.cancelAnimationFrame(frame);
+      window.clearInterval(syncTimer);
       observer.disconnect();
       resizeObserver.disconnect();
       window.removeEventListener('resize', scheduleSync);
