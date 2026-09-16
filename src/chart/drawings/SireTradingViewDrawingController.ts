@@ -271,7 +271,7 @@ export function attachSireTradingViewDrawingController(
     syncButtons();
     if (active) {
       palette.hidden = false;
-      setStatus('Tap chart to show the crosshair.');
+      setStatus('Tap chart to activate the crosshair.');
     } else {
       chart.clearCrosshairPosition();
       palette.hidden = true;
@@ -283,7 +283,7 @@ export function attachSireTradingViewDrawingController(
     if (palette.hidden) {
       palette.hidden = false;
       toggle.setAttribute('aria-expanded', 'true');
-      setStatus(primitive.getTool() ? 'Tap chart to show the crosshair.' : 'Choose a drawing tool.');
+      setStatus(primitive.getTool() ? 'Tap chart to activate the crosshair.' : 'Choose a drawing tool.');
     } else if (primitive.getTool()) {
       palette.hidden = true;
       toggle.setAttribute('aria-expanded', 'false');
@@ -304,18 +304,8 @@ export function attachSireTradingViewDrawingController(
     pointerId = event.pointerId;
     try { element.setPointerCapture(event.pointerId); } catch { /* noop */ }
     chart.setCrosshairPosition(point.price, point.time, series);
-
-    if (!armed) {
-      armed = true;
-      pendingPoint = point;
-      primitive.setPreview(point);
-      setStatus('Crosshair active. Move/drag to the first anchor, then release or tap.');
-      return;
-    }
-
     pendingPoint = point;
     primitive.setPreview(firstPoint ?? point, point);
-    setStatus(firstPoint ? 'Move to the second anchor, then release or tap.' : 'Move to the first anchor, then release or tap.');
   };
 
   const onPointerMove = (event: PointerEvent) => {
@@ -333,7 +323,7 @@ export function attachSireTradingViewDrawingController(
   };
 
   const onPointerUp = (event: PointerEvent) => {
-    if (!primitive.getTool() || !armed || !pointerActive) return;
+    if (!primitive.getTool() || !pointerActive) return;
     const point = pointFromEvent(chart, series, event) ?? pendingPoint;
     pointerActive = false;
     if (pointerId >= 0) {
@@ -344,17 +334,24 @@ export function attachSireTradingViewDrawingController(
     event.preventDefault();
     event.stopPropagation();
     chart.setCrosshairPosition(point.price, point.time, series);
+    pendingPoint = point;
+
+    if (!armed) {
+      armed = true;
+      primitive.setPreview(point, point);
+      setStatus('Crosshair active. Move it, then tap to set the first anchor.');
+      return;
+    }
 
     if (!firstPoint) {
       firstPoint = point;
-      pendingPoint = point;
       if (primitive.getTool() === 'horizontal') {
         primitive.add(point, point);
         resetPlacement();
-        setStatus('Horizontal line placed. Tap again to place another.');
+        setStatus('Horizontal line placed. Tap chart to start another.');
       } else {
         primitive.setPreview(point, point);
-        setStatus('First anchor placed. Move to the second anchor, then tap or release.');
+        setStatus('First anchor set. Move the crosshair, then tap to set the second anchor.');
       }
       return;
     }
@@ -364,13 +361,11 @@ export function attachSireTradingViewDrawingController(
     setStatus('Drawing placed. Tap chart to start another.');
   };
 
-  const onPointerCancel = (event: PointerEvent) => {
-    if (pointerActive) {
-      onPointerUp(event);
-    } else {
-      pendingPoint = null;
-      primitive.clearPreview();
-    }
+  const onPointerCancel = () => {
+    pointerActive = false;
+    pointerId = -1;
+    pendingPoint = null;
+    primitive.clearPreview();
   };
 
   const onUndo = () => {
@@ -407,7 +402,6 @@ export function attachSireTradingViewDrawingController(
   const redraw = () => primitive.invalidate();
   chart.timeScale().subscribeVisibleLogicalRangeChange(redraw);
   chart.timeScale().subscribeSizeChange(redraw);
-
   syncButtons();
 
   return {
