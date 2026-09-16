@@ -26,23 +26,13 @@ export function attachSireNativeDrawingController(
 
   if (!button || !palette || !status || !undo || !clear) return { destroy: () => undefined };
 
-  // Drawings live on a separate transparent canvas. This deliberately does not
-  // attach a Lightweight Charts primitive: attaching a primitive during a
-  // live mobile chart interaction was able to invalidate the candle renderer.
-  // Coordinates still come exclusively from Lightweight Charts' public time /
-  // price conversion APIs, so drawings follow pan and zoom correctly.
   const chartElement = chart.chartElement();
   chartElement.style.position = chartElement.style.position || 'relative';
   const canvas = document.createElement('canvas');
   canvas.setAttribute('aria-hidden', 'true');
   Object.assign(canvas.style, {
-    position: 'absolute',
-    left: '0',
-    top: '0',
-    width: '0',
-    height: '0',
-    pointerEvents: 'none',
-    zIndex: '5',
+    position: 'absolute', left: '0', top: '0', width: '0', height: '0',
+    pointerEvents: 'none', zIndex: '5',
   });
   chartElement.appendChild(canvas);
   const ctx = canvas.getContext('2d');
@@ -51,6 +41,7 @@ export function attachSireNativeDrawingController(
   let firstPoint: Point | null = null;
   let previewPoint: Point | null = null;
   let pointerActive = false;
+  let completing = false;
   let destroyed = false;
   let nextId = 1;
   let drawings: Drawing[] = [];
@@ -66,12 +57,8 @@ export function attachSireNativeDrawingController(
     const dpr = Math.max(1, window.devicePixelRatio || 1);
     canvas.style.width = `${width}px`;
     canvas.style.height = `${height}px`;
-    const pixelWidth = Math.max(1, Math.round(width * dpr));
-    const pixelHeight = Math.max(1, Math.round(height * dpr));
-    if (canvas.width !== pixelWidth || canvas.height !== pixelHeight) {
-      canvas.width = pixelWidth;
-      canvas.height = pixelHeight;
-    }
+    canvas.width = Math.max(1, Math.round(width * dpr));
+    canvas.height = Math.max(1, Math.round(height * dpr));
     draw();
   };
 
@@ -122,20 +109,15 @@ export function attachSireNativeDrawingController(
       const a = toCoordinates(drawing.a);
       if (!a) return;
       if (drawing.tool === 'horizontal') {
-        ctx.beginPath();
-        ctx.moveTo(0, a.y);
-        ctx.lineTo(width, a.y);
-        ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(0, a.y); ctx.lineTo(width, a.y); ctx.stroke();
         return;
       }
       if (!drawing.b) return;
       const b = toCoordinates(drawing.b);
       if (!b) return;
       if (drawing.tool === 'rectangle') {
-        const left = Math.min(a.x, b.x);
-        const top = Math.min(a.y, b.y);
-        ctx.fillRect(left, top, Math.abs(b.x - a.x), Math.abs(b.y - a.y));
-        ctx.strokeRect(left, top, Math.abs(b.x - a.x), Math.abs(b.y - a.y));
+        ctx.fillRect(Math.min(a.x, b.x), Math.min(a.y, b.y), Math.abs(b.x - a.x), Math.abs(b.y - a.y));
+        ctx.strokeRect(Math.min(a.x, b.x), Math.min(a.y, b.y), Math.abs(b.x - a.x), Math.abs(b.y - a.y));
       } else {
         drawSegment(a, b, drawing.tool === 'ray');
       }
@@ -150,10 +132,7 @@ export function attachSireNativeDrawingController(
         ctx.setLineDash([5, 4]);
         ctx.strokeStyle = 'rgba(150, 205, 255, 0.85)';
         if (activeTool === 'horizontal') {
-          ctx.beginPath();
-          ctx.moveTo(0, a.y);
-          ctx.lineTo(width, a.y);
-          ctx.stroke();
+          ctx.beginPath(); ctx.moveTo(0, a.y); ctx.lineTo(width, a.y); ctx.stroke();
         } else if (activeTool === 'rectangle') {
           ctx.strokeRect(Math.min(a.x, b.x), Math.min(a.y, b.y), Math.abs(b.x - a.x), Math.abs(b.y - a.y));
         } else {
@@ -167,10 +146,7 @@ export function attachSireNativeDrawingController(
 
   const scheduleDraw = () => {
     if (raf) return;
-    raf = window.requestAnimationFrame(() => {
-      raf = 0;
-      draw();
-    });
+    raf = window.requestAnimationFrame(() => { raf = 0; draw(); });
   };
 
   const setPalette = (open: boolean) => {
@@ -184,6 +160,7 @@ export function attachSireNativeDrawingController(
     activeTool = tool;
     firstPoint = null;
     previewPoint = null;
+    completing = false;
     if (!tool) {
       chart.clearCrosshairPosition();
       button.classList.remove('active');
@@ -211,7 +188,7 @@ export function attachSireNativeDrawingController(
   };
 
   const onPointerDown = (event: PointerEvent) => {
-    if (destroyed || !activeTool || event.pointerType === 'mouse' && event.button !== 0) return;
+    if (destroyed || !activeTool || (event.pointerType === 'mouse' && event.button !== 0)) return;
     const rect = chartElement.getBoundingClientRect();
     const x = event.clientX - rect.left;
     const y = event.clientY - rect.top;
@@ -228,12 +205,16 @@ export function attachSireNativeDrawingController(
     if (activeTool === 'horizontal') {
       drawings.push({ id: nextId++, tool: activeTool, a: point });
       firstPoint = null;
+      completing = false;
       setStatus('Horizontal line placed');
       scheduleDraw();
       return;
     }
 
-    if (!firstPoint) {
+    if (firstPoint) {
+      completing = true;
+    } else {
+      completing = false;
       firstPoint = point;
       setStatus(`${TOOL_LABELS[activeTool]}: tap the second point`);
       scheduleDraw();
@@ -241,67 +222,56 @@ export function attachSireNativeDrawingController(
   };
 
   const onPointerMove = (event: PointerEvent) => {
-    if (destroyed || !activeTool || !pointerActive && event.pointerType !== 'mouse') return;
+    if (destroyed || !activeTool || (!pointerActive && event.pointerType !== 'mouse')) return;
     const rect = chartElement.getBoundingClientRect();
     const x = event.clientX - rect.left;
     const y = event.clientY - rect.top;
     const size = paneSize();
     if (x < 0 || y < 0 || x > size.width || y > size.height) return;
     const point = pointFromXY(x, y);
-    if (!point) return;
-    updateCrosshair(point);
+    if (point) updateCrosshair(point);
   };
 
   const onPointerUp = (event: PointerEvent) => {
     if (!pointerActive || !activeTool) return;
     pointerActive = false;
+    if (!completing || !firstPoint) return;
     const rect = chartElement.getBoundingClientRect();
     const point = pointFromXY(event.clientX - rect.left, event.clientY - rect.top);
-    if (point && firstPoint) {
-      drawings.push({ id: nextId++, tool: activeTool, a: firstPoint, b: point });
-      firstPoint = null;
-      setStatus(`${TOOL_LABELS[activeTool]} placed — tap again to draw another`);
-      scheduleDraw();
-    }
+    if (!point) return;
+    drawings.push({ id: nextId++, tool: activeTool, a: firstPoint, b: point });
+    firstPoint = null;
+    previewPoint = point;
+    completing = false;
+    setStatus(`${TOOL_LABELS[activeTool]} placed — tap again to draw another`);
+    scheduleDraw();
   };
 
   const onToggle = (event: Event) => {
-    event.preventDefault();
-    event.stopPropagation();
+    event.preventDefault(); event.stopPropagation();
     const opening = palette.hidden;
     setPalette(opening);
-    if (opening) {
-      if (!activeTool) setStatus('Choose a drawing tool');
-    } else {
-      setTool(null);
-    }
+    if (opening) { if (!activeTool) setStatus('Choose a drawing tool'); }
+    else setTool(null);
   };
 
   const onTool = (event: Event) => {
-    event.preventDefault();
-    event.stopPropagation();
+    event.preventDefault(); event.stopPropagation();
     const tool = (event.currentTarget as HTMLElement).dataset.sireDrawingTool as DrawingTool | undefined;
     if (!tool) return;
-    setTool(tool);
-    setPalette(true);
+    setTool(tool); setPalette(true);
   };
 
   const onUndo = (event: Event) => {
-    event.preventDefault();
-    event.stopPropagation();
-    firstPoint = null;
-    drawings = drawings.slice(0, -1);
-    setStatus(activeTool ? `${TOOL_LABELS[activeTool]}: ready` : '');
-    scheduleDraw();
+    event.preventDefault(); event.stopPropagation();
+    firstPoint = null; completing = false; drawings = drawings.slice(0, -1);
+    setStatus(activeTool ? `${TOOL_LABELS[activeTool]}: ready` : ''); scheduleDraw();
   };
 
   const onClear = (event: Event) => {
-    event.preventDefault();
-    event.stopPropagation();
-    firstPoint = null;
-    drawings = [];
-    setStatus(activeTool ? `${TOOL_LABELS[activeTool]}: ready` : '');
-    scheduleDraw();
+    event.preventDefault(); event.stopPropagation();
+    firstPoint = null; completing = false; drawings = [];
+    setStatus(activeTool ? `${TOOL_LABELS[activeTool]}: ready` : ''); scheduleDraw();
   };
 
   const onRangeChange = () => scheduleDraw();
@@ -339,7 +309,10 @@ export function attachSireNativeDrawingController(
       chart.clearCrosshairPosition();
       canvas.remove();
       setPalette(false);
-      setTool(null);
+      activeTool = null;
+      firstPoint = null;
+      previewPoint = null;
+      drawings = [];
     },
   };
 }
