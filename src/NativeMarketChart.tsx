@@ -27,20 +27,10 @@ function toSeriesData(candles: Candle[]): CandlestickData[] {
 
 export default function NativeMarketChart({ candles, latest, autoScale = true }: Props) {
   const hostRef = useRef<HTMLDivElement | null>(null);
-  const barRef = useRef<HTMLDivElement | null>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const seriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null);
   const initializedRef = useRef(false);
   const firstDataRef = useRef(false);
-
-  useEffect(() => {
-    const bar = barRef.current;
-    if (!bar) return;
-    bar.style.bottom = '8px';
-    bar.style.display = 'block';
-    bar.style.visibility = 'visible';
-    bar.style.opacity = '1';
-  }, []);
 
   useEffect(() => {
     const host = hostRef.current;
@@ -81,6 +71,6 @@ export default function NativeMarketChart({ candles, latest, autoScale = true }:
 
   return <div className="native-chart-touch-surface">
     <div ref={hostRef} className="sire-native-chart" aria-label="SIRE native market chart" />
-    <div ref={barRef} className="native-bottom-glass-bar" aria-hidden="true" />
+    <div className="native-bottom-glass-bar" aria-hidden="true" />
   </div>;
 }
