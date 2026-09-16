@@ -20,6 +20,8 @@ type Bridge = {
   series: ISeriesApi<'Candlestick'>;
   observer: MutationObserver;
   resize: ResizeObserver;
+  initialized: boolean;
+  barCount: number;
 };
 
 const bridges = new WeakMap<SVGElement, Bridge>();
@@ -100,25 +102,50 @@ function sync(bridge: Bridge, stage: HTMLElement, svg: SVGElement) {
   const bars = readBars(stage, svg);
   if (!bars.length) return;
 
+  const timeScale = bridge.chart.timeScale();
+  const previousRange = timeScale.getVisibleLogicalRange();
+  const previousCount = bridge.barCount;
+  const wasAtRightEdge = previousRange !== null && previousRange.to >= previousCount - 0.75;
+
   bridge.series.setData(bars);
+  bridge.barCount = bars.length;
 
-  // Keep a real chart-style bar spacing. Do not call fitContent(): it expands
-  // the time scale to fill the whole viewport when only a few bars are present,
-  // which produces the oversized/stretched candles seen previously.
   const barSpacing = 8;
-  const visibleSlots = Math.max(24, Math.floor(bridge.host.clientWidth / barSpacing));
+  const minBarSpacing = 3;
+  const maxBarSpacing = 32;
   const rightPadding = 2;
-  const from = Math.max(-rightPadding, bars.length - visibleSlots);
-  const to = bars.length + rightPadding;
 
-  bridge.chart.timeScale().applyOptions({
+  timeScale.applyOptions({
     barSpacing,
-    minBarSpacing: 4,
+    minBarSpacing,
+    maxBarSpacing,
     rightOffset: rightPadding,
     fixLeftEdge: false,
     fixRightEdge: false,
+    lockVisibleTimeRangeOnResize: true,
+    rightBarStaysOnScroll: true,
+    shiftVisibleRangeOnNewBar: true,
   });
-  bridge.chart.timeScale().setVisibleLogicalRange({ from, to });
+
+  if (!bridge.initialized || !previousRange) {
+    // Establish a sensible trading-chart starting view without fitContent().
+    // fitContent() makes a tiny dataset fill the viewport and creates giant candles.
+    const visibleSlots = Math.max(24, Math.floor(bridge.host.clientWidth / barSpacing));
+    const from = Math.max(-rightPadding, bars.length - visibleSlots);
+    const to = bars.length + rightPadding;
+    timeScale.setVisibleLogicalRange({ from, to });
+    bridge.initialized = true;
+    return;
+  }
+
+  // Preserve the user's zoom/pan across React/SVG updates. If the latest bar was
+  // visible at the right edge, move the range forward with newly appended bars.
+  const delta = bars.length - previousCount;
+  const shift = wasAtRightEdge && delta > 0 ? delta : 0;
+  timeScale.setVisibleLogicalRange({
+    from: previousRange.from + shift,
+    to: previousRange.to + shift,
+  });
 }
 
 function mount(stage: HTMLElement, svg: SVGElement) {
@@ -128,9 +155,11 @@ function mount(stage: HTMLElement, svg: SVGElement) {
   host.className = 'sire-native-candlestick-chart';
   Object.assign(host.style, {
     position: 'absolute',
-    pointerEvents: 'none',
+    pointerEvents: 'auto',
     zIndex: '1',
     overflow: 'hidden',
+    touchAction: 'none',
+    userSelect: 'none',
   });
 
   const place = () => {
@@ -161,14 +190,34 @@ function mount(stage: HTMLElement, svg: SVGElement) {
       visible: false,
       borderVisible: false,
       barSpacing: 8,
-      minBarSpacing: 4,
+      minBarSpacing: 3,
+      maxBarSpacing: 32,
       rightOffset: 2,
       fixLeftEdge: false,
       fixRightEdge: false,
+      lockVisibleTimeRangeOnResize: true,
+      rightBarStaysOnScroll: true,
+      shiftVisibleRangeOnNewBar: true,
     },
     crosshair: { mode: 0 },
-    handleScroll: false,
-    handleScale: false,
+    // Trading-chart style interaction: mouse drag pans, wheel zooms the
+    // horizontal candle spacing, and touch pinch zooms while swiping pans.
+    handleScroll: {
+      mouseWheel: false,
+      pressedMouseMove: true,
+      horzTouchDrag: true,
+      vertTouchDrag: false,
+    },
+    handleScale: {
+      mouseWheel: true,
+      pinch: true,
+      axisPressedMouseMove: false,
+      axisDoubleClickReset: true,
+    },
+    kineticScroll: {
+      mouse: true,
+      touch: true,
+    },
   });
 
   const series = chart.addSeries(CandlestickSeries, {
@@ -193,6 +242,8 @@ function mount(stage: HTMLElement, svg: SVGElement) {
       place();
       requestAnimationFrame(() => sync(bridge, stage, svg));
     }),
+    initialized: false,
+    barCount: 0,
   };
 
   bridges.set(svg, bridge);
