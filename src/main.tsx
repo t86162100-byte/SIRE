@@ -17,6 +17,7 @@ import './glassTimeframeStyleFix';
 import './glassDrawIconFix';
 import './glassDrawBridge';
 import './glassToolsBridge';
+import './navigationAutoHide';
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
