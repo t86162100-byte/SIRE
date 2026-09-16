@@ -1,14 +1,11 @@
-/* Crisp financial-chart candle rendering. Geometry is normalized by the chart
-   renderer; this file only controls edge quality and wick sharpness. */
+/* Crisp financial-chart candle rendering.
+   Keep candle bodies clean and separate without painting black outlines into the gaps. */
 .market-svg .candle-body,
 .placement-loupe .candle-body {
   shape-rendering: crispEdges;
   vector-effect: non-scaling-stroke;
-  paint-order: stroke fill;
-  stroke: #050608;
-  stroke-width: 0.85;
-  stroke-linejoin: miter;
-  stroke-linecap: butt;
+  stroke: none;
+  stroke-width: 0;
   rx: 0;
 }
 
