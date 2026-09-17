@@ -1,11 +1,12 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type PointerEvent, type WheelEvent } from 'react';
 import { createChart, darkTheme, type Chart } from 'openalgo-charts';
 import './financialChart.css';
 
 type Tick = { symbol: string; quote: number; epoch: number };
 type HistoryResponse = Record<string, unknown>;
 type HistoryRequester = (request: Record<string, unknown>) => Promise<HistoryResponse>;
-type Props = { symbol: string; liveTick: Tick | null; requestHistory: HistoryRequester };
+type Instrument = { symbol: string; name: string };
+type Props = { symbol: string; liveTick: Tick | null; requestHistory: HistoryRequester; instruments: Instrument[]; onSelectInstrument: (instrument: Instrument) => void };
 type Candle = { time: number; open: number; high: number; low: number; close: number; volume?: number };
 type Period = { label: string; seconds: number };
 
@@ -75,7 +76,7 @@ async function loadHistory(symbol: string, seconds: number, request: HistoryRequ
   throw new Error('Deriv returned no chart history');
 }
 
-export default function FinancialChart({ symbol, liveTick, requestHistory }: Props) {
+export default function FinancialChart({ symbol, liveTick, requestHistory, instruments, onSelectInstrument }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<Chart | null>(null);
   const seriesRef = useRef<any>(null);
@@ -87,6 +88,68 @@ export default function FinancialChart({ symbol, liveTick, requestHistory }: Pro
   const [period, setPeriod] = useState(PERIODS[0].seconds);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const pressTimerRef = useRef<number | null>(null);
+  const pointerStartRef = useRef<{ x: number; y: number } | null>(null);
+  const pointerMovedRef = useRef(false);
+
+  const selectedIndex = Math.max(0, instruments.findIndex(item => item.symbol === symbol));
+  const currentInstrument = instruments[selectedIndex];
+  const previousInstrument = instruments.length ? instruments[(selectedIndex - 1 + instruments.length) % instruments.length] : undefined;
+  const nextInstrument = instruments.length ? instruments[(selectedIndex + 1) % instruments.length] : undefined;
+  const filteredInstruments = instruments.filter(item => `${item.name} ${item.symbol}`.toLowerCase().includes(searchQuery.trim().toLowerCase()));
+
+  const clearPressTimer = () => {
+    if (pressTimerRef.current !== null) {
+      window.clearTimeout(pressTimerRef.current);
+      pressTimerRef.current = null;
+    }
+  };
+
+  const changeInstrument = (direction: 1 | -1) => {
+    if (!instruments.length || instruments.length === 1) return;
+    const nextIndex = (selectedIndex + direction + instruments.length) % instruments.length;
+    onSelectInstrument(instruments[nextIndex]);
+  };
+
+  const handlePointerDown = (event: PointerEvent<HTMLDivElement>) => {
+    pointerStartRef.current = { x: event.clientX, y: event.clientY };
+    pointerMovedRef.current = false;
+    clearPressTimer();
+    pressTimerRef.current = window.setTimeout(() => {
+      if (!pointerMovedRef.current) {
+        setSearchOpen(true);
+        setSearchQuery('');
+      }
+      pressTimerRef.current = null;
+    }, 600);
+  };
+
+  const handlePointerMove = (event: PointerEvent<HTMLDivElement>) => {
+    const start = pointerStartRef.current;
+    if (!start) return;
+    const distance = Math.hypot(event.clientX - start.x, event.clientY - start.y);
+    if (distance > 8) {
+      pointerMovedRef.current = true;
+      clearPressTimer();
+    }
+  };
+
+  const handlePointerUp = (event: PointerEvent<HTMLDivElement>) => {
+    const start = pointerStartRef.current;
+    clearPressTimer();
+    pointerStartRef.current = null;
+    if (!start || pointerMovedRef.current) return;
+    const dy = event.clientY - start.y;
+    if (Math.abs(dy) > 18) changeInstrument(dy < 0 ? 1 : -1);
+  };
+
+  const handleWheel = (event: WheelEvent<HTMLDivElement>) => {
+    if (Math.abs(event.deltaY) < 8) return;
+    event.preventDefault();
+    changeInstrument(event.deltaY > 0 ? -1 : 1);
+  };
 
   const updateTick = (tick: Tick, seconds: number) => {
     const series = seriesRef.current;
@@ -106,6 +169,8 @@ export default function FinancialChart({ symbol, liveTick, requestHistory }: Pro
     symbolRef.current = symbol;
     latestTickRef.current = null;
   }, [symbol]);
+
+  useEffect(() => () => clearPressTimer(), []);
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -164,7 +229,50 @@ export default function FinancialChart({ symbol, liveTick, requestHistory }: Pro
       </div>
       <div ref={containerRef} className="sire-chart-canvas" />
       {(loading || error) && <div className={`sire-chart-status${error ? ' error' : ''}`}>{error || `Loading ${symbol} history...`}</div>}
-      <div className="sire-chart-bottom-glass" aria-hidden="true" />
+      <div
+        className="sire-chart-bottom-glass"
+        onPointerDown={handlePointerDown}
+        onPointerMove={handlePointerMove}
+        onPointerUp={handlePointerUp}
+        onPointerCancel={() => { clearPressTimer(); pointerStartRef.current = null; }}
+        onWheel={handleWheel}
+        role="button"
+        tabIndex={0}
+        aria-label={`Change instrument. Current instrument ${currentInstrument?.name || symbol}. Hold for search.`}
+      >
+        <div className="sire-instrument-carousel" aria-live="polite">
+          <div className="sire-instrument-neighbor sire-instrument-neighbor-top">{previousInstrument?.name || ''}</div>
+          <div className="sire-instrument-current">{currentInstrument?.name || symbol}</div>
+          <div className="sire-instrument-neighbor sire-instrument-neighbor-bottom">{nextInstrument?.name || ''}</div>
+        </div>
+        {searchOpen && (
+          <div className="sire-instrument-search" onPointerDown={event => event.stopPropagation()} onWheel={event => event.stopPropagation()}>
+            <div className="sire-instrument-search-head">
+              <input
+                autoFocus
+                value={searchQuery}
+                onChange={event => setSearchQuery(event.target.value)}
+                placeholder="Search Synthetic Indices"
+                aria-label="Search Synthetic Indices"
+              />
+              <button type="button" onClick={() => setSearchOpen(false)}>Close</button>
+            </div>
+            <div className="sire-instrument-search-results">
+              {filteredInstruments.slice(0, 40).map(item => (
+                <button
+                  key={item.symbol}
+                  type="button"
+                  className={item.symbol === symbol ? 'active' : ''}
+                  onClick={() => { onSelectInstrument(item); setSearchOpen(false); setSearchQuery(''); }}
+                >
+                  <span>{item.name}</span><small>{item.symbol}</small>
+                </button>
+              ))}
+              {!filteredInstruments.length && <div className="sire-instrument-empty">No Synthetic Indices found.</div>}
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
