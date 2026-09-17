@@ -24,7 +24,7 @@ function installStyles() {
     #${OVERLAY_ID} .sire-logo-orbit::before{display:none!important;content:none!important}
     #${OVERLAY_ID} .sire-logo-mark{position:relative;z-index:2;display:grid;place-items:center;width:46px;height:46px;color:#fff;font-size:41px;font-weight:900;line-height:1;text-shadow:none;filter:none;animation:sire-star 1.15s cubic-bezier(.45,0,.55,1) infinite;transform-origin:center}
     #${OVERLAY_ID} .sire-logo-mark::after{display:none!important;content:none!important}
-    #${OVERLAY_ID} .sire-loader-name{display:block;width:0;overflow:hidden;opacity:0;transform:translateX(-24px);margin-left:0;white-space:nowrap;font-size:25px;font-weight:900;letter-spacing:.15em;color:#fff;text-shadow:none;transition:width .75s cubic-bezier(.16,1,.3,1),opacity .45s ease,transform .75s cubic-bezier(.16,1,.3,1),margin-left .75s cubic-bezier(.16,1,.3,1)}
+    #${OVERLAY_ID} .sire-loader-name{display:block;width:0;overflow:hidden;opacity:0;transform:translateX(24px);margin-left:0;white-space:nowrap;font-size:25px;font-weight:900;letter-spacing:.15em;color:#fff;text-shadow:none;transition:width .75s cubic-bezier(.16,1,.3,1),opacity .45s ease,transform .75s cubic-bezier(.16,1,.3,1),margin-left .75s cubic-bezier(.16,1,.3,1)}
     #${OVERLAY_ID}.is-complete .sire-logo-mark{animation:sire-finish .65s cubic-bezier(.22,1,.36,1) forwards}
     #${OVERLAY_ID}.is-complete .sire-loader-name{width:78px;opacity:1;transform:translateX(0);margin-left:15px}
     #${OVERLAY_ID} .sire-loader-message,#${OVERLAY_ID} .sire-loader-line{display:none}
@@ -53,7 +53,8 @@ function shouldAutoLoad() {
   if (!root) return false;
   if (root.classList.contains('sire-chart-tab')) {
     const text = root.textContent?.replace(/\s+/g, ' ').toLowerCase() || '';
-    return text.includes('no instrument') || text.includes('waiting for genuine deriv ticks') || text.includes('connecting to deriv');
+    const chartStatus = root.querySelector('.sire-chart-status:not(.error)');
+    return Boolean(chartStatus) || text.includes('no instrument') || text.includes('waiting for genuine deriv ticks') || text.includes('connecting to deriv');
   }
   if (root.classList.contains('sire-tab-quote')) return !root.querySelector('.symbol-list .symbol-row');
   return false;
