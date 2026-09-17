@@ -15,6 +15,7 @@
   "dependencies": {
     "@appdeploy/client": "file:./compat/appdeploy-client",
     "@appdeploy/sdk": "file:./compat/appdeploy-sdk",
+    "lightweight-charts": "5.2.1",
     "lucide-react": "^0.469.0",
     "pg": "^8.13.1",
     "puppeteer": "^24.20.0",
