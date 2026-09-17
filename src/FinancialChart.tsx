@@ -96,7 +96,7 @@ export default function FinancialChart({ symbol, liveTick, requestHistory, instr
       topbar: true,
       statusline: true,
       indicators: true,
-      mobile: 'auto',
+      mobile: 'always',
       symbolSearch: async (query: string) => instrumentsRef.current
         .filter(item => `${item.name} ${item.symbol}`.toLowerCase().includes(query.trim().toLowerCase()))
         .slice(0, 50)
