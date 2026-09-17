@@ -7,10 +7,11 @@ const DEFAULT_COLOR = '#ffb020';
 const DEFAULT_LINE_WIDTH = 1.5;
 const POINT_COUNTS: Partial<Record<DrawingToolType, number>> = {
   hline:1, hray:1, vline:1, crossline:1, text:1, 'anchored-vwap':1,
+  trendline:2, ray:2, line:2,
   channel:3, pitchfork:3, 'fib-extension':3, 'fib-channel':3, 'triangle-pattern':3,
   arc:3, 'rotated-rectangle':3, 'fib-wedge':3, 'abcd-pattern':4, 'xabcd-pattern':5, 'head-shoulders':7,
 };
-const FREEHAND = new Set<DrawingToolType>(['brush','highlighter','polyline','elliott-wave','trendline']);
+const FREEHAND = new Set<DrawingToolType>(['brush','highlighter','polyline','elliott-wave']);
 const FIB_LEVELS: Partial<Record<DrawingToolType, number[]>> = {
   fibonacci:[0,.236,.382,.5,.618,.786,1], 'fib-extension':[0,.236,.382,.5,.618,1,1.618,2.618],
   'fib-channel':[0,.236,.382,.5,.618,1], 'gann-box':[0,.25,.5,.75,1], 'fib-time-zone':[0,1,2,3,5,8,13], 'fib-wedge':[0,.236,.382,.5,.618,1],
@@ -31,6 +32,8 @@ function buildDrawing(tool: DrawingToolType, points: DrawingPoint[], seriesId:st
     case 'text': return {...base,type:'text',point:first,content:content?.trim()||'Text',fontSize:12};
     case 'callout': return {...base,type:'callout',points:[first,points[1]],content:content?.trim()||'Label'};
     case 'ray': return {...base,type:'ray',points:[first,points[1]],extend:'right'};
+    case 'line':
+    case 'trendline': return {...base,type:tool,points:[first,points[1]]};
     default: return {...base,type:tool,points:points.slice(0,needed),...(FIB_LEVELS[tool]?{levels:FIB_LEVELS[tool]}:{})} as Omit<DrawingObject,'id'>;
   }
 }
