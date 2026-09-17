@@ -1,5 +1,10 @@
 import { useEffect, useRef } from 'react';
+import 'openalgo-charts/indicators';
 import 'openalgo-charts/draw';
+import 'openalgo-charts/profile';
+import 'openalgo-charts/trade';
+import 'openalgo-charts/transform';
+import 'openalgo-charts/webgl';
 import { createWidget, type Widget } from 'openalgo-charts/widget';
 import './financialChart.css';
 
@@ -86,11 +91,12 @@ export default function FinancialChart({ symbol, liveTick, requestHistory, instr
       interval: '1m',
       chartType: 'candlestick',
       theme: 'dark',
+      renderer: 'auto',
       rail: true,
       topbar: true,
       statusline: true,
       indicators: true,
-      mobile: 'always',
+      mobile: 'auto',
       symbolSearch: async (query: string) => instrumentsRef.current
         .filter(item => `${item.name} ${item.symbol}`.toLowerCase().includes(query.trim().toLowerCase()))
         .slice(0, 50)
@@ -98,17 +104,6 @@ export default function FinancialChart({ symbol, liveTick, requestHistory, instr
     });
     widgetRef.current = widget;
 
-    // Keep OpenAlgo's own mobile chrome active in the host shell. The widget
-    // creates the Draw / Studies / Objects / More controls itself; this only
-    // re-applies the documented mobile state after the widget is mounted so
-    // host layout/CSS cannot leave the default chrome in its hidden state.
-    const ensureOpenAlgoMobileChrome = () => {
-      widget.root.classList.add('is-mobile');
-      const mobileRoot = widget.root.querySelector<HTMLElement>('.oac-mobile');
-      if (mobileRoot) mobileRoot.hidden = false;
-    };
-    ensureOpenAlgoMobileChrome();
-    const mobileChromeFrame = window.requestAnimationFrame(ensureOpenAlgoMobileChrome);
     const offSymbol = widget.on('symbol', (event: { symbol: string }) => {
       const instrument = instrumentsRef.current.find(item => item.symbol === event.symbol);
       if (instrument && instrument.symbol !== symbolRef.current) onSelectInstrumentRef.current(instrument);
@@ -120,7 +115,6 @@ export default function FinancialChart({ symbol, liveTick, requestHistory, instr
       offSymbol?.();
       offData?.();
       subscriberRef.current = null;
-      window.cancelAnimationFrame(mobileChromeFrame);
       widget.destroy();
       widgetRef.current = null;
       candlesRef.current = [];
