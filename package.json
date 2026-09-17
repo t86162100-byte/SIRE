@@ -15,7 +15,7 @@
   "dependencies": {
     "@appdeploy/client": "file:./compat/appdeploy-client",
     "@appdeploy/sdk": "file:./compat/appdeploy-sdk",
-    "openalgo-charts": "2.2.0",
+    "openalgo-charts": "2.3.2",
     "lucide-react": "^0.469.0",
     "pg": "^8.13.1",
     "puppeteer": "^24.20.0",
@@ -29,7 +29,7 @@
   "devDependencies": {
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
-    "@types/ws": "^8.5.13",
+    "@types/ws": "^8.5.0",
     "@vitejs/plugin-react": "^4.3.0",
     "autoprefixer": "^10.4.0",
     "postcss": "^8.4.0",
