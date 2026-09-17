@@ -5,8 +5,18 @@ import './financialChart.css';
 type Tick = { symbol: string; quote: number; epoch: number };
 type Props = { symbol: string; liveTick: Tick | null };
 type Candle = { time: UTCTimestamp; open: number; high: number; low: number; close: number };
-const HISTORY_WS = 'wss://ws.binaryws.com/websockets/v3';
-const PERIODS = [{ label: '1m', seconds: 60 }, { label: '5m', seconds: 300 }, { label: '15m', seconds: 900 }, { label: '1H', seconds: 3600 }];
+type HistoryResponse = Record<string, unknown>;
+
+const HISTORY_ENDPOINTS = [
+  'wss://api.derivws.com/trading/v1/options/ws/public',
+  'wss://ws.binaryws.com/websockets/v3',
+] as const;
+const PERIODS = [
+  { label: '1m', seconds: 60 },
+  { label: '5m', seconds: 300 },
+  { label: '15m', seconds: 900 },
+  { label: '1H', seconds: 3600 },
+];
 
 function aggregate(ticks: Tick[], seconds: number): Candle[] {
   const buckets = new Map<number, Candle>();
@@ -14,30 +24,119 @@ function aggregate(ticks: Tick[], seconds: number): Candle[] {
     if (!Number.isFinite(tick.quote) || !Number.isFinite(tick.epoch)) continue;
     const bucket = Math.floor(tick.epoch / seconds) * seconds;
     const current = buckets.get(bucket);
-    if (!current) buckets.set(bucket, { time: bucket as UTCTimestamp, open: tick.quote, high: tick.quote, low: tick.quote, close: tick.quote });
-    else { current.high = Math.max(current.high, tick.quote); current.low = Math.min(current.low, tick.quote); current.close = tick.quote; }
+    if (!current) {
+      buckets.set(bucket, { time: bucket as UTCTimestamp, open: tick.quote, high: tick.quote, low: tick.quote, close: tick.quote });
+    } else {
+      current.high = Math.max(current.high, tick.quote);
+      current.low = Math.min(current.low, tick.quote);
+      current.close = tick.quote;
+    }
   }
   return [...buckets.values()].sort((a, b) => Number(a.time) - Number(b.time));
 }
 
-function requestHistory(symbol: string): Promise<Tick[]> {
-  return new Promise((resolve, reject) => {
-    const ws = new WebSocket(HISTORY_WS);
-    const timer = window.setTimeout(() => { ws.close(); reject(new Error('Chart history request timed out')); }, 12000);
-    ws.onerror = () => { window.clearTimeout(timer); ws.close(); reject(new Error('Unable to load chart history from Deriv')); };
-    ws.onopen = () => ws.send(JSON.stringify({ ticks_history: symbol, end: 'latest', count: 2500, style: 'ticks', req_id: 71 }));
-    ws.onmessage = event => {
+function parseHistory(data: HistoryResponse, symbol: string): Tick[] | null {
+  const history = data.history as Record<string, unknown> | undefined;
+  const prices = Array.isArray(history?.prices) ? history.prices : [];
+  const times = Array.isArray(history?.times) ? history.times : [];
+  if (!prices.length || !times.length) return null;
+  return prices
+    .map((price, index) => ({ symbol, quote: Number(price), epoch: Number(times[index]) }))
+    .filter(tick => Number.isFinite(tick.quote) && Number.isFinite(tick.epoch));
+}
+
+function parseCandles(data: HistoryResponse): Candle[] | null {
+  if (!Array.isArray(data.candles)) return null;
+  const candles = data.candles
+    .map((item: unknown) => {
+      if (!item || typeof item !== 'object') return null;
+      const raw = item as Record<string, unknown>;
+      return {
+        time: Number(raw.epoch) as UTCTimestamp,
+        open: Number(raw.open),
+        high: Number(raw.high),
+        low: Number(raw.low),
+        close: Number(raw.close),
+      };
+    })
+    .filter((candle): candle is Candle => Boolean(candle) && Number.isFinite(Number(candle.time)) && Number.isFinite(candle.open) && Number.isFinite(candle.high) && Number.isFinite(candle.low) && Number.isFinite(candle.close));
+  return candles.length ? candles.sort((a, b) => Number(a.time) - Number(b.time)) : null;
+}
+
+function requestHistory(symbol: string, seconds: number): Promise<{ candles: Candle[]; ticks: Tick[] }> {
+  const requestId = Math.floor(Math.random() * 900000000) + 100000000;
+  let lastError: Error | null = null;
+
+  return new Promise(async (resolve, reject) => {
+    for (const endpoint of HISTORY_ENDPOINTS) {
       try {
-        const data = JSON.parse(event.data) as Record<string, unknown>;
-        if (Number(data.req_id) !== 71) return;
-        window.clearTimeout(timer); ws.close();
-        if (data.error) throw new Error(String((data.error as Record<string, unknown>).message || 'Deriv history error'));
-        const history = data.history as Record<string, unknown> | undefined;
-        const prices = Array.isArray(history?.prices) ? history.prices : [];
-        const times = Array.isArray(history?.times) ? history.times : [];
-        resolve(prices.map((price, index) => ({ symbol, quote: Number(price), epoch: Number(times[index]) })).filter(t => Number.isFinite(t.quote) && Number.isFinite(t.epoch)));
-      } catch (error) { window.clearTimeout(timer); ws.close(); reject(error instanceof Error ? error : new Error('Invalid Deriv chart history')); }
-    };
+        const result = await new Promise<HistoryResponse>((innerResolve, innerReject) => {
+          const ws = new WebSocket(endpoint);
+          let settled = false;
+          const timer = window.setTimeout(() => {
+            if (settled) return;
+            settled = true;
+            ws.close();
+            innerReject(new Error('Deriv chart history request timed out'));
+          }, 12000);
+
+          const finish = (callback: () => void) => {
+            if (settled) return;
+            settled = true;
+            window.clearTimeout(timer);
+            ws.close();
+            callback();
+          };
+
+          ws.onerror = () => finish(() => innerReject(new Error(`Unable to connect to Deriv chart history endpoint (${endpoint.includes('binaryws') ? 'legacy' : 'current'})`)));
+          ws.onclose = () => {
+            if (!settled) finish(() => innerReject(new Error('Deriv chart history connection closed')));
+          };
+          ws.onopen = () => {
+            ws.send(JSON.stringify({
+              ticks_history: symbol,
+              end: 'latest',
+              count: 500,
+              style: 'candles',
+              granularity: seconds,
+              subscribe: 0,
+              req_id: requestId,
+            }));
+          };
+          ws.onmessage = event => {
+            try {
+              const data = JSON.parse(event.data) as HistoryResponse;
+              if (data.error) {
+                const error = data.error as Record<string, unknown>;
+                finish(() => innerReject(new Error(String(error.message || 'Deriv chart history error'))));
+                return;
+              }
+              if (data.msg_type !== 'candles' && data.msg_type !== 'history') return;
+              // The socket is dedicated to this one request, so accept the response even if a newer API response omits req_id.
+              if (data.req_id !== undefined && Number(data.req_id) !== requestId) return;
+              finish(() => innerResolve(data));
+            } catch {
+              finish(() => innerReject(new Error('Invalid Deriv chart history response')));
+            }
+          };
+        });
+
+        const directCandles = parseCandles(result);
+        if (directCandles) {
+          resolve({ candles: directCandles, ticks: [] });
+          return;
+        }
+        const ticks = parseHistory(result, symbol);
+        if (ticks?.length) {
+          resolve({ candles: aggregate(ticks, seconds), ticks });
+          return;
+        }
+        throw new Error('Deriv returned no chart history');
+      } catch (error) {
+        lastError = error instanceof Error ? error : new Error(String(error));
+      }
+    }
+    reject(lastError || new Error('Unable to load chart history from Deriv'));
   });
 }
 
@@ -45,9 +144,9 @@ export default function FinancialChart({ symbol, liveTick }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const seriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null);
-  const rawTicks = useRef<Tick[]>([]);
   const candlesRef = useRef<Candle[]>([]);
   const selectedPeriod = useRef(60);
+  const requestGeneration = useRef(0);
   const [period, setPeriod] = useState(60);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -65,28 +164,41 @@ export default function FinancialChart({ symbol, liveTick }: Props) {
       handleScale: { axisPressedMouseMove: true, mouseWheel: true, pinch: true },
     });
     const series = chart.addSeries(CandlestickSeries, { upColor: '#22c55e', downColor: '#ef4444', borderUpColor: '#22c55e', borderDownColor: '#ef4444', wickUpColor: '#22c55e', wickDownColor: '#ef4444', priceLineVisible: true, lastValueVisible: true });
-    chartRef.current = chart; seriesRef.current = series;
-    return () => { chart.remove(); chartRef.current = null; seriesRef.current = null; };
+    chartRef.current = chart;
+    seriesRef.current = series;
+    return () => {
+      chart.remove();
+      chartRef.current = null;
+      seriesRef.current = null;
+    };
   }, []);
 
-  useEffect(() => {
-    let cancelled = false;
+  const loadHistory = (nextPeriod: number) => {
+    const generation = ++requestGeneration.current;
     if (!symbol || !seriesRef.current) return;
-    setLoading(true); setError(''); rawTicks.current = []; candlesRef.current = []; seriesRef.current.setData([]);
-    requestHistory(symbol).then(ticks => {
-      if (cancelled || !seriesRef.current) return;
-      rawTicks.current = ticks;
-      candlesRef.current = aggregate(ticks, selectedPeriod.current);
-      seriesRef.current.setData(candlesRef.current);
+    setLoading(true);
+    setError('');
+    candlesRef.current = [];
+    seriesRef.current.setData([]);
+    requestHistory(symbol, nextPeriod).then(({ candles }) => {
+      if (generation !== requestGeneration.current || !seriesRef.current) return;
+      candlesRef.current = candles;
+      seriesRef.current.setData(candles);
       chartRef.current?.timeScale().fitContent();
-    }).catch(error => { if (!cancelled) setError(error instanceof Error ? error.message : 'Unable to load chart history'); }).finally(() => { if (!cancelled) setLoading(false); });
-    return () => { cancelled = true; };
+    }).catch(error => {
+      if (generation === requestGeneration.current) setError(error instanceof Error ? error.message : 'Unable to load chart history from Deriv');
+    }).finally(() => {
+      if (generation === requestGeneration.current) setLoading(false);
+    });
+  };
+
+  useEffect(() => {
+    loadHistory(selectedPeriod.current);
+    return () => { requestGeneration.current += 1; };
   }, [symbol]);
 
   useEffect(() => {
     if (!liveTick || liveTick.symbol !== symbol || !seriesRef.current) return;
-    rawTicks.current.push(liveTick);
-    if (rawTicks.current.length > 5000) rawTicks.current.splice(0, rawTicks.current.length - 5000);
     const seconds = selectedPeriod.current;
     const bucket = Math.floor(liveTick.epoch / seconds) * seconds as UTCTimestamp;
     const last = candlesRef.current[candlesRef.current.length - 1];
@@ -95,15 +207,14 @@ export default function FinancialChart({ symbol, liveTick }: Props) {
       : { time: bucket, open: liveTick.quote, high: liveTick.quote, low: liveTick.quote, close: liveTick.quote };
     if (last && last.time === bucket) candlesRef.current[candlesRef.current.length - 1] = next;
     else candlesRef.current.push(next);
-    if (candlesRef.current.length > 5000) candlesRef.current.shift();
+    if (candlesRef.current.length > 1000) candlesRef.current.shift();
     seriesRef.current.update(next);
   }, [liveTick, symbol]);
 
   const changePeriod = (seconds: number) => {
-    selectedPeriod.current = seconds; setPeriod(seconds);
-    candlesRef.current = aggregate(rawTicks.current, seconds);
-    seriesRef.current?.setData(candlesRef.current);
-    chartRef.current?.timeScale().fitContent();
+    selectedPeriod.current = seconds;
+    setPeriod(seconds);
+    loadHistory(seconds);
   };
 
   return <div className="sire-financial-chart">
