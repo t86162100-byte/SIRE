@@ -56,7 +56,6 @@ function isSynthetic(item: Record<string, unknown>): boolean {
   return (
     market === 'synthetic_index' ||
     market === 'synthetic indices' ||
-    market === 'synthetic_index' ||
     submarket.includes('synthetic') ||
     subgroup.includes('synthetic') ||
     type.includes('synthetic') ||
@@ -186,9 +185,13 @@ export class DerivMarketData {
   }
 
   async getSyntheticIndices(): Promise<DerivInstrument[]> {
-    // The current Deriv API removed legacy filtering parameters and renamed
-    // response fields. Request the complete list and filter locally.
-    const response = await this.request({ active_symbols: 'brief' });
+    // Deriv's public market-data API expects the product_type for active_symbols.
+    // Keep the request minimal and filter the complete response locally so SIRE
+    // only exposes Synthetic Indices while still discovering newly added symbols.
+    const response = await this.request({
+      active_symbols: 'brief',
+      product_type: 'basic',
+    });
     if (response.error) {
       const error = response.error as Record<string, unknown>;
       throw new Error(`Deriv active_symbols failed: ${String(error.message || 'Unknown API error')}`);
@@ -212,7 +215,7 @@ export class DerivMarketData {
       throw new Error('Deriv returned no active symbols. The WebSocket connection or Deriv market-data response must be checked.');
     }
     if (!instruments.length) {
-      const sample = records.slice(0, 3).map(item => value(item, 'underlying_symbol', 'symbol')).filter(Boolean).join(', ');
+      const sample = records.slice(0, 5).map(item => value(item, 'underlying_symbol', 'symbol')).filter(Boolean).join(', ');
       throw new Error(`Deriv returned ${records.length} active symbols, but none matched Synthetic Indices. Sample symbols: ${sample || 'none'}`);
     }
     return instruments.sort((a, b) => a.name.localeCompare(b.name));
