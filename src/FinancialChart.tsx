@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react';
+import 'openalgo-charts/draw';
 import { createWidget, type Widget } from 'openalgo-charts/widget';
 import './financialChart.css';
 
@@ -85,6 +86,10 @@ export default function FinancialChart({ symbol, liveTick, requestHistory, instr
       interval: '1m',
       chartType: 'candlestick',
       theme: 'dark',
+      rail: true,
+      topbar: true,
+      statusline: true,
+      indicators: true,
       mobile: 'always',
       symbolSearch: async (query: string) => instrumentsRef.current
         .filter(item => `${item.name} ${item.symbol}`.toLowerCase().includes(query.trim().toLowerCase()))
