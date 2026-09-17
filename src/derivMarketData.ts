@@ -27,7 +27,10 @@ type Pending = {
 };
 
 const APP_ID = '1089';
-const ENDPOINT = `wss://ws.binaryws.com/websockets/v3?app_id=${APP_ID}`;
+const ENDPOINTS = [
+  `wss://ws.derivws.com/websockets/v3?app_id=${APP_ID}`,
+  `wss://ws.binaryws.com/websockets/v3?app_id=${APP_ID}`,
+];
 
 function messageText(data: unknown): Promise<string> {
   if (typeof data === 'string') return Promise.resolve(data);
@@ -86,13 +89,31 @@ export class DerivMarketData {
   private statusListeners = new Set<(status: 'connecting' | 'connected' | 'closed' | 'error') => void>();
   private reconnectTimer = 0;
   private closedByUser = false;
+  private endpointIndex = 0;
 
   async connect(): Promise<void> {
     if (this.socket?.readyState === WebSocket.OPEN) return;
     this.closedByUser = false;
     this.emitStatus('connecting');
-    await new Promise<void>((resolve, reject) => {
-      const socket = new WebSocket(ENDPOINT);
+
+    const firstIndex = this.endpointIndex;
+    let lastError: Error | null = null;
+    for (let offset = 0; offset < ENDPOINTS.length; offset += 1) {
+      const index = (firstIndex + offset) % ENDPOINTS.length;
+      try {
+        await this.connectTo(ENDPOINTS[index]);
+        this.endpointIndex = index;
+        return;
+      } catch (error) {
+        lastError = error instanceof Error ? error : new Error(String(error));
+      }
+    }
+    throw lastError || new Error('Unable to connect to Deriv market-data endpoints');
+  }
+
+  private connectTo(endpoint: string): Promise<void> {
+    return new Promise<void>((resolve, reject) => {
+      const socket = new WebSocket(endpoint);
       this.socket = socket;
       let settled = false;
       const timer = window.setTimeout(() => {
@@ -185,21 +206,35 @@ export class DerivMarketData {
   }
 
   async getSyntheticIndices(): Promise<DerivInstrument[]> {
-    // Deriv's public market-data API expects the product_type for active_symbols.
-    // Keep the request minimal and filter the complete response locally so SIRE
-    // only exposes Synthetic Indices while still discovering newly added symbols.
-    const response = await this.request({
-      active_symbols: 'brief',
-      product_type: 'basic',
-    });
-    if (response.error) {
-      const error = response.error as Record<string, unknown>;
-      throw new Error(`Deriv active_symbols failed: ${String(error.message || 'Unknown API error')}`);
+    const requests: Record<string, unknown>[] = [
+      { active_symbols: 'full', product_type: 'basic' },
+      { active_symbols: 'brief', product_type: 'basic' },
+      { active_symbols: 'full' },
+      { active_symbols: 'brief' },
+    ];
+
+    let lastError: Error | null = null;
+    let records: Record<string, unknown>[] = [];
+    for (const request of requests) {
+      try {
+        const response = await this.request(request);
+        if (response.error) {
+          const error = response.error as Record<string, unknown>;
+          lastError = new Error(`Deriv active_symbols failed: ${String(error.message || 'Unknown API error')}`);
+          continue;
+        }
+        records = Array.isArray(response.active_symbols)
+          ? response.active_symbols.filter((item: unknown): item is Record<string, unknown> => Boolean(item && typeof item === 'object'))
+          : [];
+        if (records.length) break;
+      } catch (error) {
+        lastError = error instanceof Error ? error : new Error(String(error));
+      }
     }
 
-    const records = Array.isArray(response.active_symbols)
-      ? response.active_symbols.filter((item: unknown): item is Record<string, unknown> => Boolean(item && typeof item === 'object'))
-      : [];
+    if (!records.length) {
+      throw lastError || new Error('Deriv returned no active symbols. The WebSocket connection or Deriv market-data response must be checked.');
+    }
 
     const instruments = Array.from(
       new Map(
@@ -211,11 +246,8 @@ export class DerivMarketData {
       ).values(),
     );
 
-    if (!records.length) {
-      throw new Error('Deriv returned no active symbols. The WebSocket connection or Deriv market-data response must be checked.');
-    }
     if (!instruments.length) {
-      const sample = records.slice(0, 5).map(item => value(item, 'underlying_symbol', 'symbol')).filter(Boolean).join(', ');
+      const sample = records.slice(0, 10).map(item => value(item, 'underlying_symbol', 'symbol')).filter(Boolean).join(', ');
       throw new Error(`Deriv returned ${records.length} active symbols, but none matched Synthetic Indices. Sample symbols: ${sample || 'none'}`);
     }
     return instruments.sort((a, b) => a.name.localeCompare(b.name));
@@ -225,8 +257,50 @@ export class DerivMarketData {
     return this.request({ ticks: symbol, subscribe: 1 });
   }
 
-  history(symbol: string, granularity: number): Promise<DerivResponse> {
-    return this.request({ ticks_history: symbol, end: 'latest', count: 1500, style: 'candles', granularity, subscribe: 0 });
+  async history(symbol: string, granularity: number): Promise<DerivResponse> {
+    const allCandles: Record<string, unknown>[] = [];
+    let end: number | 'latest' = 'latest';
+    const pageSize = 5000;
+    const maxPages = 100;
+
+    for (let page = 0; page < maxPages; page += 1) {
+      const response = await this.request({
+        ticks_history: symbol,
+        end,
+        count: pageSize,
+        style: 'candles',
+        granularity,
+        subscribe: 0,
+      });
+
+      if (response.error) {
+        const error = response.error as Record<string, unknown>;
+        throw new Error(`Deriv historical candles failed: ${String(error.message || 'Unknown API error')}`);
+      }
+
+      const candles = Array.isArray(response.candles)
+        ? response.candles.filter((item: unknown): item is Record<string, unknown> => Boolean(item && typeof item === 'object'))
+        : [];
+      if (!candles.length) break;
+
+      allCandles.push(...candles);
+      if (candles.length < pageSize) break;
+
+      const earliest = Math.min(...candles.map(c => Number(c.epoch)).filter(Number.isFinite));
+      if (!Number.isFinite(earliest)) break;
+      const nextEnd = Math.floor(earliest) - 1;
+      if (end !== 'latest' && nextEnd >= end) break;
+      end = nextEnd;
+    }
+
+    const unique = new Map<number, Record<string, unknown>>();
+    allCandles.forEach(candle => {
+      const epoch = Number(candle.epoch);
+      if (Number.isFinite(epoch)) unique.set(epoch, candle);
+    });
+    const candles = Array.from(unique.values()).sort((a, b) => Number(a.epoch) - Number(b.epoch));
+
+    return { candles, echo_req: { ticks_history: symbol, style: 'candles', granularity } };
   }
 
   onTick(listener: (tick: DerivTick) => void): () => void {
