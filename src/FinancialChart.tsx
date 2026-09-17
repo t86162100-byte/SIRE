@@ -103,7 +103,7 @@ export default function FinancialChart({ symbol, liveTick, requestHistory, instr
         .map(item => ({ symbol: item.symbol, name: item.name })),
     });
     widgetRef.current = widget;
-
+    // DEBUG: force the OpenAlgo widget into the viewport center so we can rule out host layout/positioning issues.\n    widget.root.style.position = 'fixed';\n    widget.root.style.left = '50%';\n    widget.root.style.top = '50%';\n    widget.root.style.width = '100vw';\n    widget.root.style.height = '100vh';\n    widget.root.style.transform = 'translate(-50%, -50%)';\n    widget.root.style.zIndex = '9999';\n    widget.root.dataset.sireDebugCentered = 'true';\n
     const offSymbol = widget.on('symbol', (event: { symbol: string }) => {
       const instrument = instrumentsRef.current.find(item => item.symbol === event.symbol);
       if (instrument && instrument.symbol !== symbolRef.current) onSelectInstrumentRef.current(instrument);
