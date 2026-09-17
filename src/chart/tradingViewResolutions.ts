@@ -1,19 +1,9 @@
 import type { Timeframe } from '@pairlens/fast-financial-charts/types';
 
-/**
- * Fast Financial Charts is the chart engine used by SIRE.
- * Keep the timeframe contract identical to the engine instead of maintaining
- * a second TradingView-style resolution catalogue in the app.
- */
-export type TradingViewResolution = Timeframe;
+export type SireTimeframe = Timeframe;
+export type SireTimeframeOption = { value: SireTimeframe; label: string; seconds: number };
 
-export type TradingViewResolutionOption = {
-  value: TradingViewResolution;
-  label: string;
-  seconds: number;
-};
-
-export const TRADING_VIEW_RESOLUTIONS: readonly TradingViewResolutionOption[] = [
+export const SIRE_TIMEFRAMES: readonly SireTimeframeOption[] = [
   { value: '1m', label: '1m', seconds: 60 },
   { value: '5m', label: '5m', seconds: 300 },
   { value: '15m', label: '15m', seconds: 900 },
@@ -27,12 +17,19 @@ export const TRADING_VIEW_RESOLUTIONS: readonly TradingViewResolutionOption[] = 
   { value: '1M', label: '1M', seconds: 2592000 },
 ];
 
-const BY_VALUE = new Map(TRADING_VIEW_RESOLUTIONS.map(item => [item.value, item]));
+const BY_VALUE = new Map(SIRE_TIMEFRAMES.map(item => [item.value, item]));
 
-export function resolutionInfo(value: TradingViewResolution) {
-  return BY_VALUE.get(value) ?? TRADING_VIEW_RESOLUTIONS[0];
+export function timeframeInfo(value: SireTimeframe) {
+  return BY_VALUE.get(value) ?? SIRE_TIMEFRAMES[0];
 }
 
-export function resolutionLabel(value: TradingViewResolution) {
-  return resolutionInfo(value).label;
+export function timeframeLabel(value: SireTimeframe) {
+  return timeframeInfo(value).label;
 }
+
+// Compatibility exports for the existing terminal shell; values now come directly from Fast Financial Charts.
+export type TradingViewResolution = SireTimeframe;
+export type TradingViewResolutionOption = SireTimeframeOption;
+export const TRADING_VIEW_RESOLUTIONS = SIRE_TIMEFRAMES;
+export const resolutionInfo = timeframeInfo;
+export const resolutionLabel = timeframeLabel;
