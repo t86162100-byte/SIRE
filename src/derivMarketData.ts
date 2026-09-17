@@ -26,9 +26,10 @@ type Pending = {
   timer: number;
 };
 
-// Deriv's public market-data WebSocket requires no authentication or App ID.
-// Keep the endpoint exactly as documented by Deriv for public market data.
+// Current Deriv public market-data endpoint. The legacy binaryws endpoint is
+// retained as a fallback for environments that have not migrated yet.
 const ENDPOINTS = [
+  'wss://api.derivws.com/trading/v1/options/ws/public',
   'wss://ws.binaryws.com/websockets/v3',
 ];
 
@@ -55,30 +56,13 @@ function isSynthetic(item: Record<string, unknown>): boolean {
   const type = value(item, 'underlying_symbol_type', 'symbol_type').toLowerCase();
   const name = value(item, 'underlying_symbol_name', 'display_name').toLowerCase();
   const text = `${symbol} ${name} ${market} ${submarket} ${subgroup} ${type}`.toLowerCase();
-
-  return (
-    market === 'synthetic_index' ||
-    market === 'synthetic indices' ||
-    submarket.includes('synthetic') ||
-    subgroup.includes('synthetic') ||
-    type.includes('synthetic') ||
-    /synthetic index|volatility|boom|crash|jump|step|drift|range break|daily reset|bull market|bear market|random index/.test(text) ||
-    /^(r_|1hz|boom|crash|step|jump|drift|range_break|bull|bear)/i.test(symbol)
-  );
+  return market === 'synthetic_index' || market === 'synthetic indices' || submarket.includes('synthetic') || subgroup.includes('synthetic') || type.includes('synthetic') || /synthetic index|volatility|boom|crash|jump|step|drift|range break|daily reset|bull market|bear market|random index/.test(text) || /^(r_|1hz|boom|crash|step|jump|drift|range_break|bull|bear)/i.test(symbol);
 }
 
 function normalize(item: Record<string, unknown>): DerivInstrument | null {
   const symbol = value(item, 'underlying_symbol', 'symbol');
   if (!symbol) return null;
-  return {
-    symbol,
-    name: value(item, 'underlying_symbol_name', 'display_name') || symbol,
-    market: value(item, 'market'),
-    submarket: value(item, 'submarket'),
-    subgroup: value(item, 'subgroup'),
-    symbolType: value(item, 'underlying_symbol_type', 'symbol_type'),
-    exchangeOpen: typeof item.exchange_is_open === 'number' ? item.exchange_is_open : undefined,
-  };
+  return { symbol, name: value(item, 'underlying_symbol_name', 'display_name') || symbol, market: value(item, 'market'), submarket: value(item, 'submarket'), subgroup: value(item, 'subgroup'), symbolType: value(item, 'underlying_symbol_type', 'symbol_type'), exchangeOpen: typeof item.exchange_is_open === 'number' ? item.exchange_is_open : undefined };
 }
 
 export class DerivMarketData {
@@ -95,7 +79,6 @@ export class DerivMarketData {
     if (this.socket?.readyState === WebSocket.OPEN) return;
     this.closedByUser = false;
     this.emitStatus('connecting');
-
     const firstIndex = this.endpointIndex;
     let lastError: Error | null = null;
     for (let offset = 0; offset < ENDPOINTS.length; offset += 1) {
@@ -113,16 +96,16 @@ export class DerivMarketData {
 
   private connectTo(endpoint: string): Promise<void> {
     return new Promise<void>((resolve, reject) => {
-      const socket = new WebSocket(endpoint);
+      let socket: WebSocket;
+      try { socket = new WebSocket(endpoint); } catch (error) { reject(error instanceof Error ? error : new Error(String(error))); return; }
       this.socket = socket;
       let settled = false;
       const timer = window.setTimeout(() => {
         if (settled) return;
         settled = true;
         try { socket.close(); } catch { /* ignore */ }
-        reject(new Error('Deriv WebSocket connection timed out'));
+        reject(new Error(`Deriv WebSocket connection timed out: ${endpoint}`));
       }, 15000);
-
       socket.onopen = () => {
         if (settled) return;
         settled = true;
@@ -135,7 +118,7 @@ export class DerivMarketData {
         if (!settled) {
           settled = true;
           window.clearTimeout(timer);
-          reject(new Error('Deriv WebSocket connection failed'));
+          reject(new Error(`Deriv WebSocket connection failed: ${endpoint}`));
         }
       };
       socket.onclose = event => {
@@ -144,29 +127,18 @@ export class DerivMarketData {
         if (!settled) {
           settled = true;
           window.clearTimeout(timer);
-          reject(new Error(`Deriv WebSocket closed before connection (${event.code})`));
+          reject(new Error(`Deriv WebSocket closed before connection (${event.code}${event.reason ? `: ${event.reason}` : ''})`));
         }
         if (!this.closedByUser && this.socket === socket) this.scheduleReconnect();
       };
       socket.onmessage = event => {
         void messageText(event.data).then(text => {
           let data: DerivResponse;
-          try { data = JSON.parse(text) as DerivResponse; }
-          catch { return; }
+          try { data = JSON.parse(text) as DerivResponse; } catch { return; }
           if (data.msg_type === 'tick' && data.tick) {
             const raw = data.tick as Record<string, unknown>;
-            const tick: DerivTick = {
-              symbol: String(raw.symbol || raw.underlying_symbol || ''),
-              quote: Number(raw.quote),
-              bid: Number.isFinite(Number(raw.bid)) ? Number(raw.bid) : undefined,
-              ask: Number.isFinite(Number(raw.ask)) ? Number(raw.ask) : undefined,
-              epoch: Number(raw.epoch),
-              id: raw.id ? String(raw.id) : undefined,
-              source: 'Deriv',
-            };
-            if (tick.symbol && Number.isFinite(tick.quote) && Number.isFinite(tick.epoch)) {
-              this.listeners.forEach(listener => listener(tick));
-            }
+            const tick: DerivTick = { symbol: String(raw.symbol || raw.underlying_symbol || ''), quote: Number(raw.quote), bid: Number.isFinite(Number(raw.bid)) ? Number(raw.bid) : undefined, ask: Number.isFinite(Number(raw.ask)) ? Number(raw.ask) : undefined, epoch: Number(raw.epoch), id: raw.id ? String(raw.id) : undefined, source: 'Deriv' };
+            if (tick.symbol && Number.isFinite(tick.quote) && Number.isFinite(tick.epoch)) this.listeners.forEach(listener => listener(tick));
           }
           const reqId = Number(data.req_id);
           const waiter = this.pending.get(reqId);
@@ -176,9 +148,7 @@ export class DerivMarketData {
           if (data.error) {
             const error = data.error as Record<string, unknown>;
             waiter.reject(new Error(String(error.message || 'Deriv API error')));
-          } else {
-            waiter.resolve(data);
-          }
+          } else waiter.resolve(data);
         }).catch(() => undefined);
       };
     });
@@ -190,62 +160,27 @@ export class DerivMarketData {
     if (!socket || socket.readyState !== WebSocket.OPEN) throw new Error('Deriv WebSocket is not connected');
     const reqId = this.nextReqId++;
     return new Promise((resolve, reject) => {
-      const timer = window.setTimeout(() => {
-        this.pending.delete(reqId);
-        reject(new Error(`Deriv request timed out (${String(request.active_symbols ? 'active_symbols' : request.ticks_history ? 'ticks_history' : request.ticks ? 'ticks' : 'request')})`));
-      }, 15000);
+      const timer = window.setTimeout(() => { this.pending.delete(reqId); reject(new Error(`Deriv request timed out (${String(request.active_symbols ? 'active_symbols' : request.ticks_history ? 'ticks_history' : request.ticks ? 'ticks' : 'request')})`)); }, 15000);
       this.pending.set(reqId, { resolve, reject, timer });
-      try {
-        socket.send(JSON.stringify({ ...request, req_id: reqId }));
-      } catch (error) {
-        window.clearTimeout(timer);
-        this.pending.delete(reqId);
-        reject(error instanceof Error ? error : new Error(String(error)));
-      }
+      try { socket.send(JSON.stringify({ ...request, req_id: reqId })); }
+      catch (error) { window.clearTimeout(timer); this.pending.delete(reqId); reject(error instanceof Error ? error : new Error(String(error))); }
     });
   }
 
   async getSyntheticIndices(): Promise<DerivInstrument[]> {
-    // Do not send product_type: Deriv's current active_symbols API removed it.
-    // Retrieve the complete public list and filter Synthetic Indices locally.
-    const requests: Record<string, unknown>[] = [
-      { active_symbols: 'brief' },
-      { active_symbols: 'full' },
-    ];
-
+    const requests: Record<string, unknown>[] = [{ active_symbols: 'brief' }, { active_symbols: 'full' }];
     let lastError: Error | null = null;
     let records: Record<string, unknown>[] = [];
     for (const request of requests) {
       try {
         const response = await this.request(request);
-        if (response.error) {
-          const error = response.error as Record<string, unknown>;
-          lastError = new Error(`Deriv active_symbols failed: ${String(error.message || 'Unknown API error')}`);
-          continue;
-        }
-        records = Array.isArray(response.active_symbols)
-          ? response.active_symbols.filter((item: unknown): item is Record<string, unknown> => Boolean(item && typeof item === 'object'))
-          : [];
+        if (response.error) { const error = response.error as Record<string, unknown>; lastError = new Error(`Deriv active_symbols failed: ${String(error.message || 'Unknown API error')}`); continue; }
+        records = Array.isArray(response.active_symbols) ? response.active_symbols.filter((item: unknown): item is Record<string, unknown> => Boolean(item && typeof item === 'object')) : [];
         if (records.length) break;
-      } catch (error) {
-        lastError = error instanceof Error ? error : new Error(String(error));
-      }
+      } catch (error) { lastError = error instanceof Error ? error : new Error(String(error)); }
     }
-
-    if (!records.length) {
-      throw lastError || new Error('Deriv returned no active symbols. The WebSocket connection or Deriv market-data response must be checked.');
-    }
-
-    const instruments = Array.from(
-      new Map(
-        records
-          .filter(isSynthetic)
-          .map(normalize)
-          .filter((item): item is DerivInstrument => Boolean(item))
-          .map(item => [item.symbol, item]),
-      ).values(),
-    );
-
+    if (!records.length) throw lastError || new Error('Deriv returned no active symbols.');
+    const instruments = Array.from(new Map(records.filter(isSynthetic).map(normalize).filter((item): item is DerivInstrument => Boolean(item)).map(item => [item.symbol, item])).values());
     if (!instruments.length) {
       const sample = records.slice(0, 10).map(item => value(item, 'underlying_symbol', 'symbol')).filter(Boolean).join(', ');
       throw new Error(`Deriv returned ${records.length} active symbols, but none matched Synthetic Indices. Sample symbols: ${sample || 'none'}`);
@@ -253,92 +188,37 @@ export class DerivMarketData {
     return instruments.sort((a, b) => a.name.localeCompare(b.name));
   }
 
-  subscribe(symbol: string): Promise<DerivResponse> {
-    return this.request({ ticks: symbol, subscribe: 1 });
-  }
+  subscribe(symbol: string): Promise<DerivResponse> { return this.request({ ticks: symbol, subscribe: 1 }); }
 
   async history(symbol: string, granularity: number): Promise<DerivResponse> {
     const allCandles: Record<string, unknown>[] = [];
     let end: number | 'latest' = 'latest';
     const pageSize = 5000;
     const maxPages = 100;
-
     for (let page = 0; page < maxPages; page += 1) {
-      const response = await this.request({
-        ticks_history: symbol,
-        end,
-        count: pageSize,
-        style: 'candles',
-        granularity,
-        subscribe: 0,
-      });
-
-      if (response.error) {
-        const error = response.error as Record<string, unknown>;
-        throw new Error(`Deriv historical candles failed: ${String(error.message || 'Unknown API error')}`);
-      }
-
-      const candles = Array.isArray(response.candles)
-        ? response.candles.filter((item: unknown): item is Record<string, unknown> => Boolean(item && typeof item === 'object'))
-        : [];
+      const response = await this.request({ ticks_history: symbol, end, count: pageSize, style: 'candles', granularity, subscribe: 0 });
+      if (response.error) { const error = response.error as Record<string, unknown>; throw new Error(`Deriv historical candles failed: ${String(error.message || 'Unknown API error')}`); }
+      const candles = Array.isArray(response.candles) ? response.candles.filter((item: unknown): item is Record<string, unknown> => Boolean(item && typeof item === 'object')) : [];
       if (!candles.length) break;
-
       allCandles.push(...candles);
       if (candles.length < pageSize) break;
-
-      const earliest = Math.min(...candles.map(c => Number(c.epoch)).filter(Number.isFinite));
-      if (!Number.isFinite(earliest)) break;
-      const nextEnd = Math.floor(earliest) - 1;
+      const epochs = candles.map(c => Number(c.epoch)).filter(Number.isFinite);
+      if (!epochs.length) break;
+      const nextEnd = Math.floor(Math.min(...epochs)) - 1;
       if (end !== 'latest' && nextEnd >= end) break;
       end = nextEnd;
     }
-
     const unique = new Map<number, Record<string, unknown>>();
-    allCandles.forEach(candle => {
-      const epoch = Number(candle.epoch);
-      if (Number.isFinite(epoch)) unique.set(epoch, candle);
-    });
-    const candles = Array.from(unique.values()).sort((a, b) => Number(a.epoch) - Number(b.epoch));
-
-    return { candles, echo_req: { ticks_history: symbol, style: 'candles', granularity } };
+    allCandles.forEach(candle => { const epoch = Number(candle.epoch); if (Number.isFinite(epoch)) unique.set(epoch, candle); });
+    return { candles: Array.from(unique.values()).sort((a, b) => Number(a.epoch) - Number(b.epoch)), echo_req: { ticks_history: symbol, style: 'candles', granularity } };
   }
 
-  onTick(listener: (tick: DerivTick) => void): () => void {
-    this.listeners.add(listener);
-    return () => this.listeners.delete(listener);
-  }
-
-  onStatus(listener: (status: 'connecting' | 'connected' | 'closed' | 'error') => void): () => void {
-    this.statusListeners.add(listener);
-    return () => this.statusListeners.delete(listener);
-  }
-
-  close(): void {
-    this.closedByUser = true;
-    window.clearTimeout(this.reconnectTimer);
-    this.rejectPending(new Error('Deriv client closed'));
-    try { this.socket?.close(); } catch { /* ignore */ }
-    this.socket = null;
-  }
-
-  private emitStatus(status: 'connecting' | 'connected' | 'closed' | 'error') {
-    this.statusListeners.forEach(listener => listener(status));
-  }
-
-  private rejectPending(error: Error) {
-    this.pending.forEach(waiter => {
-      window.clearTimeout(waiter.timer);
-      waiter.reject(error);
-    });
-    this.pending.clear();
-  }
-
-  private scheduleReconnect() {
-    window.clearTimeout(this.reconnectTimer);
-    this.reconnectTimer = window.setTimeout(() => {
-      if (!this.closedByUser) void this.connect().catch(() => this.scheduleReconnect());
-    }, 1500);
-  }
+  onTick(listener: (tick: DerivTick) => void): () => void { this.listeners.add(listener); return () => this.listeners.delete(listener); }
+  onStatus(listener: (status: 'connecting' | 'connected' | 'closed' | 'error') => void): () => void { this.statusListeners.add(listener); return () => this.statusListeners.delete(listener); }
+  close(): void { this.closedByUser = true; window.clearTimeout(this.reconnectTimer); this.rejectPending(new Error('Deriv client closed')); try { this.socket?.close(); } catch { /* ignore */ } this.socket = null; }
+  private emitStatus(status: 'connecting' | 'connected' | 'closed' | 'error') { this.statusListeners.forEach(listener => listener(status)); }
+  private rejectPending(error: Error) { this.pending.forEach(waiter => { window.clearTimeout(waiter.timer); waiter.reject(error); }); this.pending.clear(); }
+  private scheduleReconnect() { window.clearTimeout(this.reconnectTimer); this.reconnectTimer = window.setTimeout(() => { if (!this.closedByUser) void this.connect().catch(() => this.scheduleReconnect()); }, 1500); }
 }
 
 export const derivMarketData = new DerivMarketData();
