@@ -8,23 +8,15 @@ import {
   type ISeriesApi,
   type UTCTimestamp,
 } from 'lightweight-charts';
-import { createLineToolsPlugin } from 'lightweight-charts-line-tools-core';
 import {
-  LineToolArrow,
-  LineToolCallout,
-  LineToolCrossLine,
-  LineToolExtendedLine,
-  LineToolHorizontalLine,
-  LineToolHorizontalRay,
-  LineToolRay,
-  LineToolTrendLine,
-  LineToolVerticalLine,
-} from 'lightweight-charts-line-tools-lines';
-import { LineToolRectangle } from 'lightweight-charts-line-tools-rectangle';
-import { LineToolFibRetracement } from 'lightweight-charts-line-tools-fib-retracement';
-import { LineToolParallelChannel } from 'lightweight-charts-line-tools-parallel-channel';
-import { LineToolPriceRange } from 'lightweight-charts-line-tools-price-range';
-import { LineToolText } from 'lightweight-charts-line-tools-text';
+  DrawingManager,
+  InteractionHandler,
+  getToolRegistry,
+  type Anchor,
+  type DrawingToolDefinition,
+  type IDrawing,
+  type SerializedDrawing,
+} from 'lightweight-charts-drawing';
 import './financialChart.css';
 
 type Tick = { symbol: string; quote: number; epoch: number };
@@ -32,17 +24,13 @@ type HistoryResponse = Record<string, unknown>;
 type HistoryRequester = (request: Record<string, unknown>) => Promise<HistoryResponse>;
 type Props = { symbol: string; liveTick: Tick | null; requestHistory: HistoryRequester };
 type Candle = { time: UTCTimestamp; open: number; high: number; low: number; close: number };
-type LineToolsApi = ReturnType<typeof createLineToolsPlugin>;
 
-type ToolGroup = {
+type DrawingGroup = {
   key: string;
   label: string;
-  tools: { type: string; label: string }[];
+  tools: DrawingToolDefinition[];
 };
 
-// Broad, platform-style timeframe set. Deriv's current ticks_history API accepts
-// arbitrary integer candle granularities; the values below also cover the common
-// intervals exposed by MetaTrader, cTrader and TradingView.
 const PERIODS = [
   { label: '1m', seconds: 60 },
   { label: '2m', seconds: 120 },
@@ -67,48 +55,24 @@ const PERIODS = [
   { label: '1M', seconds: 2592000 },
 ];
 
-const TOOL_GROUPS: ToolGroup[] = [
-  {
-    key: 'lines',
-    label: 'Lines',
-    tools: [
-      { type: 'TrendLine', label: 'Trend line' },
-      { type: 'Ray', label: 'Ray' },
-      { type: 'ExtendedLine', label: 'Extended line' },
-      { type: 'HorizontalLine', label: 'Horizontal line' },
-      { type: 'HorizontalRay', label: 'Horizontal ray' },
-      { type: 'VerticalLine', label: 'Vertical line' },
-      { type: 'CrossLine', label: 'Cross line' },
-      { type: 'Arrow', label: 'Arrow' },
-      { type: 'Callout', label: 'Callout' },
-    ],
-  },
-  {
-    key: 'fibonacci',
-    label: 'Fibonacci',
-    tools: [{ type: 'FibRetracement', label: 'Fib retracement' }],
-  },
-  {
-    key: 'channels',
-    label: 'Channels',
-    tools: [{ type: 'ParallelChannel', label: 'Parallel channel' }],
-  },
-  {
-    key: 'shapes',
-    label: 'Shapes',
-    tools: [{ type: 'Rectangle', label: 'Rectangle' }],
-  },
-  {
-    key: 'measurement',
-    label: 'Measurement',
-    tools: [{ type: 'PriceRange', label: 'Price range' }],
-  },
-  {
-    key: 'annotation',
-    label: 'Annotations',
-    tools: [{ type: 'Text', label: 'Text' }],
-  },
-];
+const CATEGORY_LABELS: Record<string, string> = {
+  line: 'Lines',
+  shape: 'Shapes',
+  channel: 'Channels',
+  fibonacci: 'Fibonacci',
+  pitchfork: 'Pitchforks',
+  gann: 'Gann',
+  forecasting: 'Forecast',
+  annotation: 'Annotations',
+  measurement: 'Measurement',
+};
+
+const registry = getToolRegistry();
+const DRAWING_GROUPS: DrawingGroup[] = registry.getCategories().map(category => ({
+  key: category,
+  label: CATEGORY_LABELS[category] ?? category,
+  tools: registry.getByCategory(category),
+}));
 
 function aggregate(ticks: Tick[], seconds: number): Candle[] {
   const buckets = new Map<number, Candle>();
@@ -139,11 +103,7 @@ function parseHistory(data: HistoryResponse, symbol: string): Tick[] | null {
   const times = Array.isArray(history?.times) ? history.times : [];
   if (!prices.length || !times.length) return null;
   return prices
-    .map((price, index) => ({
-      symbol,
-      quote: Number(price),
-      epoch: Number(times[index]),
-    }))
+    .map((price, index) => ({ symbol, quote: Number(price), epoch: Number(times[index]) }))
     .filter(tick => Number.isFinite(tick.quote) && Number.isFinite(tick.epoch));
 }
 
@@ -173,11 +133,7 @@ function parseCandles(data: HistoryResponse): Candle[] | null {
   return candles.length ? candles.sort((a, b) => Number(a.time) - Number(b.time)) : null;
 }
 
-async function loadHistory(
-  symbol: string,
-  seconds: number,
-  request: HistoryRequester,
-): Promise<Candle[]> {
+async function loadHistory(symbol: string, seconds: number, request: HistoryRequester): Promise<Candle[]> {
   const result = await request({
     ticks_history: symbol,
     end: 'latest',
@@ -192,38 +148,23 @@ async function loadHistory(
   throw new Error('Deriv returned no chart history');
 }
 
-function registerTools(lineTools: LineToolsApi) {
-  lineTools.registerLineTool('TrendLine', LineToolTrendLine);
-  lineTools.registerLineTool('Ray', LineToolRay);
-  lineTools.registerLineTool('ExtendedLine', LineToolExtendedLine);
-  lineTools.registerLineTool('HorizontalLine', LineToolHorizontalLine);
-  lineTools.registerLineTool('HorizontalRay', LineToolHorizontalRay);
-  lineTools.registerLineTool('VerticalLine', LineToolVerticalLine);
-  lineTools.registerLineTool('CrossLine', LineToolCrossLine);
-  lineTools.registerLineTool('Arrow', LineToolArrow);
-  lineTools.registerLineTool('Callout', LineToolCallout);
-  lineTools.registerLineTool('FibRetracement', LineToolFibRetracement);
-  lineTools.registerLineTool('ParallelChannel', LineToolParallelChannel);
-  lineTools.registerLineTool('Rectangle', LineToolRectangle);
-  lineTools.registerLineTool('PriceRange', LineToolPriceRange);
-  lineTools.registerLineTool('Text', LineToolText);
-}
-
-function countSerializedDrawings(lineTools: LineToolsApi): number {
-  try {
-    const raw = lineTools.exportLineTools();
-    const data = JSON.parse(raw) as unknown;
-    return Array.isArray(data) ? data.length : 0;
-  } catch {
-    return 0;
-  }
+function drawingStyle(tool: DrawingToolDefinition) {
+  return {
+    lineColor: tool.defaultStyle?.lineColor ?? '#60a5fa',
+    lineWidth: tool.defaultStyle?.lineWidth ?? 2,
+    fillColor: tool.defaultStyle?.fillColor ?? 'rgba(96,165,250,.10)',
+    labelColor: tool.defaultStyle?.labelColor ?? '#60a5fa',
+    showLabels: tool.defaultStyle?.showLabels ?? true,
+  };
 }
 
 export default function FinancialChart({ symbol, liveTick, requestHistory }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const seriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null);
-  const lineToolsRef = useRef<LineToolsApi | null>(null);
+  const managerRef = useRef<DrawingManager | null>(null);
+  const interactionRef = useRef<InteractionHandler | null>(null);
+  const previewRef = useRef<IDrawing | null>(null);
   const candlesRef = useRef<Candle[]>([]);
   const selectedPeriod = useRef(60);
   const requestGeneration = useRef(0);
@@ -231,30 +172,47 @@ export default function FinancialChart({ symbol, liveTick, requestHistory }: Pro
   const latestTickRef = useRef<Tick | null>(null);
   const symbolRef = useRef(symbol);
   const previousSymbolRef = useRef(symbol);
+  const drawingIdRef = useRef(0);
   const [period, setPeriod] = useState(60);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [toolGroup, setToolGroup] = useState('lines');
+  const [drawingGroup, setDrawingGroup] = useState(DRAWING_GROUPS[0]?.key ?? 'line');
   const [activeTool, setActiveTool] = useState<string | null>(null);
   const [drawingCount, setDrawingCount] = useState(0);
 
+  const countDrawings = () => {
+    const manager = managerRef.current;
+    if (!manager) return 0;
+    return manager.getAllDrawings().filter(drawing => drawing.id !== '__sire_preview__').length;
+  };
+
   const saveDrawings = () => {
-    const lineTools = lineToolsRef.current;
-    if (!lineTools || typeof window === 'undefined') return;
+    const manager = managerRef.current;
+    if (!manager || typeof window === 'undefined') return;
     try {
-      window.localStorage.setItem(`sire:drawings:${symbolRef.current}`, lineTools.exportLineTools());
-      setDrawingCount(countSerializedDrawings(lineTools));
-    } catch {}
+      const drawings = manager.exportDrawings().filter(drawing => drawing.id !== '__sire_preview__');
+      window.localStorage.setItem(`sire:drawings:${symbolRef.current}`, JSON.stringify(drawings));
+      setDrawingCount(drawings.length);
+    } catch {
+      // Drawing persistence must never interrupt chart interaction.
+    }
   };
 
   const loadDrawings = (targetSymbol: string) => {
-    const lineTools = lineToolsRef.current;
-    if (!lineTools || typeof window === 'undefined') return;
-    lineTools.removeAllLineTools();
+    const manager = managerRef.current;
+    if (!manager || typeof window === 'undefined') return;
+    manager.clearAll();
     try {
       const raw = window.localStorage.getItem(`sire:drawings:${targetSymbol}`);
-      if (raw) lineTools.importLineTools(raw);
-      setDrawingCount(countSerializedDrawings(lineTools));
+      if (!raw) {
+        setDrawingCount(0);
+        return;
+      }
+      const data = JSON.parse(raw) as SerializedDrawing[];
+      manager.importDrawings(data, (type, serialized) =>
+        registry.createDrawing(type, serialized.id, serialized.anchors, serialized.style, serialized.options),
+      );
+      setDrawingCount(countDrawings());
     } catch {
       setDrawingCount(0);
     }
@@ -279,14 +237,131 @@ export default function FinancialChart({ symbol, liveTick, requestHistory }: Pro
     else candlesRef.current.push(next);
     if (candlesRef.current.length > 1500) candlesRef.current.shift();
     series.update(next);
-    const y = series.priceToCoordinate(next.close);
-    const height = containerRef.current?.clientHeight ?? 0;
-    if (y == null || y < -20 || (height > 0 && y > height + 20)) chartRef.current?.priceScale('right').applyOptions({ autoScale: true });
+  };
+
+  const chartAnchorFromPoint = (x: number, y: number): Anchor | null => {
+    const chart = chartRef.current;
+    const series = seriesRef.current;
+    if (!chart || !series) return null;
+    const time = chart.timeScale().coordinateToTime(x);
+    const price = series.coordinateToPrice(y);
+    if (time === null || price === null || !Number.isFinite(price)) return null;
+    return { time, price };
+  };
+
+  const removePreview = () => {
+    const manager = managerRef.current;
+    if (manager && previewRef.current) {
+      manager.removeDrawing(previewRef.current.id);
+    }
+    previewRef.current = null;
+  };
+
+  const updatePreview = (handler: InteractionHandler, previewAnchor?: Anchor) => {
+    const manager = managerRef.current;
+    if (!manager) return;
+    const toolType = handler.getAnchors().length ? activeTool : null;
+    if (!toolType) return;
+    const definition = registry.get(toolType);
+    if (!definition) return;
+    const anchors = handler.getAnchors();
+    const preview = handler.getPreviewAnchor() ?? previewAnchor;
+    if (!preview) return;
+    const previewAnchors = [...anchors];
+    while (previewAnchors.length < definition.requiredAnchors) previewAnchors.push({ ...preview });
+    if (previewAnchors.length === 0) return;
+    removePreview();
+    const drawing = registry.createDrawing(
+      toolType,
+      '__sire_preview__',
+      previewAnchors,
+      drawingStyle(definition),
+      definition.defaultOptions,
+    );
+    if (drawing) {
+      previewRef.current = drawing;
+      manager.addDrawing(drawing);
+    }
+  };
+
+  const cancelActiveTool = () => {
+    interactionRef.current?.onKeyDown('Escape');
+    interactionRef.current = null;
+    removePreview();
+    managerRef.current?.setActiveTool(null);
+    setActiveTool(null);
+  };
+
+  const startTool = (type: string) => {
+    const chart = chartRef.current;
+    const series = seriesRef.current;
+    const manager = managerRef.current;
+    if (!chart || !series || !manager) return;
+    const definition = registry.get(type);
+    if (!definition) return;
+
+    cancelActiveTool();
+    manager.deselectAll();
+    manager.setActiveTool(type);
+    setActiveTool(type);
+
+    let handler: InteractionHandler;
+    handler = new InteractionHandler({
+      requiredAnchors: definition.requiredAnchors,
+      pixelToChart: point => chartAnchorFromPoint(point.x, point.y),
+      onAnchorAdded: anchor => updatePreview(handler, anchor),
+      onPreviewMove: anchor => updatePreview(handler, anchor),
+      onComplete: () => {
+        const anchors = handler.getAnchors();
+        removePreview();
+        const id = `sire-drawing-${Date.now()}-${++drawingIdRef.current}`;
+        const drawing = registry.createDrawing(type, id, anchors, drawingStyle(definition), definition.defaultOptions);
+        if (drawing) {
+          manager.addDrawing(drawing);
+          manager.selectDrawing(id);
+        }
+        handler.reset();
+        interactionRef.current = null;
+        manager.setActiveTool(null);
+        setActiveTool(null);
+        setDrawingCount(countDrawings());
+        saveDrawings();
+      },
+      onCancel: () => {
+        removePreview();
+        interactionRef.current = null;
+        manager.setActiveTool(null);
+        setActiveTool(null);
+      },
+    });
+    interactionRef.current = handler;
+  };
+
+  const handlePlacementEvent = (event: MouseEvent) => {
+    const handler = interactionRef.current;
+    const container = containerRef.current;
+    if (!handler || !container) return;
+    const rect = container.getBoundingClientRect();
+    const point = { x: event.clientX - rect.left, y: event.clientY - rect.top };
+    const anchor = chartAnchorFromPoint(point.x, point.y);
+    handler.onMouseDown({ point, time: anchor?.time ?? null, price: anchor?.price ?? null, srcEvent: event });
+  };
+
+  const handlePlacementMove = (event: MouseEvent) => {
+    const handler = interactionRef.current;
+    const container = containerRef.current;
+    if (!handler || !container || handler.getState() !== 'placing') return;
+    const rect = container.getBoundingClientRect();
+    const point = { x: event.clientX - rect.left, y: event.clientY - rect.top };
+    const anchor = chartAnchorFromPoint(point.x, point.y);
+    handler.onMouseMove({ point, time: anchor?.time ?? null, price: anchor?.price ?? null, srcEvent: event });
   };
 
   useEffect(() => {
-    if (!containerRef.current) return;
-    const chart = createChart(containerRef.current, {
+    const container = containerRef.current;
+    if (!container) return;
+
+    const chart = createChart(container, {
       autoSize: true,
       layout: { background: { type: ColorType.Solid, color: '#090d12' }, textColor: '#8995a5', attributionLogo: true },
       grid: { vertLines: { color: 'rgba(120,135,150,.08)' }, horzLines: { color: 'rgba(120,135,150,.08)' } },
@@ -299,22 +374,49 @@ export default function FinancialChart({ symbol, liveTick, requestHistory }: Pro
     const series = chart.addSeries(CandlestickSeries, {
       upColor: '#22c55e', downColor: '#ef4444', borderUpColor: '#22c55e', borderDownColor: '#ef4444', wickUpColor: '#22c55e', wickDownColor: '#ef4444', priceLineVisible: true, lastValueVisible: true,
     });
-    const lineTools = createLineToolsPlugin(chart, series);
-    registerTools(lineTools);
-    lineToolsRef.current = lineTools;
+    const manager = new DrawingManager();
+    manager.attach(chart, series, container);
     chartRef.current = chart;
     seriesRef.current = series;
-    const handleAfterEdit = () => { setActiveTool(null); saveDrawings(); };
-    const handleSingleClick = () => setDrawingCount(countSerializedDrawings(lineTools));
-    lineTools.subscribeLineToolsAfterEdit(handleAfterEdit);
-    lineTools.subscribeLineToolsSingleClick(handleSingleClick);
+    managerRef.current = manager;
+
+    const handleDrawingEvent = (event: { drawingId?: string }) => {
+      if (event.drawingId === '__sire_preview__') return;
+      setDrawingCount(countDrawings());
+      if (event.drawingId && !event.drawingId.startsWith('__sire_preview__')) saveDrawings();
+    };
+    const unsubAdded = manager.on('drawing:added', handleDrawingEvent);
+    const unsubRemoved = manager.on('drawing:removed', handleDrawingEvent);
+    const unsubUpdated = manager.on('drawing:updated', handleDrawingEvent);
+
+    container.addEventListener('click', handlePlacementEvent);
+    container.addEventListener('mousemove', handlePlacementMove);
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') cancelActiveTool();
+      if ((event.key === 'Delete' || event.key === 'Backspace') && !interactionRef.current) {
+        const selected = manager.getSelectedDrawing();
+        if (selected) {
+          manager.removeDrawing(selected.id);
+          saveDrawings();
+        }
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+
     loadDrawings(symbolRef.current);
+
     return () => {
-      lineTools.unsubscribeLineToolsAfterEdit(handleAfterEdit);
-      lineTools.unsubscribeLineToolsSingleClick(handleSingleClick);
-      lineTools.destroy();
+      unsubAdded();
+      unsubRemoved();
+      unsubUpdated();
+      container.removeEventListener('click', handlePlacementEvent);
+      container.removeEventListener('mousemove', handlePlacementMove);
+      window.removeEventListener('keydown', handleKeyDown);
+      interactionRef.current = null;
+      previewRef.current = null;
+      manager.detach();
       chart.remove();
-      lineToolsRef.current = null;
+      managerRef.current = null;
       chartRef.current = null;
       seriesRef.current = null;
     };
@@ -324,7 +426,7 @@ export default function FinancialChart({ symbol, liveTick, requestHistory }: Pro
     symbolRef.current = symbol;
     if (previousSymbolRef.current === symbol) return;
     previousSymbolRef.current = symbol;
-    setActiveTool(null);
+    cancelActiveTool();
     loadDrawings(symbol);
   }, [symbol]);
 
@@ -356,7 +458,10 @@ export default function FinancialChart({ symbol, liveTick, requestHistory }: Pro
 
   useEffect(() => {
     fetchHistory(selectedPeriod.current);
-    return () => { requestGeneration.current += 1; historyLoadingRef.current = false; };
+    return () => {
+      requestGeneration.current += 1;
+      historyLoadingRef.current = false;
+    };
   }, [symbol, requestHistory]);
 
   useEffect(() => {
@@ -369,25 +474,9 @@ export default function FinancialChart({ symbol, liveTick, requestHistory }: Pro
     if (seconds === selectedPeriod.current && !loading) return;
     selectedPeriod.current = seconds;
     setPeriod(seconds);
-    setActiveTool(null);
+    cancelActiveTool();
     fetchHistory(seconds);
   };
-
-  const startTool = (type: string) => {
-    const lineTools = lineToolsRef.current;
-    if (!lineTools) return;
-    setActiveTool(type);
-    lineTools.addLineTool(type);
-  };
-
-  const deleteSelected = () => {
-    const lineTools = lineToolsRef.current;
-    if (!lineTools) return;
-    lineTools.removeSelectedLineTools();
-    saveDrawings();
-  };
-
-  const fitChart = () => resetViewport();
 
   const goLive = () => {
     const chart = chartRef.current;
@@ -396,7 +485,8 @@ export default function FinancialChart({ symbol, liveTick, requestHistory }: Pro
     chart.timeScale().scrollToRealtime();
   };
 
-  const currentGroup = TOOL_GROUPS.find(group => group.key === toolGroup) ?? TOOL_GROUPS[0];
+  const fitChart = () => resetViewport();
+  const currentGroup = DRAWING_GROUPS.find(group => group.key === drawingGroup) ?? DRAWING_GROUPS[0];
 
   return (
     <div className="sire-financial-chart">
@@ -412,15 +502,41 @@ export default function FinancialChart({ symbol, liveTick, requestHistory }: Pro
         <button onClick={fitChart}>FIT</button>
       </div>
 
-      <div className="sire-drawing-toolbar">
-        <select value={toolGroup} onChange={event => setToolGroup(event.target.value)} aria-label="Drawing category">
-          {TOOL_GROUPS.map(group => <option key={group.key} value={group.key}>{group.label}</option>)}
-        </select>
-        <select value="" onChange={event => event.target.value && startTool(event.target.value)} aria-label="Drawing tool">
-          <option value="">{activeTool ? `${activeTool} · press Esc to cancel` : 'Choose tool…'}</option>
-          {currentGroup.tools.map(tool => <option key={tool.type} value={tool.type}>{tool.label}</option>)}
-        </select>
-        <button onClick={deleteSelected} title="Delete selected drawing">DELETE</button>
+      <div className="sire-drawing-toolbar" aria-label="Drawing tools">
+        <div className="sire-drawing-groups">
+          {DRAWING_GROUPS.map(group => (
+            <button
+              key={group.key}
+              className={drawingGroup === group.key ? 'active' : ''}
+              onClick={() => { cancelActiveTool(); setDrawingGroup(group.key); }}
+              title={`${group.label} tools`}
+            >
+              {group.label}
+            </button>
+          ))}
+        </div>
+        <div className="sire-drawing-tools" aria-label={`${currentGroup?.label ?? 'Drawing'} tools`}>
+          {currentGroup?.tools.map(tool => (
+            <button
+              key={tool.type}
+              className={activeTool === tool.type ? 'active' : ''}
+              onClick={() => startTool(tool.type)}
+              title={`${tool.name} · ${tool.requiredAnchors} point${tool.requiredAnchors === 1 ? '' : 's'}`}
+            >
+              {tool.name}
+            </button>
+          ))}
+        </div>
+        <button onClick={() => managerRef.current?.deselectAll()}>SELECT</button>
+        <button onClick={() => {
+          const manager = managerRef.current;
+          const selected = manager?.getSelectedDrawing();
+          if (manager && selected) {
+            manager.removeDrawing(selected.id);
+            saveDrawings();
+          }
+        }}>DELETE</button>
+        <span className="sire-drawing-active">{activeTool ? (registry.get(activeTool)?.name ?? activeTool) : 'Select a drawing tool'}</span>
         <span className="sire-drawing-count">{drawingCount} drawing{drawingCount === 1 ? '' : 's'}</span>
       </div>
 
