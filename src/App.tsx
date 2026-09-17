@@ -10,13 +10,9 @@ type Tick = { symbol: string; quote: number; bid?: number; ask?: number; epoch: 
 type DerivResponse = Record<string, unknown>;
 type DerivEndpoint = { url: string; label: string; legacy: boolean };
 
-const DERIV_APP_ID = String((import.meta as ImportMeta & { env?: Record<string, string | undefined> }).env?.VITE_DERIV_APP_ID || '1089');
+const DERIV_PROXY_URL = `${window.location.protocol === 'https:' ? 'wss' : 'ws'}://${window.location.host}/deriv`;
 const DERIV_ENDPOINTS: DerivEndpoint[] = [
-  { url: 'wss://api.derivws.com/trading/v1/options/ws/public', label: 'Deriv public API', legacy: false },
-  { url: 'wss://ws.derivws.com/websockets/v3', label: 'Deriv WebSocket v3', legacy: true },
-  { url: 'wss://ws.binaryws.com/websockets/v3', label: 'Deriv legacy WebSocket v3', legacy: true },
-  { url: `wss://ws.derivws.com/websockets/v3?app_id=${encodeURIComponent(DERIV_APP_ID)}`, label: 'Deriv WebSocket v3 (App ID)', legacy: true },
-  { url: `wss://ws.binaryws.com/websockets/v3?app_id=${encodeURIComponent(DERIV_APP_ID)}`, label: 'Deriv legacy WebSocket v3 (App ID)', legacy: true },
+  { url: DERIV_PROXY_URL, label: 'SIRE Deriv proxy', legacy: true },
 ];
 const INGEST_CHUNK = 500;
 
@@ -33,7 +29,7 @@ function openDeriv(endpoint: DerivEndpoint): Promise<WebSocket> {
       settled = true;
       try { socket.close(); } catch { /* ignore */ }
       reject(new Error(`${endpoint.label} connection timed out`));
-    }, 10000);
+    }, 15000);
     socket.onopen = () => {
       if (settled) return;
       settled = true;
@@ -95,15 +91,16 @@ async function discoverCatalogue() {
     let ws: WebSocket | null = null;
     try {
       ws = await openDeriv(endpoint);
-      const requests = endpoint.legacy
-        ? [{ active_symbols: 'brief' }, { active_symbols: 'brief', product_type: 'basic' }]
-        : [{ active_symbols: 'brief' }];
-      let data: DerivResponse | null = null;
+      const requests = [{ active_symbols: 'brief' }, { active_symbols: 'brief', product_type: 'basic' }];
       let records: Record<string, unknown>[] = [];
       for (const request of requests) {
-        data = await requestOnce(ws, request);
-        records = (Array.isArray(data.active_symbols) ? data.active_symbols : []).filter((item: unknown): item is Record<string, unknown> => Boolean(item && typeof item === 'object'));
-        if (records.length) break;
+        try {
+          const data = await requestOnce(ws, request);
+          records = (Array.isArray(data.active_symbols) ? data.active_symbols : []).filter((item: unknown): item is Record<string, unknown> => Boolean(item && typeof item === 'object'));
+          if (records.length) break;
+        } catch (error) {
+          errors.push(error instanceof Error ? `${endpoint.label}: ${error.message}` : `${endpoint.label}: ${String(error)}`);
+        }
       }
       const instruments = Array.from(new Map(records.filter(isSynthetic).map(normalize).filter((item): item is Instrument => Boolean(item)).map(item => [item.symbol, item])).values()).sort((a, b) => a.name.localeCompare(b.name));
       if (instruments.length) return { instruments, allInstruments: records, endpoint };
@@ -139,7 +136,7 @@ export default function App() {
     if (!selected) return;
     let disposed = false; let reconnectTimer = 0;
     const connect = async () => {
-      const candidates = endpointRef.current ? [endpointRef.current, ...DERIV_ENDPOINTS.filter(item => item.url !== endpointRef.current?.url)] : DERIV_ENDPOINTS;
+      const candidates = endpointRef.current ? [endpointRef.current] : DERIV_ENDPOINTS;
       try {
         let ws: WebSocket | null = null; let activeEndpoint: DerivEndpoint | null = null; const connectionErrors: string[] = [];
         for (const endpoint of candidates) {
