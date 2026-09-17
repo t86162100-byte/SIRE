@@ -1,49 +1,62 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { FastFinancialChart } from '@pairlens/fast-financial-charts/react';
-import type {
-  ChartSeriesInput,
-  DrawingToolType,
-  FastFinancialChartRef,
-  IndicatorInstanceInput,
-  Timeframe,
-} from '@pairlens/fast-financial-charts/types';
+import type { ChartSeriesInput, DrawingToolType, FastFinancialChartRef, IndicatorInstanceInput, Timeframe } from '@pairlens/fast-financial-charts/types';
+import { isPlaceableTool, MobileDrawingPlacement } from './chart/mobileDrawingPlacement';
 
 type Candle = { epoch: number; open: number; high: number; low: number; close: number; volume?: number };
 type TimeframeOption = { value: Timeframe; label: string };
 type Props = { candles: Candle[]; latest?: { epoch: number; quote: number; bid?: number; ask?: number } | null; autoScale?: boolean; timeframe: Timeframe; timeframeOptions: readonly TimeframeOption[]; onTimeframeChange: (value: Timeframe) => void };
-type DrawingEntry = { type: DrawingToolType; label: string; group: string; hint: string };
-type IndicatorPreset = { type: string; label: string; group: string; params: Record<string, boolean | number | string>; pane: 'overlay' | 'separate' };
 
-const DRAWING_TOOLS: DrawingEntry[] = [
-  { type: 'select', label: 'Select', group: 'Basics', hint: 'Select and move drawings' },
-  { type: 'line', label: 'Trend Line', group: 'Lines', hint: 'Two-point trend line' }, { type: 'ray', label: 'Ray', group: 'Lines', hint: 'Line extended forward' }, { type: 'xline', label: 'Extended Line', group: 'Lines', hint: 'Line extended both ways' },
-  { type: 'hline', label: 'Horizontal Line', group: 'Lines', hint: 'Fixed price level' }, { type: 'hray', label: 'Horizontal Ray', group: 'Lines', hint: 'Price level extended right' }, { type: 'vline', label: 'Vertical Line', group: 'Lines', hint: 'Fixed time marker' }, { type: 'crossline', label: 'Cross Line', group: 'Lines', hint: 'Price and time marker' }, { type: 'arrow', label: 'Arrow', group: 'Lines', hint: 'Directional arrow' }, { type: 'trend-angle', label: 'Trend Angle', group: 'Lines', hint: 'Trend line with angle' },
-  { type: 'rectangle', label: 'Rectangle', group: 'Shapes', hint: 'Two-corner box' }, { type: 'rotated-rectangle', label: 'Rotated Rectangle', group: 'Shapes', hint: 'Angled rectangle' }, { type: 'circle', label: 'Circle', group: 'Shapes', hint: 'Circular region' }, { type: 'ellipse', label: 'Ellipse', group: 'Shapes', hint: 'Oval region' }, { type: 'arc', label: 'Arc', group: 'Shapes', hint: 'Three-point arc' },
-  { type: 'triangle-pattern', label: 'Triangle Pattern', group: 'Patterns', hint: 'Three-point triangle' }, { type: 'abcd-pattern', label: 'ABCD Pattern', group: 'Patterns', hint: 'Four-point harmonic pattern' }, { type: 'xabcd-pattern', label: 'XABCD Pattern', group: 'Patterns', hint: 'Five-point harmonic pattern' }, { type: 'head-shoulders', label: 'Head & Shoulders', group: 'Patterns', hint: 'Head-and-shoulders structure' }, { type: 'elliott-wave', label: 'Elliott Wave', group: 'Patterns', hint: 'Multi-point wave count' },
-  { type: 'fibonacci', label: 'Fib Retracement', group: 'Fibonacci', hint: 'Retracement levels' }, { type: 'fib-extension', label: 'Fib Extension', group: 'Fibonacci', hint: 'Extension levels' }, { type: 'fib-channel', label: 'Fib Channel', group: 'Fibonacci', hint: 'Fibonacci channel' }, { type: 'fib-time-zone', label: 'Fib Time Zone', group: 'Fibonacci', hint: 'Time-based Fibonacci levels' }, { type: 'fib-wedge', label: 'Fib Wedge', group: 'Fibonacci', hint: 'Fibonacci wedge' },
-  { type: 'gann-fan', label: 'Gann Fan', group: 'Gann', hint: 'Gann angle fan' }, { type: 'gann-box', label: 'Gann Box', group: 'Gann', hint: 'Gann price/time grid' },
-  { type: 'channel', label: 'Parallel Channel', group: 'Channels', hint: 'Three-point parallel channel' }, { type: 'pitchfork', label: 'Pitchfork', group: 'Channels', hint: 'Three-point pitchfork' },
-  { type: 'forecast', label: 'Forecast', group: 'Analysis', hint: 'Project a future range' }, { type: 'anchored-vwap', label: 'Anchored VWAP', group: 'Analysis', hint: 'VWAP anchored to a point' }, { type: 'measure', label: 'Measure', group: 'Analysis', hint: 'Measure price and time distance' }, { type: 'date-range', label: 'Date Range', group: 'Analysis', hint: 'Measure time range' }, { type: 'price-date-range', label: 'Price & Date Range', group: 'Analysis', hint: 'Measure price and time together' }, { type: 'info-line', label: 'Info Line', group: 'Analysis', hint: 'Line with information' },
-  { type: 'long-position', label: 'Long Position', group: 'Positions', hint: 'Entry, target and stop layout' }, { type: 'short-position', label: 'Short Position', group: 'Positions', hint: 'Entry, target and stop layout' },
-  { type: 'text', label: 'Text', group: 'Annotation', hint: 'Place a text note' }, { type: 'callout', label: 'Callout', group: 'Annotation', hint: 'Text callout with pointer' }, { type: 'path', label: 'Shape', group: 'Annotation', hint: 'Freeform shape preset' }, { type: 'polyline', label: 'Polyline', group: 'Annotation', hint: 'Multi-point freeform line' }, { type: 'brush', label: 'Brush', group: 'Annotation', hint: 'Freehand drawing' }, { type: 'highlighter', label: 'Highlighter', group: 'Annotation', hint: 'Freehand translucent highlight' },
-];
+type CatalogItem = { type: string; label: string; group: string; hint: string };
 
-const INDICATOR_PRESETS: IndicatorPreset[] = [
-  { type: 'EMA', label: 'Exponential Moving Average', group: 'Moving Averages', params: { period: 20 }, pane: 'overlay' }, { type: 'SMA', label: 'Simple Moving Average', group: 'Moving Averages', params: { period: 20 }, pane: 'overlay' }, { type: 'WMA', label: 'Weighted Moving Average', group: 'Moving Averages', params: { period: 20 }, pane: 'overlay' }, { type: 'DEMA', label: 'Double EMA', group: 'Moving Averages', params: { period: 20 }, pane: 'overlay' }, { type: 'TEMA', label: 'Triple EMA', group: 'Moving Averages', params: { period: 20 }, pane: 'overlay' }, { type: 'VWAP', label: 'VWAP', group: 'Moving Averages', params: {}, pane: 'overlay' }, { type: 'HMA', label: 'Hull Moving Average', group: 'Moving Averages', params: { period: 9 }, pane: 'overlay' }, { type: 'VWMA', label: 'Volume Weighted MA', group: 'Moving Averages', params: { period: 20 }, pane: 'overlay' }, { type: 'ALMA', label: 'Arnaud Legoux MA', group: 'Moving Averages', params: { period: 9, offset: 0.85, sigma: 6 }, pane: 'overlay' }, { type: 'KAMA', label: 'Kaufman Adaptive MA', group: 'Moving Averages', params: { period: 10, fast: 2, slow: 30 }, pane: 'overlay' }, { type: 'SMMA', label: 'Smoothed MA', group: 'Moving Averages', params: { period: 7 }, pane: 'overlay' }, { type: 'LSMA', label: 'Least Squares MA', group: 'Moving Averages', params: { period: 25 }, pane: 'overlay' }, { type: 'McGinleyDynamic', label: 'McGinley Dynamic', group: 'Moving Averages', params: { period: 14 }, pane: 'overlay' }, { type: 'MovingAverageHamming', label: 'Hamming Moving Average', group: 'Moving Averages', params: { period: 20 }, pane: 'overlay' }, { type: 'MovingAverageChannel', label: 'Moving Average Channel', group: 'Moving Averages', params: { period: 20 }, pane: 'overlay' }, { type: 'MovingAverageMultiple', label: 'Moving Average Multiple', group: 'Moving Averages', params: { periods: '10,20,50,100,200' }, pane: 'overlay' }, { type: 'GuppyMMA', label: 'Guppy Multiple MA', group: 'Moving Averages', params: {}, pane: 'overlay' },
-  { type: 'RSI', label: 'Relative Strength Index', group: 'Oscillators', params: { period: 14 }, pane: 'separate' }, { type: 'MACD', label: 'MACD', group: 'Oscillators', params: { fast: 12, slow: 26, signal: 9 }, pane: 'separate' }, { type: 'Stochastic', label: 'Stochastic', group: 'Oscillators', params: { kPeriod: 14, dPeriod: 3, smooth: 3 }, pane: 'separate' }, { type: 'StochRSI', label: 'Stochastic RSI', group: 'Oscillators', params: { rsiPeriod: 14, stochPeriod: 14, kSmooth: 3, dSmooth: 3 }, pane: 'separate' }, { type: 'WilliamsR', label: 'Williams %R', group: 'Oscillators', params: { period: 14 }, pane: 'separate' }, { type: 'CCI', label: 'Commodity Channel Index', group: 'Oscillators', params: { period: 20 }, pane: 'separate' }, { type: 'MFI', label: 'Money Flow Index', group: 'Oscillators', params: { period: 14 }, pane: 'separate' }, { type: 'Momentum', label: 'Momentum', group: 'Oscillators', params: { period: 10 }, pane: 'separate' }, { type: 'ROC', label: 'Rate of Change', group: 'Oscillators', params: { period: 12 }, pane: 'separate' }, { type: 'Aroon', label: 'Aroon', group: 'Oscillators', params: { period: 25 }, pane: 'separate' }, { type: 'ADX', label: 'Average Directional Index', group: 'Oscillators', params: { period: 14 }, pane: 'separate' }, { type: 'TRIX', label: 'TRIX', group: 'Oscillators', params: { period: 15, signal: 9 }, pane: 'separate' }, { type: 'BBPercent', label: 'Bollinger %B', group: 'Oscillators', params: { period: 20, stdDev: 2 }, pane: 'separate' }, { type: 'AwesomeOscillator', label: 'Awesome Oscillator', group: 'Oscillators', params: { fast: 5, slow: 34 }, pane: 'separate' }, { type: 'ChoppinessIndex', label: 'Choppiness Index', group: 'Oscillators', params: { period: 14 }, pane: 'separate' }, { type: 'FisherTransform', label: 'Fisher Transform', group: 'Oscillators', params: { period: 9 }, pane: 'separate' }, { type: 'VortexIndicator', label: 'Vortex Indicator', group: 'Oscillators', params: { period: 14 }, pane: 'separate' }, { type: 'UltimateOscillator', label: 'Ultimate Oscillator', group: 'Oscillators', params: { period1: 7, period2: 14, period3: 28 }, pane: 'separate' }, { type: 'CoppockCurve', label: 'Coppock Curve', group: 'Oscillators', params: { longPeriod: 14, shortPeriod: 11, wmaPeriod: 10 }, pane: 'separate' }, { type: 'KST', label: 'Know Sure Thing', group: 'Oscillators', params: { roc1: 10, roc2: 15, roc3: 20, roc4: 30 }, pane: 'separate' }, { type: 'ElderForceIndex', label: 'Elder Force Index', group: 'Oscillators', params: { period: 13 }, pane: 'separate' }, { type: 'DPO', label: 'Detrended Price Oscillator', group: 'Oscillators', params: { period: 20 }, pane: 'separate' }, { type: 'CMO', label: 'Chande Momentum Oscillator', group: 'Oscillators', params: { period: 9 }, pane: 'separate' }, { type: 'RVI', label: 'Relative Vigor Index', group: 'Oscillators', params: { period: 10, signal: 4 }, pane: 'separate' }, { type: 'TSI', label: 'True Strength Index', group: 'Oscillators', params: { longPeriod: 25, shortPeriod: 13, signal: 7 }, pane: 'separate' }, { type: 'SMIErgodic', label: 'SMI Ergodic', group: 'Oscillators', params: { longPeriod: 20, shortPeriod: 5, signal: 5 }, pane: 'separate' }, { type: 'ConnorsRSI', label: 'Connors RSI', group: 'Oscillators', params: { rsiPeriod: 3, streakPeriod: 2, rankPeriod: 100 }, pane: 'separate' }, { type: 'BalanceOfPower', label: 'Balance of Power', group: 'Oscillators', params: { period: 14 }, pane: 'separate' }, { type: 'RelativeVolatilityIndex', label: 'Relative Volatility Index', group: 'Oscillators', params: { period: 10, smoothPeriod: 14 }, pane: 'separate' }, { type: 'AcceleratorOscillator', label: 'Accelerator Oscillator', group: 'Oscillators', params: { fast: 5, slow: 34, smoothPeriod: 5 }, pane: 'separate' }, { type: 'MassIndex', label: 'Mass Index', group: 'Oscillators', params: { emaPeriod: 9, sumPeriod: 25 }, pane: 'separate' }, { type: 'PriceOscillator', label: 'Price Oscillator', group: 'Oscillators', params: { fast: 12, slow: 26 }, pane: 'separate' }, { type: 'DirectionalMovement', label: 'Directional Movement', group: 'Oscillators', params: { period: 14 }, pane: 'separate' }, { type: 'TrendStrengthIndex', label: 'Trend Strength Index', group: 'Oscillators', params: { period: 14 }, pane: 'separate' }, { type: 'RankCorrelationIndex', label: 'Rank Correlation Index', group: 'Oscillators', params: { period: 14 }, pane: 'separate' },
-  { type: 'BollingerBands', label: 'Bollinger Bands', group: 'Bands & Channels', params: { period: 20, stdDev: 2 }, pane: 'overlay' }, { type: 'DonchianChannels', label: 'Donchian Channels', group: 'Bands & Channels', params: { period: 20 }, pane: 'overlay' }, { type: 'KeltnerChannels', label: 'Keltner Channels', group: 'Bands & Channels', params: { period: 20, atrPeriod: 10, multiplier: 2 }, pane: 'overlay' }, { type: 'Envelopes', label: 'Envelopes', group: 'Bands & Channels', params: { period: 20, deviation: 10 }, pane: 'overlay' }, { type: 'PriceChannel', label: 'Price Channel', group: 'Bands & Channels', params: { period: 20 }, pane: 'overlay' },
-  { type: 'SuperTrend', label: 'SuperTrend', group: 'Trend', params: { period: 10, multiplier: 3 }, pane: 'overlay' }, { type: 'Ichimoku', label: 'Ichimoku Cloud', group: 'Trend', params: { tenkanPeriod: 9, kijunPeriod: 26, senkouBPeriod: 52, displacement: 26 }, pane: 'overlay' }, { type: 'ParabolicSAR', label: 'Parabolic SAR', group: 'Trend', params: { afStart: 0.02, afStep: 0.02, afMax: 0.2 }, pane: 'overlay' }, { type: 'Alligator', label: 'Williams Alligator', group: 'Trend', params: { jawPeriod: 13, teethPeriod: 8, lipsPeriod: 5, jawShift: 8, teethShift: 5, lipsShift: 3 }, pane: 'overlay' }, { type: 'WilliamsFractal', label: 'Williams Fractal', group: 'Trend', params: { period: 2 }, pane: 'overlay' }, { type: 'ZigZag', label: 'Zig Zag', group: 'Trend', params: { deviation: 5 }, pane: 'overlay' }, { type: 'ChandeKrollStop', label: 'Chande Kroll Stop', group: 'Trend', params: { atrPeriod: 10, firstStop: 1, secondStop: 9 }, pane: 'overlay' }, { type: 'MACross', label: 'MA Cross', group: 'Trend', params: { fastPeriod: 9, slowPeriod: 21 }, pane: 'overlay' }, { type: 'EMACross', label: 'EMA Cross', group: 'Trend', params: { fastPeriod: 9, slowPeriod: 21 }, pane: 'overlay' }, { type: 'MAWithEMACross', label: 'MA with EMA Cross', group: 'Trend', params: { smaPeriod: 10, emaPeriod: 21 }, pane: 'overlay' },
-  { type: 'Volume', label: 'Volume', group: 'Volume', params: {}, pane: 'separate' }, { type: 'OBV', label: 'On Balance Volume', group: 'Volume', params: {}, pane: 'separate' }, { type: 'AD', label: 'Accumulation/Distribution', group: 'Volume', params: {}, pane: 'separate' }, { type: 'CMF', label: 'Chaikin Money Flow', group: 'Volume', params: { period: 20 }, pane: 'separate' }, { type: 'KlingerOscillator', label: 'Klinger Oscillator', group: 'Volume', params: { fast: 34, slow: 55, signal: 13 }, pane: 'separate' }, { type: 'PVT', label: 'Price Volume Trend', group: 'Volume', params: {}, pane: 'separate' }, { type: 'EaseOfMovement', label: 'Ease of Movement', group: 'Volume', params: { period: 14 }, pane: 'separate' }, { type: 'VolumeOscillator', label: 'Volume Oscillator', group: 'Volume', params: { fast: 5, slow: 10 }, pane: 'separate' }, { type: 'NetVolume', label: 'Net Volume', group: 'Volume', params: {}, pane: 'separate' },
-  { type: 'ATR', label: 'Average True Range', group: 'Volatility', params: { period: 14 }, pane: 'separate' }, { type: 'BBWidth', label: 'Bollinger Band Width', group: 'Volatility', params: { period: 20, stdDev: 2 }, pane: 'separate' }, { type: 'HistoricalVolatility', label: 'Historical Volatility', group: 'Volatility', params: { period: 20 }, pane: 'separate' }, { type: 'PivotPoints', label: 'Pivot Points', group: 'Volatility', params: { method: 'standard' }, pane: 'overlay' }, { type: 'StandardDeviation', label: 'Standard Deviation', group: 'Volatility', params: { period: 20 }, pane: 'separate' }, { type: 'ChaikinVolatility', label: 'Chaikin Volatility', group: 'Volatility', params: { emaPeriod: 10, rocPeriod: 10 }, pane: 'separate' }, { type: 'FiftyTwoWeekHighLow', label: '52 Week High/Low', group: 'Volatility', params: { period: 252 }, pane: 'overlay' },
-  { type: 'AveragePrice', label: 'Average Price', group: 'Statistical', params: {}, pane: 'overlay' }, { type: 'MedianPrice', label: 'Median Price', group: 'Statistical', params: {}, pane: 'overlay' }, { type: 'TypicalPrice', label: 'Typical Price', group: 'Statistical', params: {}, pane: 'overlay' }, { type: 'LinearRegressionCurve', label: 'Linear Regression Curve', group: 'Statistical', params: { period: 25 }, pane: 'overlay' }, { type: 'LinearRegressionSlope', label: 'Linear Regression Slope', group: 'Statistical', params: { period: 25 }, pane: 'separate' }, { type: 'AccumulativeSwingIndex', label: 'Accumulative Swing Index', group: 'Statistical', params: { limitMove: 0 }, pane: 'separate' }, { type: 'MajorityRule', label: 'Majority Rule', group: 'Statistical', params: { period: 14 }, pane: 'separate' },
-];
+const DRAWING_GROUPS = ['All', 'Basics', 'Lines', 'Shapes', 'Patterns', 'Fibonacci', 'Gann', 'Channels', 'Analysis', 'Positions', 'Annotation'];
+const INDICATOR_GROUPS = ['All', 'Moving Averages', 'Oscillators', 'Bands & Channels', 'Trend', 'Volume', 'Volatility', 'Statistical'];
+
+const OVERLAY_INDICATORS = new Set([
+  'EMA', 'SMA', 'WMA', 'DEMA', 'TEMA', 'VWAP', 'HMA', 'VWMA', 'ALMA', 'KAMA', 'SMMA', 'LSMA',
+  'McGinleyDynamic', 'MovingAverageHamming', 'MovingAverageChannel', 'MovingAverageMultiple', 'GuppyMMA',
+  'BollingerBands', 'DonchianChannels', 'KeltnerChannels', 'Envelopes', 'PriceChannel', 'SuperTrend',
+  'Ichimoku', 'ParabolicSAR', 'Alligator', 'WilliamsFractal', 'ZigZag', 'ChandeKrollStop', 'MACross',
+  'EMACross', 'MAWithEMACross', 'PivotPoints', 'FiftyTwoWeekHighLow', 'AveragePrice', 'MedianPrice',
+  'TypicalPrice', 'LinearRegressionCurve',
+]);
+
+const humanize = (value: string) => value.replace(/^custom:/, '').replace(/([a-z])([A-Z])/g, '$1 $2').replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+const drawingGroup = (type: string) => {
+  if (['select'].includes(type)) return 'Basics';
+  if (['line', 'arrow', 'ray', 'xline', 'hline', 'hray', 'vline', 'crossline', 'trend-angle'].includes(type)) return 'Lines';
+  if (['rectangle', 'rotated-rectangle', 'circle', 'ellipse', 'arc', 'path'].includes(type)) return 'Shapes';
+  if (['triangle-pattern', 'abcd-pattern', 'xabcd-pattern', 'head-shoulders', 'elliott-wave'].includes(type)) return 'Patterns';
+  if (type.startsWith('fib') || type === 'fibonacci') return 'Fibonacci';
+  if (type.startsWith('gann')) return 'Gann';
+  if (['channel', 'pitchfork'].includes(type)) return 'Channels';
+  if (['forecast', 'anchored-vwap', 'measure', 'date-range', 'price-date-range', 'info-line'].includes(type)) return 'Analysis';
+  if (['long-position', 'short-position'].includes(type)) return 'Positions';
+  return 'Annotation';
+};
+const drawingHint = (type: string) => {
+  const points = type === 'hline' || type === 'hray' || type === 'vline' || type === 'crossline' || type === 'text' || type === 'anchored-vwap' ? 1 : type === 'channel' || type === 'pitchfork' || type === 'fib-extension' || type === 'fib-channel' || type === 'triangle-pattern' || type === 'arc' || type === 'rotated-rectangle' || type === 'fib-wedge' ? 3 : type === 'abcd-pattern' ? 4 : type === 'xabcd-pattern' ? 5 : type === 'head-shoulders' ? 7 : 2;
+  if (['brush', 'highlighter', 'polyline', 'elliott-wave'].includes(type)) return 'Freehand';
+  return points === 1 ? 'One point' : `${points} points`;
+};
+const indicatorGroup = (type: string) => {
+  if (['EMA','SMA','WMA','DEMA','TEMA','VWAP','HMA','VWMA','ALMA','KAMA','SMMA','LSMA','McGinleyDynamic','MovingAverageHamming','MovingAverageChannel','MovingAverageMultiple','GuppyMMA'].includes(type)) return 'Moving Averages';
+  if (['RSI','MACD','Stochastic','StochRSI','WilliamsR','CCI','MFI','Momentum','ROC','Aroon','ADX','TRIX','BBPercent','AwesomeOscillator','ChoppinessIndex','FisherTransform','VortexIndicator','UltimateOscillator','CoppockCurve','KST','ElderForceIndex','DPO','CMO','RVI','TSI','SMIErgodic','ConnorsRSI','BalanceOfPower','RelativeVolatilityIndex','AcceleratorOscillator','MassIndex','PriceOscillator','DirectionalMovement','TrendStrengthIndex','RankCorrelationIndex'].includes(type)) return 'Oscillators';
+  if (['BollingerBands','DonchianChannels','KeltnerChannels','Envelopes','PriceChannel'].includes(type)) return 'Bands & Channels';
+  if (['SuperTrend','Ichimoku','ParabolicSAR','Alligator','WilliamsFractal','ZigZag','ChandeKrollStop','MACross','EMACross','MAWithEMACross'].includes(type)) return 'Trend';
+  if (['Volume','OBV','AD','CMF','KlingerOscillator','PVT','EaseOfMovement','VolumeOscillator','NetVolume'].includes(type)) return 'Volume';
+  if (['ATR','BBWidth','HistoricalVolatility','PivotPoints','StandardDeviation','ChaikinVolatility','FiftyTwoWeekHighLow'].includes(type)) return 'Volatility';
+  return 'Statistical';
+};
 
 function toBars(candles: Candle[]) {
-  return candles.filter(candle => [candle.epoch, candle.open, candle.high, candle.low, candle.close].every(Number.isFinite)).slice().sort((a, b) => a.epoch - b.epoch).reduce<ChartSeriesInput['bars']>((bars, candle) => { const ts = Math.floor(candle.epoch * 1000); if (bars.length && bars[bars.length - 1].ts === ts) return bars; bars.push({ ts, open: candle.open, high: candle.high, low: candle.low, close: candle.close, volume: candle.volume ?? 0 }); return bars; }, []);
+  return candles.filter(c => [c.epoch,c.open,c.high,c.low,c.close].every(Number.isFinite)).slice().sort((a,b) => a.epoch-b.epoch).reduce<ChartSeriesInput['bars']>((bars,c) => {
+    const ts = Math.floor(c.epoch * 1000);
+    if (bars.length && bars[bars.length - 1].ts === ts) return bars;
+    bars.push({ ts, open:c.open, high:c.high, low:c.low, close:c.close, volume:c.volume ?? 0 });
+    return bars;
+  }, []);
 }
-
-const DRAWING_GROUPS = ['All', 'Basics', 'Lines', 'Shapes', 'Fibonacci', 'Gann', 'Channels', 'Patterns', 'Analysis', 'Positions', 'Annotation'];
-const INDICATOR_GROUPS = ['All', 'Moving Averages', 'Oscillators', 'Bands & Channels', 'Trend', 'Volume', 'Volatility', 'Statistical'];
 
 export default function NativeMarketChart({ candles, latest, autoScale = true, timeframe, timeframeOptions, onTimeframeChange }: Props) {
   const chartRef = useRef<FastFinancialChartRef | null>(null);
@@ -53,53 +66,118 @@ export default function NativeMarketChart({ candles, latest, autoScale = true, t
   const [indicators, setIndicators] = useState<IndicatorInstanceInput[]>([]);
   const [timeframeOpen, setTimeframeOpen] = useState(false);
   const [instrumentLabel, setInstrumentLabel] = useState('Select instrument');
-  const [drawingGroup, setDrawingGroup] = useState('All');
-  const [indicatorGroup, setIndicatorGroup] = useState('All');
+  const [drawingGroupState, setDrawingGroupState] = useState('All');
+  const [indicatorGroupState, setIndicatorGroupState] = useState('All');
   const [drawingSearch, setDrawingSearch] = useState('');
   const [indicatorSearch, setIndicatorSearch] = useState('');
+  const [capabilities, setCapabilities] = useState<{ drawingTools: string[]; indicatorTypes: string[] }>({ drawingTools: [], indicatorTypes: [] });
+  const [isMobile, setIsMobile] = useState(false);
 
-  const series = useMemo<ChartSeriesInput[]>(() => [{ id: 'SIRE', label: 'SIRE', bars: toBars(candles), pricePrecision: 8 }], [candles]);
-  useEffect(() => { const update = () => setInstrumentLabel(document.querySelector('.native-instrument-picker strong')?.textContent?.trim() || 'Select instrument'); update(); const observer = new MutationObserver(update); const node = document.querySelector('.native-instrument-picker'); if (node) observer.observe(node, { subtree: true, childList: true, characterData: true }); return () => observer.disconnect(); }, []);
-  const addIndicator = (preset: IndicatorPreset) => { setIndicators(current => [...current, { id: `${preset.type}-${Date.now()}`, type: preset.type, seriesId: 'SIRE', params: preset.params, pane: preset.pane }]); setIndicatorsOpen(false); };
-  const filteredDrawings = useMemo(() => DRAWING_TOOLS.filter(tool => (drawingGroup === 'All' || tool.group === drawingGroup) && `${tool.label} ${tool.type} ${tool.hint}`.toLowerCase().includes(drawingSearch.trim().toLowerCase())), [drawingGroup, drawingSearch]);
-  const filteredIndicators = useMemo(() => INDICATOR_PRESETS.filter(item => (indicatorGroup === 'All' || item.group === indicatorGroup) && `${item.label} ${item.type}`.toLowerCase().includes(indicatorSearch.trim().toLowerCase())), [indicatorGroup, indicatorSearch]);
-  const paletteShell: CSSProperties = { position: 'fixed', zIndex: 10004, left: 188, bottom: 56, width: 'min(410px, calc(100vw - 24px))', maxHeight: 'min(62vh, 520px)', overflow: 'hidden', boxSizing: 'border-box', padding: 10, border: '1px solid rgba(72,110,150,.45)', borderRadius: 12, background: 'rgba(9,14,21,.97)', boxShadow: '0 14px 40px rgba(0,0,0,.45)', color: '#d8e1eb', backdropFilter: 'blur(14px)' };
-  const searchStyle: CSSProperties = { width: '100%', boxSizing: 'border-box', height: 34, padding: '0 10px', borderRadius: 8, border: '1px solid rgba(100,125,150,.24)', outline: 'none', background: 'rgba(20,28,38,.92)', color: '#e6edf5', fontSize: 11 };
-  const chipRowStyle: CSSProperties = { display: 'flex', gap: 5, overflowX: 'auto', padding: '8px 0 6px', scrollbarWidth: 'none' };
-  const chipStyle = (active: boolean): CSSProperties => ({ flex: '0 0 auto', border: `1px solid ${active ? 'rgba(0,145,255,.6)' : 'rgba(100,125,150,.18)'}`, borderRadius: 7, padding: '5px 8px', background: active ? 'rgba(0,105,190,.24)' : 'rgba(19,27,36,.82)', color: active ? '#f3f8ff' : '#8997a6', fontSize: 9, whiteSpace: 'nowrap' });
-  const itemStyle = (active: boolean): CSSProperties => ({ width: '100%', textAlign: 'left', display: 'block', padding: '8px 9px', border: `1px solid ${active ? 'rgba(0,145,255,.5)' : 'rgba(80,105,130,.10)'}`, borderRadius: 8, background: active ? 'rgba(0,105,190,.20)' : 'rgba(17,24,32,.72)', color: '#d8e1ea', marginBottom: 5 });
+  const series = useMemo<ChartSeriesInput[]>(() => [{ id:'SIRE', label:'SIRE', bars:toBars(candles), pricePrecision:8 }], [candles]);
+
+  useEffect(() => {
+    const update = () => setInstrumentLabel(document.querySelector('.native-instrument-picker strong')?.textContent?.trim() || 'Select instrument');
+    update();
+    const node = document.querySelector('.native-instrument-picker');
+    const observer = new MutationObserver(update);
+    if (node) observer.observe(node, { subtree:true, childList:true, characterData:true });
+    return () => observer.disconnect();
+  }, []);
+
+  useEffect(() => {
+    const media = window.matchMedia('(max-width: 767px)');
+    const update = () => setIsMobile(media.matches);
+    update();
+    media.addEventListener?.('change', update);
+    return () => media.removeEventListener?.('change', update);
+  }, []);
+
+  const onReady = (ref: FastFinancialChartRef) => {
+    chartRef.current = ref;
+    const next = ref.getCapabilities();
+    setCapabilities({ drawingTools: next.drawingTools, indicatorTypes: next.indicatorTypes });
+  };
+
+  const drawings = useMemo<CatalogItem[]>(() => capabilities.drawingTools.map(type => ({ type, label:humanize(type), group:drawingGroup(type), hint:drawingHint(type) })), [capabilities.drawingTools]);
+  const indicatorsCatalog = useMemo<CatalogItem[]>(() => capabilities.indicatorTypes.map(type => ({ type, label:humanize(type), group:indicatorGroup(type), hint:OVERLAY_INDICATORS.has(type) ? 'On price chart' : 'Separate pane' })), [capabilities.indicatorTypes]);
+  const filteredDrawings = useMemo(() => drawings.filter(item => (drawingGroupState === 'All' || item.group === drawingGroupState) && `${item.label} ${item.type} ${item.hint}`.toLowerCase().includes(drawingSearch.trim().toLowerCase())), [drawings,drawingGroupState,drawingSearch]);
+  const filteredIndicators = useMemo(() => indicatorsCatalog.filter(item => (indicatorGroupState === 'All' || item.group === indicatorGroupState) && `${item.label} ${item.type}`.toLowerCase().includes(indicatorSearch.trim().toLowerCase())), [indicatorsCatalog,indicatorGroupState,indicatorSearch]);
+
+  const chooseDrawing = (type: string) => {
+    setIndicatorsOpen(false);
+    setDrawingsOpen(false);
+    setActiveTool(type as DrawingToolType);
+  };
+  const addIndicator = (type: string) => {
+    setIndicators(current => [...current, { id:`${type}-${Date.now()}`, type: type as IndicatorInstanceInput['type'], seriesId:'SIRE', pane:OVERLAY_INDICATORS.has(type) ? 'overlay' : 'separate' }]);
+    setIndicatorsOpen(false);
+  };
+  const isPlacing = isPlaceableTool(activeTool);
+  const engineActiveTool = activeTool && !isPlacing ? activeTool : null;
+
+  const sheetStyle: CSSProperties = isMobile
+    ? { position:'fixed', zIndex:10040, left:0, right:0, bottom:56, width:'100vw', maxHeight:'72vh', overflow:'hidden', boxSizing:'border-box', padding:'14px 14px 12px', border:'1px solid rgba(72,110,150,.45)', borderBottom:0, borderRadius:'18px 18px 0 0', background:'rgba(9,14,21,.985)', boxShadow:'0 -14px 40px rgba(0,0,0,.48)', color:'#d8e1eb', backdropFilter:'blur(16px)' }
+    : { position:'fixed', zIndex:10040, left:12, right:'auto', bottom:56, width:'min(430px, calc(100vw - 24px))', maxHeight:'min(62vh, 520px)', overflow:'hidden', boxSizing:'border-box', padding:10, border:'1px solid rgba(72,110,150,.45)', borderRadius:12, background:'rgba(9,14,21,.97)', boxShadow:'0 14px 40px rgba(0,0,0,.45)', color:'#d8e1eb', backdropFilter:'blur(14px)' };
+  const searchStyle: CSSProperties = { width:'100%', boxSizing:'border-box', height:46, padding:'0 12px', borderRadius:11, border:'1px solid rgba(100,125,150,.28)', outline:'none', background:'rgba(20,28,38,.94)', color:'#e6edf5', fontSize:14 };
+  const chipRowStyle: CSSProperties = { display:'flex', gap:7, overflowX:'auto', padding:'10px 0 8px', scrollbarWidth:'none' };
+  const chipStyle = (active:boolean): CSSProperties => ({ flex:'0 0 auto', minHeight:42, border:`1px solid ${active ? 'rgba(0,145,255,.7)' : 'rgba(100,125,150,.2)'}`, borderRadius:10, padding:'0 12px', background:active ? 'rgba(0,105,190,.28)' : 'rgba(19,27,36,.9)', color:active ? '#f3f8ff' : '#9aa8b7', fontSize:12, whiteSpace:'nowrap' });
+  const itemStyle = (active:boolean): CSSProperties => ({ width:'100%', minHeight:58, textAlign:'left', display:'block', padding:'10px 12px', border:`1px solid ${active ? 'rgba(0,145,255,.55)' : 'rgba(80,105,130,.14)'}`, borderRadius:11, background:active ? 'rgba(0,105,190,.22)' : 'rgba(17,24,32,.8)', color:'#d8e1ea', marginBottom:7, touchAction:'manipulation' });
 
   return (
-    <div className="sire-native-chart" style={{ position: 'absolute', inset: 0, isolation: 'isolate' }}>
-      <FastFinancialChart ref={chartRef} series={series} timeframe={timeframe} chartType="candles" priceScale={{ mode: 'normal', borderVisible: true, ticksVisible: true, scaleMargins: { top: 0.08, bottom: 0.08 } }} timeScale={{ rightOffset: 6, barSpacing: 8, minBarSpacing: 2, shiftVisibleRangeOnNewBar: true }} crosshairConfig={{ mode: 'normal', vertLine: { color: '#66717f', width: 1, style: 'dashed', visible: true }, horzLine: { color: '#66717f', width: 1, style: 'dashed', labelVisible: true } }} theme={{ background: '#090d12', axisText: '#9aa5b1', hudBg: 'rgba(9,13,18,.92)', hudText: '#e6edf7', layout: { priceAxisWidth: 76, timeAxisHeight: 22, gridRows: 6, gridColumns: 8 } }} interaction={{ wheelZoom: true, dragPan: true, handleScroll: { mouseWheel: true, pressedMouseMove: true, horzTouchDrag: true, vertTouchDrag: true }, handleScale: { mouseWheel: true, pinch: true, axisPressedMouseMove: true, axisDoubleClickReset: true, smoothWheel: true }, kineticScroll: { touch: true, mouse: true }, drawingSnap: true }} indicators={indicators} activeTool={activeTool} onActiveToolChange={setActiveTool} onReady={ref => { chartRef.current = ref; }} defaultViewport={{ type: 'last-bars', bars: 200 }} className="sire-fast-financial-chart" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%' }} onDrawingsChange={() => undefined} />
+    <div className="sire-native-chart" style={{ position:'absolute', inset:0, isolation:'isolate' }}>
+      <FastFinancialChart
+        ref={chartRef}
+        series={series}
+        timeframe={timeframe}
+        chartType="candles"
+        priceScale={{ mode:'normal', borderVisible:true, ticksVisible:true, scaleMargins:{ top:0.08, bottom:0.08 } }}
+        timeScale={{ rightOffset:6, barSpacing:8, minBarSpacing:2, shiftVisibleRangeOnNewBar:true }}
+        crosshairConfig={{ mode:'normal', vertLine:{ color:'#66717f', width:1, style:'dashed', visible:!isPlacing }, horzLine:{ color:'#66717f', width:1, style:'dashed', labelVisible:!isPlacing, visible:!isPlacing } }}
+        theme={{ background:'#090d12', axisText:'#9aa5b1', hudBg:'rgba(9,13,18,.92)', hudText:'#e6edf7', layout:{ priceAxisWidth:76, timeAxisHeight:22, gridRows:6, gridColumns:8 } }}
+        interaction={{ wheelZoom:true, dragPan:true, handleScroll:{ mouseWheel:true, pressedMouseMove:true, horzTouchDrag:true, vertTouchDrag:true }, handleScale:{ mouseWheel:true, pinch:true, axisPressedMouseMove:true, axisDoubleClickReset:true, smoothWheel:true }, kineticScroll:{ touch:true, mouse:true }, drawingSnap:true }}
+        indicators={indicators}
+        activeTool={engineActiveTool}
+        onActiveToolChange={tool => { if (!isPlaceableTool(tool)) setActiveTool(tool); }}
+        onReady={onReady}
+        defaultViewport={{ type:'last-bars', bars:200 }}
+        className="sire-fast-financial-chart"
+        style={{ position:'absolute', inset:0, width:'100%', height:'100%' }}
+        onDrawingsChange={() => undefined}
+      />
+
       <LiveTickBridge chart={chartRef.current} latest={latest} />
-      <div className="native-bottom-glass-bar" style={{ pointerEvents: 'auto', position: 'fixed', zIndex: 10003 }}>
-        <div className="native-bottom-instrument-viewport" style={{ pointerEvents: 'auto' }}><button type="button" className="native-bottom-instrument-current" style={{ background: 'transparent', border: 0, width: '100%', height: '100%', textAlign: 'left' }} onClick={() => document.querySelector<HTMLButtonElement>('.native-instrument-picker')?.click()}>{instrumentLabel}</button></div>
-        <div className="native-bottom-timeframe-viewport" style={{ pointerEvents: 'auto' }}><button type="button" className="native-bottom-timeframe-current" style={{ background: 'transparent', border: 0, width: '100%', height: '100%' }} onClick={() => setTimeframeOpen(true)}>{timeframeOptions.find(option => option.value === timeframe)?.label || timeframe}</button></div>
-        <button type="button" className={`sire-drawing-toggle ${drawingsOpen ? 'active' : ''}`} data-sire-drawing-toggle style={{ position: 'relative', zIndex: 10005, pointerEvents: 'auto', touchAction: 'manipulation' }} onClick={() => { setDrawingsOpen(value => !value); setIndicatorsOpen(false); }} aria-label="Drawing tools">✎</button>
-        <button type="button" className={`sire-drawing-toggle ${indicatorsOpen ? 'active' : ''}`} style={{ position: 'relative', zIndex: 10005, pointerEvents: 'auto', touchAction: 'manipulation' }} onClick={() => { setIndicatorsOpen(value => !value); setDrawingsOpen(false); }} aria-label="Indicators">ƒ</button>
+
+      {isPlacing ? <MobileDrawingPlacement chartRef={chartRef} tool={activeTool} seriesId="SIRE" label={drawings.find(item => item.type === activeTool)?.label || humanize(activeTool || '')} onCancel={() => setActiveTool(null)} onComplete={() => undefined} /> : null}
+
+      <div className="native-bottom-glass-bar" style={{ pointerEvents:'auto', position:'fixed', zIndex:10003 }}>
+        <div className="native-bottom-instrument-viewport" style={{ pointerEvents:'auto' }}><button type="button" className="native-bottom-instrument-current" style={{ background:'transparent', border:0, width:'100%', height:'100%', textAlign:'left' }} onClick={() => document.querySelector<HTMLButtonElement>('.native-instrument-picker')?.click()}>{instrumentLabel}</button></div>
+        <div className="native-bottom-timeframe-viewport" style={{ pointerEvents:'auto' }}><button type="button" className="native-bottom-timeframe-current" style={{ background:'transparent', border:0, width:'100%', height:'100%' }} onClick={() => setTimeframeOpen(true)}>{timeframeOptions.find(option => option.value === timeframe)?.label || timeframe}</button></div>
+        <button type="button" className={`sire-drawing-toggle ${drawingsOpen ? 'active' : ''}`} data-sire-drawing-toggle style={{ position:'relative', zIndex:10005, pointerEvents:'auto', touchAction:'manipulation' }} onClick={() => { setDrawingsOpen(v => !v); setIndicatorsOpen(false); }} aria-label="Drawing tools">✎</button>
+        <button type="button" className={`sire-drawing-toggle ${indicatorsOpen ? 'active' : ''}`} style={{ position:'relative', zIndex:10005, pointerEvents:'auto', touchAction:'manipulation' }} onClick={() => { setIndicatorsOpen(v => !v); setDrawingsOpen(false); }} aria-label="Indicators">ƒ</button>
       </div>
-      {drawingsOpen && <div className="sire-drawing-palette" data-sire-drawing-palette style={paletteShell}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}><strong style={{ fontSize: 12 }}>Drawing tools</strong><span style={{ fontSize: 8, color: '#68788a' }}>{DRAWING_TOOLS.length} tools</span></div>
-        <input value={drawingSearch} onChange={event => setDrawingSearch(event.target.value)} placeholder="Search drawing tools…" aria-label="Search drawing tools" style={{ ...searchStyle, marginTop: 8 }} />
-        <div style={chipRowStyle}>{DRAWING_GROUPS.map(group => <button key={group} type="button" onClick={() => setDrawingGroup(group)} style={chipStyle(drawingGroup === group)}>{group}</button>)}</div>
-        <div style={{ maxHeight: 'min(43vh, 365px)', overflowY: 'auto', paddingRight: 2 }}>{filteredDrawings.map(tool => <button key={tool.type} type="button" style={itemStyle(activeTool === tool.type)} onClick={() => { setActiveTool(tool.type); setDrawingsOpen(false); }}><span style={{ display: 'block', fontSize: 10, fontWeight: 650 }}>{tool.label}</span><span style={{ display: 'block', marginTop: 2, fontSize: 8, color: '#718093' }}>{tool.hint}</span></button>)}{!filteredDrawings.length && <div style={{ padding: 18, textAlign: 'center', color: '#718093', fontSize: 9 }}>No drawing tools match that search.</div>}</div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, paddingTop: 7 }}><span style={{ flex: 1, fontSize: 8, color: '#748395' }}>{activeTool ? `Active: ${DRAWING_TOOLS.find(tool => tool.type === activeTool)?.label || activeTool}` : 'Choose a tool, then draw directly on the chart.'}</span><button type="button" onClick={() => chartRef.current?.undo()}>Undo</button><button type="button" onClick={() => { chartRef.current?.clearDrawings(); setActiveTool(null); }}>Clear</button></div>
-      </div>}
-      {indicatorsOpen && <div className="sire-drawing-palette" style={{ ...paletteShell, left: 228, width: 'min(430px, calc(100vw - 24px))' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}><strong style={{ fontSize: 12 }}>Indicators</strong><span style={{ fontSize: 8, color: '#68788a' }}>{INDICATOR_PRESETS.length} built-in</span></div>
-        <input value={indicatorSearch} onChange={event => setIndicatorSearch(event.target.value)} placeholder="Search indicators…" aria-label="Search indicators" style={{ ...searchStyle, marginTop: 8 }} />
-        <div style={chipRowStyle}>{INDICATOR_GROUPS.map(group => <button key={group} type="button" onClick={() => setIndicatorGroup(group)} style={chipStyle(indicatorGroup === group)}>{group}</button>)}</div>
-        <div style={{ maxHeight: 'min(43vh, 365px)', overflowY: 'auto', paddingRight: 2 }}>{filteredIndicators.map(preset => <button key={preset.type} type="button" style={itemStyle(false)} onClick={() => addIndicator(preset)}><span style={{ display: 'flex', justifyContent: 'space-between', gap: 8, fontSize: 10, fontWeight: 650 }}><span>{preset.label}</span><span style={{ fontSize: 8, color: '#647487', fontWeight: 500 }}>{preset.type}</span></span><span style={{ display: 'block', marginTop: 2, fontSize: 8, color: '#718093' }}>{preset.pane === 'overlay' ? 'On price chart' : 'Separate pane'}</span></button>)}{!filteredIndicators.length && <div style={{ padding: 18, textAlign: 'center', color: '#718093', fontSize: 9 }}>No indicators match that search.</div>}</div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, paddingTop: 7 }}><span style={{ flex: 1, fontSize: 8, color: '#748395' }}>{indicators.length ? `${indicators.length} indicator${indicators.length === 1 ? '' : 's'} active` : 'Choose an indicator to add it.'}</span><button type="button" onClick={() => setIndicators(current => current.slice(0, -1))}>Remove last</button><button type="button" onClick={() => setIndicators([])}>Clear</button></div>
-      </div>}
+
+      {(drawingsOpen || indicatorsOpen) && isMobile ? <div onClick={() => { setDrawingsOpen(false); setIndicatorsOpen(false); }} style={{ position:'fixed', inset:0, zIndex:10030, background:'rgba(0,0,0,.28)' }} /> : null}
+
+      {drawingsOpen ? <ToolSheet title="Drawing tools" count={drawings.length} search={drawingSearch} setSearch={setDrawingSearch} groups={DRAWING_GROUPS} group={drawingGroupState} setGroup={setDrawingGroupState} items={filteredDrawings} activeType={activeTool} onChoose={chooseDrawing} onClose={() => setDrawingsOpen(false)} isMobile={isMobile} sheetStyle={sheetStyle} /> : null}
+      {indicatorsOpen ? <ToolSheet title="Indicators" count={indicatorsCatalog.length} search={indicatorSearch} setSearch={setIndicatorSearch} groups={INDICATOR_GROUPS} group={indicatorGroupState} setGroup={setIndicatorGroupState} items={filteredIndicators} onChoose={item => addIndicator(item.type)} onClose={() => setIndicatorsOpen(false)} isMobile={isMobile} sheetStyle={sheetStyle} /> : null}
+
       {timeframeOpen && <div className="native-bottom-timeframe-overlay" onClick={event => { if (event.currentTarget === event.target) setTimeframeOpen(false); }}><div className="native-bottom-timeframe-sheet"><div className="native-bottom-timeframe-head"><span>TIMEFRAME</span><button type="button" onClick={() => setTimeframeOpen(false)}>Done</button></div><div className="native-bottom-timeframe-list">{timeframeOptions.map(option => <button key={option.value} type="button" className={option.value === timeframe ? 'active' : ''} onClick={() => { onTimeframeChange(option.value); setTimeframeOpen(false); }}>{option.label}</button>)}</div></div></div>}
       <div className="native-fast-chart-status" aria-hidden="true">Fast Financial Charts · {autoScale ? 'Auto scale' : 'Manual scale'}</div>
     </div>
   );
 }
 
-function LiveTickBridge({ chart, latest }: { chart: FastFinancialChartRef | null; latest?: { epoch: number; quote: number } | null }) {
-  useEffect(() => { if (!chart || !latest) return; chart.applyTick({ seriesId: 'SIRE', ts: Math.floor(latest.epoch * 1000), price: latest.quote, volume: 0 }); }, [chart, latest]);
+function ToolSheet({ title, count, search, setSearch, groups, group, setGroup, items, activeType, onChoose, onClose, isMobile, sheetStyle }: { title:string; count:number; search:string; setSearch:(value:string)=>void; groups:string[]; group:string; setGroup:(value:string)=>void; items:CatalogItem[]; activeType?:string|null; onChoose:(item:CatalogItem)=>void; onClose:()=>void; isMobile:boolean; sheetStyle:CSSProperties }) {
+  return <div className="sire-mobile-tool-sheet" style={sheetStyle} onClick={event => event.stopPropagation()}>
+    <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:10 }}><div><strong style={{ fontSize:16 }}>{title}</strong><span style={{ display:'block', marginTop:2, fontSize:11, color:'#748395' }}>{count} engine tools · {isMobile ? 'Touch a tool to arm it' : 'Choose a tool'}</span></div><button type="button" onClick={onClose} style={{ minWidth:44, height:44, border:0, borderRadius:10, background:'rgba(30,40,52,.9)', color:'#d8e1eb', fontSize:18 }}>×</button></div>
+    <input value={search} onChange={e => setSearch(e.target.value)} placeholder={`Search ${title.toLowerCase()}…`} aria-label={`Search ${title}`} style={{ ...({} as CSSProperties), width:'100%', boxSizing:'border-box', height:46, marginTop:10, padding:'0 12px', borderRadius:11, border:'1px solid rgba(100,125,150,.28)', outline:'none', background:'rgba(20,28,38,.94)', color:'#e6edf5', fontSize:14 }} />
+    <div style={{ display:'flex', gap:7, overflowX:'auto', padding:'10px 0 8px', scrollbarWidth:'none' }}>{groups.map(g => <button key={g} type="button" onClick={() => setGroup(g)} style={{ flex:'0 0 auto', minHeight:42, border:`1px solid ${group === g ? 'rgba(0,145,255,.7)' : 'rgba(100,125,150,.2)'}`, borderRadius:10, padding:'0 12px', background:group === g ? 'rgba(0,105,190,.28)' : 'rgba(19,27,36,.9)', color:group === g ? '#f3f8ff' : '#9aa8b7', fontSize:12, whiteSpace:'nowrap' }}>{g}</button>)}</div>
+    <div style={{ overflowY:'auto', maxHeight:isMobile ? 'calc(72vh - 170px)' : 'min(43vh, 365px)', paddingRight:2, overscrollBehavior:'contain' }}>{items.map(item => <button key={item.type} type="button" onClick={() => onChoose(item)} style={{ width:'100%', minHeight:58, textAlign:'left', display:'block', padding:'10px 12px', border:`1px solid ${activeType === item.type ? 'rgba(0,145,255,.55)' : 'rgba(80,105,130,.14)'}`, borderRadius:11, background:activeType === item.type ? 'rgba(0,105,190,.22)' : 'rgba(17,24,32,.8)', color:'#d8e1ea', marginBottom:7, touchAction:'manipulation' }}><span style={{ display:'block', fontSize:13, fontWeight:650 }}>{item.label}</span><span style={{ display:'block', marginTop:3, fontSize:11, color:'#718093' }}>{item.hint}</span></button>)}{!items.length ? <div style={{ padding:24, textAlign:'center', color:'#718093', fontSize:12 }}>No matches.</div> : null}</div>
+    <div style={{ paddingTop:8, display:'flex', justifyContent:'flex-end' }}><button type="button" onClick={onClose} style={{ minHeight:44, padding:'0 14px', borderRadius:10, border:'1px solid rgba(100,125,150,.22)', background:'rgba(19,27,36,.9)', color:'#b9c7d4' }}>Done</button></div>
+  </div>;
+}
+
+function LiveTickBridge({ chart, latest }: { chart: FastFinancialChartRef | null; latest?: { epoch:number; quote:number } | null }) {
+  useEffect(() => { if (!chart || !latest) return; chart.applyTick({ seriesId:'SIRE', ts:Math.floor(latest.epoch * 1000), price:latest.quote, volume:0 }); }, [chart, latest]);
   return null;
 }
