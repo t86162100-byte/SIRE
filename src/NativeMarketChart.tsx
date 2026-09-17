@@ -78,7 +78,7 @@ export default function NativeMarketChart({ candles, latest, autoScale = true, t
   };
 
   return (
-    <div className="sire-native-chart" style={{ position: 'absolute', inset: 0 }}>
+    <div className="sire-native-chart" style={{ position: 'absolute', inset: 0, isolation: 'isolate' }}>
       <FastFinancialChart
         ref={chartRef}
         series={series}
@@ -101,23 +101,23 @@ export default function NativeMarketChart({ candles, latest, autoScale = true, t
 
       <LiveTickBridge chart={chartRef.current} latest={latest} />
 
-      <div className="native-bottom-glass-bar" style={{ pointerEvents: 'auto' }}>
+      <div className="native-bottom-glass-bar" style={{ pointerEvents: 'auto', position: 'fixed', zIndex: 10002 }}>
         <div className="native-bottom-instrument-viewport" style={{ pointerEvents: 'auto' }}>
           <button type="button" className="native-bottom-instrument-current" style={{ background: 'transparent', border: 0, width: '100%', height: '100%', textAlign: 'left' }} onClick={() => document.querySelector<HTMLButtonElement>('.native-instrument-picker')?.click()}>{instrumentLabel}</button>
         </div>
         <div className="native-bottom-timeframe-viewport" style={{ pointerEvents: 'auto' }}>
           <button type="button" className="native-bottom-timeframe-current" style={{ background: 'transparent', border: 0, width: '100%', height: '100%' }} onClick={() => setTimeframeOpen(true)}>{timeframeOptions.find(option => option.value === timeframe)?.label || timeframe}</button>
         </div>
-        <button type="button" className={`sire-drawing-toggle ${drawingsOpen ? 'active' : ''}`} data-sire-drawing-toggle onClick={() => { setDrawingsOpen(value => !value); setIndicatorsOpen(false); }} aria-label="Drawing tools">✎</button>
-        <button type="button" className={`sire-drawing-toggle ${indicatorsOpen ? 'active' : ''}`} onClick={() => { setIndicatorsOpen(value => !value); setDrawingsOpen(false); }} aria-label="Indicators">ƒ</button>
+        <button type="button" className={`sire-drawing-toggle ${drawingsOpen ? 'active' : ''}`} data-sire-drawing-toggle style={{ position: 'relative', zIndex: 10003, pointerEvents: 'auto', touchAction: 'manipulation' }} onClick={() => { setDrawingsOpen(value => !value); setIndicatorsOpen(false); }} aria-label="Drawing tools">✎</button>
+        <button type="button" className={`sire-drawing-toggle ${indicatorsOpen ? 'active' : ''}`} style={{ position: 'relative', zIndex: 10003, pointerEvents: 'auto', touchAction: 'manipulation' }} onClick={() => { setIndicatorsOpen(value => !value); setDrawingsOpen(false); }} aria-label="Indicators">ƒ</button>
       </div>
 
-      {drawingsOpen && <div className="sire-drawing-palette" data-sire-drawing-palette style={{ left: 188, bottom: 56 }}>
+      {drawingsOpen && <div className="sire-drawing-palette" data-sire-drawing-palette style={{ position: 'fixed', left: 188, bottom: 56, zIndex: 10004, pointerEvents: 'auto' }}>
         <div className="sire-drawing-palette-tools">{DRAWING_TOOLS.map(tool => <button key={tool.type} type="button" className={activeTool === tool.type ? 'active' : ''} onClick={() => { setActiveTool(tool.type); setDrawingsOpen(false); }}>{tool.label}</button>)}</div>
         <div className="sire-drawing-palette-actions"><span>{activeTool ? `Active: ${activeTool}` : 'Select a drawing tool'}</span><button type="button" onClick={() => chartRef.current?.undo()}>Undo</button><button type="button" onClick={() => { chartRef.current?.clearDrawings(); setActiveTool(null); }}>Clear</button></div>
       </div>}
 
-      {indicatorsOpen && <div className="sire-drawing-palette" style={{ left: 228, bottom: 56, minWidth: 280 }}>
+      {indicatorsOpen && <div className="sire-drawing-palette" style={{ position: 'fixed', left: 228, bottom: 56, minWidth: 280, zIndex: 10004, pointerEvents: 'auto' }}>
         <div className="sire-drawing-palette-tools">{INDICATOR_PRESETS.map(preset => <button key={preset.type} type="button" onClick={() => addIndicator(preset)}>{preset.label}</button>)}</div>
         <div className="sire-drawing-palette-actions"><span>{indicators.length ? `${indicators.length} indicator${indicators.length === 1 ? '' : 's'}` : 'Built-in indicators'}</span><button type="button" onClick={() => setIndicators(current => current.slice(0, -1))}>Remove</button><button type="button" onClick={() => setIndicators([])}>Clear</button></div>
       </div>}
