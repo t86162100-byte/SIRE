@@ -26,7 +26,8 @@ type Pending = {
   timer: number;
 };
 
-const ENDPOINT = 'wss://ws.binaryws.com/websockets/v3';
+const APP_ID = '1089';
+const ENDPOINT = `wss://ws.binaryws.com/websockets/v3?app_id=${APP_ID}`;
 
 function messageText(data: unknown): Promise<string> {
   if (typeof data === 'string') return Promise.resolve(data);
