@@ -141,6 +141,16 @@ export default function FinancialChart({ symbol, liveTick, requestHistory, instr
       widgetRef.current = null;
       candlesRef.current = [];
     };
+    } catch (error) {
+      host.textContent = `OpenAlgo widget failed to initialize: ${error instanceof Error ? error.message : String(error)}`;
+      host.style.padding = '24px';
+      host.style.boxSizing = 'border-box';
+      host.style.color = '#ff8080';
+      host.style.background = '#080808';
+      host.style.fontFamily = 'monospace';
+      host.style.fontSize = '14px';
+      throw error;
+    }
   }, []);
 
   useEffect(() => {
