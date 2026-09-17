@@ -26,8 +26,7 @@ type Pending = {
   timer: number;
 };
 
-const APP_ID = String(import.meta.env.VITE_DERIV_APP_ID || '1089');
-const ENDPOINT = `wss://ws.derivws.com/websockets/v3?app_id=${encodeURIComponent(APP_ID)}`;
+const ENDPOINT = 'wss://ws.binaryws.com/websockets/v3';
 
 function messageText(data: unknown): Promise<string> {
   if (typeof data === 'string') return Promise.resolve(data);
