@@ -46,6 +46,7 @@ export default function FinancialChart({ symbol, liveTick }: Props) {
   const chartRef = useRef<IChartApi | null>(null);
   const seriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null);
   const rawTicks = useRef<Tick[]>([]);
+  const candlesRef = useRef<Candle[]>([]);
   const selectedPeriod = useRef(60);
   const [period, setPeriod] = useState(60);
   const [loading, setLoading] = useState(false);
@@ -71,11 +72,12 @@ export default function FinancialChart({ symbol, liveTick }: Props) {
   useEffect(() => {
     let cancelled = false;
     if (!symbol || !seriesRef.current) return;
-    setLoading(true); setError(''); rawTicks.current = []; seriesRef.current.setData([]);
+    setLoading(true); setError(''); rawTicks.current = []; candlesRef.current = []; seriesRef.current.setData([]);
     requestHistory(symbol).then(ticks => {
       if (cancelled || !seriesRef.current) return;
       rawTicks.current = ticks;
-      seriesRef.current.setData(aggregate(ticks, selectedPeriod.current));
+      candlesRef.current = aggregate(ticks, selectedPeriod.current);
+      seriesRef.current.setData(candlesRef.current);
       chartRef.current?.timeScale().fitContent();
     }).catch(error => { if (!cancelled) setError(error instanceof Error ? error.message : 'Unable to load chart history'); }).finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
@@ -85,15 +87,22 @@ export default function FinancialChart({ symbol, liveTick }: Props) {
     if (!liveTick || liveTick.symbol !== symbol || !seriesRef.current) return;
     rawTicks.current.push(liveTick);
     if (rawTicks.current.length > 5000) rawTicks.current.splice(0, rawTicks.current.length - 5000);
-    const candles = aggregate(rawTicks.current, selectedPeriod.current);
-    const last = candles[candles.length - 1];
-    if (last) seriesRef.current.update(last);
+    const seconds = selectedPeriod.current;
+    const bucket = Math.floor(liveTick.epoch / seconds) * seconds as UTCTimestamp;
+    const last = candlesRef.current[candlesRef.current.length - 1];
+    const next: Candle = last && last.time === bucket
+      ? { ...last, high: Math.max(last.high, liveTick.quote), low: Math.min(last.low, liveTick.quote), close: liveTick.quote }
+      : { time: bucket, open: liveTick.quote, high: liveTick.quote, low: liveTick.quote, close: liveTick.quote };
+    if (last && last.time === bucket) candlesRef.current[candlesRef.current.length - 1] = next;
+    else candlesRef.current.push(next);
+    if (candlesRef.current.length > 5000) candlesRef.current.shift();
+    seriesRef.current.update(next);
   }, [liveTick, symbol]);
 
   const changePeriod = (seconds: number) => {
     selectedPeriod.current = seconds; setPeriod(seconds);
-    const candles = aggregate(rawTicks.current, seconds);
-    seriesRef.current?.setData(candles);
+    candlesRef.current = aggregate(rawTicks.current, seconds);
+    seriesRef.current?.setData(candlesRef.current);
     chartRef.current?.timeScale().fitContent();
   };
 
@@ -102,6 +111,5 @@ export default function FinancialChart({ symbol, liveTick }: Props) {
     <div ref={containerRef} className="sire-chart-canvas" />
     {loading && <div className="sire-chart-status">Loading market history…</div>}
     {error && <div className="sire-chart-status error">{error}</div>}
-    <div className="sire-chart-attribution">TradingView Lightweight Charts</div>
   </div>;
 }
