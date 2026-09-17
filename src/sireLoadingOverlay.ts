@@ -1,6 +1,7 @@
 const STYLE_ID = 'sire-loading-overlay-style';
 const OVERLAY_ID = 'sire-loading-overlay';
 const SHOW_CLASS = 'sire-loading-active';
+const MIN_LOAD_MS = 850;
 
 type LoadingApi = { show: (message?: string) => void; hide: () => void };
 
@@ -11,6 +12,8 @@ let scheduled = false;
 let wasLoading = false;
 let finishing = false;
 let finishTimer: number | undefined;
+let minimumLoadTimer: number | undefined;
+let loadStartedAt = 0;
 
 function installStyles() {
   if (document.getElementById(STYLE_ID)) return;
@@ -60,29 +63,43 @@ function shouldAutoLoad() {
   return false;
 }
 
+function completeLoading(el: HTMLElement) {
+  if (!wasLoading || finishing) return;
+  wasLoading = false;
+  finishing = true;
+  el.classList.remove(SHOW_CLASS);
+  el.classList.add('is-visible', 'is-complete');
+  finishTimer = window.setTimeout(() => {
+    const current = document.getElementById(OVERLAY_ID);
+    if (current) current.classList.remove('is-visible', 'is-complete', SHOW_CLASS);
+    finishing = false;
+    finishTimer = undefined;
+  }, 1800);
+}
+
 function sync() {
   scheduled = false;
   const el = ensureOverlay();
   const active = manualLoading || shouldAutoLoad();
   if (active) {
+    if (!wasLoading) loadStartedAt = performance.now();
     wasLoading = true;
     finishing = false;
     if (finishTimer !== undefined) { window.clearTimeout(finishTimer); finishTimer = undefined; }
+    if (minimumLoadTimer !== undefined) { window.clearTimeout(minimumLoadTimer); minimumLoadTimer = undefined; }
     el.classList.remove('is-complete');
     el.classList.add('is-visible', SHOW_CLASS);
     return;
   }
   if (wasLoading && !finishing) {
-    wasLoading = false;
-    finishing = true;
-    el.classList.remove(SHOW_CLASS);
-    el.classList.add('is-visible', 'is-complete');
-    finishTimer = window.setTimeout(() => {
-      const current = document.getElementById(OVERLAY_ID);
-      if (current) current.classList.remove('is-visible', 'is-complete', SHOW_CLASS);
-      finishing = false;
-      finishTimer = undefined;
-    }, 1800);
+    const remaining = Math.max(0, MIN_LOAD_MS - (performance.now() - loadStartedAt));
+    if (remaining > 0) {
+      if (minimumLoadTimer === undefined) {
+        minimumLoadTimer = window.setTimeout(() => { minimumLoadTimer = undefined; scheduleSync(); }, remaining);
+      }
+      return;
+    }
+    completeLoading(el);
     return;
   }
   if (finishing) return;
