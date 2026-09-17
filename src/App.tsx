@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ChevronDown, Search, Beaker } from 'lucide-react';
 import ResearchLab from './ResearchLab';
 import FinancialChart from './FinancialChart';
@@ -41,10 +41,7 @@ export default function App() {
     const removeStatus = derivMarketData.onStatus(next => {
       if (!mounted) return;
       if (next === 'connecting') setStatus('Connecting to Deriv…');
-      if (next === 'connected') {
-        setStatus(selectedRef.current ? `LIVE · ${selectedRef.current.name}` : 'Deriv connected');
-        if (selectedRef.current) void derivMarketData.subscribe(selectedRef.current.symbol).catch(() => undefined);
-      }
+      if (next === 'connected') setStatus(selectedRef.current ? `LIVE · ${selectedRef.current.name}` : 'Deriv connected');
       if (next === 'closed') setStatus('Reconnecting to Deriv…');
       if (next === 'error') setStatus('Deriv connection error');
     });
@@ -69,10 +66,10 @@ export default function App() {
     return () => { mounted = false; removeTick(); };
   }, [selected?.symbol]);
 
-  const requestHistory = async (request: Record<string, unknown>): Promise<DerivResponse> => {
+  const requestHistory = useCallback(async (request: Record<string, unknown>): Promise<DerivResponse> => {
     if (typeof request.ticks_history === 'string') return derivMarketData.history(String(request.ticks_history), Number(request.granularity || 60));
     return derivMarketData.request(request);
-  };
+  }, []);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
