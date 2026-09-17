@@ -114,6 +114,7 @@ export default function FinancialChart({ symbol, liveTick, requestHistory, instr
   };
 
   const handlePointerDown = (event: PointerEvent<HTMLDivElement>) => {
+    event.currentTarget.setPointerCapture?.(event.pointerId);
     pointerStartRef.current = { x: event.clientX, y: event.clientY };
     pointerMovedRef.current = false;
     clearPressTimer();
@@ -140,9 +141,20 @@ export default function FinancialChart({ symbol, liveTick, requestHistory, instr
     const start = pointerStartRef.current;
     clearPressTimer();
     pointerStartRef.current = null;
-    if (!start || pointerMovedRef.current) return;
+    if (!start) return;
     const dy = event.clientY - start.y;
-    if (Math.abs(dy) > 18) changeInstrument(dy < 0 ? 1 : -1);
+    if (Math.abs(dy) >= 24) {
+      changeInstrument(dy < 0 ? 1 : -1);
+    }
+    pointerMovedRef.current = false;
+    try { event.currentTarget.releasePointerCapture?.(event.pointerId); } catch { /* already released */ }
+  };
+
+  const handlePointerCancel = (event: PointerEvent<HTMLDivElement>) => {
+    clearPressTimer();
+    pointerStartRef.current = null;
+    pointerMovedRef.current = false;
+    try { event.currentTarget.releasePointerCapture?.(event.pointerId); } catch { /* already released */ }
   };
 
   const handleWheel = (event: WheelEvent<HTMLDivElement>) => {
@@ -234,7 +246,7 @@ export default function FinancialChart({ symbol, liveTick, requestHistory, instr
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
-        onPointerCancel={() => { clearPressTimer(); pointerStartRef.current = null; }}
+        onPointerCancel={handlePointerCancel}
         onWheel={handleWheel}
         role="button"
         tabIndex={0}
