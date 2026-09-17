@@ -15,6 +15,16 @@ type Instrument = { symbol: string; name: string };
 type Props = { symbol: string; liveTick: Tick | null; requestHistory: HistoryRequester; instruments: Instrument[]; onSelectInstrument: (instrument: Instrument) => void };
 type Candle = { time: number; open: number; high: number; low: number; close: number; volume?: number };
 type Period = { label: string; seconds: number };
+
+const PERIODS: Period[] = [
+  { label: '1m', seconds: 60 }, { label: '2m', seconds: 120 }, { label: '3m', seconds: 180 },
+  { label: '5m', seconds: 300 }, { label: '10m', seconds: 600 }, { label: '15m', seconds: 900 },
+  { label: '20m', seconds: 1200 }, { label: '30m', seconds: 1800 }, { label: '45m', seconds: 2700 },
+  { label: '1H', seconds: 3600 }, { label: '2H', seconds: 7200 }, { label: '3H', seconds: 10800 },
+  { label: '4H', seconds: 14400 }, { label: '6H', seconds: 21600 }, { label: '8H', seconds: 28800 },
+  { label: '12H', seconds: 43200 }, { label: '1D', seconds: 86400 }, { label: '2D', seconds: 172800 },
+  { label: '3D', seconds: 259200 }, { label: '1W', seconds: 604800 }, { label: '1M', seconds: 2592000 },
+];
 type ToolId = string;
 type ToolGroup = { id: string; label: string; tools: ToolId[] };
 
