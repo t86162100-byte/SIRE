@@ -26,10 +26,10 @@ type Pending = {
   timer: number;
 };
 
-const APP_ID = '1089';
+// Deriv's public market-data WebSocket requires no authentication or App ID.
+// Keep the endpoint exactly as documented by Deriv for public market data.
 const ENDPOINTS = [
-  `wss://ws.derivws.com/websockets/v3?app_id=${APP_ID}`,
-  `wss://ws.binaryws.com/websockets/v3?app_id=${APP_ID}`,
+  'wss://ws.binaryws.com/websockets/v3',
 ];
 
 function messageText(data: unknown): Promise<string> {
@@ -108,7 +108,7 @@ export class DerivMarketData {
         lastError = error instanceof Error ? error : new Error(String(error));
       }
     }
-    throw lastError || new Error('Unable to connect to Deriv market-data endpoints');
+    throw lastError || new Error('Unable to connect to Deriv market-data WebSocket');
   }
 
   private connectTo(endpoint: string): Promise<void> {
@@ -206,11 +206,11 @@ export class DerivMarketData {
   }
 
   async getSyntheticIndices(): Promise<DerivInstrument[]> {
+    // Do not send product_type: Deriv's current active_symbols API removed it.
+    // Retrieve the complete public list and filter Synthetic Indices locally.
     const requests: Record<string, unknown>[] = [
-      { active_symbols: 'full', product_type: 'basic' },
-      { active_symbols: 'brief', product_type: 'basic' },
-      { active_symbols: 'full' },
       { active_symbols: 'brief' },
+      { active_symbols: 'full' },
     ];
 
     let lastError: Error | null = null;
