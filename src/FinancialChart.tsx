@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState, type ComponentProps, type PointerEvent, type WheelEvent } from 'react';
 import { createChart, darkTheme, type Chart } from 'openalgo-charts';
 import { DrawingController } from 'openalgo-charts/draw';
-import { Pencil, MousePointer2, Slash, Sigma, Waves, Ruler, Shapes, Type, Star, Magnet, Lock, EyeOff, Trash2, Undo2, Redo2, X } from 'lucide-react';
+import { Pencil, Magnet, Lock, EyeOff, Trash2, Undo2, Redo2, X } from 'lucide-react';
+import { DRAWING_TOOL_ICONS, hasDrawingTool, getDrawingTool } from 'openalgo-charts/draw';
 import './financialChart.css';
 
 type LoadingApi = { show: (message?: string) => void; hide: () => void };
@@ -15,62 +16,34 @@ type Props = { symbol: string; liveTick: Tick | null; requestHistory: HistoryReq
 type Candle = { time: number; open: number; high: number; low: number; close: number; volume?: number };
 type Period = { label: string; seconds: number };
 type ToolId = string;
-type ToolGroup = { id: string; label: string; icon: typeof Pencil; tools: { id: ToolId; label: string; icon: typeof Pencil }[] };
-
-const PERIODS: Period[] = [
-  { label: '1m', seconds: 60 }, { label: '2m', seconds: 120 }, { label: '3m', seconds: 180 },
-  { label: '5m', seconds: 300 }, { label: '10m', seconds: 600 }, { label: '15m', seconds: 900 },
-  { label: '20m', seconds: 1200 }, { label: '30m', seconds: 1800 }, { label: '45m', seconds: 2700 },
-  { label: '1H', seconds: 3600 }, { label: '2H', seconds: 7200 }, { label: '3H', seconds: 10800 },
-  { label: '4H', seconds: 14400 }, { label: '6H', seconds: 21600 }, { label: '8H', seconds: 28800 },
-  { label: '12H', seconds: 43200 }, { label: '1D', seconds: 86400 }, { label: '2D', seconds: 172800 },
-  { label: '3D', seconds: 259200 }, { label: '1W', seconds: 604800 }, { label: '1M', seconds: 2592000 },
-];
+type ToolId = string;
+type ToolGroup = { id: string; label: string; tools: ToolId[] };
 
 const DRAWING_GROUPS: ToolGroup[] = [
-  { id: 'cursor', label: 'Cursor', icon: MousePointer2, tools: [
-    { id: 'cursor', label: 'Cursor', icon: MousePointer2 },
-  ]},
-  { id: 'trend', label: 'Trend', icon: Slash, tools: [
-    { id: 'trend-line', label: 'Trend line', icon: Slash }, { id: 'ray', label: 'Ray', icon: Slash },
-    { id: 'extended-line', label: 'Extended line', icon: Slash }, { id: 'arrow', label: 'Arrow', icon: Slash },
-    { id: 'horizontal-line', label: 'Horizontal line', icon: MinusIcon }, { id: 'vertical-line', label: 'Vertical line', icon: MinusIcon },
-    { id: 'parallel-channel', label: 'Parallel channel', icon: Waves },
-  ]},
-  { id: 'fib', label: 'Fibonacci / Gann', icon: Sigma, tools: [
-    { id: 'fib-retracement', label: 'Fib retracement', icon: Sigma }, { id: 'fib-extension', label: 'Trend-based Fib extension', icon: Sigma },
-    { id: 'fib-channel', label: 'Fib channel', icon: Waves }, { id: 'fib-time-zone', label: 'Fib time zone', icon: Sigma },
-    { id: 'gann-fan', label: 'Gann fan', icon: Sigma }, { id: 'gann-box', label: 'Gann box', icon: Shapes },
-  ]},
-  { id: 'patterns', label: 'Patterns', icon: Waves, tools: [
-    { id: 'elliott-impulse', label: 'Elliott impulse', icon: Waves }, { id: 'head-and-shoulders', label: 'Head and shoulders', icon: Waves },
-    { id: 'abcd', label: 'ABCD pattern', icon: Waves }, { id: 'triangle-pattern', label: 'Triangle pattern', icon: Shapes },
-  ]},
-  { id: 'measure', label: 'Forecast / Measure', icon: Ruler, tools: [
-    { id: 'forecast', label: 'Forecast', icon: Ruler }, { id: 'price-range', label: 'Price range', icon: Ruler },
-    { id: 'date-range', label: 'Date range', icon: Ruler }, { id: 'long-position', label: 'Long position', icon: Ruler },
-    { id: 'short-position', label: 'Short position', icon: Ruler },
-  ]},
-  { id: 'shapes', label: 'Geometric shapes', icon: Shapes, tools: [
-    { id: 'rectangle', label: 'Rectangle', icon: Shapes }, { id: 'rotated-rectangle', label: 'Rotated rectangle', icon: Shapes },
-    { id: 'circle', label: 'Circle', icon: Shapes }, { id: 'ellipse', label: 'Ellipse', icon: Shapes },
-    { id: 'triangle', label: 'Triangle', icon: Shapes }, { id: 'polyline', label: 'Polyline', icon: Waves },
-    { id: 'arc', label: 'Arc', icon: Waves }, { id: 'curve', label: 'Curve', icon: Waves },
-  ]},
-  { id: 'annotation', label: 'Annotation', icon: Type, tools: [
-    { id: 'text', label: 'Text', icon: Type }, { id: 'price-label', label: 'Price label', icon: Type },
-    { id: 'callout', label: 'Callout', icon: Type }, { id: 'flag-mark', label: 'Flag mark', icon: Star },
-    { id: 'table', label: 'Table', icon: Type },
-  ]},
-  { id: 'icons', label: 'Icons', icon: Star, tools: [
-    { id: 'mark-up', label: 'Mark up', icon: Star }, { id: 'mark-down', label: 'Mark down', icon: Star },
-    { id: 'mark-left', label: 'Mark left', icon: Star }, { id: 'mark-right', label: 'Mark right', icon: Star },
-  ]},
+  { id: 'lines', label: 'Lines', tools: ['trend-line','ray','extended-line','arrow','info-line','trend-angle','horizontal-line','horizontal-ray','vertical-line','cross-line'] },
+  { id: 'channels', label: 'Channels', tools: ['parallel-channel','fib-channel','disjoint-channel','flat-top-bottom','regression-channel','pitchfork','schiff-pitchfork','modified-schiff-pitchfork','inside-pitchfork'] },
+  { id: 'fib', label: 'Fibonacci & Gann', tools: ['fib-retracement','fib-extension','fib-time-zone','fib-fan','fib-extension-two-point','fib-speed-resistance-fan','trend-fib-time','fib-circles','fib-speed-resistance-arcs','fib-wedge','fib-spiral','gann-fan','gann-box','gann-square'] },
+  { id: 'shapes', label: 'Shapes', tools: ['rectangle','rotated-rectangle','ellipse','circle','triangle','path','polyline','arc','curve','double-curve'] },
+  { id: 'cycles', label: 'Cycles', tools: ['cyclic-lines','time-cycles','sine-line'] },
+  { id: 'patterns', label: 'Patterns', tools: ['xabcd-pattern','abcd-pattern','head-shoulders','elliott-impulse','elliott-correction','gartley','bat','butterfly','crab','shark','cypher'] },
+  { id: 'geometry', label: 'Geometric studies', tools: ['dedekind-tessellation','sonic','supersonic','golden-sonic','golden-supersonic'] },
+  { id: 'marks', label: 'Arrows & marks', tools: ['arrow-up','arrow-down','arrow-left','arrow-right','flag-mark','icon-stamp','price-label','signpost'] },
+  { id: 'forecast', label: 'Forecasting', tools: ['long-position','short-position','forecast'] },
+  { id: 'measure', label: 'Measurement', tools: ['price-range','date-range','measure'] },
+  { id: 'text', label: 'Text & notes', tools: ['text','note','callout','balloon','comment','price-note','table','brush','highlighter'] },
 ];
 
-function MinusIcon(props: ComponentProps<typeof Slash>) {
-  return <span {...props} style={{ display: 'block', width: 16, height: 2, background: 'currentColor', borderRadius: 99 }} />;
+const DRAWING_GROUP_ICONS: Record<string,string> = {
+  lines:'M3 18 21 6', channels:'M2 17 10 9M8 21 22 7', fib:'M3 5h18M3 12h18M3 19h18', shapes:'M4 5h16v14H4z',
+  cycles:'M3 12h18M12 3v18', patterns:'M4 17 9 7l6 10 5-12', geometry:'M4 18 12 4l8 14M7 14h10', marks:'M4 12h14m-5-5 5 5-5 5',
+  forecast:'M4 18 11 11l4 4 5-9', measure:'M4 18 20 6M7 18h13M4 18v-3', text:'M5 5h14M12 5v14M8 19h8',
+};
+
+function drawingGlyph(id: string, size = 18) {
+  const d = DRAWING_TOOL_ICONS[id] || DRAWING_GROUP_ICONS[id] || DRAWING_TOOL_ICONS['cursor'];
+  return <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d={d} fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" /></svg>;
 }
+
 
 const PITCH_BLACK_THEME = {
   ...darkTheme,
@@ -134,7 +107,7 @@ export default function FinancialChart({ symbol, liveTick, requestHistory, instr
   const [searchQuery, setSearchQuery] = useState('');
   const [periodOpen, setPeriodOpen] = useState(false);
   const [drawingOpen, setDrawingOpen] = useState(false);
-  const [drawingGroup, setDrawingGroup] = useState('trend');
+  const [drawingGroup, setDrawingGroup] = useState('lines');
   const [activeTool, setActiveTool] = useState<string | null>(null);
   const pressTimerRef = useRef<number | null>(null);
   const pointerStartRef = useRef<{ x: number; y: number } | null>(null);
@@ -161,11 +134,7 @@ export default function FinancialChart({ symbol, liveTick, requestHistory, instr
   const handlePointerUp = (zone: 'instrument' | 'period') => (event: PointerEvent<HTMLDivElement>) => { if (interactionRef.current !== zone) return; const start = pointerStartRef.current; clearPressTimer(); pointerStartRef.current = null; interactionRef.current = null; if (!start) return; const dy = event.clientY - start.y; if (Math.abs(dy) >= 24) { if (zone === 'instrument') changeInstrument(dy < 0 ? 1 : -1); else changePeriod(dy < 0 ? 1 : -1); } pointerMovedRef.current = false; try { event.currentTarget.releasePointerCapture?.(event.pointerId); } catch { /* already released */ } };
   const handlePointerCancel = (zone: 'instrument' | 'period') => (event: PointerEvent<HTMLDivElement>) => { if (interactionRef.current !== zone) return; clearPressTimer(); pointerStartRef.current = null; pointerMovedRef.current = false; interactionRef.current = null; try { event.currentTarget.releasePointerCapture?.(event.pointerId); } catch { /* already released */ } };
   const handleDrawingTool = (tool: ToolId) => {
-    if (!drawingRef.current || tool === 'cursor') {
-      drawingRef.current?.setTool('cursor');
-      setActiveTool(tool === 'cursor' ? null : tool);
-      return;
-    }
+    if (!drawingRef.current || !hasDrawingTool(tool)) return;
     try {
       drawingRef.current.setTool(tool);
       setActiveTool(tool);
@@ -219,19 +188,27 @@ export default function FinancialChart({ symbol, liveTick, requestHistory, instr
         </button>
         {drawingOpen && (
           <div className="sire-drawing-rack" role="dialog" aria-label="Drawing tools">
-            <div className="sire-drawing-groups">
-              {DRAWING_GROUPS.map(group => { const Icon = group.icon; return <button key={group.id} type="button" className={`sire-drawing-group${drawingGroup === group.id ? ' active' : ''}`} aria-label={group.label} title={group.label} onClick={() => setDrawingGroup(group.id)}><Icon size={17} strokeWidth={2} /></button>; })}
+            <div className="sire-drawing-category-strip" role="tablist" aria-label="Drawing categories">
+              {DRAWING_GROUPS.map(group => (
+                <button key={group.id} type="button" role="tab" aria-selected={drawingGroup === group.id} className={`sire-drawing-category${drawingGroup === group.id ? ' active' : ''}`} aria-label={group.label} title={group.label} onClick={() => setDrawingGroup(group.id)}>
+                  {drawingGlyph(group.id, 19)}
+                </button>
+              ))}
             </div>
-            <div className="sire-drawing-tools">
-              {(DRAWING_GROUPS.find(group => group.id === drawingGroup)?.tools || []).map(tool => { const Icon = tool.icon; return <button key={tool.id} type="button" className={`sire-drawing-tool${activeTool === tool.id ? ' active' : ''}`} aria-label={tool.label} title={tool.label} onClick={() => handleDrawingTool(tool.id)}><Icon size={18} strokeWidth={2} /></button>; })}
+            <div className="sire-drawing-tool-strip" role="toolbar" aria-label={DRAWING_GROUPS.find(group => group.id === drawingGroup)?.label || 'Drawing tools'}>
+              {(DRAWING_GROUPS.find(group => group.id === drawingGroup)?.tools || []).filter(hasDrawingTool).map(tool => (
+                <button key={tool} type="button" className={`sire-drawing-tool${activeTool === tool ? ' active' : ''}`} aria-label={getDrawingTool(tool).name} title={getDrawingTool(tool).name} onClick={() => handleDrawingTool(tool)}>
+                  {drawingGlyph(tool, 18)}
+                </button>
+              ))}
             </div>
             <div className="sire-drawing-actions">
-              <button type="button" aria-label="Magnet" title="Magnet" onClick={() => (drawingRef.current as any)?.setMagnet?.('weak')}><Magnet size={16}/></button>
-              <button type="button" aria-label="Undo" title="Undo" onClick={() => (drawingRef.current as any)?.undo?.()}><Undo2 size={16}/></button>
-              <button type="button" aria-label="Redo" title="Redo" onClick={() => (drawingRef.current as any)?.redo?.()}><Redo2 size={16}/></button>
-              <button type="button" aria-label="Lock drawings" title="Lock drawings" onClick={() => (drawingRef.current as any)?.lockAll?.()}><Lock size={16}/></button>
-              <button type="button" aria-label="Hide drawings" title="Hide drawings" onClick={() => (drawingRef.current as any)?.setVisible?.(false)}><EyeOff size={16}/></button>
-              <button type="button" aria-label="Remove drawings" title="Remove drawings" onClick={() => (drawingRef.current as any)?.removeAll?.()}><Trash2 size={16}/></button>
+              <button type="button" aria-label="Magnet" title="Magnet" onClick={() => drawingRef.current?.setOptions({ magnet: 'weak' })}><Magnet size={16}/></button>
+              <button type="button" aria-label="Undo" title="Undo" onClick={() => drawingRef.current?.undo()}><Undo2 size={16}/></button>
+              <button type="button" aria-label="Redo" title="Redo" onClick={() => drawingRef.current?.redo()}><Redo2 size={16}/></button>
+              <button type="button" aria-label="Lock drawings" title="Lock drawings" onClick={() => { for (const id of drawingRef.current?.selection?.() || []) drawingRef.current?.update(id, { locked: true }); }}><Lock size={16}/></button>
+              <button type="button" aria-label="Hide drawings" title="Hide drawings" onClick={() => { for (const id of drawingRef.current?.selection?.() || []) drawingRef.current?.update(id, { visible: false }); }}><EyeOff size={16}/></button>
+              <button type="button" aria-label="Remove drawings" title="Remove drawings" onClick={() => { for (const id of drawingRef.current?.selection?.() || []) drawingRef.current?.remove(id); }}><Trash2 size={16}/></button>
               <button type="button" aria-label="Close drawing tools" title="Close" onClick={() => setDrawingOpen(false)}><X size={16}/></button>
             </div>
           </div>
