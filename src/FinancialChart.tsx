@@ -16,7 +16,6 @@ type Props = { symbol: string; liveTick: Tick | null; requestHistory: HistoryReq
 type Candle = { time: number; open: number; high: number; low: number; close: number; volume?: number };
 type Period = { label: string; seconds: number };
 type ToolId = string;
-type ToolId = string;
 type ToolGroup = { id: string; label: string; tools: ToolId[] };
 
 const DRAWING_GROUPS: ToolGroup[] = [
