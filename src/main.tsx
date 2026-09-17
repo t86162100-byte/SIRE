@@ -12,6 +12,7 @@ import './quoteInstrumentCards';
 import './quoteListFullHeight';
 import './sireLoadingOverlay';
 import './sireChatLoader';
+import './sireTouchDrawingAdapter';
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
