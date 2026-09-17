@@ -36,21 +36,27 @@ function messageText(data: unknown): Promise<string> {
   return Promise.reject(new Error('Unsupported Deriv WebSocket message format'));
 }
 
+function value(item: Record<string, unknown>, ...keys: string[]): string {
+  for (const key of keys) {
+    const v = item[key];
+    if (v !== undefined && v !== null && String(v).trim()) return String(v).trim();
+  }
+  return '';
+}
+
 function isSynthetic(item: Record<string, unknown>): boolean {
-  const symbol = String(item.underlying_symbol || item.symbol || '');
-  const market = String(item.market || '').toLowerCase();
-  const submarket = String(item.submarket || '').toLowerCase();
-  const subgroup = String(item.subgroup || '').toLowerCase();
-  const type = String(item.underlying_symbol_type || item.symbol_type || '').toLowerCase();
-  const text = [symbol, item.underlying_symbol_name, item.display_name, market, submarket, subgroup, type]
-    .filter(value => value !== undefined && value !== null)
-    .map(String)
-    .join(' ')
-    .toLowerCase();
+  const symbol = value(item, 'underlying_symbol', 'symbol');
+  const market = value(item, 'market').toLowerCase();
+  const submarket = value(item, 'submarket').toLowerCase();
+  const subgroup = value(item, 'subgroup').toLowerCase();
+  const type = value(item, 'underlying_symbol_type', 'symbol_type').toLowerCase();
+  const name = value(item, 'underlying_symbol_name', 'display_name').toLowerCase();
+  const text = `${symbol} ${name} ${market} ${submarket} ${subgroup} ${type}`.toLowerCase();
 
   return (
     market === 'synthetic_index' ||
     market === 'synthetic indices' ||
+    market === 'synthetic_index' ||
     submarket.includes('synthetic') ||
     subgroup.includes('synthetic') ||
     type.includes('synthetic') ||
@@ -60,15 +66,15 @@ function isSynthetic(item: Record<string, unknown>): boolean {
 }
 
 function normalize(item: Record<string, unknown>): DerivInstrument | null {
-  const symbol = String(item.underlying_symbol || item.symbol || '').trim();
+  const symbol = value(item, 'underlying_symbol', 'symbol');
   if (!symbol) return null;
   return {
     symbol,
-    name: String(item.underlying_symbol_name || item.display_name || symbol),
-    market: String(item.market || ''),
-    submarket: String(item.submarket || ''),
-    subgroup: String(item.subgroup || ''),
-    symbolType: String(item.underlying_symbol_type || item.symbol_type || ''),
+    name: value(item, 'underlying_symbol_name', 'display_name') || symbol,
+    market: value(item, 'market'),
+    submarket: value(item, 'submarket'),
+    subgroup: value(item, 'subgroup'),
+    symbolType: value(item, 'underlying_symbol_type', 'symbol_type'),
     exchangeOpen: typeof item.exchange_is_open === 'number' ? item.exchange_is_open : undefined,
   };
 }
@@ -180,16 +186,35 @@ export class DerivMarketData {
   }
 
   async getSyntheticIndices(): Promise<DerivInstrument[]> {
+    // The current Deriv API removed legacy filtering parameters and renamed
+    // response fields. Request the complete list and filter locally.
     const response = await this.request({ active_symbols: 'brief' });
+    if (response.error) {
+      const error = response.error as Record<string, unknown>;
+      throw new Error(`Deriv active_symbols failed: ${String(error.message || 'Unknown API error')}`);
+    }
+
     const records = Array.isArray(response.active_symbols)
       ? response.active_symbols.filter((item: unknown): item is Record<string, unknown> => Boolean(item && typeof item === 'object'))
       : [];
+
     const instruments = Array.from(
       new Map(
-        records.filter(isSynthetic).map(normalize).filter((item): item is DerivInstrument => Boolean(item)).map(item => [item.symbol, item]),
+        records
+          .filter(isSynthetic)
+          .map(normalize)
+          .filter((item): item is DerivInstrument => Boolean(item))
+          .map(item => [item.symbol, item]),
       ).values(),
     );
-    if (!instruments.length) throw new Error(`Deriv returned ${records.length} active symbols, but no Synthetic Indices were found`);
+
+    if (!records.length) {
+      throw new Error('Deriv returned no active symbols. The WebSocket connection or Deriv market-data response must be checked.');
+    }
+    if (!instruments.length) {
+      const sample = records.slice(0, 3).map(item => value(item, 'underlying_symbol', 'symbol')).filter(Boolean).join(', ');
+      throw new Error(`Deriv returned ${records.length} active symbols, but none matched Synthetic Indices. Sample symbols: ${sample || 'none'}`);
+    }
     return instruments.sort((a, b) => a.name.localeCompare(b.name));
   }
 
