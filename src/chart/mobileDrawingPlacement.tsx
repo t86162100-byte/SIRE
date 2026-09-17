@@ -10,7 +10,7 @@ const POINT_COUNTS: Partial<Record<DrawingToolType, number>> = {
   channel:3, pitchfork:3, 'fib-extension':3, 'fib-channel':3, 'triangle-pattern':3,
   arc:3, 'rotated-rectangle':3, 'fib-wedge':3, 'abcd-pattern':4, 'xabcd-pattern':5, 'head-shoulders':7,
 };
-const FREEHAND = new Set<DrawingToolType>(['brush','highlighter','polyline','elliott-wave']);
+const FREEHAND = new Set<DrawingToolType>(['brush','highlighter','polyline','elliott-wave','trendline']);
 const FIB_LEVELS: Partial<Record<DrawingToolType, number[]>> = {
   fibonacci:[0,.236,.382,.5,.618,.786,1], 'fib-extension':[0,.236,.382,.5,.618,1,1.618,2.618],
   'fib-channel':[0,.236,.382,.5,.618,1], 'gann-box':[0,.25,.5,.75,1], 'fib-time-zone':[0,1,2,3,5,8,13], 'fib-wedge':[0,.236,.382,.5,.618,1],
@@ -54,7 +54,6 @@ export function MobileDrawingPlacement({chartRef,tool,seriesId,label,onCancel,on
 
   const cursor=useMemo(()=>{const width=Math.max(0,frame.width-76);const height=Math.max(0,frame.height-22);return clamp(reticle??{x:width/2,y:height/2},frame.width,frame.height,76,22);},[frame,reticle]);
 
-  // The engine exposes these conversions, but keep them out of render-time failure paths.
   const readPoint=useCallback((p:{x:number;y:number})=>{
     const chart=chartRef.current;
     if(!chart || frame.width<2 || frame.height<2)return null;
