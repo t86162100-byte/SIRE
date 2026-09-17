@@ -50,7 +50,7 @@ function parseCandles(data: HistoryResponse): Candle[] | null {
 }
 
 async function loadHistory(symbol: string, seconds: number, request: HistoryRequester): Promise<{ candles: Candle[]; ticks: Tick[] }> {
-  const result = await request({ ticks_history: symbol, end: 'latest', count: 500, style: 'candles', granularity: seconds, subscribe: 0 });
+  const result = await request({ ticks_history: symbol, end: 'latest', count: 1500, style: 'candles', granularity: seconds });
   const directCandles = parseCandles(result);
   if (directCandles) return { candles: directCandles, ticks: [] };
   const ticks = parseHistory(result, symbol);
@@ -119,7 +119,7 @@ export default function FinancialChart({ symbol, liveTick, requestHistory }: Pro
     const next: Candle = last && last.time === bucket ? { ...last, high: Math.max(last.high, liveTick.quote), low: Math.min(last.low, liveTick.quote), close: liveTick.quote } : { time: bucket, open: liveTick.quote, high: liveTick.quote, low: liveTick.quote, close: liveTick.quote };
     if (last && last.time === bucket) candlesRef.current[candlesRef.current.length - 1] = next;
     else candlesRef.current.push(next);
-    if (candlesRef.current.length > 1000) candlesRef.current.shift();
+    if (candlesRef.current.length > 1500) candlesRef.current.shift();
     seriesRef.current.update(next);
   }, [liveTick, symbol]);
 
