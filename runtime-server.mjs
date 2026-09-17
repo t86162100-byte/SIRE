@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { readFile, stat } from 'node:fs/promises';
 import { extname, join, normalize } from 'node:path';
 import { WebSocketServer } from 'ws';
+import WebSocket from 'ws';
 
 const { handler } = await import('./backend/index.ts');
 import { handleGeminiRequest } from './backend/gemini-ai.ts';
@@ -17,12 +18,17 @@ const PORT = Number(process.env.PORT || 10000);
 const HOST = '0.0.0.0';
 const DIST = join(process.cwd(), 'dist');
 const MIME = { '.html':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.json':'application/json; charset=utf-8','.svg':'image/svg+xml','.png':'image/png','.jpg':'image/jpeg','.jpeg':'image/jpeg','.webp':'image/webp','.ico':'image/x-icon','.woff':'font/woff','.woff2':'font/woff2' };
+const DERIV_UPSTREAMS = [
+  'wss://ws.binaryws.com/websockets/v3',
+  'wss://ws.derivws.com/websockets/v3',
+  'wss://api.derivws.com/trading/v1/options/ws/public',
+];
 
 async function serveStatic(req, res) {
   if (!req.url || !['GET','HEAD'].includes(req.method || '')) return false;
   const requestPath = decodeURIComponent(new URL(req.url, 'http://sire.local').pathname);
-  if (requestPath.startsWith('/api/') || requestPath === '/ws') return false;
-  const candidate = requestPath === '/' ? join(DIST,'index.html') : join(DIST, normalize(requestPath).replace(/^[/\\]+/,''));
+  if (requestPath.startsWith('/api/') || requestPath === '/ws' || requestPath === '/deriv') return false;
+  const candidate = requestPath === '/' ? join(DIST,'index.html') : join(DIST, normalize(requestPath).replace(/^[/\\\\]+/,''));
   let filePath = candidate;
   try { const info = await stat(filePath); if (!info.isFile()) throw new Error('not a file'); } catch { filePath = join(DIST,'index.html'); }
   try { const data = await readFile(filePath); res.writeHead(200,{ 'Content-Type': MIME[extname(filePath).toLowerCase()] || 'application/octet-stream', 'Cache-Control': filePath.includes('/assets/') ? 'public, max-age=31536000, immutable' : 'no-cache' }); if (req.method !== 'HEAD') res.end(data); else res.end(); return true; } catch { return false; }
@@ -54,6 +60,30 @@ async function handleDirectGptRequest(parsed) {
   if (!query) throw new Error('query is required');
   const gpt = await runOpenRouter({ query, history: Array.isArray(parsed.history) ? parsed.history : [] });
   return { text: gpt.text, responseId: gpt.responseId || '', model: gpt.model, provider: gpt.provider, directGptTest: true };
+}
+
+async function connectDerivUpstream() {
+  const errors = [];
+  for (const url of DERIV_UPSTREAMS) {
+    try {
+      const upstream = await new Promise((resolve, reject) => {
+        const socket = new WebSocket(url, { handshakeTimeout: 10000 });
+        let settled = false;
+        const fail = (error) => { if (settled) return; settled = true; try { socket.close(); } catch {} reject(error); };
+        const timer = setTimeout(() => fail(new Error(`timeout connecting to ${url}`)), 11000);
+        socket.once('open', () => { if (settled) return; settled = true; clearTimeout(timer); resolve(socket); });
+        socket.once('error', error => fail(error));
+        socket.once('close', (code, reason) => fail(new Error(`closed ${code}${reason ? `: ${reason.toString()}` : ''}`)));
+      });
+      console.log(`[SIRE Deriv proxy] connected ${url}`);
+      return { socket: upstream, url };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.error(`[SIRE Deriv proxy] ${url} failed: ${message}`);
+      errors.push(`${url}: ${message}`);
+    }
+  }
+  throw new Error(`No Deriv upstream available. ${errors.join(' | ')}`);
 }
 
 startAgentWorker().catch(error => console.error('[SIRE agent worker]', error));
@@ -101,5 +131,21 @@ const server = http.createServer(async (req,res) => {
   } catch(cause) { const message=cause instanceof Error?cause.message:String(cause); console.error('[HTTP ERROR]',req.method,req.url,message); if (!res.headersSent) res.writeHead(500,{'Content-Type':'application/json','Access-Control-Allow-Origin':'*'}); res.end(JSON.stringify({error:message})); } });
 });
 const wss = new WebSocketServer({ noServer:true });
-server.on('upgrade',(req,socket,head)=>{ const url=new URL(req.url||'/',`http://${req.headers.host||'localhost'}`); if(url.pathname!=='/ws'){socket.destroy();return;} wss.handleUpgrade(req,socket,head,wsSocket=>{ const connectionId=url.searchParams.get('connection_id')||randomUUID(); ws.register(connectionId,wsSocket); wsSocket.send(JSON.stringify({type:'system.connected',payload:{connection_id:connectionId}})); wsSocket.on('close',async()=>{ws.unregister(connectionId); await realtime({body:JSON.stringify({type:'system.disconnected',payload:{connection_id:connectionId}})});}); }); });
+const derivWss = new WebSocketServer({ noServer:true });
+server.on('upgrade',(req,socket,head)=>{
+  const url=new URL(req.url||'/',`http://${req.headers.host||'localhost'}`);
+  if(url.pathname==='/deriv'){
+    void connectDerivUpstream().then(({socket: upstream, url: upstreamUrl})=>{
+      derivWss.handleUpgrade(req,socket,head,client=>{
+        console.log(`[SIRE Deriv proxy] client connected via ${upstreamUrl}`);
+        client.on('message',data=>{ if(upstream.readyState===WebSocket.OPEN) upstream.send(data); });
+        upstream.on('message',data=>{ if(client.readyState===WebSocket.OPEN) client.send(data); });
+        const closeBoth=()=>{ try{client.close();}catch{} try{upstream.close();}catch{} };
+        client.on('close',closeBoth); upstream.on('close',closeBoth); client.on('error',closeBoth); upstream.on('error',closeBoth);
+      });
+    }).catch(error=>{ console.error('[SIRE Deriv proxy] client connection failed',error); try{socket.destroy();}catch{} });
+    return;
+  }
+  if(url.pathname!=='/ws'){socket.destroy();return;} wss.handleUpgrade(req,socket,head,wsSocket=>{ const connectionId=url.searchParams.get('connection_id')||randomUUID(); ws.register(connectionId,wsSocket); wsSocket.send(JSON.stringify({type:'system.connected',payload:{connection_id:connectionId}})); wsSocket.on('close',async()=>{ws.unregister(connectionId); await realtime({body:JSON.stringify({type:'system.disconnected',payload:{connection_id:connectionId}})});}); });
+});
 server.listen(PORT,HOST,()=>console.log(`SIRE server listening on ${HOST}:${PORT}`));
