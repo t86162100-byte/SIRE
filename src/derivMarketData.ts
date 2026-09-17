@@ -26,8 +26,6 @@ type Pending = {
   timer: number;
 };
 
-// Current Deriv public market-data endpoint. The legacy binaryws endpoint is
-// retained as a fallback for environments that have not migrated yet.
 const ENDPOINTS = [
   'wss://api.derivws.com/trading/v1/options/ws/public',
   'wss://ws.binaryws.com/websockets/v3',
@@ -196,7 +194,10 @@ export class DerivMarketData {
     const pageSize = 5000;
     const maxPages = 100;
     for (let page = 0; page < maxPages; page += 1) {
-      const response = await this.request({ ticks_history: symbol, end, count: pageSize, style: 'candles', granularity, subscribe: 0 });
+      // Do not send subscribe: 0 here. A one-shot ticks_history request needs
+      // no subscribe field and this keeps the request valid on both the current
+      // and legacy public market-data schemas.
+      const response = await this.request({ ticks_history: symbol, end, count: pageSize, style: 'candles', granularity });
       if (response.error) { const error = response.error as Record<string, unknown>; throw new Error(`Deriv historical candles failed: ${String(error.message || 'Unknown API error')}`); }
       const candles = Array.isArray(response.candles) ? response.candles.filter((item: unknown): item is Record<string, unknown> => Boolean(item && typeof item === 'object')) : [];
       if (!candles.length) break;
