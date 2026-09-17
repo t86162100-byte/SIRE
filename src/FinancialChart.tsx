@@ -40,16 +40,33 @@ type ToolGroup = {
   tools: { type: string; label: string }[];
 };
 
+// Broad, platform-style timeframe set. Deriv's current ticks_history API accepts
+// arbitrary integer candle granularities; the values below also cover the common
+// intervals exposed by MetaTrader, cTrader and TradingView.
 const PERIODS = [
   { label: '1m', seconds: 60 },
+  { label: '2m', seconds: 120 },
+  { label: '3m', seconds: 180 },
   { label: '5m', seconds: 300 },
+  { label: '10m', seconds: 600 },
   { label: '15m', seconds: 900 },
+  { label: '20m', seconds: 1200 },
+  { label: '30m', seconds: 1800 },
+  { label: '45m', seconds: 2700 },
   { label: '1H', seconds: 3600 },
+  { label: '2H', seconds: 7200 },
+  { label: '3H', seconds: 10800 },
+  { label: '4H', seconds: 14400 },
+  { label: '6H', seconds: 21600 },
+  { label: '8H', seconds: 28800 },
+  { label: '12H', seconds: 43200 },
+  { label: '1D', seconds: 86400 },
+  { label: '2D', seconds: 172800 },
+  { label: '3D', seconds: 259200 },
+  { label: '1W', seconds: 604800 },
+  { label: '1M', seconds: 2592000 },
 ];
 
-// These are existing Lightweight Charts V5 line-tool plugins. SIRE only registers
-// and exposes them; drawing, hit-testing, dragging, snapping and persistence are
-// handled by the external line-tools core/plugin packages.
 const TOOL_GROUPS: ToolGroup[] = [
   {
     key: 'lines',
@@ -225,14 +242,9 @@ export default function FinancialChart({ symbol, liveTick, requestHistory }: Pro
     const lineTools = lineToolsRef.current;
     if (!lineTools || typeof window === 'undefined') return;
     try {
-      window.localStorage.setItem(
-        `sire:drawings:${symbolRef.current}`,
-        lineTools.exportLineTools(),
-      );
+      window.localStorage.setItem(`sire:drawings:${symbolRef.current}`, lineTools.exportLineTools());
       setDrawingCount(countSerializedDrawings(lineTools));
-    } catch {
-      // Local persistence is best-effort; the chart remains fully usable.
-    }
+    } catch {}
   };
 
   const loadDrawings = (targetSymbol: string) => {
@@ -257,115 +269,46 @@ export default function FinancialChart({ symbol, liveTick, requestHistory }: Pro
 
   const updateWithTick = (tick: Tick, seconds: number) => {
     const series = seriesRef.current;
-    if (
-      !series ||
-      tick.symbol !== symbolRef.current ||
-      !Number.isFinite(tick.quote) ||
-      !Number.isFinite(tick.epoch)
-    ) return;
-
+    if (!series || tick.symbol !== symbolRef.current || !Number.isFinite(tick.quote) || !Number.isFinite(tick.epoch)) return;
     const bucket = Math.floor(tick.epoch / seconds) * seconds as UTCTimestamp;
     const last = candlesRef.current[candlesRef.current.length - 1];
     const next: Candle = last && last.time === bucket
-      ? {
-          ...last,
-          high: Math.max(last.high, tick.quote),
-          low: Math.min(last.low, tick.quote),
-          close: tick.quote,
-        }
-      : {
-          time: bucket,
-          open: tick.quote,
-          high: tick.quote,
-          low: tick.quote,
-          close: tick.quote,
-        };
-
+      ? { ...last, high: Math.max(last.high, tick.quote), low: Math.min(last.low, tick.quote), close: tick.quote }
+      : { time: bucket, open: tick.quote, high: tick.quote, low: tick.quote, close: tick.quote };
     if (last && last.time === bucket) candlesRef.current[candlesRef.current.length - 1] = next;
     else candlesRef.current.push(next);
     if (candlesRef.current.length > 1500) candlesRef.current.shift();
     series.update(next);
-
     const y = series.priceToCoordinate(next.close);
     const height = containerRef.current?.clientHeight ?? 0;
-    if (y == null || y < -20 || (height > 0 && y > height + 20)) {
-      chartRef.current?.priceScale('right').applyOptions({ autoScale: true });
-    }
+    if (y == null || y < -20 || (height > 0 && y > height + 20)) chartRef.current?.priceScale('right').applyOptions({ autoScale: true });
   };
 
   useEffect(() => {
     if (!containerRef.current) return;
-
     const chart = createChart(containerRef.current, {
       autoSize: true,
-      layout: {
-        background: { type: ColorType.Solid, color: '#090d12' },
-        textColor: '#8995a5',
-        attributionLogo: true,
-      },
-      grid: {
-        vertLines: { color: 'rgba(120,135,150,.08)' },
-        horzLines: { color: 'rgba(120,135,150,.08)' },
-      },
-      crosshair: {
-        mode: CrosshairMode.Normal,
-        vertLine: { color: 'rgba(150,165,180,.35)' },
-        horzLine: { color: 'rgba(150,165,180,.35)' },
-      },
-      rightPriceScale: {
-        borderColor: 'rgba(120,135,150,.18)',
-        autoScale: true,
-        scaleMargins: { top: 0.08, bottom: 0.08 },
-      },
-      timeScale: {
-        borderColor: 'rgba(120,135,150,.18)',
-        timeVisible: true,
-        secondsVisible: false,
-        rightOffset: 6,
-        barSpacing: 7,
-      },
-      handleScroll: {
-        mouseWheel: true,
-        pressedMouseMove: true,
-        horzTouchDrag: true,
-        vertTouchDrag: true,
-      },
-      handleScale: {
-        axisPressedMouseMove: true,
-        mouseWheel: true,
-        pinch: true,
-      },
+      layout: { background: { type: ColorType.Solid, color: '#090d12' }, textColor: '#8995a5', attributionLogo: true },
+      grid: { vertLines: { color: 'rgba(120,135,150,.08)' }, horzLines: { color: 'rgba(120,135,150,.08)' } },
+      crosshair: { mode: CrosshairMode.Normal, vertLine: { color: 'rgba(150,165,180,.35)' }, horzLine: { color: 'rgba(150,165,180,.35)' } },
+      rightPriceScale: { borderColor: 'rgba(120,135,150,.18)', autoScale: true, scaleMargins: { top: 0.08, bottom: 0.08 } },
+      timeScale: { borderColor: 'rgba(120,135,150,.18)', timeVisible: true, secondsVisible: false, rightOffset: 6, barSpacing: 7 },
+      handleScroll: { mouseWheel: true, pressedMouseMove: true, horzTouchDrag: true, vertTouchDrag: true },
+      handleScale: { axisPressedMouseMove: true, mouseWheel: true, pinch: true },
     });
-
     const series = chart.addSeries(CandlestickSeries, {
-      upColor: '#22c55e',
-      downColor: '#ef4444',
-      borderUpColor: '#22c55e',
-      borderDownColor: '#ef4444',
-      wickUpColor: '#22c55e',
-      wickDownColor: '#ef4444',
-      priceLineVisible: true,
-      lastValueVisible: true,
+      upColor: '#22c55e', downColor: '#ef4444', borderUpColor: '#22c55e', borderDownColor: '#ef4444', wickUpColor: '#22c55e', wickDownColor: '#ef4444', priceLineVisible: true, lastValueVisible: true,
     });
-
     const lineTools = createLineToolsPlugin(chart, series);
     registerTools(lineTools);
     lineToolsRef.current = lineTools;
     chartRef.current = chart;
     seriesRef.current = series;
-
-    const handleAfterEdit = () => {
-      setActiveTool(null);
-      saveDrawings();
-    };
-    const handleSingleClick = () => {
-      setDrawingCount(countSerializedDrawings(lineTools));
-    };
-
+    const handleAfterEdit = () => { setActiveTool(null); saveDrawings(); };
+    const handleSingleClick = () => setDrawingCount(countSerializedDrawings(lineTools));
     lineTools.subscribeLineToolsAfterEdit(handleAfterEdit);
     lineTools.subscribeLineToolsSingleClick(handleSingleClick);
     loadDrawings(symbolRef.current);
-
     return () => {
       lineTools.unsubscribeLineToolsAfterEdit(handleAfterEdit);
       lineTools.unsubscribeLineToolsSingleClick(handleSingleClick);
@@ -388,11 +331,9 @@ export default function FinancialChart({ symbol, liveTick, requestHistory }: Pro
   const fetchHistory = (nextPeriod: number) => {
     const generation = ++requestGeneration.current;
     if (!symbol || !seriesRef.current) return;
-
     historyLoadingRef.current = true;
     setLoading(true);
     setError('');
-
     loadHistory(symbol, nextPeriod, requestHistory)
       .then(candles => {
         if (generation !== requestGeneration.current || !seriesRef.current) return;
@@ -403,9 +344,7 @@ export default function FinancialChart({ symbol, liveTick, requestHistory }: Pro
         if (pendingTick && pendingTick.symbol === symbol) updateWithTick(pendingTick, nextPeriod);
       })
       .catch(reason => {
-        if (generation === requestGeneration.current) {
-          setError(reason instanceof Error ? reason.message : 'Unable to load chart history from Deriv');
-        }
+        if (generation === requestGeneration.current) setError(reason instanceof Error ? reason.message : 'Unable to load chart history from Deriv');
       })
       .finally(() => {
         if (generation === requestGeneration.current) {
@@ -417,10 +356,7 @@ export default function FinancialChart({ symbol, liveTick, requestHistory }: Pro
 
   useEffect(() => {
     fetchHistory(selectedPeriod.current);
-    return () => {
-      requestGeneration.current += 1;
-      historyLoadingRef.current = false;
-    };
+    return () => { requestGeneration.current += 1; historyLoadingRef.current = false; };
   }, [symbol, requestHistory]);
 
   useEffect(() => {
@@ -441,8 +377,6 @@ export default function FinancialChart({ symbol, liveTick, requestHistory }: Pro
     const lineTools = lineToolsRef.current;
     if (!lineTools) return;
     setActiveTool(type);
-    // The core owns the complete interaction lifecycle: placement, ghosting,
-    // snapping, selection and dragging. No SIRE click/drag engine is involved.
     lineTools.addLineTool(type);
   };
 
@@ -467,13 +401,9 @@ export default function FinancialChart({ symbol, liveTick, requestHistory }: Pro
   return (
     <div className="sire-financial-chart">
       <div className="sire-chart-controls">
-        <div className="sire-chart-periods">
+        <div className="sire-chart-periods" aria-label="Chart timeframe">
           {PERIODS.map(item => (
-            <button
-              key={item.seconds}
-              className={period === item.seconds ? 'active' : ''}
-              onClick={() => changePeriod(item.seconds)}
-            >
+            <button key={item.seconds} className={period === item.seconds ? 'active' : ''} onClick={() => changePeriod(item.seconds)} title={`${item.label} timeframe`}>
               {item.label}
             </button>
           ))}
@@ -484,24 +414,14 @@ export default function FinancialChart({ symbol, liveTick, requestHistory }: Pro
 
       <div className="sire-drawing-toolbar">
         <select value={toolGroup} onChange={event => setToolGroup(event.target.value)} aria-label="Drawing category">
-          {TOOL_GROUPS.map(group => (
-            <option key={group.key} value={group.key}>{group.label}</option>
-          ))}
+          {TOOL_GROUPS.map(group => <option key={group.key} value={group.key}>{group.label}</option>)}
         </select>
-        <select
-          value=""
-          onChange={event => event.target.value && startTool(event.target.value)}
-          aria-label="Drawing tool"
-        >
+        <select value="" onChange={event => event.target.value && startTool(event.target.value)} aria-label="Drawing tool">
           <option value="">{activeTool ? `${activeTool} · press Esc to cancel` : 'Choose tool…'}</option>
-          {currentGroup.tools.map(tool => (
-            <option key={tool.type} value={tool.type}>{tool.label}</option>
-          ))}
+          {currentGroup.tools.map(tool => <option key={tool.type} value={tool.type}>{tool.label}</option>)}
         </select>
         <button onClick={deleteSelected} title="Delete selected drawing">DELETE</button>
-        <span className="sire-drawing-count">
-          {drawingCount} drawing{drawingCount === 1 ? '' : 's'}
-        </span>
+        <span className="sire-drawing-count">{drawingCount} drawing{drawingCount === 1 ? '' : 's'}</span>
       </div>
 
       <div ref={containerRef} className="sire-chart-canvas" />
