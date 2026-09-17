@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react';
+import 'openalgo-charts/draw';
 import { createWidget, type Widget } from 'openalgo-charts/widget';
 import './financialChart.css';
 
