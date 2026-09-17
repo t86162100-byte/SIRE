@@ -7,16 +7,16 @@ import type {
   IndicatorInstanceInput,
   Timeframe,
 } from '@pairlens/fast-financial-charts/types';
-import type { TradingViewResolution, TradingViewResolutionOption } from './chart/tradingViewResolutions';
 
 type Candle = { epoch: number; open: number; high: number; low: number; close: number; volume?: number };
+type TimeframeOption = { value: Timeframe; label: string };
 type Props = {
   candles: Candle[];
   latest?: { epoch: number; quote: number; bid?: number; ask?: number } | null;
   autoScale?: boolean;
-  timeframe: TradingViewResolution;
-  timeframeOptions: readonly TradingViewResolutionOption[];
-  onTimeframeChange: (value: TradingViewResolution) => void;
+  timeframe: Timeframe;
+  timeframeOptions: readonly TimeframeOption[];
+  onTimeframeChange: (value: Timeframe) => void;
 };
 
 const DRAWING_TOOLS: Array<{ type: DrawingToolType; label: string }> = [
@@ -82,7 +82,7 @@ export default function NativeMarketChart({ candles, latest, autoScale = true, t
       <FastFinancialChart
         ref={chartRef}
         series={series}
-        timeframe={timeframe as Timeframe}
+        timeframe={timeframe}
         chartType="candles"
         priceScale={{ mode: 'normal', borderVisible: true, ticksVisible: true, scaleMargins: { top: 0.08, bottom: 0.08 } }}
         timeScale={{ rightOffset: 6, barSpacing: 8, minBarSpacing: 2, shiftVisibleRangeOnNewBar: true }}
