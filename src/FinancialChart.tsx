@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { createChart, type Chart } from 'openalgo-charts';
+import { createChart, darkTheme, type Chart } from 'openalgo-charts';
 import './financialChart.css';
 
 type Tick = { symbol: string; quote: number; epoch: number };
@@ -18,6 +18,24 @@ const PERIODS: Period[] = [
   { label: '12H', seconds: 43200 }, { label: '1D', seconds: 86400 }, { label: '2D', seconds: 172800 },
   { label: '3D', seconds: 259200 }, { label: '1W', seconds: 604800 }, { label: '1M', seconds: 2592000 },
 ];
+
+const PITCH_BLACK_THEME = {
+  ...darkTheme,
+  background: '#000000',
+  grid: '#111111',
+  axisText: '#8a8a8a',
+  axisLine: '#242424',
+  paneSeparator: '#161616',
+  crosshair: '#555555',
+  crosshairLabelBackground: '#161616',
+  upColor: '#26a69a',
+  wickUpColor: '#26a69a',
+  downColor: '#ef5350',
+  wickDownColor: '#ef5350',
+  lastPriceUp: '#26a69a',
+  lastPriceDown: '#ef5350',
+  lastPriceText: '#ffffff',
+};
 
 function parseCandles(data: HistoryResponse): Candle[] | null {
   if (!Array.isArray(data.candles)) return null;
@@ -92,6 +110,7 @@ export default function FinancialChart({ symbol, liveTick, requestHistory }: Pro
   useEffect(() => {
     if (!containerRef.current) return;
     const chart = createChart(containerRef.current, {
+      theme: PITCH_BLACK_THEME,
       timezone: 'Africa/Lagos',
       branding: false,
       navigation: { mousePan: 'both', defaultVisibleBars: 120 },
