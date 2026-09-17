@@ -73,7 +73,18 @@ export default function FinancialChart({ symbol, liveTick, requestHistory, instr
 
   useEffect(() => {
     if (!containerRef.current) return;
-    // DEBUG: give the host itself a guaranteed viewport-sized box before OpenAlgo initializes.\n    const host = containerRef.current;\n    host.style.position = 'fixed';\n    host.style.left = '0';\n    host.style.top = '0';\n    host.style.width = '100vw';\n    host.style.height = '100vh';\n    host.style.zIndex = '9998';\n    host.style.display = 'block';\n    host.style.visibility = 'visible';\n    host.style.opacity = '1';\n    const feed = {
+    // DEBUG: give the host itself a guaranteed viewport-sized box before OpenAlgo initializes.
+    const host = containerRef.current;
+    host.style.position = 'fixed';
+    host.style.left = '0';
+    host.style.top = '0';
+    host.style.width = '100vw';
+    host.style.height = '100vh';
+    host.style.zIndex = '9998';
+    host.style.display = 'block';
+    host.style.visibility = 'visible';
+    host.style.opacity = '1';
+    const feed = {
       async getBars(req: { symbol: string; interval: string }) {
         const bars = await requestBars(req.symbol, req.interval, requestHistoryRef.current);
         candlesRef.current = bars;
@@ -84,7 +95,9 @@ export default function FinancialChart({ symbol, liveTick, requestHistory, instr
         return () => { subscriberRef.current = null; };
       },
     };
-    let widget: Widget;\n    try {\n      widget = createWidget(host, {
+    let widget: Widget;
+    try {
+      widget = createWidget(host, {
       feed,
       symbol,
       exchange: 'Deriv Synthetic Indices',
@@ -103,7 +116,16 @@ export default function FinancialChart({ symbol, liveTick, requestHistory, instr
         .map(item => ({ symbol: item.symbol, name: item.name })),
     });
     widgetRef.current = widget;
-    // DEBUG: force the OpenAlgo widget into the viewport center so we can rule out host layout/positioning issues.\n    widget.root.style.position = 'fixed';\n    widget.root.style.left = '50%';\n    widget.root.style.top = '50%';\n    widget.root.style.width = '100vw';\n    widget.root.style.height = '100vh';\n    widget.root.style.transform = 'translate(-50%, -50%)';\n    widget.root.style.zIndex = '9999';\n    widget.root.dataset.sireDebugCentered = 'true';\n
+    // DEBUG: force the OpenAlgo widget into the viewport center so we can rule out host layout/positioning issues.
+    widget.root.style.position = 'fixed';
+    widget.root.style.left = '50%';
+    widget.root.style.top = '50%';
+    widget.root.style.width = '100vw';
+    widget.root.style.height = '100vh';
+    widget.root.style.transform = 'translate(-50%, -50%)';
+    widget.root.style.zIndex = '9999';
+    widget.root.dataset.sireDebugCentered = 'true';
+
     const offSymbol = widget.on('symbol', (event: { symbol: string }) => {
       const instrument = instrumentsRef.current.find(item => item.symbol === event.symbol);
       if (instrument && instrument.symbol !== symbolRef.current) onSelectInstrumentRef.current(instrument);
