@@ -13,8 +13,10 @@ type DerivEndpoint = { url: string; label: string; legacy: boolean };
 const DERIV_APP_ID = String((import.meta as ImportMeta & { env?: Record<string, string | undefined> }).env?.VITE_DERIV_APP_ID || '1089');
 const DERIV_ENDPOINTS: DerivEndpoint[] = [
   { url: 'wss://api.derivws.com/trading/v1/options/ws/public', label: 'Deriv public API', legacy: false },
-  { url: `wss://ws.derivws.com/websockets/v3?app_id=${encodeURIComponent(DERIV_APP_ID)}`, label: 'Deriv WebSocket v3', legacy: true },
-  { url: `wss://ws.binaryws.com/websockets/v3?app_id=${encodeURIComponent(DERIV_APP_ID)}`, label: 'Deriv legacy WebSocket v3', legacy: true },
+  { url: 'wss://ws.derivws.com/websockets/v3', label: 'Deriv WebSocket v3', legacy: true },
+  { url: 'wss://ws.binaryws.com/websockets/v3', label: 'Deriv legacy WebSocket v3', legacy: true },
+  { url: `wss://ws.derivws.com/websockets/v3?app_id=${encodeURIComponent(DERIV_APP_ID)}`, label: 'Deriv WebSocket v3 (App ID)', legacy: true },
+  { url: `wss://ws.binaryws.com/websockets/v3?app_id=${encodeURIComponent(DERIV_APP_ID)}`, label: 'Deriv legacy WebSocket v3 (App ID)', legacy: true },
 ];
 const INGEST_CHUNK = 500;
 
@@ -93,9 +95,16 @@ async function discoverCatalogue() {
     let ws: WebSocket | null = null;
     try {
       ws = await openDeriv(endpoint);
-      const request = endpoint.legacy ? { active_symbols: 'brief', product_type: 'basic' } : { active_symbols: 'brief' };
-      const data = await requestOnce(ws, request);
-      const records = (Array.isArray(data.active_symbols) ? data.active_symbols : []).filter((item: unknown): item is Record<string, unknown> => Boolean(item && typeof item === 'object'));
+      const requests = endpoint.legacy
+        ? [{ active_symbols: 'brief' }, { active_symbols: 'brief', product_type: 'basic' }]
+        : [{ active_symbols: 'brief' }];
+      let data: DerivResponse | null = null;
+      let records: Record<string, unknown>[] = [];
+      for (const request of requests) {
+        data = await requestOnce(ws, request);
+        records = (Array.isArray(data.active_symbols) ? data.active_symbols : []).filter((item: unknown): item is Record<string, unknown> => Boolean(item && typeof item === 'object'));
+        if (records.length) break;
+      }
       const instruments = Array.from(new Map(records.filter(isSynthetic).map(normalize).filter((item): item is Instrument => Boolean(item)).map(item => [item.symbol, item])).values()).sort((a, b) => a.name.localeCompare(b.name));
       if (instruments.length) return { instruments, allInstruments: records, endpoint };
       errors.push(`${endpoint.label}: ${records.length} active markets returned but no Synthetic Indices matched`);
