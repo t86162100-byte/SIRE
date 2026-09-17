@@ -10,20 +10,8 @@ import {
 } from 'lightweight-charts';
 import { DrawingManager, TrendLine } from 'lightweight-charts-drawing';
 
-type Candle = {
-  epoch: number;
-  open: number;
-  high: number;
-  low: number;
-  close: number;
-  volume?: number;
-};
-
-type Props = {
-  candles: Candle[];
-  className?: string;
-};
-
+type Candle = { epoch: number; open: number; high: number; low: number; close: number; volume?: number };
+type Props = { candles: Candle[]; className?: string };
 type Point = { time: Time; price: number };
 
 function toChartData(candles: Candle[]) {
@@ -40,11 +28,9 @@ function toChartData(candles: Candle[]) {
 }
 
 /**
- * Isolated migration prototype.
- *
- * This is intentionally not wired into the existing SIRE chart yet. It proves the
- * new engine's base candles plus real drawing-manager selection/anchor editing
- * before the existing Fast Financial Charts implementation is replaced.
+ * Isolated migration prototype. It is intentionally not wired into the existing
+ * SIRE chart yet: first we prove candles, real trend-line anchors, selection,
+ * and drag editing on the new engine before replacing the current implementation.
  */
 export default function LightweightMarketChart({ candles, className }: Props) {
   const hostRef = useRef<HTMLDivElement | null>(null);
@@ -52,6 +38,7 @@ export default function LightweightMarketChart({ candles, className }: Props) {
   const seriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null);
   const managerRef = useRef<DrawingManager | null>(null);
   const nextAnchorRef = useRef<Point[]>([]);
+  const drawingModeRef = useRef<'pan' | 'trend-line'>('pan');
   const [drawingMode, setDrawingMode] = useState<'pan' | 'trend-line'>('pan');
   const [anchorCount, setAnchorCount] = useState(0);
   const data = useMemo(() => toChartData(candles), [candles]);
@@ -62,10 +49,7 @@ export default function LightweightMarketChart({ candles, className }: Props) {
 
     const chart = createChart(host, {
       autoSize: true,
-      layout: {
-        background: { type: ColorType.Solid, color: '#090d12' },
-        textColor: '#9aa5b1',
-      },
+      layout: { background: { type: ColorType.Solid, color: '#090d12' }, textColor: '#9aa5b1' },
       grid: {
         vertLines: { color: 'rgba(86, 99, 114, 0.16)' },
         horzLines: { color: 'rgba(86, 99, 114, 0.16)' },
@@ -75,10 +59,7 @@ export default function LightweightMarketChart({ candles, className }: Props) {
         vertLine: { color: '#66717f', style: 2, width: 1 },
         horzLine: { color: '#66717f', style: 2, width: 1 },
       },
-      rightPriceScale: {
-        borderColor: 'rgba(116, 129, 144, 0.35)',
-        scaleMargins: { top: 0.08, bottom: 0.08 },
-      },
+      rightPriceScale: { borderColor: 'rgba(116, 129, 144, 0.35)', scaleMargins: { top: 0.08, bottom: 0.08 } },
       timeScale: {
         borderColor: 'rgba(116, 129, 144, 0.35)',
         rightOffset: 6,
@@ -87,18 +68,8 @@ export default function LightweightMarketChart({ candles, className }: Props) {
         timeVisible: true,
         secondsVisible: false,
       },
-      handleScroll: {
-        mouseWheel: true,
-        pressedMouseMove: true,
-        horzTouchDrag: true,
-        vertTouchDrag: true,
-      },
-      handleScale: {
-        mouseWheel: true,
-        pinch: true,
-        axisPressedMouseMove: true,
-        axisDoubleClickReset: true,
-      },
+      handleScroll: { mouseWheel: true, pressedMouseMove: true, horzTouchDrag: true, vertTouchDrag: true },
+      handleScale: { mouseWheel: true, pinch: true, axisPressedMouseMove: true, axisDoubleClickReset: true },
     });
 
     const series = chart.addSeries(CandlestickSeries, {
@@ -113,13 +84,12 @@ export default function LightweightMarketChart({ candles, className }: Props) {
 
     const manager = new DrawingManager();
     manager.attach(chart, series, host);
-
     chartRef.current = chart;
     seriesRef.current = series;
     managerRef.current = manager;
 
-    const onClick = (param: Parameters<NonNullable<Parameters<IChartApi['subscribeClick']>[0]>>[0]) => {
-      if (drawingMode !== 'trend-line' || !param.point || param.time === undefined) return;
+    const onClick = (param: any) => {
+      if (drawingModeRef.current !== 'trend-line' || !param.point || param.time === undefined) return;
       const price = series.coordinateToPrice(param.point.y);
       if (price === null) return;
 
@@ -128,15 +98,15 @@ export default function LightweightMarketChart({ candles, className }: Props) {
       setAnchorCount(count);
 
       if (count === 2) {
-        const id = `sire-trend-${Date.now()}`;
         manager.addDrawing(
-          new TrendLine(id, nextAnchorRef.current, {
+          new TrendLine(`sire-trend-${Date.now()}`, nextAnchorRef.current, {
             lineColor: '#5da9ff',
             lineWidth: 2,
           }),
         );
         nextAnchorRef.current = [];
         setAnchorCount(0);
+        drawingModeRef.current = 'pan';
         setDrawingMode('pan');
       }
     };
@@ -153,7 +123,7 @@ export default function LightweightMarketChart({ candles, className }: Props) {
       managerRef.current = null;
       nextAnchorRef.current = [];
     };
-  }, [drawingMode]);
+  }, []);
 
   useEffect(() => {
     const series = seriesRef.current;
@@ -164,48 +134,19 @@ export default function LightweightMarketChart({ candles, className }: Props) {
   const selectTrendLine = () => {
     nextAnchorRef.current = [];
     setAnchorCount(0);
-    setDrawingMode((current) => (current === 'trend-line' ? 'pan' : 'trend-line'));
+    const next = drawingModeRef.current === 'trend-line' ? 'pan' : 'trend-line';
+    drawingModeRef.current = next;
+    setDrawingMode(next);
   };
 
   return (
     <div className={className} style={{ position: 'relative', width: '100%', height: '100%', minHeight: 240, background: '#090d12' }}>
       <div ref={hostRef} style={{ position: 'absolute', inset: 0 }} />
-      <div
-        style={{
-          position: 'absolute',
-          top: 12,
-          left: 12,
-          zIndex: 5,
-          display: 'flex',
-          alignItems: 'center',
-          gap: 8,
-          padding: 6,
-          border: '1px solid rgba(72,110,150,.45)',
-          borderRadius: 10,
-          background: 'rgba(9,14,21,.92)',
-          backdropFilter: 'blur(12px)',
-        }}
-      >
-        <button
-          type="button"
-          onClick={selectTrendLine}
-          style={{
-            minHeight: 40,
-            padding: '0 12px',
-            borderRadius: 8,
-            border: '1px solid rgba(100,130,160,.45)',
-            background: drawingMode === 'trend-line' ? 'rgba(93,169,255,.18)' : 'transparent',
-            color: '#d8e1eb',
-            touchAction: 'manipulation',
-          }}
-        >
+      <div style={{ position: 'absolute', top: 12, left: 12, zIndex: 5, display: 'flex', alignItems: 'center', gap: 8, padding: 6, border: '1px solid rgba(72,110,150,.45)', borderRadius: 10, background: 'rgba(9,14,21,.92)', backdropFilter: 'blur(12px)' }}>
+        <button type="button" onClick={selectTrendLine} style={{ minHeight: 40, padding: '0 12px', borderRadius: 8, border: '1px solid rgba(100,130,160,.45)', background: drawingMode === 'trend-line' ? 'rgba(93,169,255,.18)' : 'transparent', color: '#d8e1eb', touchAction: 'manipulation' }}>
           Trend line
         </button>
-        {drawingMode === 'trend-line' ? (
-          <span style={{ color: '#9aa5b1', fontSize: 12 }}>
-            {anchorCount === 0 ? 'Select first point' : 'Select second point'}
-          </span>
-        ) : null}
+        {drawingMode === 'trend-line' ? <span style={{ color: '#9aa5b1', fontSize: 12 }}>{anchorCount === 0 ? 'Select first point' : 'Select second point'}</span> : null}
       </div>
     </div>
   );
