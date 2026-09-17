@@ -73,7 +73,7 @@ export default function FinancialChart({ symbol, liveTick, requestHistory, instr
 
   useEffect(() => {
     if (!containerRef.current) return;
-    const feed = {
+    // DEBUG: give the host itself a guaranteed viewport-sized box before OpenAlgo initializes.\n    const host = containerRef.current;\n    host.style.position = 'fixed';\n    host.style.left = '0';\n    host.style.top = '0';\n    host.style.width = '100vw';\n    host.style.height = '100vh';\n    host.style.zIndex = '9998';\n    host.style.display = 'block';\n    host.style.visibility = 'visible';\n    host.style.opacity = '1';\n    const feed = {
       async getBars(req: { symbol: string; interval: string }) {
         const bars = await requestBars(req.symbol, req.interval, requestHistoryRef.current);
         candlesRef.current = bars;
@@ -84,7 +84,7 @@ export default function FinancialChart({ symbol, liveTick, requestHistory, instr
         return () => { subscriberRef.current = null; };
       },
     };
-    const widget = createWidget(containerRef.current, {
+    let widget: Widget;\n    try {\n      widget = createWidget(host, {
       feed,
       symbol,
       exchange: 'Deriv Synthetic Indices',
