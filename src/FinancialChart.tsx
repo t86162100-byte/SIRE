@@ -90,14 +90,19 @@ export default function FinancialChart({ symbol, liveTick, requestHistory, instr
   const [error, setError] = useState('');
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [periodOpen, setPeriodOpen] = useState(false);
   const pressTimerRef = useRef<number | null>(null);
   const pointerStartRef = useRef<{ x: number; y: number } | null>(null);
   const pointerMovedRef = useRef(false);
+  const interactionRef = useRef<'instrument' | 'period' | null>(null);
 
   const selectedIndex = Math.max(0, instruments.findIndex(item => item.symbol === symbol));
   const currentInstrument = instruments[selectedIndex];
   const previousInstrument = instruments.length ? instruments[(selectedIndex - 1 + instruments.length) % instruments.length] : undefined;
   const nextInstrument = instruments.length ? instruments[(selectedIndex + 1) % instruments.length] : undefined;
+  const currentPeriod = PERIODS.find(item => item.seconds === period) || PERIODS[0];
+  const previousPeriod = PERIODS[(PERIODS.findIndex(item => item.seconds === period) - 1 + PERIODS.length) % PERIODS.length];
+  const nextPeriod = PERIODS[(PERIODS.findIndex(item => item.seconds === period) + 1) % PERIODS.length];
   const filteredInstruments = instruments.filter(item => `${item.name} ${item.symbol}`.toLowerCase().includes(searchQuery.trim().toLowerCase()));
 
   const clearPressTimer = () => {
@@ -113,21 +118,36 @@ export default function FinancialChart({ symbol, liveTick, requestHistory, instr
     onSelectInstrument(instruments[nextIndex]);
   };
 
-  const handlePointerDown = (event: PointerEvent<HTMLDivElement>) => {
+  const changePeriod = (direction: 1 | -1) => {
+    const currentIndex = PERIODS.findIndex(item => item.seconds === period);
+    const nextIndex = (currentIndex + direction + PERIODS.length) % PERIODS.length;
+    setPeriod(PERIODS[nextIndex].seconds);
+  };
+
+  const handlePointerDown = (zone: 'instrument' | 'period') => (event: PointerEvent<HTMLDivElement>) => {
+    event.stopPropagation();
     event.currentTarget.setPointerCapture?.(event.pointerId);
+    interactionRef.current = zone;
     pointerStartRef.current = { x: event.clientX, y: event.clientY };
     pointerMovedRef.current = false;
     clearPressTimer();
     pressTimerRef.current = window.setTimeout(() => {
-      if (!pointerMovedRef.current) {
-        setSearchOpen(true);
-        setSearchQuery('');
+      if (!pointerMovedRef.current && interactionRef.current === zone) {
+        if (zone === 'instrument') {
+          setPeriodOpen(false);
+          setSearchOpen(true);
+          setSearchQuery('');
+        } else {
+          setSearchOpen(false);
+          setPeriodOpen(true);
+        }
       }
       pressTimerRef.current = null;
     }, 600);
   };
 
-  const handlePointerMove = (event: PointerEvent<HTMLDivElement>) => {
+  const handlePointerMove = (zone: 'instrument' | 'period') => (event: PointerEvent<HTMLDivElement>) => {
+    if (interactionRef.current !== zone) return;
     const start = pointerStartRef.current;
     if (!start) return;
     const distance = Math.hypot(event.clientX - start.x, event.clientY - start.y);
@@ -137,30 +157,37 @@ export default function FinancialChart({ symbol, liveTick, requestHistory, instr
     }
   };
 
-  const handlePointerUp = (event: PointerEvent<HTMLDivElement>) => {
+  const handlePointerUp = (zone: 'instrument' | 'period') => (event: PointerEvent<HTMLDivElement>) => {
+    if (interactionRef.current !== zone) return;
     const start = pointerStartRef.current;
     clearPressTimer();
     pointerStartRef.current = null;
+    interactionRef.current = null;
     if (!start) return;
     const dy = event.clientY - start.y;
     if (Math.abs(dy) >= 24) {
-      changeInstrument(dy < 0 ? 1 : -1);
+      if (zone === 'instrument') changeInstrument(dy < 0 ? 1 : -1);
+      else changePeriod(dy < 0 ? 1 : -1);
     }
     pointerMovedRef.current = false;
     try { event.currentTarget.releasePointerCapture?.(event.pointerId); } catch { /* already released */ }
   };
 
-  const handlePointerCancel = (event: PointerEvent<HTMLDivElement>) => {
+  const handlePointerCancel = (zone: 'instrument' | 'period') => (event: PointerEvent<HTMLDivElement>) => {
+    if (interactionRef.current !== zone) return;
     clearPressTimer();
     pointerStartRef.current = null;
     pointerMovedRef.current = false;
+    interactionRef.current = null;
     try { event.currentTarget.releasePointerCapture?.(event.pointerId); } catch { /* already released */ }
   };
 
-  const handleWheel = (event: WheelEvent<HTMLDivElement>) => {
+  const handleWheel = (zone: 'instrument' | 'period') => (event: WheelEvent<HTMLDivElement>) => {
+    event.stopPropagation();
     if (Math.abs(event.deltaY) < 8) return;
     event.preventDefault();
-    changeInstrument(event.deltaY > 0 ? -1 : 1);
+    if (zone === 'instrument') changeInstrument(event.deltaY > 0 ? -1 : 1);
+    else changePeriod(event.deltaY > 0 ? -1 : 1);
   };
 
   const updateTick = (tick: Tick, seconds: number) => {
@@ -241,49 +268,70 @@ export default function FinancialChart({ symbol, liveTick, requestHistory, instr
       </div>
       <div ref={containerRef} className="sire-chart-canvas" />
       {(loading || error) && <div className={`sire-chart-status${error ? ' error' : ''}`}>{error || `Loading ${symbol} history...`}</div>}
-      <div
-        className="sire-chart-bottom-glass"
-        onPointerDown={handlePointerDown}
-        onPointerMove={handlePointerMove}
-        onPointerUp={handlePointerUp}
-        onPointerCancel={handlePointerCancel}
-        onWheel={handleWheel}
-        role="button"
-        tabIndex={0}
-        aria-label={`Change instrument. Current instrument ${currentInstrument?.name || symbol}. Hold for search.`}
-      >
-        <div className="sire-instrument-carousel" aria-live="polite">
-          <div className="sire-instrument-neighbor sire-instrument-neighbor-top">{previousInstrument?.name || ''}</div>
-          <div className="sire-instrument-current">{currentInstrument?.name || symbol}</div>
-          <div className="sire-instrument-neighbor sire-instrument-neighbor-bottom">{nextInstrument?.name || ''}</div>
-        </div>
-        {searchOpen && (
-          <div className="sire-instrument-search" onPointerDown={event => event.stopPropagation()} onWheel={event => event.stopPropagation()}>
-            <div className="sire-instrument-search-head">
-              <input
-                autoFocus
-                value={searchQuery}
-                onChange={event => setSearchQuery(event.target.value)}
-                placeholder="Search Synthetic Indices"
-                aria-label="Search Synthetic Indices"
-              />
-              <button type="button" onClick={() => setSearchOpen(false)}>Close</button>
-            </div>
-            <div className="sire-instrument-search-results">
-              {filteredInstruments.slice(0, 40).map(item => (
-                <button
-                  key={item.symbol}
-                  type="button"
-                  className={item.symbol === symbol ? 'active' : ''}
-                  onClick={() => { onSelectInstrument(item); setSearchOpen(false); setSearchQuery(''); }}
-                >
-                  <span>{item.name}</span><small>{item.symbol}</small>
-                </button>
-              ))}
-              {!filteredInstruments.length && <div className="sire-instrument-empty">No Synthetic Indices found.</div>}
-            </div>
+      <div className="sire-chart-bottom-glass">
+        <div
+          className="sire-instrument-control"
+          onPointerDown={handlePointerDown('instrument')}
+          onPointerMove={handlePointerMove('instrument')}
+          onPointerUp={handlePointerUp('instrument')}
+          onPointerCancel={handlePointerCancel('instrument')}
+          onWheel={handleWheel('instrument')}
+          onContextMenu={event => event.preventDefault()}
+          role="button"
+          tabIndex={0}
+          aria-label={`Change instrument. Current instrument ${currentInstrument?.name || symbol}. Hold for search.`}
+        >
+          <div className="sire-instrument-carousel" aria-live="polite">
+            <div className="sire-instrument-neighbor sire-instrument-neighbor-top">{previousInstrument?.name || ''}</div>
+            <div className="sire-instrument-current">{currentInstrument?.name || symbol}</div>
+            <div className="sire-instrument-neighbor sire-instrument-neighbor-bottom">{nextInstrument?.name || ''}</div>
           </div>
-        )}
+          {searchOpen && (
+            <div className="sire-instrument-search" onPointerDown={event => event.stopPropagation()} onWheel={event => event.stopPropagation()}>
+              <div className="sire-instrument-search-head">
+                <input autoFocus value={searchQuery} onChange={event => setSearchQuery(event.target.value)} placeholder="Search Synthetic Indices" aria-label="Search Synthetic Indices" />
+                <button type="button" onClick={() => setSearchOpen(false)}>Close</button>
+              </div>
+              <div className="sire-instrument-search-results">
+                {filteredInstruments.slice(0, 40).map(item => (
+                  <button key={item.symbol} type="button" className={item.symbol === symbol ? 'active' : ''} onClick={() => { onSelectInstrument(item); setSearchOpen(false); setSearchQuery(''); }}>
+                    <span>{item.name}</span><small>{item.symbol}</small>
+                  </button>
+                ))}
+                {!filteredInstruments.length && <div className="sire-instrument-empty">No Synthetic Indices found.</div>}
+              </div>
+            </div>
+          )}
+        </div>
+        <div
+          className="sire-period-control"
+          onPointerDown={handlePointerDown('period')}
+          onPointerMove={handlePointerMove('period')}
+          onPointerUp={handlePointerUp('period')}
+          onPointerCancel={handlePointerCancel('period')}
+          onWheel={handleWheel('period')}
+          onContextMenu={event => event.preventDefault()}
+          role="button"
+          tabIndex={0}
+          aria-label={`Change timeframe. Current timeframe ${currentPeriod.label}. Hold for timeframe selection.`}
+        >
+          <div className="sire-period-carousel" aria-live="polite">
+            <div className="sire-period-neighbor sire-period-neighbor-top">{previousPeriod.label}</div>
+            <div className="sire-period-current">{currentPeriod.label}</div>
+            <div className="sire-period-neighbor sire-period-neighbor-bottom">{nextPeriod.label}</div>
+          </div>
+          {periodOpen && (
+            <div className="sire-period-search" onPointerDown={event => event.stopPropagation()} onWheel={event => event.stopPropagation()}>
+              <div className="sire-period-list">
+                {PERIODS.map(item => (
+                  <button key={item.label} type="button" className={item.seconds === period ? 'active' : ''} onClick={() => { setPeriod(item.seconds); setPeriodOpen(false); }}>
+                    {item.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
