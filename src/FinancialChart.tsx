@@ -164,6 +164,7 @@ export default function FinancialChart({ symbol, liveTick, requestHistory }: Pro
       </div>
       <div ref={containerRef} className="sire-chart-canvas" />
       {(loading || error) && <div className={`sire-chart-status${error ? ' error' : ''}`}>{error || `Loading ${symbol} history...`}</div>}
+      <div className="sire-chart-bottom-glass" aria-hidden="true" />
     </div>
   );
 }
