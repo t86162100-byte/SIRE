@@ -1,5 +1,4 @@
 import { useEffect, useRef } from 'react';
-import 'openalgo-charts/draw';
 import { createWidget, type Widget } from 'openalgo-charts/widget';
 import './financialChart.css';
 
@@ -97,6 +96,18 @@ export default function FinancialChart({ symbol, liveTick, requestHistory, instr
         .map(item => ({ symbol: item.symbol, name: item.name })),
     });
     widgetRef.current = widget;
+
+    // Keep OpenAlgo's own mobile chrome active in the host shell. The widget
+    // creates the Draw / Studies / Objects / More controls itself; this only
+    // re-applies the documented mobile state after the widget is mounted so
+    // host layout/CSS cannot leave the default chrome in its hidden state.
+    const ensureOpenAlgoMobileChrome = () => {
+      widget.root.classList.add('is-mobile');
+      const mobileRoot = widget.root.querySelector<HTMLElement>('.oac-mobile');
+      if (mobileRoot) mobileRoot.hidden = false;
+    };
+    ensureOpenAlgoMobileChrome();
+    const mobileChromeFrame = window.requestAnimationFrame(ensureOpenAlgoMobileChrome);
     const offSymbol = widget.on('symbol', (event: { symbol: string }) => {
       const instrument = instrumentsRef.current.find(item => item.symbol === event.symbol);
       if (instrument && instrument.symbol !== symbolRef.current) onSelectInstrumentRef.current(instrument);
@@ -108,6 +119,7 @@ export default function FinancialChart({ symbol, liveTick, requestHistory, instr
       offSymbol?.();
       offData?.();
       subscriberRef.current = null;
+      window.cancelAnimationFrame(mobileChromeFrame);
       widget.destroy();
       widgetRef.current = null;
       candlesRef.current = [];
