@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState, type PointerEvent, type WheelEvent } from 'react';
 import { createChart, darkTheme, type Chart } from 'openalgo-charts';
+import { DrawingController } from 'openalgo-charts/draw';
+import { Pencil, MousePointer2, Slash, Sigma, Waves, Ruler, Shapes, Type, Star, Magnet, Lock, EyeOff, Trash2, Undo2, Redo2, X } from 'lucide-react';
 import './financialChart.css';
 
 type LoadingApi = { show: (message?: string) => void; hide: () => void };
@@ -12,6 +14,8 @@ type Instrument = { symbol: string; name: string };
 type Props = { symbol: string; liveTick: Tick | null; requestHistory: HistoryRequester; instruments: Instrument[]; onSelectInstrument: (instrument: Instrument) => void };
 type Candle = { time: number; open: number; high: number; low: number; close: number; volume?: number };
 type Period = { label: string; seconds: number };
+type ToolId = string;
+type ToolGroup = { id: string; label: string; icon: typeof Pencil; tools: { id: ToolId; label: string; icon: typeof Pencil }[] };
 
 const PERIODS: Period[] = [
   { label: '1m', seconds: 60 }, { label: '2m', seconds: 120 }, { label: '3m', seconds: 180 },
@@ -22,6 +26,51 @@ const PERIODS: Period[] = [
   { label: '12H', seconds: 43200 }, { label: '1D', seconds: 86400 }, { label: '2D', seconds: 172800 },
   { label: '3D', seconds: 259200 }, { label: '1W', seconds: 604800 }, { label: '1M', seconds: 2592000 },
 ];
+
+const DRAWING_GROUPS: ToolGroup[] = [
+  { id: 'cursor', label: 'Cursor', icon: MousePointer2, tools: [
+    { id: 'cursor', label: 'Cursor', icon: MousePointer2 },
+  ]},
+  { id: 'trend', label: 'Trend', icon: Slash, tools: [
+    { id: 'trend-line', label: 'Trend line', icon: Slash }, { id: 'ray', label: 'Ray', icon: Slash },
+    { id: 'extended-line', label: 'Extended line', icon: Slash }, { id: 'arrow', label: 'Arrow', icon: Slash },
+    { id: 'horizontal-line', label: 'Horizontal line', icon: MinusIcon }, { id: 'vertical-line', label: 'Vertical line', icon: MinusIcon },
+    { id: 'parallel-channel', label: 'Parallel channel', icon: Waves },
+  ]},
+  { id: 'fib', label: 'Fibonacci / Gann', icon: Sigma, tools: [
+    { id: 'fib-retracement', label: 'Fib retracement', icon: Sigma }, { id: 'fib-extension', label: 'Trend-based Fib extension', icon: Sigma },
+    { id: 'fib-channel', label: 'Fib channel', icon: Waves }, { id: 'fib-time-zone', label: 'Fib time zone', icon: Sigma },
+    { id: 'gann-fan', label: 'Gann fan', icon: Sigma }, { id: 'gann-box', label: 'Gann box', icon: Shapes },
+  ]},
+  { id: 'patterns', label: 'Patterns', icon: Waves, tools: [
+    { id: 'elliott-impulse', label: 'Elliott impulse', icon: Waves }, { id: 'head-and-shoulders', label: 'Head and shoulders', icon: Waves },
+    { id: 'abcd', label: 'ABCD pattern', icon: Waves }, { id: 'triangle-pattern', label: 'Triangle pattern', icon: Shapes },
+  ]},
+  { id: 'measure', label: 'Forecast / Measure', icon: Ruler, tools: [
+    { id: 'forecast', label: 'Forecast', icon: Ruler }, { id: 'price-range', label: 'Price range', icon: Ruler },
+    { id: 'date-range', label: 'Date range', icon: Ruler }, { id: 'long-position', label: 'Long position', icon: Ruler },
+    { id: 'short-position', label: 'Short position', icon: Ruler },
+  ]},
+  { id: 'shapes', label: 'Geometric shapes', icon: Shapes, tools: [
+    { id: 'rectangle', label: 'Rectangle', icon: Shapes }, { id: 'rotated-rectangle', label: 'Rotated rectangle', icon: Shapes },
+    { id: 'circle', label: 'Circle', icon: Shapes }, { id: 'ellipse', label: 'Ellipse', icon: Shapes },
+    { id: 'triangle', label: 'Triangle', icon: Shapes }, { id: 'polyline', label: 'Polyline', icon: Waves },
+    { id: 'arc', label: 'Arc', icon: Waves }, { id: 'curve', label: 'Curve', icon: Waves },
+  ]},
+  { id: 'annotation', label: 'Annotation', icon: Type, tools: [
+    { id: 'text', label: 'Text', icon: Type }, { id: 'price-label', label: 'Price label', icon: Type },
+    { id: 'callout', label: 'Callout', icon: Type }, { id: 'flag-mark', label: 'Flag mark', icon: Star },
+    { id: 'table', label: 'Table', icon: Type },
+  ]},
+  { id: 'icons', label: 'Icons', icon: Star, tools: [
+    { id: 'mark-up', label: 'Mark up', icon: Star }, { id: 'mark-down', label: 'Mark down', icon: Star },
+    { id: 'mark-left', label: 'Mark left', icon: Star }, { id: 'mark-right', label: 'Mark right', icon: Star },
+  ]},
+];
+
+function MinusIcon(props: React.ComponentProps<typeof Slash>) {
+  return <span {...props} style={{ display: 'block', width: 16, height: 2, background: 'currentColor', borderRadius: 99 }} />;
+}
 
 const PITCH_BLACK_THEME = {
   ...darkTheme,
@@ -71,6 +120,7 @@ async function loadHistory(symbol: string, seconds: number, request: HistoryRequ
 export default function FinancialChart({ symbol, liveTick, requestHistory, instruments, onSelectInstrument }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<Chart | null>(null);
+  const drawingRef = useRef<DrawingController | null>(null);
   const seriesRef = useRef<any>(null);
   const candlesRef = useRef<Candle[]>([]);
   const periodRef = useRef(PERIODS[0].seconds);
@@ -83,6 +133,9 @@ export default function FinancialChart({ symbol, liveTick, requestHistory, instr
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [periodOpen, setPeriodOpen] = useState(false);
+  const [drawingOpen, setDrawingOpen] = useState(false);
+  const [drawingGroup, setDrawingGroup] = useState('trend');
+  const [activeTool, setActiveTool] = useState<string | null>(null);
   const pressTimerRef = useRef<number | null>(null);
   const pointerStartRef = useRef<{ x: number; y: number } | null>(null);
   const pointerMovedRef = useRef(false);
@@ -107,13 +160,27 @@ export default function FinancialChart({ symbol, liveTick, requestHistory, instr
   const handlePointerMove = (zone: 'instrument' | 'period') => (event: PointerEvent<HTMLDivElement>) => { if (interactionRef.current !== zone) return; const start = pointerStartRef.current; if (!start) return; if (Math.hypot(event.clientX - start.x, event.clientY - start.y) > 8) { pointerMovedRef.current = true; clearPressTimer(); } };
   const handlePointerUp = (zone: 'instrument' | 'period') => (event: PointerEvent<HTMLDivElement>) => { if (interactionRef.current !== zone) return; const start = pointerStartRef.current; clearPressTimer(); pointerStartRef.current = null; interactionRef.current = null; if (!start) return; const dy = event.clientY - start.y; if (Math.abs(dy) >= 24) { if (zone === 'instrument') changeInstrument(dy < 0 ? 1 : -1); else changePeriod(dy < 0 ? 1 : -1); } pointerMovedRef.current = false; try { event.currentTarget.releasePointerCapture?.(event.pointerId); } catch { /* already released */ } };
   const handlePointerCancel = (zone: 'instrument' | 'period') => (event: PointerEvent<HTMLDivElement>) => { if (interactionRef.current !== zone) return; clearPressTimer(); pointerStartRef.current = null; pointerMovedRef.current = false; interactionRef.current = null; try { event.currentTarget.releasePointerCapture?.(event.pointerId); } catch { /* already released */ } };
+  const handleDrawingTool = (tool: ToolId) => {
+    if (!drawingRef.current || tool === 'cursor') {
+      drawingRef.current?.setTool('cursor');
+      setActiveTool(tool === 'cursor' ? null : tool);
+      return;
+    }
+    try {
+      drawingRef.current.setTool(tool);
+      setActiveTool(tool);
+      setDrawingOpen(false);
+    } catch {
+      setActiveTool(null);
+    }
+  };
   const handleWheel = (zone: 'instrument' | 'period') => (event: WheelEvent<HTMLDivElement>) => { event.stopPropagation(); if (Math.abs(event.deltaY) < 8) return; event.preventDefault(); if (zone === 'instrument') changeInstrument(event.deltaY > 0 ? -1 : 1); else changePeriod(event.deltaY > 0 ? -1 : 1); };
 
   const updateTick = (tick: Tick, seconds: number) => { const series = seriesRef.current; if (!series || tick.symbol !== symbolRef.current || !Number.isFinite(tick.quote) || !Number.isFinite(tick.epoch)) return; const time = Math.floor(tick.epoch / seconds) * seconds; const last = candlesRef.current[candlesRef.current.length - 1]; const next: Candle = last?.time === time ? { ...last, high: Math.max(last.high, tick.quote), low: Math.min(last.low, tick.quote), close: tick.quote } : { time, open: tick.quote, high: tick.quote, low: tick.quote, close: tick.quote }; if (last?.time === time) candlesRef.current[candlesRef.current.length - 1] = next; else candlesRef.current.push(next); if (candlesRef.current.length > 1500) candlesRef.current.shift(); series.update(next); };
 
   useEffect(() => { symbolRef.current = symbol; latestTickRef.current = null; }, [symbol]);
   useEffect(() => () => clearPressTimer(), []);
-  useEffect(() => { if (!containerRef.current) return; const chart = createChart(containerRef.current, { theme: PITCH_BLACK_THEME, timezone: 'Africa/Lagos', branding: false, navigation: { mousePan: 'both', defaultVisibleBars: 120 }, crosshair: { mode: 'normal' }, grid: { vertical: true, horizontal: true } }); const series = chart.addSeries('candlestick'); chartRef.current = chart; seriesRef.current = series; return () => { chart.destroy(); chartRef.current = null; seriesRef.current = null; }; }, []);
+  useEffect(() => { if (!containerRef.current) return; const chart = createChart(containerRef.current, { theme: PITCH_BLACK_THEME, timezone: 'Africa/Lagos', branding: false, navigation: { mousePan: 'both', defaultVisibleBars: 120 }, crosshair: { mode: 'normal' }, grid: { vertical: true, horizontal: true } }); const series = chart.addSeries('candlestick'); chartRef.current = chart; seriesRef.current = series; drawingRef.current = new DrawingController(chart, { magnet: 'weak' }); return () => { chart.destroy(); drawingRef.current = null; chartRef.current = null; seriesRef.current = null; }; }, []);
   useEffect(() => {
     const generation = ++generationRef.current;
     if (!symbol || !seriesRef.current) return;
@@ -143,8 +210,32 @@ export default function FinancialChart({ symbol, liveTick, requestHistory, instr
           {searchOpen && <div className="sire-instrument-search" onPointerDown={event => event.stopPropagation()} onWheel={event => event.stopPropagation()}><div className="sire-instrument-search-head"><input autoFocus value={searchQuery} onChange={event => setSearchQuery(event.target.value)} placeholder="Search Synthetic Indices" aria-label="Search Synthetic Indices" /><button type="button" onClick={() => setSearchOpen(false)}>Close</button></div><div className="sire-instrument-search-results">{filteredInstruments.slice(0, 40).map(item => <button key={item.symbol} type="button" className={item.symbol === symbol ? 'active' : ''} onClick={() => { onSelectInstrument(item); setSearchOpen(false); setSearchQuery(''); }}><span>{item.name}</span><small>{item.symbol}</small></button>)}{!filteredInstruments.length && <div className="sire-instrument-empty">No Synthetic Indices found</div>}</div></div>}
         </div>
         <div className="sire-period-control" onPointerDown={handlePointerDown('period')} onPointerMove={handlePointerMove('period')} onPointerUp={handlePointerUp('period')} onPointerCancel={handlePointerCancel('period')} onWheel={handleWheel('period')} onContextMenu={event => event.preventDefault()} role="button" tabIndex={0} aria-label={`Change timeframe. Current timeframe ${currentPeriod.label}. Hold for timeframe selection.`}>
+
           <div className="sire-period-carousel" aria-live="polite"><div className="sire-period-neighbor sire-period-neighbor-top">{previousPeriod.label}</div><div className="sire-period-current">{currentPeriod.label}</div><div className="sire-period-neighbor sire-period-neighbor-bottom">{nextPeriod.label}</div></div>
           {periodOpen && <div className="sire-period-search" onPointerDown={event => event.stopPropagation()} onWheel={event => event.stopPropagation()}><div className="sire-period-list">{PERIODS.map(item => <button key={item.label} type="button" className={item.seconds === period ? 'active' : ''} onClick={() => { setPeriod(item.seconds); setPeriodOpen(false); }}>{item.label}</button>)}</div></div>}
+        </div>
+        <button type="button" className={`sire-drawing-trigger${drawingOpen ? ' active' : ''}`} aria-label="Drawing tools" aria-expanded={drawingOpen} onClick={() => { setDrawingOpen(value => !value); setPeriodOpen(false); setSearchOpen(false); }}>
+          <Pencil size={18} strokeWidth={2.2} />
+        </button>
+        {drawingOpen && (
+          <div className="sire-drawing-rack" role="dialog" aria-label="Drawing tools">
+            <div className="sire-drawing-groups">
+              {DRAWING_GROUPS.map(group => { const Icon = group.icon; return <button key={group.id} type="button" className={`sire-drawing-group${drawingGroup === group.id ? ' active' : ''}`} aria-label={group.label} title={group.label} onClick={() => setDrawingGroup(group.id)}><Icon size={17} strokeWidth={2} /></button>; })}
+            </div>
+            <div className="sire-drawing-tools">
+              {(DRAWING_GROUPS.find(group => group.id === drawingGroup)?.tools || []).map(tool => { const Icon = tool.icon; return <button key={tool.id} type="button" className={`sire-drawing-tool${activeTool === tool.id ? ' active' : ''}`} aria-label={tool.label} title={tool.label} onClick={() => handleDrawingTool(tool.id)}><Icon size={18} strokeWidth={2} /></button>; })}
+            </div>
+            <div className="sire-drawing-actions">
+              <button type="button" aria-label="Magnet" title="Magnet" onClick={() => drawingRef.current?.setMagnet?.('weak')}><Magnet size={16}/></button>
+              <button type="button" aria-label="Undo" title="Undo" onClick={() => drawingRef.current?.undo?.()}><Undo2 size={16}/></button>
+              <button type="button" aria-label="Redo" title="Redo" onClick={() => drawingRef.current?.redo?.()}><Redo2 size={16}/></button>
+              <button type="button" aria-label="Lock drawings" title="Lock drawings" onClick={() => drawingRef.current?.lockAll?.()}><Lock size={16}/></button>
+              <button type="button" aria-label="Hide drawings" title="Hide drawings" onClick={() => drawingRef.current?.setVisible?.(false)}><EyeOff size={16}/></button>
+              <button type="button" aria-label="Remove drawings" title="Remove drawings" onClick={() => drawingRef.current?.removeAll?.()}><Trash2 size={16}/></button>
+              <button type="button" aria-label="Close drawing tools" title="Close" onClick={() => setDrawingOpen(false)}><X size={16}/></button>
+            </div>
+          </div>
+        )}
         </div>
       </div>
     </div>
