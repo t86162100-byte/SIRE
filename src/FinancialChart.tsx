@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type PointerEvent, type WheelEvent } from 'react';
+import { useEffect, useRef, useState, type ComponentProps, type PointerEvent, type WheelEvent } from 'react';
 import { createChart, darkTheme, type Chart } from 'openalgo-charts';
 import { DrawingController } from 'openalgo-charts/draw';
 import { Pencil, MousePointer2, Slash, Sigma, Waves, Ruler, Shapes, Type, Star, Magnet, Lock, EyeOff, Trash2, Undo2, Redo2, X } from 'lucide-react';
@@ -68,7 +68,7 @@ const DRAWING_GROUPS: ToolGroup[] = [
   ]},
 ];
 
-function MinusIcon(props: React.ComponentProps<typeof Slash>) {
+function MinusIcon(props: ComponentProps<typeof Slash>) {
   return <span {...props} style={{ display: 'block', width: 16, height: 2, background: 'currentColor', borderRadius: 99 }} />;
 }
 
@@ -226,12 +226,12 @@ export default function FinancialChart({ symbol, liveTick, requestHistory, instr
               {(DRAWING_GROUPS.find(group => group.id === drawingGroup)?.tools || []).map(tool => { const Icon = tool.icon; return <button key={tool.id} type="button" className={`sire-drawing-tool${activeTool === tool.id ? ' active' : ''}`} aria-label={tool.label} title={tool.label} onClick={() => handleDrawingTool(tool.id)}><Icon size={18} strokeWidth={2} /></button>; })}
             </div>
             <div className="sire-drawing-actions">
-              <button type="button" aria-label="Magnet" title="Magnet" onClick={() => drawingRef.current?.setMagnet?.('weak')}><Magnet size={16}/></button>
-              <button type="button" aria-label="Undo" title="Undo" onClick={() => drawingRef.current?.undo?.()}><Undo2 size={16}/></button>
-              <button type="button" aria-label="Redo" title="Redo" onClick={() => drawingRef.current?.redo?.()}><Redo2 size={16}/></button>
-              <button type="button" aria-label="Lock drawings" title="Lock drawings" onClick={() => drawingRef.current?.lockAll?.()}><Lock size={16}/></button>
-              <button type="button" aria-label="Hide drawings" title="Hide drawings" onClick={() => drawingRef.current?.setVisible?.(false)}><EyeOff size={16}/></button>
-              <button type="button" aria-label="Remove drawings" title="Remove drawings" onClick={() => drawingRef.current?.removeAll?.()}><Trash2 size={16}/></button>
+              <button type="button" aria-label="Magnet" title="Magnet" onClick={() => (drawingRef.current as any)?.setMagnet?.('weak')}><Magnet size={16}/></button>
+              <button type="button" aria-label="Undo" title="Undo" onClick={() => (drawingRef.current as any)?.undo?.()}><Undo2 size={16}/></button>
+              <button type="button" aria-label="Redo" title="Redo" onClick={() => (drawingRef.current as any)?.redo?.()}><Redo2 size={16}/></button>
+              <button type="button" aria-label="Lock drawings" title="Lock drawings" onClick={() => (drawingRef.current as any)?.lockAll?.()}><Lock size={16}/></button>
+              <button type="button" aria-label="Hide drawings" title="Hide drawings" onClick={() => (drawingRef.current as any)?.setVisible?.(false)}><EyeOff size={16}/></button>
+              <button type="button" aria-label="Remove drawings" title="Remove drawings" onClick={() => (drawingRef.current as any)?.removeAll?.()}><Trash2 size={16}/></button>
               <button type="button" aria-label="Close drawing tools" title="Close" onClick={() => setDrawingOpen(false)}><X size={16}/></button>
             </div>
           </div>
