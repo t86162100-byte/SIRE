@@ -4,7 +4,7 @@ import { db } from '@appdeploy/sdk';
 const JOB_TABLE = 'sire_agent_jobs_v1';
 const POLL_MS = Math.max(1000, Number(process.env.SIRE_AGENT_POLL_MS || 5000));
 const LEASE_MS = Math.max(30000, Number(process.env.SIRE_AGENT_LEASE_MS || 120000));
-const EXECUTOR_URL = process.env.SIRE_AGENT_EXECUTOR_URL || `http://127.0.0.1:${process.env.PORT || 10000}/agent`;
+const EXECUTOR_URL = process.env.SIRE_AGENT_EXECUTOR_URL || 'http://127.0.0.1:10001/agent';
 let stopping = false;
 
 function sleep(ms: number) { return new Promise(resolve => setTimeout(resolve, ms)); }

@@ -1,87 +1,34 @@
 const STYLE_ID = 'sire-tab-navigation-style';
 const NAV_ID = 'sire-bottom-tabs';
-
+const FLOAT_ID = 'sire-chart-floating-quote';
 type Tab = 'sire' | 'chart' | 'quote';
-
 function injectStyles() {
   if (document.getElementById(STYLE_ID)) return;
-  const style = document.createElement('style');
-  style.id = STYLE_ID;
+  const style = document.createElement('style'); style.id = STYLE_ID;
   style.textContent = `
-    .sire-tab-mode .symbol-sidebar { display: none !important; }
-    .sire-tab-mode .chart-terminal { width: 100% !important; }
-    .sire-tab-quote .terminal-body { display: block !important; padding-bottom: 76px !important; }
-    .sire-tab-quote .chart-terminal { display: none !important; }
-    .sire-tab-quote .symbol-sidebar { display: flex !important; width: 100% !important; height: calc(100vh - 132px) !important; border-right: 0 !important; padding: 16px !important; box-sizing: border-box; }
-    .sire-tab-quote .sidebar-search { max-width: 760px; width: 100%; margin: 0 auto 12px; }
-    .sire-tab-quote .sidebar-meta { max-width: 760px; width: 100%; margin: 0 auto 10px; }
-    .sire-tab-quote .symbol-list { width: 100%; max-width: 760px; margin: 0 auto; display: grid !important; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px; overflow-y: auto; align-content: start; }
-    .sire-tab-quote .symbol-row { min-height: 82px; padding: 14px !important; border: 1px solid rgba(255,255,255,.08); border-radius: 14px; background: rgba(255,255,255,.025); text-align: left; }
-    .sire-tab-quote .symbol-row.active { border-color: rgba(120,190,255,.65); background: rgba(80,150,220,.09); }
-    .sire-tab-quote .catalogue-refresh { width: min(760px, 100%); margin: 12px auto 0; }
-    #${NAV_ID} { position: fixed; z-index: 9999; left: 0; right: 0; bottom: 0; height: 68px; display: grid; grid-template-columns: repeat(3, 1fr); padding: 8px max(12px, env(safe-area-inset-left)) max(8px, env(safe-area-inset-bottom)); gap: 6px; box-sizing: border-box; background: rgba(8,11,17,.96); border-top: 1px solid rgba(255,255,255,.09); backdrop-filter: blur(18px); }
-    #${NAV_ID} button { border: 0; border-radius: 12px; background: transparent; color: rgba(255,255,255,.55); font: 700 11px/1 system-ui,sans-serif; letter-spacing: .08em; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 5px; cursor: pointer; }
-    #${NAV_ID} button.active { color: #fff; background: rgba(255,255,255,.09); }
-    #${NAV_ID} .tab-icon { font-size: 17px; line-height: 1; }
-    @media (min-width: 800px) { #${NAV_ID} { left: 50%; right: auto; transform: translateX(-50%); width: 430px; border: 1px solid rgba(255,255,255,.1); border-bottom: 0; border-radius: 16px 16px 0 0; } }
-  `;
-  document.head.appendChild(style);
+    .sire-tab-mode .symbol-sidebar{display:none!important}.sire-tab-mode .chart-terminal{width:100%!important}
+    .sire-tab-mode .terminal-topbar{display:none!important}.sire-tab-mode .terminal-topbar .instrument-picker,.sire-tab-mode .terminal-topbar .live-state,.sire-tab-mode .chart-subbar,.sire-tab-mode button[title="Open GPT research laboratory"]{display:none!important}
+    /* The chart control toolbar is intentionally removed from the UI on every tab. */
+    .sire-tab-mode .chart-toolbar,html .chart-toolbar{display:none!important;height:0!important;min-height:0!important;max-height:0!important;padding:0!important;margin:0!important;overflow:hidden!important;pointer-events:none!important}
+    .sire-chart-tab .research-controls{display:none!important}
+    .sire-tab-quote .research-controls{display:none!important}
+    .sire-tab-quote .terminal-body{display:block!important;padding-bottom:108px!important}.sire-tab-quote .chart-terminal{display:none!important}.sire-tab-quote .symbol-sidebar{display:flex!important;width:100%!important;height:calc(100vh - 132px)!important;border-right:0!important;padding:16px 16px 108px!important;box-sizing:border-box}.sire-tab-quote .sidebar-search{max-width:760px;width:100%;margin:0 auto 12px}.sire-tab-quote .sidebar-meta{max-width:760px;width:100%;margin:0 auto 10px}.sire-tab-quote .symbol-list{width:100%;max-width:760px;margin:0 auto;display:grid!important;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px;overflow-y:auto;align-content:start;padding-bottom:8px}.sire-tab-quote .symbol-row{min-height:82px;padding:14px!important;border:1px solid rgba(255,255,255,.08);border-radius:14px;background:rgba(255,255,255,.025);text-align:left}.sire-tab-quote .symbol-row.active{border-color:rgba(255,255,255,.72);background:rgba(255,255,255,.07);box-shadow:0 0 18px rgba(255,255,255,.08)}.sire-tab-quote .catalogue-refresh{width:min(760px,100%);margin:12px auto 0}
+    .sire-chat-only-header .sire-chat-context,.sire-chat-only-header .sire-chat-only-close{display:none!important}.sire-chat-only-composer{bottom:62px!important;transition:transform .22s ease,opacity .22s ease}.sire-chat-only-composer.is-scroll-hidden{transform:translateY(calc(100% + 22px))!important;opacity:0!important;pointer-events:none!important}
+    #${FLOAT_ID}{position:fixed;z-index:9000;top:14px;left:14px;display:none;pointer-events:none;color:#fff;font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;text-align:left;line-height:1.05;text-shadow:0 2px 10px rgba(0,0,0,.9)}#${FLOAT_ID}.show{display:block}#${FLOAT_ID} .float-name{font-size:14px;font-weight:700;letter-spacing:.02em;color:rgba(255,255,255,.94);margin-bottom:6px}#${FLOAT_ID} .float-price-row{display:flex;align-items:baseline;gap:9px;white-space:nowrap}#${FLOAT_ID} .float-price{font-size:22px;font-weight:700;letter-spacing:.01em;color:#fff}#${FLOAT_ID} .float-change{font-size:12px;font-weight:700;letter-spacing:.01em;color:rgba(255,255,255,.62)}#${FLOAT_ID} .float-change.up{color:#4fd1c5}#${FLOAT_ID} .float-change.down{color:#ff5b63}
+    #${NAV_ID}{position:fixed;z-index:9999;left:50%;right:auto;bottom:max(6px,env(safe-area-inset-bottom));transform:translateX(-50%);display:flex;align-items:center;justify-content:center;gap:10px;padding:0;margin:0;pointer-events:none;background:transparent;border:0}#${NAV_ID} button{pointer-events:auto;min-width:86px;height:46px;padding:0 17px;border:1px solid rgba(255,255,255,.32);border-radius:999px;background:rgba(20,22,28,.34);color:rgba(255,255,255,.72);-webkit-backdrop-filter:blur(18px) saturate(125%);backdrop-filter:blur(18px) saturate(125%);box-shadow:0 7px 22px rgba(0,0,0,.22),inset 0 0 0 1px rgba(255,255,255,.035),0 0 12px rgba(255,255,255,.035);font:700 11px/1 system-ui,sans-serif;letter-spacing:.09em;display:inline-flex;align-items:center;justify-content:center;gap:7px;cursor:pointer;touch-action:manipulation;-webkit-tap-highlight-color:transparent}#${NAV_ID} button.active{color:#fff;border-color:rgba(255,255,255,.9);background:rgba(255,255,255,.08);box-shadow:0 8px 26px rgba(0,0,0,.24),inset 0 0 0 1px rgba(255,255,255,.08),0 0 22px rgba(255,255,255,.18)}#${NAV_ID} .tab-icon{font-size:15px;line-height:1;opacity:.9}.sire-tab-mode .terminal-body{padding-bottom:82px!important}.sire-chat-only{padding-bottom:82px!important}
+    @media(max-width:520px){html,body,#root{margin:0!important;padding:0!important;min-height:100%!important;background:#000!important}.sire-tab-mode.sire-chart-tab .terminal-shell,.sire-tab-mode.sire-chart-tab .terminal-body,.sire-tab-mode.sire-chart-tab .chart-terminal,.sire-tab-mode.sire-chart-tab .chart-stage{position:fixed!important;top:0!important;left:0!important;right:0!important;bottom:0!important;width:100%!important;height:100dvh!important;min-height:100dvh!important;margin:0!important;padding:0!important;box-sizing:border-box!important;transform:none!important}.sire-tab-mode.sire-chart-tab .terminal-shell{overflow:hidden!important;border:0!important;border-radius:0!important}.sire-tab-mode.sire-chart-tab .terminal-body{overflow:hidden!important}.sire-tab-mode.sire-chart-tab .chart-terminal,.sire-tab-mode.sire-chart-tab .chart-stage,.sire-tab-mode.sire-chart-tab .chart-area,.sire-tab-mode.sire-chart-tab .chart-container{background:#000!important}.sire-tab-mode.sire-chart-tab .chart-terminal{z-index:1!important}#${FLOAT_ID}{top:12px;left:14px}#${FLOAT_ID} .float-name{font-size:14px;margin-bottom:5px}#${FLOAT_ID} .float-price{font-size:21px}#${FLOAT_ID} .float-change{font-size:11px}#${NAV_ID}{gap:7px;bottom:max(6px,env(safe-area-inset-bottom));width:calc(100vw - 28px)}#${NAV_ID} button{flex:1 1 0;min-width:0;height:44px;padding:0 10px}.sire-chat-only-composer{bottom:60px!important}.sire-chart-tab .research-controls{display:none!important}}
+    @media(min-width:800px){#${NAV_ID}{gap:12px}#${NAV_ID} button{min-width:94px;height:48px}}
+  `; document.head.appendChild(style);
 }
-
-function findSireOpenButton() {
-  return Array.from(document.querySelectorAll('button')).find(button => button.getAttribute('title') === 'Open GPT research laboratory') as HTMLButtonElement | undefined;
-}
-
-function findChatCloseButton() {
-  return document.querySelector('.sire-chat-only-close') as HTMLButtonElement | null;
-}
-
-function setTab(tab: Tab) {
-  const root = document.getElementById('root');
-  const nav = document.getElementById(NAV_ID);
-  if (!root || !nav) return;
-
-  root.classList.toggle('sire-tab-mode', tab !== 'quote');
-  root.classList.toggle('sire-tab-sire', tab === 'sire');
-  root.classList.toggle('sire-tab-quote', tab === 'quote');
-  nav.querySelectorAll('button').forEach(button => button.classList.toggle('active', button.dataset.tab === tab));
-
-  if (tab === 'sire') {
-    const openButton = findSireOpenButton();
-    if (openButton) openButton.click();
-  } else {
-    findChatCloseButton()?.click();
-  }
-}
-
-function mountNavigation() {
-  injectStyles();
-  if (document.getElementById(NAV_ID)) return;
-
-  const nav = document.createElement('nav');
-  nav.id = NAV_ID;
-  nav.setAttribute('aria-label', 'Primary navigation');
-  const tabs: Array<[Tab, string, string]> = [
-    ['sire', '✦', 'SIRE'],
-    ['chart', '⌁', 'CHART'],
-    ['quote', '▦', 'QUOTE'],
-  ];
-  tabs.forEach(([tab, icon, label]) => {
-    const button = document.createElement('button');
-    button.type = 'button';
-    button.dataset.tab = tab;
-    button.innerHTML = `<span class="tab-icon">${icon}</span><span>${label}</span>`;
-    button.addEventListener('click', () => setTab(tab));
-    nav.appendChild(button);
-  });
-  document.body.appendChild(nav);
-  setTab('sire');
-}
-
-if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', mountNavigation, { once: true });
-else mountNavigation();
-
-const observer = new MutationObserver(() => {
-  if (!document.getElementById(NAV_ID)) mountNavigation();
-});
-observer.observe(document.documentElement, { childList: true, subtree: true });
+function findSireOpenButton(){return Array.from(document.querySelectorAll('button')).find(button=>button.getAttribute('title')==='Open GPT research laboratory') as HTMLButtonElement|undefined}
+function findChatCloseButton(){return document.querySelector('.sire-chat-only-close') as HTMLButtonElement|null}
+function wireChatComposer(){const messages=document.querySelector('.sire-chat-only-messages') as HTMLElement|null,composer=document.querySelector('.sire-chat-only-composer') as HTMLElement|null;if(!messages||!composer||composer.dataset.scrollWired==='true')return;composer.dataset.scrollWired='true';composer.classList.remove('is-scroll-hidden');let previousTop=messages.scrollTop;messages.addEventListener('scroll',()=>{const nextTop=messages.scrollTop,delta=nextTop-previousTop;if(Math.abs(delta)>=4){composer.classList.toggle('is-scroll-hidden',delta>0&&nextTop>12);previousTop=nextTop}},{passive:true})}
+function ensureFloatingQuote(){let el=document.getElementById(FLOAT_ID);if(el)return el;el=document.createElement('div');el.id=FLOAT_ID;el.innerHTML='<div class="float-name"></div><div class="float-price-row"><span class="float-price"></span><span class="float-change"></span></div>';document.body.appendChild(el);return el}
+function updateFloatingQuote(){const el=ensureFloatingQuote();const source=document.querySelector('.chart-subbar');if(!source)return;const main=source.children[0] as HTMLElement|null;const ohlc=source.children[1] as HTMLElement|null;const priceNode=main?.querySelector('i') as HTMLElement|null;const nameNode=main?.querySelector('b') as HTMLElement|null;if(!main||!priceNode||!nameNode)return;const name=nameNode.textContent?.trim()||'';const price=priceNode.textContent?.trim()||'—';const raw=ohlc?.textContent||'';const numbers=raw.match(/[0-9][0-9,]*(?:\.[0-9]+)?/g)||[];let change='';if(numbers.length>=4){const open=Number(numbers[0].replace(/,/g,''));const close=Number(numbers[3].replace(/,/g,''));if(Number.isFinite(open)&&open!==0&&Number.isFinite(close)){const pct=((close-open)/open)*100;change=`${pct>=0?'▲ +':'▼ '}${pct.toFixed(2)}%`;}}el.querySelector('.float-name')!.textContent=name;el.querySelector('.float-price')!.textContent=price;const changeNode=el.querySelector('.float-change')!;changeNode.textContent=change;changeNode.classList.toggle('up',change.startsWith('▲'));changeNode.classList.toggle('down',change.startsWith('▼'));}
+function setFloatingVisible(visible:boolean){ensureFloatingQuote().classList.toggle('show',visible)}
+function wireFloatingQuote(){updateFloatingQuote()}
+function setTab(tab:Tab){const root=document.getElementById('root'),nav=document.getElementById(NAV_ID);if(!root||!nav)return;root.classList.toggle('sire-tab-mode',tab!=='quote');root.classList.toggle('sire-tab-quote',tab==='quote');root.classList.toggle('sire-chart-tab',tab==='chart');setFloatingVisible(tab==='chart');nav.querySelectorAll('button').forEach(button=>button.classList.toggle('active',button.dataset.tab===tab));if(tab==='sire'){findSireOpenButton()?.click();window.setTimeout(wireChatComposer,0)}else findChatCloseButton()?.click()}
+function mountNavigation(){injectStyles();if(document.getElementById(NAV_ID))return;ensureFloatingQuote();wireFloatingQuote();const nav=document.createElement('nav');nav.id=NAV_ID;nav.setAttribute('aria-label','Primary navigation');const tabs:Array<[Tab,string,string]>=[['sire','✦','SIRE'],['chart','⌁','CHART'],['quote','▦','QUOTE']];tabs.forEach(([tab,icon,label])=>{const button=document.createElement('button');button.type='button';button.dataset.tab=tab;button.innerHTML=`<span class="tab-icon">${icon}</span><span>${label}</span>`;button.addEventListener('click',()=>setTab(tab));nav.appendChild(button)});document.body.appendChild(nav);setTab('chart')}
+if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',mountNavigation,{once:true});else mountNavigation();
+const observer=new MutationObserver(()=>{if(!document.getElementById(NAV_ID))mountNavigation();if(document.querySelector('.sire-chat-only-composer'))wireChatComposer()});observer.observe(document.documentElement,{childList:true,subtree:true});
+setInterval(()=>{if(document.querySelector('.sire-chart-tab'))updateFloatingQuote()},1000);

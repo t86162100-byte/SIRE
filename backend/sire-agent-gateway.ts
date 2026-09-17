@@ -1,12 +1,9 @@
-/* SIRE Agent Gateway
- * A provider-neutral tool-calling loop. Configure any OpenAI-compatible model endpoint
- * with SIRE_AGENT_BASE_URL, SIRE_AGENT_API_KEY and SIRE_AGENT_MODEL.
- */
+/* SIRE Agent Gateway - provider-neutral autonomous tool-calling runtime. */
 import { createServer } from 'node:http';
 import { autonomousEnvironmentAudit } from './sire-autonomy';
 import { AGENT_CAPABILITIES, connectorRequest, discoverConnectors, enqueueAgentTask, webSearch } from './agent-tools';
 
-const PORT = Number(process.env.PORT || 10000);
+const PORT = Number(process.env.SIRE_AGENT_PORT || 10001);
 const BASE_URL = (process.env.SIRE_AGENT_BASE_URL || '').replace(/\/$/, '');
 const API_KEY = process.env.SIRE_AGENT_API_KEY || '';
 const MODEL = process.env.SIRE_AGENT_MODEL || '';
@@ -14,14 +11,14 @@ const MAX_STEPS = Math.min(24, Math.max(1, Number(process.env.SIRE_AGENT_MAX_STE
 const ALLOW_WRITES = process.env.SIRE_AGENT_ALLOW_WRITES === 'true';
 
 const tools = [
-  { type: 'function', function: { name: 'web_search', description: 'Search the live public web and return source results. Use this for current information and documentation.', parameters: { type: 'object', properties: { query: { type: 'string' }, limit: { type: 'number' } }, required: ['query'] } } },
-  { type: 'function', function: { name: 'list_connectors', description: 'Discover currently configured SIRE connectors and their permissions.', parameters: { type: 'object', properties: {} } } },
-  { type: 'function', function: { name: 'inspect_sire', description: 'Inspect SIRE itself: catalogue, persisted market data coverage and known capability gaps.', parameters: { type: 'object', properties: {} } } },
-  { type: 'function', function: { name: 'connector_request', description: 'Call an authenticated connector. Read actions are allowed by default; write/execute/deploy actions require SIRE_AGENT_ALLOW_WRITES=true and connector permission.', parameters: { type: 'object', properties: { connectorId: { type: 'string' }, path: { type: 'string' }, method: { type: 'string', enum: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'] }, permission: { type: 'string', enum: ['read', 'write', 'execute', 'deploy'] }, body: { type: 'object' } }, required: ['connectorId', 'path'] } } },
-  { type: 'function', function: { name: 'create_background_task', description: 'Create a durable SIRE task that the always-on worker can resume and execute.', parameters: { type: 'object', properties: { task: { type: 'string' }, priority: { type: 'number' }, continuous: { type: 'boolean' }, metadata: { type: 'object' } }, required: ['task'] } } },
+  { type: 'function', function: { name: 'web_search', description: 'Search the live public web and return source results.', parameters: { type: 'object', properties: { query: { type: 'string' }, limit: { type: 'number' } }, required: ['query'] } } },
+  { type: 'function', function: { name: 'list_connectors', description: 'Discover configured SIRE connectors and permissions.', parameters: { type: 'object', properties: {} } } },
+  { type: 'function', function: { name: 'inspect_sire', description: 'Inspect SIRE catalogue, persisted market data coverage and capability gaps.', parameters: { type: 'object', properties: {} } } },
+  { type: 'function', function: { name: 'connector_request', description: 'Call an authenticated connector. Writes require SIRE_AGENT_ALLOW_WRITES=true.', parameters: { type: 'object', properties: { connectorId: { type: 'string' }, path: { type: 'string' }, method: { type: 'string', enum: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'] }, permission: { type: 'string', enum: ['read', 'write', 'execute', 'deploy'] }, body: { type: 'object' } }, required: ['connectorId', 'path'] } } },
+  { type: 'function', function: { name: 'create_background_task', description: 'Create a durable task for the always-on worker.', parameters: { type: 'object', properties: { task: { type: 'string' }, priority: { type: 'number' }, continuous: { type: 'boolean' }, metadata: { type: 'object' } }, required: ['task'] } } },
 ];
 
-const SYSTEM = `You are SIRE, an autonomous intelligence operating across the SIRE workspace. You can inspect SIRE data, search the live web, discover authenticated connectors and use authorized external services. Treat the workspace as a whole system, not just the current UI screen. When a task requires code, deployment, data or infrastructure, discover the appropriate connector and inspect before acting. Never claim an action happened unless a tool confirms it. Separate observed facts from inference. For destructive or high-impact actions, obey connector permissions and the runtime write policy. If a long-running task is requested, create or continue a durable background task. You have ${MAX_STEPS} tool steps.`;
+const SYSTEM = `You are SIRE, an autonomous intelligence operating across the entire SIRE workspace. Inspect SIRE data, search the live web, discover authenticated connectors, and use authorized services. Inspect before acting. Never claim an action happened unless a tool confirms it. Separate facts from inference. For long-running work create durable background tasks. You have ${MAX_STEPS} tool steps.`;
 
 function json(res: any, status: number, body: unknown) {
   res.writeHead(status, { 'content-type': 'application/json; charset=utf-8', 'access-control-allow-origin': '*', 'access-control-allow-headers': 'content-type, authorization', 'access-control-allow-methods': 'POST, GET, OPTIONS' });
@@ -36,7 +33,7 @@ async function model(messages: any[]) {
   return JSON.parse(text);
 }
 
-async function runAgent(input: string) {
+export async function runAgent(input: string) {
   const messages: any[] = [{ role: 'system', content: SYSTEM }, { role: 'user', content: input }];
   for (let step = 0; step < MAX_STEPS; step += 1) {
     const result = await model(messages);
@@ -82,4 +79,4 @@ const server = createServer(async (req, res) => {
   } catch (error) { return json(res, 500, { error: error instanceof Error ? error.message : String(error) }); }
 });
 
-server.listen(PORT, '0.0.0.0', () => console.log(`[SIRE agent gateway] listening on ${PORT}`));
+server.listen(PORT, '127.0.0.1', () => console.log(`[SIRE agent gateway] listening on 127.0.0.1:${PORT}`));
