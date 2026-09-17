@@ -78,7 +78,7 @@ export default function App() {
   const selectInstrument = (item: DerivInstrument) => { setSelected(item); setSearch(''); };
 
   return (
-    <main className="native-terminal-shell">
+    <main className={`native-terminal-shell${researchLabOpen ? ' sire-research-open' : ''}`}>
       <div className="native-terminal-body">
         <aside className="native-symbol-sidebar"><div className="sidebar-search"><Search size={15} /><input value={search} onChange={event => setSearch(event.target.value)} placeholder="Search" /></div><div className="sidebar-meta"><span>DERIV SYNTHETIC</span><b>{instruments.length}</b></div><div className="native-symbol-list">{filtered.slice(0, 150).map(item => <button key={item.symbol} className={selected?.symbol === item.symbol ? 'active' : ''} onClick={() => selectInstrument(item)}><span><b>{item.name}</b><small>{item.symbol}</small></span><i>{item.exchangeOpen === 0 ? 'OFF' : 'LIVE'}</i></button>)}</div></aside>
         <section className="native-chart-panel">{lastError && <div className="native-error-banner">{lastError}</div>}{selected && <FinancialChart symbol={selected.symbol} liveTick={latest} requestHistory={requestHistory} instruments={instruments.map(item => ({ symbol: item.symbol, name: item.name }))} onSelectInstrument={item => { const match = instruments.find(candidate => candidate.symbol === item.symbol); if (match) selectInstrument(match); }} />}</section>
