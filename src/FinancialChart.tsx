@@ -250,11 +250,12 @@ export default function FinancialChart({ symbol, isActive = false, liveTick, req
   })();
   const formatMarketPrice = (price: number) => price.toLocaleString(undefined, { minimumFractionDigits: marketPriceDecimals, maximumFractionDigits: marketPriceDecimals });
   const updateMarketQuote = (bars: Candle[], livePrice?: number) => {
-    const sorted = bars.slice().sort((a, b) => a.time - b.time);
-    const latest = sorted[sorted.length - 1];
+    // History is kept in chronological order by OpenAlgo's data controller;
+    // avoid copying/sorting the full retained history on every live tick.
+    const latest = bars[bars.length - 1];
     const price = Number.isFinite(livePrice) ? Number(livePrice) : latest?.close;
     if (!Number.isFinite(price)) return;
-    const previous = sorted.length > 1 ? sorted[sorted.length - 2].close : latest?.open;
+    const previous = bars.length > 1 ? bars[bars.length - 2].close : latest?.open;
     const percent = Number.isFinite(previous) && Number(previous) !== 0 ? ((Number(price) - Number(previous)) / Number(previous)) * 100 : 0;
     setMarketQuote({ price: Number(price), percent });
   };
@@ -634,11 +635,13 @@ export default function FinancialChart({ symbol, isActive = false, liveTick, req
       const instrument = instrumentsRef.current.find(item => item.symbol === event.symbol);
       if (instrument && instrument.symbol !== symbolRef.current) onSelectInstrumentRef.current(instrument);
     });
-    const offData = widget.on('data', (event: { bars?: Candle[] }) => {
-      if (Array.isArray(event.bars)) {
-        candlesRef.current = event.bars;
-        window.setTimeout(refreshTpoProfile, 0);
-      }
+    const offData = widget.on('data', () => {
+      // The widget's data event reports the retained bar count, not the bar
+      // array. Read the authoritative managed-history store so prepend pages
+      // immediately become available to replay and profile features.
+      const loaded = widget.dataController?.bars();
+      if (loaded) candlesRef.current = loaded.slice().sort((a, b) => a.time - b.time);
+      window.setTimeout(refreshTpoProfile, 0);
     });
     const renderReplayState = (state: unknown) => {
       const next = state as typeof replayState;
@@ -790,7 +793,11 @@ export default function FinancialChart({ symbol, isActive = false, liveTick, req
       ? { ...last, high: Math.max(last.high, tick.quote), low: Math.min(last.low, tick.quote), close: tick.quote }
       : { time, open: tick.quote, high: tick.quote, low: tick.quote, close: tick.quote };
     if (last?.time === time) candlesRef.current[candlesRef.current.length - 1] = bar;
-    else { candlesRef.current.push(bar); if (candlesRef.current.length > 1500) candlesRef.current.shift(); }
+    else {
+      candlesRef.current.push(bar);
+      const retainedLimit = widget.dataController ? 500000 : 1500;
+      if (candlesRef.current.length > retainedLimit) candlesRef.current.splice(0, candlesRef.current.length - retainedLimit);
+    }
     subscriberRef.current?.(bar);
   }, [liveTick, symbol]);
 
