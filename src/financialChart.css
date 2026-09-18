@@ -69,7 +69,7 @@
 
 .sire-financial-chart:not(.sire-toolbar-owner) .sire-bottom-glass-bar{display:none}
 .sire-financial-chart.sire-toolbar-owner .sire-bottom-glass-bar{position:fixed;left:50%;right:auto;bottom:40px;width:180px;max-width:calc(100% - 24px);transform:translateX(-50%);border-radius:999px;transition:left .48s cubic-bezier(.22,.61,.36,1),width .48s cubic-bezier(.22,.61,.36,1),height .48s cubic-bezier(.22,.61,.36,1),bottom .28s ease,transform .48s cubic-bezier(.22,.61,.36,1),border-radius .48s ease,background .35s ease,box-shadow .35s ease,opacity .35s ease!important}
-.sire-financial-chart.sire-toolbar-owner .sire-bottom-glass-bar.sire-bar-rolled-up{left:8px;width:52px;height:52px;transform:translateX(0);border-radius:50%;overflow:hidden}
+.sire-financial-chart.sire-toolbar-owner .sire-bottom-glass-bar.sire-bar-rolled-up{left:8px;width:52px;height:52px;transform:translateX(0);border-radius:50%;overflow:hidden;pointer-events:auto;cursor:pointer;touch-action:manipulation}
 .sire-financial-chart.sire-toolbar-owner .sire-bottom-glass-bar.sire-bar-rolled-up .sire-bottom-scroll-track{opacity:0;transform:translateX(18px) scale(.82);pointer-events:none;transition:opacity .2s ease,transform .48s cubic-bezier(.22,.61,.36,1)}
 .sire-financial-chart.sire-toolbar-owner .sire-bottom-glass-bar:not(.sire-bar-rolled-up) .sire-bottom-scroll-track{opacity:1;transform:translateX(0) scale(1);transition:opacity .32s ease .12s,transform .48s cubic-bezier(.22,.61,.36,1)}
 .sire-financial-chart.sire-toolbar-owner .sire-bottom-glass-bar.sire-bar-rolled-up:after{content:"";position:absolute;inset:0;border-radius:50%;background:rgba(255,255,255,.035);box-shadow:inset 0 0 0 1px rgba(255,255,255,.08);pointer-events:none}
