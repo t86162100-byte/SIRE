@@ -113,6 +113,76 @@ const REPLAY_SUB_INTERVAL: Record<string, string> = {
 };
 const replaySubInterval = (interval: string) => REPLAY_SUB_INTERVAL[interval] ?? null;
 
+const earliestTickCache = new Map<string, number>();
+
+async function discoverEarliestDerivTick(symbol: string, requestHistory: HistoryRequester): Promise<number | null> {
+  const cached = earliestTickCache.get(symbol);
+  if (cached !== undefined) return cached;
+
+  const probe = async (end: number) => {
+    try {
+      const result = await requestHistory({
+        ticks_history: symbol,
+        end: Math.floor(end),
+        count: 1,
+        style: 'ticks',
+        subscribe: 0,
+        noCache: true,
+      });
+      const ticks = parseTicks(result) ?? [];
+      return ticks[0]?.epoch ?? null;
+    } catch {
+      return null;
+    }
+  };
+
+  const now = Math.floor(Date.now() / 1000);
+  let hi = now;
+  let span = 86400;
+  let lo: number | null = null;
+
+  // Move the upper bound backward exponentially until Deriv has no history
+  // at that point. This discovers the provider's historical boundary without
+  // assuming an age for any Synthetic Index.
+  for (let i = 0; i < 32; i += 1) {
+    const candidate = Math.max(0, now - span);
+    const tick = await probe(candidate);
+    if (tick === null) {
+      lo = candidate;
+      break;
+    }
+    hi = Math.min(hi, tick);
+    span *= 2;
+    if (candidate === 0) break;
+  }
+
+  if (lo === null) {
+    // The public endpoint still returned history all the way to epoch zero.
+    // Treat the earliest returned tick as the boundary.
+    const tick = await probe(0);
+    if (tick === null) return null;
+    earliestTickCache.set(symbol, tick);
+    return tick;
+  }
+
+  // Binary-search the transition between "no history" and "history exists".
+  // The returned tick is then refined with a small forward request so the
+  // exact earliest available tick is used rather than an approximate probe.
+  let left = lo;
+  let right = hi;
+  for (let i = 0; i < 34 && right - left > 1; i += 1) {
+    const mid = Math.floor((left + right) / 2);
+    const tick = await probe(mid);
+    if (tick === null) left = mid;
+    else right = mid;
+  }
+
+  const refined = await probe(right);
+  if (refined === null) return null;
+  earliestTickCache.set(symbol, refined);
+  return refined;
+}
+
 const FALLBACK_BASE_SECONDS: Record<string, number> = {
   '20m': 600,
   '45m': 900,
@@ -390,12 +460,17 @@ export default function FinancialChart({ symbol, isActive = false, liveTick, req
     const host = containerRef.current;
     const sourceFeed = {
       async getBars(req: BarsRequest) {
+        // Explicitly discover Deriv's earliest available tick for every
+        // Synthetic Index before the chart history is considered complete.
+        // The controller then pages backward until that boundary is reached.
+        await discoverEarliestDerivTick(req.symbol, requestHistoryRef.current);
         const bars = await requestBars(req, requestHistoryRef.current);
         candlesRef.current = bars;
         updateMarketQuote(bars);
         resyncRef.current = null;
         return bars;
       },
+
       subscribeBars(req: BarsRequest, onBar: (bar: Candle) => void, options?: { seedFrom?: Candle; onResync?: () => void }) {
         subscriberRef.current = bar => { if (req.symbol === symbolRef.current) onBar(bar); };
         resyncRef.current = options?.onResync ?? null;
@@ -918,12 +993,14 @@ export default function FinancialChart({ symbol, isActive = false, liveTick, req
     const controller = widget?.dataController;
     if (!controller) return candlesRef.current.slice().sort((a, b) => a.time - b.time);
 
+    const earliest = earliestTickCache.get(symbolRef.current);
+    const goal = targetEpoch === undefined ? earliest : targetEpoch;
     let previousFirst = Infinity;
     for (let page = 0; page < REPLAY_HISTORY_PAGE_LIMIT; page += 1) {
       const loaded = controller.bars().slice().sort((a, b) => a.time - b.time);
       const first = loaded[0];
       if (!first) break;
-      if (targetEpoch !== undefined && first.time <= targetEpoch) break;
+      if (goal !== undefined && first.time <= goal) break;
       if (first.time >= previousFirst) break;
       previousFirst = first.time;
 
