@@ -170,48 +170,33 @@ export default function FinancialChart({ symbol, liveTick, requestHistory, instr
     swipeInstrument(direction);
     window.setTimeout(() => setSwipeAnimation(null), 320);
   };
-  const cancelInstrumentLongPress = () => {
-    if (longPressTimerRef.current !== null) {
-      window.clearTimeout(longPressTimerRef.current);
-      longPressTimerRef.current = null;
-    }
-  };
   const handleInstrumentPointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
     if (event.pointerType === 'mouse' && event.button !== 0) return;
     event.currentTarget.setPointerCapture?.(event.pointerId);
     swipeStartYRef.current = event.clientY;
     swipeAccumulatedRef.current = 0;
-    longPressStartYRef.current = event.clientY;
-    cancelInstrumentLongPress();
-    longPressTimerRef.current = window.setTimeout(() => {
-      longPressTimerRef.current = null;
-      swipeStartYRef.current = null;
-      longPressStartYRef.current = null;
-      onLongPressInstrument?.();
-    }, 600);
   };
   const handleInstrumentPointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
-    const start = longPressStartYRef.current;
+    const start = swipeStartYRef.current;
     if (start === null) return;
     const delta = event.clientY - start;
-    if (Math.abs(delta) > 20) cancelInstrumentLongPress();
     if (Math.abs(delta) < 55 || swipeAnimatingRef.current) return;
     const direction: 1 | -1 = delta < 0 ? 1 : -1;
     triggerSwipeStep(direction);
     swipeAnimatingRef.current = true;
-    longPressStartYRef.current = event.clientY;
     swipeStartYRef.current = event.clientY;
     swipeAccumulatedRef.current = 0;
     window.setTimeout(() => { swipeAnimatingRef.current = false; }, 320);
   };
   const handleInstrumentPointerEnd = (event: React.PointerEvent<HTMLDivElement>) => {
-    cancelInstrumentLongPress();
-    longPressStartYRef.current = null;
+    const start = swipeStartYRef.current;
+    const delta = start === null ? 0 : event.clientY - start;
     swipeStartYRef.current = null;
     swipeAccumulatedRef.current = 0;
     if (event.currentTarget.hasPointerCapture?.(event.pointerId)) {
       event.currentTarget.releasePointerCapture?.(event.pointerId);
     }
+    if (Math.abs(delta) < 18) onLongPressInstrument?.();
   };
 
   useEffect(() => {
