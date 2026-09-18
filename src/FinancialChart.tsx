@@ -517,6 +517,7 @@ export default function FinancialChart({ symbol, liveTick, requestHistory, instr
           )}
         </div>
       )}
+      <div className="sire-bottom-glass-bar" aria-hidden="true" />
     </div>
   );
 }
