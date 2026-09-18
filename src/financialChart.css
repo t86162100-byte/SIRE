@@ -1,7 +1,7 @@
 .sire-financial-chart{position:absolute;inset:0;width:100%;height:100%;min-width:0;min-height:0;overflow:hidden;isolation:isolate;background:#000000}
 .sire-financial-chart .oac-widget{position:absolute!important;inset:0!important;width:100%!important;height:100%!important;min-width:0!important;min-height:0!important;max-width:none!important;max-height:none!important}
 
-.sire-draw-rack{position:absolute;z-index:28000;inset:0;display:flex;pointer-events:none;font-family:Arial,sans-serif;transform:translateY(-102%) scaleY(.94);transform-origin:top left;opacity:0;visibility:hidden;transition:transform 340ms cubic-bezier(.22,.61,.36,1),opacity 220ms ease,visibility 0s linear 340ms;will-change:transform,opacity}.sire-draw-rack.is-open{transform:translateY(0) scaleY(1);opacity:1;visibility:visible;transition:transform 340ms cubic-bezier(.22,.61,.36,1),opacity 220ms ease,visibility 0s linear 0s}.sire-draw-rack.is-open .sire-draw-rack__rail,.sire-draw-rack.is-open .sire-draw-rack__panel{pointer-events:auto}.sire-draw-rack:not(.is-open) .sire-draw-rack__rail,.sire-draw-rack:not(.is-open) .sire-draw-rack__panel{pointer-events:none}
+.sire-draw-rack{display:none!important;position:absolute;z-index:28000;inset:0;display:flex;pointer-events:none;font-family:Arial,sans-serif;transform:translateY(-102%) scaleY(.94);transform-origin:top left;opacity:0;visibility:hidden;transition:transform 340ms cubic-bezier(.22,.61,.36,1),opacity 220ms ease,visibility 0s linear 340ms;will-change:transform,opacity}.sire-draw-rack.is-open{transform:translateY(0) scaleY(1);opacity:1;visibility:visible;transition:transform 340ms cubic-bezier(.22,.61,.36,1),opacity 220ms ease,visibility 0s linear 0s}.sire-draw-rack.is-open .sire-draw-rack__rail,.sire-draw-rack.is-open .sire-draw-rack__panel{pointer-events:auto}.sire-draw-rack:not(.is-open) .sire-draw-rack__rail,.sire-draw-rack:not(.is-open) .sire-draw-rack__panel{pointer-events:none}
 .sire-draw-rack__rail{pointer-events:auto;width:58px;height:100%;display:flex;flex-direction:column;align-items:center;overflow-y:auto;overflow-x:hidden;background:#131722;border-right:1px solid #2a2e39;box-shadow:4px 0 18px rgba(0,0,0,.42);padding:6px 4px 10px;box-sizing:border-box}
 .sire-draw-rack__close{width:42px;height:38px;border:0;background:transparent;color:#d1d4dc;font-size:24px;line-height:1;cursor:pointer;border-radius:4px;margin-bottom:4px}
 .sire-draw-rack__close:hover,.sire-draw-rack__close:focus-visible{background:#2a2e39;outline:0}
@@ -74,3 +74,8 @@
 .sire-replay-speed-row button.active{background:#fff;color:#000}
 .sire-replay-error{margin-top:6px;font-size:10px;color:#ff8f8f}
 @media(max-width:640px){.sire-replay-setup,.sire-replay-transport{left:8px;right:8px;bottom:52px;min-width:0;max-width:none}.sire-replay-clock{font-size:9px}.sire-replay-speed-row{overflow-x:auto;scrollbar-width:none}.sire-replay-speed-row::-webkit-scrollbar{display:none}.sire-replay-setup-row input{font-size:10px;flex:1;min-width:0}}
+/* SIRE Tools button controls the native OpenAlgo drawing rail. */
+.oac-rail{transform-origin:top left;transition:clip-path 340ms cubic-bezier(.22,.61,.36,1),opacity 220ms ease,transform 340ms cubic-bezier(.22,.61,.36,1);will-change:clip-path,opacity,transform}
+.oac-rail.sire-oac-rail--closed{clip-path:inset(0 0 100% 0);opacity:0;transform:translateY(-8px);pointer-events:none}
+.oac-rail:not(.sire-oac-rail--closed){clip-path:inset(0 0 0 0);opacity:1;transform:translateY(0);pointer-events:auto}
+@media(prefers-reduced-motion:reduce){.oac-rail{transition:none!important}}
