@@ -671,7 +671,6 @@ export default function FinancialChart({ symbol, isActive = false, liveTick, req
       offRenderer?.();
       offDrawingObjects?.();
       offIndicatorObjects?.();
-      offIndicatorClick?.();
       offDrawingSelect?.();
       window.removeEventListener('resize', onResize);
       host.removeEventListener('pointerdown', onDrawingInteraction, true);
