@@ -150,3 +150,46 @@
 .sire-crosshair-magnifier__readout{height:22px;display:flex;align-items:center;justify-content:space-between;gap:8px;padding:0 4px;color:rgba(243,244,246,.64);font:700 9px/1 Arial,sans-serif;letter-spacing:.35px;white-space:nowrap}.sire-crosshair-magnifier__readout strong{color:#f3f4f6;font-size:11px;letter-spacing:.1px}
 .sire-crosshair-magnifier__chart{display:block;width:100%;height:124px;border-radius:6px;background:rgba(0,0,0,.35);overflow:hidden}.sire-crosshair-magnifier__crosshair{stroke:rgba(255,255,255,.82);stroke-width:.75;stroke-dasharray:3 2;vector-effect:non-scaling-stroke}.sire-crosshair-magnifier__wick{stroke-width:1.25;vector-effect:non-scaling-stroke}.sire-crosshair-magnifier__wick.is-up{stroke:#35d98a}.sire-crosshair-magnifier__wick.is-down{stroke:#ff5d69}.sire-crosshair-magnifier__body{stroke-width:.9;vector-effect:non-scaling-stroke}.sire-crosshair-magnifier__body.is-up{fill:rgba(53,217,138,.78);stroke:#35d98a}.sire-crosshair-magnifier__body.is-down{fill:rgba(255,93,105,.78);stroke:#ff5d69}.sire-crosshair-magnifier__point{fill:#fff;stroke:rgba(0,0,0,.85);stroke-width:1.2;vector-effect:non-scaling-stroke}
 @media(max-width:640px){.sire-crosshair-magnifier{width:218px!important;padding:6px;border-radius:9px}.sire-crosshair-magnifier__chart{height:116px}.sire-crosshair-magnifier__readout{height:21px;font-size:8px}.sire-crosshair-magnifier__readout strong{font-size:10px}}
+
+
+.sire-custom-drawing-crosshair{
+  position:absolute;
+  inset:0;
+  z-index:210;
+  pointer-events:none;
+  overflow:hidden;
+}
+.sire-custom-drawing-crosshair__vertical,
+.sire-custom-drawing-crosshair__horizontal{
+  position:absolute;
+  display:block;
+  pointer-events:none;
+}
+.sire-custom-drawing-crosshair__vertical{
+  left:var(--sire-crosshair-x,50%);
+  top:0;
+  width:1px;
+  height:100%;
+  background:rgba(255,255,255,.72);
+  box-shadow:0 0 0 1px rgba(0,0,0,.18);
+}
+.sire-custom-drawing-crosshair__horizontal{
+  left:0;
+  top:var(--sire-crosshair-y,50%);
+  width:100%;
+  height:1px;
+  background:rgba(255,255,255,.72);
+  box-shadow:0 0 0 1px rgba(0,0,0,.18);
+}
+.sire-custom-drawing-crosshair__point{
+  position:absolute;
+  left:var(--sire-crosshair-x,50%);
+  top:var(--sire-crosshair-y,50%);
+  width:8px;
+  height:8px;
+  margin:-4px 0 0 -4px;
+  border:1px solid #fff;
+  border-radius:50%;
+  background:rgba(255,255,255,.22);
+  box-shadow:0 0 0 2px rgba(0,0,0,.32);
+}
