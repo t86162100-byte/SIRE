@@ -529,14 +529,16 @@ export default function FinancialChart({ symbol, isActive = false, liveTick, req
         setSelectedIndicatorPosition(null);
         return;
       }
+
+      // The SIRE indicator controls are intentionally rendered over the price
+      // pane, even when the selected indicator lives in a lower pane. This
+      // keeps the settings/delete bar in one predictable place.
       const hostRect = host.getBoundingClientRect();
-      const pane = widget.chart.panes()[indicator.paneIndex];
-      const paneRect = pane?.element?.getBoundingClientRect?.();
-      const paneTop = paneRect ? paneRect.top - hostRect.top : 8;
-      const indicatorRows = widget.objects.list().filter((item: any) => item?.kind === 'indicator' && Number(item?.paneIndex) === indicator.paneIndex);
-      const rowIndex = Math.max(0, indicatorRows.findIndex((item: any) => item?.id === indicator.id));
+      const pricePane = widget.chart.panes()[0];
+      const pricePaneRect = pricePane?.element?.getBoundingClientRect?.();
+      const priceTop = pricePaneRect ? pricePaneRect.top - hostRect.top : 8;
       const left = Math.max(8, Math.min(hostRect.width - 92, 8 + Math.max(46, indicator.name.length * 6.5 + 8)));
-      const top = Math.max(6, Math.min(hostRect.height - 42, paneTop + 4 + rowIndex * 18));
+      const top = Math.max(8, Math.min(hostRect.height - 42, priceTop + 6));
       setSelectedIndicatorPosition({ left, top });
     };
 
@@ -612,6 +614,40 @@ export default function FinancialChart({ symbol, isActive = false, liveTick, req
     const onIndicatorInteraction = (event: PointerEvent) => {
       const target = event.target as Element | null;
       if (target?.closest?.('.sire-indicator-selection-bar')) return;
+
+      // Sub-pane indicators do not reliably expose their legend row as a DOM
+      // target because OpenAlgo renders the pane/legend on canvas. Treat a tap
+      // anywhere inside an indicator pane as selecting that pane's indicator.
+      // The controls are then shown on the price pane, where the user can
+      // always reach Settings/Delete.
+      const clientX = event.clientX;
+      const clientY = event.clientY;
+      const panes = widget.chart.panes();
+      for (let paneIndex = 1; paneIndex < panes.length; paneIndex += 1) {
+        const pane = panes[paneIndex];
+        const rect = pane?.element?.getBoundingClientRect?.();
+        if (!rect) continue;
+        const inside = clientX >= rect.left && clientX <= rect.right && clientY >= rect.top && clientY <= rect.bottom;
+        if (!inside) continue;
+
+        const paneIndicators = widget.objects.list().filter(
+          (item: any) => item?.kind === 'indicator' && Number(item?.paneIndex) === paneIndex && item?.visible !== false
+        );
+        const indicator = paneIndicators[paneIndicators.length - 1];
+        if (!indicator) break;
+
+        const next = {
+          id: indicator.id,
+          name: indicator.name,
+          paneIndex: indicator.paneIndex,
+        };
+        widget.objects.select(indicator.id);
+        selectedIndicatorRef.current = next;
+        setSelectedIndicator(next);
+        updateSelectedIndicatorOverlay(next);
+        return;
+      }
+
       selectedIndicatorRef.current = null;
       setSelectedIndicator(null);
       setSelectedIndicatorPosition(null);
