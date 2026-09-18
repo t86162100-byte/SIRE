@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, ArrowUpRight, Circle, Crosshair, Eraser, Eye, GitBranch, Highlighter, KeyRound, Lock, Minus, MoreHorizontal, MousePointer2, MoveUpRight, Pencil, Plus, RectangleHorizontal, Settings2, Ruler, Shapes, Slash, Square, Table2, Target, TextCursorInput, Type, Waves, Wrench } from 'lucide-react';
+import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, ArrowUpRight, Circle, Crosshair, Eraser, Eye, GitBranch, Highlighter, Lock, Minus, MoreHorizontal, MousePointer2, MoveUpRight, Pencil, Plus, RectangleHorizontal, Ruler, Shapes, Slash, Square, Table2, Target, TextCursorInput, Type, Waves, Wrench } from 'lucide-react';
 import { addComparison, comparisonController, PriceLevels, ReplayController, registerInterval, withBarCache } from 'openalgo-charts';
 import 'openalgo-charts/indicators';
 import 'openalgo-charts/draw';
@@ -472,7 +472,7 @@ export default function FinancialChart({ symbol, isActive = false, liveTick, req
     setRendererKind(widget.chart.rendererKind);
     const offRenderer = widget.chart.on('renderer:fallback', () => setRendererKind('canvas2d'));
     widgetRef.current = widget;
-    const updateSelectedDrawingOverlay = (drawing: typeof selectedDrawing extends infer T ? any : any) => {
+    const updateSelectedDrawingOverlay = (drawing: any) => {
       if (!drawing) {
         setSelectedDrawingPosition(null);
         return;
