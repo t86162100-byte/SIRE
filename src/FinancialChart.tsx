@@ -198,11 +198,15 @@ export default function FinancialChart({ symbol, isActive = false, liveTick, req
   const [activeTimeframe, setActiveTimeframe] = useState('1m');
   const [swipeAnimation, setSwipeAnimation] = useState<'up' | 'down' | null>(null);
   const replayRef = useRef<ReplayController | null>(null);
+  const replayShadeRef = useRef<ReplayShade | null>(null);
+  const replayMarkRef = useRef<TextWatermark | null>(null);
+  const replaySubBarsRef = useRef<{ key: string; bars: Candle[] } | null>(null);
   const [replaySetupOpen, setReplaySetupOpen] = useState(false);
   const [replayStartInput, setReplayStartInput] = useState('');
   const [replayEndInput, setReplayEndInput] = useState('');
   const [replayRangeError, setReplayRangeError] = useState<string | null>(null);
   const [replayDraftSpeed, setReplayDraftSpeed] = useState(1);
+  const [replayLoading, setReplayLoading] = useState(false);
   const [marketQuote, setMarketQuote] = useState<{ price: number; percent: number } | null>(null);
   const widgetRef = useRef<Widget | null>(null);
   const candlesRef = useRef<Candle[]>([]);
@@ -625,13 +629,14 @@ export default function FinancialChart({ symbol, isActive = false, liveTick, req
     });
     const renderReplayState = (state: unknown) => setReplayState(state as typeof replayState);
     const offReplayStart = widget.chart.on('replay:start', renderReplayState);
-    const offReplayFrame = widget.chart.on('replay:frame', renderReplayState);
+    const offReplayFrame = widget.chart.on('replay:frame', (state: unknown) => { renderReplayState(state); syncReplayDecorations(state as typeof replayState); });
     const offReplayPlay = widget.chart.on('replay:play', renderReplayState);
     const offReplayPause = widget.chart.on('replay:pause', renderReplayState);
     const offReplayEnd = widget.chart.on('replay:end', renderReplayState);
     const offReplayStop = widget.chart.on('replay:stop', () => {
       widget.dataController?.setPaused?.(false);
       setReplayActive(false);
+      clearReplayDecorations();
       setReplayState(null);
       window.setTimeout(() => resyncRef.current?.(), 0);
     });
@@ -772,27 +777,87 @@ export default function FinancialChart({ symbol, isActive = false, liveTick, req
     subscriberRef.current?.(bar);
   }, [liveTick, symbol]);
 
-  const startReplay = (startIndex: number, endIndex: number, speed: number) => {
+  const loadReplaySubBars = async (fullBars: Candle[], startIndex: number, endIndex: number) => {
+    const widget = widgetRef.current;
+    if (!widget) return null;
+    const finer = replaySubInterval(widget.interval());
+    if (!finer) return null;
+    const key = `${symbolRef.current}|${widget.interval()}|${fullBars[startIndex]?.time ?? 0}|${fullBars[endIndex]?.time ?? 0}`;
+    if (replaySubBarsRef.current?.key === key) return replaySubBarsRef.current.bars;
+    const from = fullBars[startIndex]?.time;
+    const to = fullBars[endIndex]?.time;
+    if (!Number.isFinite(from) || !Number.isFinite(to)) return null;
+    try {
+      const bars = await requestBars({
+        symbol: symbolRef.current,
+        interval: finer,
+        from,
+        to: Number(to) + intervalSeconds(widget.interval()),
+        noCache: true,
+      }, requestHistoryRef.current);
+      const sub = bars.filter(bar => bar.time >= Number(from) && bar.time <= Number(to) + intervalSeconds(widget.interval()));
+      if (!sub.length) return null;
+      replaySubBarsRef.current = { key, bars: sub };
+      return sub;
+    } catch {
+      return null;
+    }
+  };
+
+  const clearReplayDecorations = () => {
+    const widget = widgetRef.current;
+    if (widget && replayShadeRef.current) widget.chart.removePrimitive(replayShadeRef.current);
+    replayShadeRef.current = null;
+    if (widget && replayMarkRef.current) widget.chart.removePrimitive(replayMarkRef.current);
+    replayMarkRef.current = null;
+  };
+
+  const syncReplayDecorations = (state: typeof replayState) => {
+    const widget = widgetRef.current;
+    if (!widget || !state) return;
+    if (!replayMarkRef.current) {
+      replayMarkRef.current = new TextWatermark({ text: 'Replay' });
+      widget.chart.addPrimitive(replayMarkRef.current, 0);
+    }
+    if (!replayShadeRef.current) {
+      replayShadeRef.current = new ReplayShade({ index: state.index, lineVisible: true });
+      widget.chart.addPrimitive(replayShadeRef.current, 0);
+    } else {
+      replayShadeRef.current.setOptions({ index: state.index });
+    }
+  };
+
+  const startReplay = async (startIndex: number, endIndex: number, speed: number) => {
     const widget = widgetRef.current;
     const fullBars = candlesRef.current.slice().sort((a, b) => a.time - b.time);
     if (!widget || fullBars.length < 2) return false;
     const start = Math.max(0, Math.min(startIndex, fullBars.length - 2));
     const end = Math.max(start + 1, Math.min(endIndex, fullBars.length - 1));
-    const replayBars = fullBars.slice(0, end + 1);
+    setReplayLoading(true);
+    const subBars = await loadReplaySubBars(fullBars, start, end);
+    if (!widgetRef.current || widgetRef.current !== widget) {
+      setReplayLoading(false);
+      return false;
+    }
     replayRef.current?.stop();
     replayRef.current = null;
+    clearReplayDecorations();
     widget.dataController?.setPaused?.(true);
+    const replayBars = fullBars.slice(0, end + 1);
     const replay = new ReplayController(widget.chart, {
       series: widget.series,
       bars: replayBars,
       startIndex: start,
+      subBars: subBars || undefined,
       barMs: 1000,
       speed,
     });
     replayRef.current = replay;
     setReplayActive(true);
     setReplayState(replay.state() as typeof replayState);
+    syncReplayDecorations(replay.state() as typeof replayState);
     setReplaySetupOpen(false);
+    setReplayLoading(false);
     return true;
   };
 
@@ -835,7 +900,7 @@ export default function FinancialChart({ symbol, isActive = false, liveTick, req
       return;
     }
     setReplayRangeError(null);
-    return startReplay(startIndex, endIndex, replayDraftSpeed);
+    void startReplay(startIndex, endIndex, replayDraftSpeed);
   };
 
   const toggleReplay = () => {
@@ -860,6 +925,7 @@ export default function FinancialChart({ symbol, isActive = false, liveTick, req
 
   const replayStepBack = () => replayRef.current?.stepBack();
   const replayStep = () => replayRef.current?.step();
+  const replaySeek = (index: number) => replayRef.current?.seek(index);
   const exportChartSvg = () => { const widget = widgetRef.current; if (!widget) return; const svg = widget.chart.exportSVG({ background: true }); const blob = new Blob([svg], { type: 'image/svg+xml;charset=utf-8' }); const url = URL.createObjectURL(blob); const anchor = document.createElement('a'); anchor.href = url; anchor.download = `sire-${widget.symbol()}-${widget.interval()}.svg`; anchor.click(); URL.revokeObjectURL(url); };
   const addCompare = async (compareSymbol: string) => {
     const widget = widgetRef.current;
