@@ -748,8 +748,10 @@ export default function FinancialChart({ symbol, liveTick, requestHistory, instr
           title="Open drawing tools"
           onClick={() => setDrawRackOpen(open => !open)}
         >
-          <span className="sire-bottom-draw-pen"><Pencil size={18} strokeWidth={2} /></span>
-          <Waves className="sire-bottom-draw-wave" size={18} strokeWidth={1.8} />
+          <svg className="sire-bottom-draw-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <path d="M2 17c3-3 6-3 9 0s6 3 9 0" />
+            <path d="M16 3l4 4L9 18H5v-4L16 3z" />
+          </svg>
         </button>
         {timeframeOpen && (
           <div className="sire-bottom-timeframe-menu">
