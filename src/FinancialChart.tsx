@@ -1188,6 +1188,15 @@ export default function FinancialChart({ symbol, isActive = false, liveTick, req
           >
             <Trash2 size={15} strokeWidth={2} aria-hidden="true" />
           </button>
+          <button
+            type="button"
+            className="sire-indicator-selection-button sire-indicator-selection-obj"
+            aria-label="Open objects"
+            title="Objects"
+            onClick={() => widgetRef.current?.openObjects()}
+          >
+            <span aria-hidden="true">Obj</span>
+          </button>
         </div>
       )}
       {selectedDrawing && (
