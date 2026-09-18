@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, ArrowUpRight, Circle, Crosshair, Eraser, GitBranch, Highlighter, Minus, MousePointer2, MoveUpRight, Pencil, Plus, RectangleHorizontal, Ruler, Shapes, Slash, Square, Table2, Target, TextCursorInput, Type, Waves } from 'lucide-react';
+import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, ArrowUpRight, Circle, Crosshair, Eraser, GitBranch, Highlighter, Minus, MousePointer2, MoveUpRight, Pencil, Plus, RectangleHorizontal, Ruler, Shapes, Slash, Square, Table2, Target, TextCursorInput, Type, Waves, Wrench } from 'lucide-react';
 import { addComparison, comparisonController, PriceLevels, ReplayController, registerInterval, withBarCache } from 'openalgo-charts';
 import 'openalgo-charts/indicators';
 import 'openalgo-charts/draw';
@@ -782,7 +782,7 @@ export default function FinancialChart({ symbol, isActive = false, liveTick, req
           </div>
         </div>
       )}
-      {drawRackOpen && (
+      <div className={`sire-draw-rack${drawRackOpen ? ' is-open' : ''}`} role="dialog" aria-label="Drawing tools" aria-hidden={!drawRackOpen}>
         <div className="sire-draw-rack" role="dialog" aria-label="Drawing tools">
           <div className="sire-draw-rack__rail">
             <button className="sire-draw-rack__close" type="button" aria-label="Close drawing tools" onClick={() => setDrawRackOpen(false)}>×</button>
@@ -852,7 +852,7 @@ export default function FinancialChart({ symbol, isActive = false, liveTick, req
             </div>
           )}
         </div>
-      )}
+      </div>
       <div className="sire-bottom-glass-bar">
         <div
           onPointerDown={handleInstrumentPointerDown}
@@ -895,6 +895,16 @@ export default function FinancialChart({ symbol, isActive = false, liveTick, req
           onClick={toggleReplay}
         >
           <span aria-hidden="true">{replayActive ? (replayState?.playing ? 'Ⅱ' : '▶') : '⏱'}</span>
+        </button>
+        <button
+          type="button"
+          className="sire-bottom-tools-button"
+          aria-label={drawRackOpen ? 'Close drawing tools' : 'Open drawing tools'}
+          aria-expanded={drawRackOpen}
+          title={drawRackOpen ? 'Close tools' : 'Tools'}
+          onClick={() => setDrawRackOpen(open => !open)}
+        >
+          <Wrench size={22} strokeWidth={1.8} aria-hidden="true" />
         </button>
         <button
           type="button"
