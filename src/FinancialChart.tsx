@@ -109,6 +109,8 @@ export default function FinancialChart({ symbol, liveTick, requestHistory, instr
   const swipeStartYRef = useRef<number | null>(null);
   const swipeAccumulatedRef = useRef(0);
   const swipeAnimatingRef = useRef(false);
+  const holdTimerRef = useRef<number | null>(null);
+  const holdTriggeredRef = useRef(false);
   const [swipeAnimation, setSwipeAnimation] = useState<'up' | 'down' | null>(null);
   const replayRef = useRef<ReplayController | null>(null);
   const availableDrawTools = useMemo(() => new Set(['__cursor__', ...registeredDrawingTools().map(tool => tool.id)]), []);
@@ -168,17 +170,33 @@ export default function FinancialChart({ symbol, liveTick, requestHistory, instr
     swipeInstrument(direction);
     window.setTimeout(() => setSwipeAnimation(null), 320);
   };
+  const clearInstrumentHold = () => {
+    if (holdTimerRef.current !== null) {
+      window.clearTimeout(holdTimerRef.current);
+      holdTimerRef.current = null;
+    }
+  };
   const handleInstrumentPointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
     if (event.pointerType === 'mouse' && event.button !== 0) return;
+    event.preventDefault();
     event.currentTarget.setPointerCapture?.(event.pointerId);
     swipeStartYRef.current = event.clientY;
     swipeAccumulatedRef.current = 0;
+    holdTriggeredRef.current = false;
+    clearInstrumentHold();
+    holdTimerRef.current = window.setTimeout(() => {
+      if (swipeStartYRef.current !== null) {
+        holdTriggeredRef.current = true;
+        onInstrumentTap?.();
+      }
+    }, 600);
   };
   const handleInstrumentPointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
     const start = swipeStartYRef.current;
     if (start === null) return;
     const delta = event.clientY - start;
-    if (Math.abs(delta) < 55 || swipeAnimatingRef.current) return;
+    if (Math.abs(delta) >= 18 && !holdTriggeredRef.current) clearInstrumentHold();
+    if (Math.abs(delta) < 55 || swipeAnimatingRef.current || holdTriggeredRef.current) return;
     const direction: 1 | -1 = delta < 0 ? 1 : -1;
     triggerSwipeStep(direction);
     swipeAnimatingRef.current = true;
@@ -187,14 +205,13 @@ export default function FinancialChart({ symbol, liveTick, requestHistory, instr
     window.setTimeout(() => { swipeAnimatingRef.current = false; }, 320);
   };
   const handleInstrumentPointerEnd = (event: React.PointerEvent<HTMLDivElement>) => {
-    const start = swipeStartYRef.current;
-    const delta = start === null ? 0 : event.clientY - start;
+    clearInstrumentHold();
     swipeStartYRef.current = null;
     swipeAccumulatedRef.current = 0;
+    holdTriggeredRef.current = false;
     if (event.currentTarget.hasPointerCapture?.(event.pointerId)) {
       event.currentTarget.releasePointerCapture?.(event.pointerId);
     }
-    if (Math.abs(delta) < 18) onInstrumentTap?.();
   };
 
   useEffect(() => {
