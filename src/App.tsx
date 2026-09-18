@@ -18,7 +18,7 @@ export default function App() {
   const [latestBySymbol, setLatestBySymbol] = useState<Record<string, Tick>>({});
   const [researchLabOpen, setResearchLabOpen] = useState(false);
   const selectedRef = useRef<DerivInstrument | null>(null);
-  const [chartLayout, setChartLayout] = useState<1 | 2 | 4>(1);
+  const [chartLayout, setChartLayout] = useState<1 | 2>(1);
   const [activeChartIndex, setActiveChartIndex] = useState(0);
   const [linked, setLinked] = useState(false);
   const [chartSymbols, setChartSymbols] = useState<string[]>([]);
@@ -95,7 +95,7 @@ export default function App() {
       <aside className="native-symbol-sidebar"><div className="sidebar-search"><Search size={15} /><input value={search} onChange={event => setSearch(event.target.value)} placeholder="Search" /></div><div className="sidebar-meta"><span>DERIV SYNTHETIC</span><b>{instruments.length}</b></div><div className="native-symbol-list">{filtered.slice(0, 150).map(item => <button key={item.symbol} className={selected?.symbol === item.symbol ? 'active' : ''} onClick={() => selectInstrument(item)}><span><b>{item.name}</b><small>{item.symbol}</small></span><i>{item.exchangeOpen === 0 ? 'OFF' : 'LIVE'}</i></button>)}</div></aside>
       <section className="native-chart-panel">
         {lastError && <div className="native-error-banner">{lastError}</div>}
-        <div className="sire-workspace-toolbar"><span>SIRE · OpenAlgo</span><button type="button" className={chartLayout === 1 ? 'active' : ''} onClick={() => setChartLayout(1)}>1</button><button type="button" className={chartLayout === 2 ? 'active' : ''} onClick={() => setChartLayout(2)}>2</button><button type="button" className={chartLayout === 4 ? 'active' : ''} onClick={() => setChartLayout(4)}>4</button><button type="button" className={linked ? 'active' : ''} onClick={() => setLinked(value => !value)}>Link</button></div>
+        <div className="sire-workspace-toolbar"><span>SIRE · OpenAlgo</span><button type="button" className={chartLayout === 1 ? 'active' : ''} onClick={() => setChartLayout(1)}>1</button><button type="button" className={chartLayout === 2 ? 'active' : ''} onClick={() => setChartLayout(2)}>2</button><button type="button" className={linked ? 'active' : ''} onClick={() => setLinked(value => !value)}>Link</button></div>
         <div className={`sire-chart-grid sire-chart-grid--${chartLayout}`} onContextMenu={event => event.preventDefault()}>
           {chartItems.map((chartSymbol, index) => <div className={`sire-chart-cell${activeChartIndex === index ? ' sire-chart-cell--active' : ''}`} key={index} onPointerDown={() => setActiveChartIndex(index)}>{chartSymbol && <FinancialChart
             symbol={chartSymbol}
