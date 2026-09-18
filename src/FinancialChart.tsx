@@ -181,13 +181,11 @@ export default function FinancialChart({ symbol, liveTick, requestHistory, instr
     const threshold = 55;
     if (Math.abs(delta) < threshold || swipeAnimatingRef.current) return;
     const direction: 1 | -1 = delta < 0 ? 1 : -1;
-    const before = swipeAccumulatedRef.current;
     triggerSwipeStep(direction);
     swipeAnimatingRef.current = true;
     swipeStartYRef.current = current;
     swipeAccumulatedRef.current = 0;
     window.setTimeout(() => { swipeAnimatingRef.current = false; }, 320);
-    void before;
   };
   const handleInstrumentSwipeEnd = () => {
     swipeStartYRef.current = null;
