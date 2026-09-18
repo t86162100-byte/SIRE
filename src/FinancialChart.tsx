@@ -863,6 +863,12 @@ export default function FinancialChart({ symbol, isActive = false, liveTick, req
       window.removeEventListener('resize', onResize);
       host.removeEventListener('pointerdown', onDrawingInteraction, true);
       host.removeEventListener('pointerdown', onIndicatorInteraction, true);
+      host.removeEventListener('pointerdown', onPlacementPointerDown, true);
+      host.removeEventListener('pointermove', onPlacementPointerMove, true);
+      host.removeEventListener('pointerup', onPlacementPointerUp, true);
+      host.removeEventListener('pointercancel', onPlacementPointerCancel, true);
+      host.removeEventListener('contextmenu', onChartContextMenu, true);
+      delete (host as any).__sireSetPlacementCrosshair;
       offReplayStart?.();
       offReplayFrame?.();
       offReplayPlay?.();
@@ -1316,8 +1322,7 @@ export default function FinancialChart({ symbol, isActive = false, liveTick, req
                           const pointY = Math.max(paneTop, Math.min((paneRect?.bottom ?? rect.bottom) - rect.top - 1, y));
 
                           const chartHost = host as any;
-
-                          chartHost.__sirePlacementCenter = { x, y: pointY };
+                          chartHost.__sireSetPlacementCrosshair?.(x, pointY);
 
                         });
 
