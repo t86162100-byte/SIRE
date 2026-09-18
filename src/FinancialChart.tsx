@@ -52,6 +52,28 @@ const FAST_HISTORY_PAGE_SIZE = 5000;
 const FAST_HISTORY_PAGES_PER_BATCH = 8;
 const FAST_HISTORY_CONCURRENCY = 4;
 const FAST_HISTORY_MAX_BARS = 5000000;
+const HISTORY_CACHE_TTL_MS = 15 * 60_000;
+const HISTORY_CACHE_MAX_SYMBOLS = 24;
+type HistoryCacheEntry = { bars: Candle[]; updatedAt: number };
+const historyCache = new Map<string, HistoryCacheEntry>();
+function historyCacheKey(symbol: string, interval: string) { return symbol + '::' + interval; }
+function getCachedHistory(symbol: string, interval: string): Candle[] {
+  const key = historyCacheKey(symbol, interval);
+  const entry = historyCache.get(key);
+  if (!entry) return [];
+  if (Date.now() - entry.updatedAt > HISTORY_CACHE_TTL_MS) { historyCache.delete(key); return []; }
+  return entry.bars.slice().sort((a, b) => a.time - b.time);
+}
+function putCachedHistory(symbol: string, interval: string, bars: Candle[]) {
+  if (!bars.length) return;
+  const key = historyCacheKey(symbol, interval);
+  historyCache.set(key, { bars: bars.slice().sort((a, b) => a.time - b.time), updatedAt: Date.now() });
+  while (historyCache.size > HISTORY_CACHE_MAX_SYMBOLS) {
+    const oldest = historyCache.keys().next().value;
+    if (!oldest) break;
+    historyCache.delete(oldest);
+  }
+}
 const formatReplayInput = (epoch: number) => new Date(epoch * 1000 + 60 * 60 * 1000).toISOString().slice(0, 16);
 const parseReplayInput = (value: string) => {
   if (!value) return NaN;
@@ -464,10 +486,17 @@ export default function FinancialChart({ symbol, isActive = false, liveTick, req
     const host = containerRef.current;
     const sourceFeed = {
       async getBars(req: BarsRequest) {
-        // Never block the first chart paint on an expensive earliest-history
-        // probe. Deriv history is paged aggressively in the background after
-        // the first 5,000 candles are on screen.
+        const cached = getCachedHistory(req.symbol, req.interval);
+        if (cached.length) {
+          candlesRef.current = cached;
+          updateMarketQuote(cached);
+          void requestBars({ ...req, noCache: false }, requestHistoryRef.current)
+            .then(fresh => { if (fresh.length) putCachedHistory(req.symbol, req.interval, fresh); })
+            .catch(() => undefined);
+          return cached;
+        }
         const bars = await requestBars(req, requestHistoryRef.current);
+        putCachedHistory(req.symbol, req.interval, bars);
         candlesRef.current = bars;
         updateMarketQuote(bars);
         resyncRef.current = null;
@@ -712,6 +741,7 @@ export default function FinancialChart({ symbol, isActive = false, liveTick, req
     // finding the provider's absolute first tick.
     void backfillHistoryTo().then(bars => {
       candlesRef.current = bars.slice().sort((a, b) => a.time - b.time);
+      putCachedHistory(symbolRef.current, widget.interval(), candlesRef.current);
       updateMarketQuote(candlesRef.current);
       window.setTimeout(refreshTpoProfile, 0);
     });
@@ -726,7 +756,10 @@ export default function FinancialChart({ symbol, isActive = false, liveTick, req
       // the primary series while the managed controller may still only know
       // about its original first page.
       const loaded = widget.series.getData?.();
-      if (loaded?.length) candlesRef.current = loaded.slice().sort((a, b) => a.time - b.time);
+      if (loaded?.length) {
+        candlesRef.current = loaded.slice().sort((a, b) => a.time - b.time);
+        putCachedHistory(symbolRef.current, widget.interval(), candlesRef.current);
+      }
       else {
         const managed = widget.dataController?.bars();
         if (managed?.length) candlesRef.current = managed.slice().sort((a, b) => a.time - b.time);
@@ -1048,6 +1081,7 @@ export default function FinancialChart({ symbol, isActive = false, liveTick, req
       for (const bar of [...bars, ...older]) merged.set(bar.time, bar);
       bars = [...merged.values()].sort((a, b) => a.time - b.time);
       candlesRef.current = bars;
+      putCachedHistory(symbolRef.current, widget.interval(), bars);
       widget.series.setData(bars);
       updateMarketQuote(bars);
       pageCount += pages.length;
