@@ -51,6 +51,5 @@
 .sire-bottom-draw-button{position:absolute;left:136px;top:14px;width:48px;height:44px;pointer-events:auto;border:0;background:transparent;color:#f3f4f6;border-radius:9px;display:flex;align-items:center;justify-content:center;cursor:pointer;touch-action:manipulation;padding:0;box-sizing:border-box}
 .sire-bottom-draw-button:before{content:"";position:absolute;left:-1px;top:-14px;height:72px;width:1px;background:rgba(255,255,255,.18);box-shadow:0 0 8px rgba(255,255,255,.05);pointer-events:none}
 .sire-bottom-draw-button:hover,.sire-bottom-draw-button:focus-visible{background:rgba(255,255,255,.08);outline:none}
-.sire-bottom-draw-pen{position:absolute;top:7px;left:13px;display:grid;place-items:center;transform:rotate(42deg);transform-origin:center;color:#f3f4f6}
-.sire-bottom-draw-wave{position:absolute;left:17px;bottom:5px;color:#bfc4cf}
-@media(max-width:640px){.sire-bottom-draw-button{left:130px;top:11px;width:46px;height:44px}.sire-bottom-draw-button:before{top:-11px;height:66px}.sire-bottom-draw-pen{top:7px;left:12px}.sire-bottom-draw-wave{left:16px;bottom:5px}}
+.sire-bottom-draw-icon{display:block;width:24px;height:24px;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+@media(max-width:640px){.sire-bottom-draw-button{left:130px;top:11px;width:46px;height:44px}.sire-bottom-draw-button:before{top:-11px;height:66px}}
