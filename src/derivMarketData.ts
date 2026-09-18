@@ -188,30 +188,55 @@ export class DerivMarketData {
 
   subscribe(symbol: string): Promise<DerivResponse> { return this.request({ ticks: symbol, subscribe: 1 }); }
 
-  async history(symbol: string, granularity: number): Promise<DerivResponse> {
+  async history(symbol: string, granularity: number, start?: number, end?: number | 'latest', count = 5000): Promise<DerivResponse> {
     const allCandles: Record<string, unknown>[] = [];
-    let end: number | 'latest' = 'latest';
-    const pageSize = 5000;
-    const maxPages = 100;
+    const pageSize = Math.min(Math.max(Math.floor(count), 1), 5000);
+    let pageEnd: number | 'latest' = end ?? 'latest';
+    const lowerBound = Number.isFinite(start) ? Math.floor(Number(start)) : undefined;
+    const maxPages = lowerBound !== undefined && pageEnd !== 'latest'
+      ? Math.min(200, Math.max(1, Math.ceil(Math.max(0, pageEnd - lowerBound) / Math.max(granularity, 1) / pageSize)))
+      : 1;
+
     for (let page = 0; page < maxPages; page += 1) {
-      // Do not send subscribe: 0 here. A one-shot ticks_history request needs
-      // no subscribe field and this keeps the request valid on both the current
-      // and legacy public market-data schemas.
-      const response = await this.request({ ticks_history: symbol, end, count: pageSize, style: 'candles', granularity });
-      if (response.error) { const error = response.error as Record<string, unknown>; throw new Error(`Deriv historical candles failed: ${String(error.message || 'Unknown API error')}`); }
-      const candles = Array.isArray(response.candles) ? response.candles.filter((item: unknown): item is Record<string, unknown> => Boolean(item && typeof item === 'object')) : [];
+      // One-shot ticks_history requests work on both the current and legacy
+      // public market-data schemas. When a range is supplied, page backwards
+      // inside that range so OpenAlgo can ask for older history without making
+      // every initial chart load download the entire instrument history.
+      const request: Record<string, unknown> = {
+        ticks_history: symbol,
+        end: pageEnd,
+        count: pageSize,
+        style: 'candles',
+        granularity,
+      };
+      if (lowerBound !== undefined) request.start = lowerBound;
+      const response = await this.request(request);
+      if (response.error) {
+        const error = response.error as Record<string, unknown>;
+        throw new Error(`Deriv historical candles failed: ${String(error.message || 'Unknown API error')}`);
+      }
+      const candles = Array.isArray(response.candles)
+        ? response.candles.filter((item: unknown): item is Record<string, unknown> => Boolean(item && typeof item === 'object'))
+        : [];
       if (!candles.length) break;
       allCandles.push(...candles);
-      if (candles.length < pageSize) break;
+      if (candles.length < pageSize || lowerBound === undefined) break;
       const epochs = candles.map(c => Number(c.epoch)).filter(Number.isFinite);
       if (!epochs.length) break;
       const nextEnd = Math.floor(Math.min(...epochs)) - 1;
-      if (end !== 'latest' && nextEnd >= end) break;
-      end = nextEnd;
+      if (nextEnd < lowerBound || (pageEnd !== 'latest' && nextEnd >= pageEnd)) break;
+      pageEnd = nextEnd;
     }
+
     const unique = new Map<number, Record<string, unknown>>();
-    allCandles.forEach(candle => { const epoch = Number(candle.epoch); if (Number.isFinite(epoch)) unique.set(epoch, candle); });
-    return { candles: Array.from(unique.values()).sort((a, b) => Number(a.epoch) - Number(b.epoch)), echo_req: { ticks_history: symbol, style: 'candles', granularity } };
+    allCandles.forEach(candle => {
+      const epoch = Number(candle.epoch);
+      if (Number.isFinite(epoch) && (lowerBound === undefined || epoch >= lowerBound)) unique.set(epoch, candle);
+    });
+    return {
+      candles: Array.from(unique.values()).sort((a, b) => Number(a.epoch) - Number(b.epoch)),
+      echo_req: { ticks_history: symbol, style: 'candles', granularity, start: lowerBound, end: end ?? 'latest' },
+    };
   }
 
   onTick(listener: (tick: DerivTick) => void): () => void { this.listeners.add(listener); return () => this.listeners.delete(listener); }
