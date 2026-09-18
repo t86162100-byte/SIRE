@@ -19,6 +19,7 @@ export default function App() {
   const [researchLabOpen, setResearchLabOpen] = useState(false);
   const selectedRef = useRef<DerivInstrument | null>(null);
   const [chartLayout, setChartLayout] = useState<1 | 2 | 4>(1);
+  const [activeChartIndex, setActiveChartIndex] = useState(0);
   const [linked, setLinked] = useState(true);
   const [chartSymbols, setChartSymbols] = useState<string[]>([]);
   const linkGroupRef = useRef<LinkGroup | null>(null);
@@ -28,6 +29,9 @@ export default function App() {
     if (!instruments.length) return;
     setChartSymbols(current => Array.from({ length: chartLayout }, (_, index) => current[index] || (index === 0 ? (selected?.symbol || instruments[0].symbol) : instruments[index % instruments.length].symbol)));
   }, [chartLayout, instruments, selected?.symbol]);
+  useEffect(() => {
+    setActiveChartIndex(current => Math.min(current, chartLayout - 1));
+  }, [chartLayout]);
   useEffect(() => {
     if (!linkGroupRef.current) linkGroupRef.current = createLinkGroup({ crosshair: true, viewport: true, symbol: linked });
     else linkGroupRef.current.setOptions({ crosshair: true, viewport: true, symbol: linked });
@@ -90,7 +94,7 @@ export default function App() {
         {lastError && <div className="native-error-banner">{lastError}</div>}
         <div className="sire-workspace-toolbar"><span>SIRE · OpenAlgo</span><button type="button" className={chartLayout === 1 ? 'active' : ''} onClick={() => setChartLayout(1)}>1</button><button type="button" className={chartLayout === 2 ? 'active' : ''} onClick={() => setChartLayout(2)}>2</button><button type="button" className={chartLayout === 4 ? 'active' : ''} onClick={() => setChartLayout(4)}>4</button><button type="button" className={linked ? 'active' : ''} onClick={() => setLinked(value => !value)}>Link</button></div>
         <div className={`sire-chart-grid sire-chart-grid--${chartLayout}`} onContextMenu={event => event.preventDefault()}>
-          {chartItems.map((chartSymbol, index) => <div className="sire-chart-cell" key={index}>{chartSymbol && <FinancialChart
+          {chartItems.map((chartSymbol, index) => <div className={`sire-chart-cell${activeChartIndex === index ? ' sire-chart-cell--active' : ''}`} key={index} onPointerDown={() => setActiveChartIndex(index)}>{chartSymbol && <FinancialChart
             symbol={chartSymbol}
             liveTick={latestBySymbol[chartSymbol] || null}
             requestHistory={requestHistory}
