@@ -128,7 +128,7 @@ export default function App() {
       <section className="native-chart-panel">
         {lastError && <div className="native-error-banner">{lastError}</div>}
         <div className="sire-workspace-toolbar"><span>SIRE · OpenAlgo</span><button type="button" className={linked ? 'active' : ''} onClick={() => setLinked(value => !value)}>Link</button></div>
-        <div className={`sire-chart-grid sire-chart-grid--${chartLayout} sire-chart-grid--${multiChartPosition}`} onContextMenu={event => event.preventDefault()}>
+        <div className={`sire-chart-grid sire-chart-grid--${chartLayout}${chartLayout === 2 ? ` sire-chart-grid--${multiChartPosition}` : ''}`} onContextMenu={event => event.preventDefault()}>
           {chartItems.map((chartSymbol, index) => <div className={`sire-chart-cell${activeChartIndex === index ? ' sire-chart-cell--active' : ''}`} key={index} onPointerDown={() => setActiveChartIndex(index)}>{chartSymbol && <FinancialChart
             symbol={chartSymbol}
             isActive={activeChartIndex === index}
@@ -157,7 +157,7 @@ export default function App() {
             <div className="sire-multichart-head"><div><strong>Multi-chart</strong><small>{chartLayout === 2 ? 'Manage the second window' : 'Add a second window'}</small></div><button type="button" onClick={() => setMultiChartOpen(false)} aria-label="Close multi-chart manager">×</button></div>
             <label className="sire-multichart-field"><span>Instrument</span><select value={multiChartInstrument} onChange={event => setMultiChartInstrument(event.target.value)}>{instruments.map(item => <option key={item.symbol} value={item.symbol}>{item.name} · {item.symbol}</option>)}</select></label>
             <div className="sire-multichart-field"><span>New window position</span><div className="sire-multichart-directions">{(['up','down','left','right'] as const).map(position => <button key={position} type="button" className={multiChartPosition === position ? 'active' : ''} onClick={() => setMultiChartPosition(position)}>{position === 'up' ? '↑ Up' : position === 'down' ? '↓ Down' : position === 'left' ? '← Left' : '→ Right'}</button>)}</div></div>
-            <div className="sire-multichart-actions">{chartLayout === 2 && <><button type="button" className="danger" onClick={removeSecondChart}>Delete window</button><button type="button" onClick={makeSecondMainChart}>Make selected main</button></>}<button type="button" className="primary" onClick={confirmMultiChart}>{chartLayout === 2 ? 'Apply' : 'Confirm'}</button></div>
+            <div className="sire-multichart-actions"><button type="button" className="primary" onClick={confirmMultiChart}>{chartLayout === 2 ? 'Apply' : 'Confirm'}</button></div>
           </div>
         </div>}
         {instrumentSearchOpen && <div className="sire-instrument-search-overlay" onContextMenu={event => event.preventDefault()}>
