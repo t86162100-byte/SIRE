@@ -18,6 +18,8 @@ function style() {
   el.textContent = `
     #${NAV_ID}.nav-auto-hidden{display:none!important;opacity:0!important;pointer-events:none!important}
     #${NAV_ID}{transition:opacity .28s ease,transform .28s ease!important}
+    .sire-bottom-glass-bar{transition:bottom .28s ease!important}
+    .sire-bottom-glass-bar.nav-visible{bottom:calc(max(8px,env(safe-area-inset-bottom)) + var(--sire-nav-clearance, 0px))!important}
   `;
   document.head.appendChild(el);
 }
@@ -28,9 +30,16 @@ function currentNav() {
 
 function syncGlassBar() {
   const nav = currentNav();
-  const bar = document.querySelector('.native-bottom-glass-bar');
+  const bar = document.querySelector('.sire-bottom-glass-bar');
   if (!bar) return;
-  bar.classList.toggle('nav-visible', !!nav && !nav.classList.contains('nav-auto-hidden'));
+  const visible = !!nav && !nav.classList.contains('nav-auto-hidden');
+  if (visible && nav) {
+    const navHeight = Math.ceil(nav.getBoundingClientRect().height);
+    bar.style.setProperty('--sire-nav-clearance', `${Math.max(0, navHeight + 8)}px`);
+  } else {
+    bar.style.removeProperty('--sire-nav-clearance');
+  }
+  bar.classList.toggle('nav-visible', visible);
 }
 
 function reveal(ms = HIDE_AFTER) {
