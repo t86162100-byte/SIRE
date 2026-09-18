@@ -743,6 +743,15 @@ export default function FinancialChart({ symbol, liveTick, requestHistory, instr
         </div>
         <button
           type="button"
+          className="sire-bottom-indicator-button"
+          aria-label="Open indicators"
+          title="Indicators"
+          onClick={() => widgetRef.current?.openIndicatorPicker()}
+        >
+          <span className="sire-bottom-indicator-icon" aria-hidden="true">ƒ</span>
+        </button>
+        <button
+          type="button"
           className="sire-bottom-draw-button"
           aria-label="Open drawing tools"
           title="Open drawing tools"
