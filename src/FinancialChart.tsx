@@ -3,7 +3,7 @@ import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, ArrowUpRight, Circle, Crossh
 import { addComparison, comparisonController, PriceLevels, ReplayController, registerInterval, withBarCache } from 'openalgo-charts';
 import 'openalgo-charts/indicators';
 import 'openalgo-charts/draw';
-import { iconSvg, registeredDrawingTools } from 'openalgo-charts/draw';
+import 'openalgo-charts/draw';
 import { computeMarketProfile, MarketProfile } from 'openalgo-charts/profile';
 import 'openalgo-charts/trade';
 import 'openalgo-charts/transform';
@@ -185,10 +185,6 @@ async function requestBars(req: BarsRequest, requestHistory: HistoryRequester): 
 export default function FinancialChart({ symbol, isActive = false, liveTick, requestHistory, instruments, onSelectInstrument, onWidgetReady, onWidgetDestroyed, onInstrumentTap }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [drawRackOpen, setDrawRackOpen] = useState(false);
-  const [drawGroup, setDrawGroup] = useState(1);
-  const [activeDrawTool, setActiveDrawTool] = useState<string | null>(null);
-  const [customDrawingCrosshair, setCustomDrawingCrosshair] = useState<{ x: number; y: number } | null>(null);
-  const [drawingCrosshair, setDrawingCrosshair] = useState<{ time: number; price: number; paneIndex: number; x: number; y: number } | null>(null);
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [compareQuery, setCompareQuery] = useState('');
   const [comparisons, setComparisons] = useState<string[]>([]);
@@ -223,21 +219,6 @@ export default function FinancialChart({ symbol, isActive = false, liveTick, req
   const [replayRangeError, setReplayRangeError] = useState<string | null>(null);
   const [replayDraftSpeed, setReplayDraftSpeed] = useState(1);
   const [marketQuote, setMarketQuote] = useState<{ price: number; percent: number } | null>(null);
-  const availableDrawTools = useMemo(() => new Set(['__cursor__', ...registeredDrawingTools().map(tool => tool.id)]), []);
-  const universalIcons = useMemo(() => ({
-    cursor: MousePointer2, 'trend-line': Slash, ray: MoveUpRight, 'extended-line': ArrowUpRight,
-    'horizontal-line': Minus, 'horizontal-ray': ArrowRight, 'vertical-line': ArrowUp, 'cross-line': Crosshair,
-    arrow: ArrowUpRight, 'parallel-channel': GitBranch, 'fib-retracement': Waves, 'fib-extension': Waves,
-    'fib-channel': Waves, 'fib-time-zone': Waves, 'fib-fan': GitBranch, 'gann-fan': GitBranch, 'gann-box': RectangleHorizontal,
-    'cyclic-lines': Circle, 'time-cycles': Circle, 'sine-line': Waves, path: Pencil, polyline: Pencil,
-    triangle: Shapes, 'rotated-rectangle': RectangleHorizontal, 'double-curve': Waves, forecast: ArrowUpRight,
-    'price-range': Ruler, 'date-range': Ruler, measure: Ruler, 'long-position': ArrowUp, 'short-position': ArrowDown,
-    rectangle: RectangleHorizontal, ellipse: Circle, circle: Circle, arc: Circle, curve: Waves,
-    highlighter: Highlighter, brush: Pencil, text: Type, note: TextCursorInput, 'price-note': TextCursorInput,
-    callout: TextCursorInput, comment: TextCursorInput, balloon: TextCursorInput, signpost: Target, table: Table2,
-    'price-label': TextCursorInput, 'flag-mark': Target, 'arrow-up': ArrowUp, 'arrow-down': ArrowDown,
-    'arrow-left': ArrowLeft, 'arrow-right': ArrowRight,
-  } as Record<string, React.ComponentType<{ size?: number; strokeWidth?: number }> >), []);
   const widgetRef = useRef<Widget | null>(null);
   const candlesRef = useRef<Candle[]>([]);
   const subscriberRef = useRef<((bar: Candle) => void) | null>(null);
@@ -397,60 +378,6 @@ export default function FinancialChart({ symbol, isActive = false, liveTick, req
   };
 
   useEffect(() => {
-    const host = containerRef.current;
-    if (!host) return;
-    const onDrawButton = (event: MouseEvent) => {
-      const target = event.target as HTMLElement | null;
-      const button = target?.closest<HTMLElement>('[data-mobile-action="draw"]');
-      if (!button) return;
-      event.preventDefault();
-      event.stopPropagation();
-      setDrawRackOpen(open => !open);
-    };
-    host.addEventListener('click', onDrawButton, true);
-    return () => host.removeEventListener('click', onDrawButton, true);
-  }, []);
-
-  useEffect(() => {
-    const host = containerRef.current;
-    if (!host || !activeDrawTool) {
-      setCustomDrawingCrosshair(null);
-      return;
-    }
-
-    // SIRE-owned crosshair: appears immediately when a drawing tool is confirmed.
-    const rect = host.getBoundingClientRect();
-    setCustomDrawingCrosshair({
-      x: Math.max(1, rect.width * 0.5),
-      y: Math.max(1, rect.height * 0.5),
-    });
-
-    const moveCrosshair = (event: PointerEvent) => {
-      const nextRect = host.getBoundingClientRect();
-      setCustomDrawingCrosshair({
-        x: Math.max(0, Math.min(nextRect.width, event.clientX - nextRect.left)),
-        y: Math.max(0, Math.min(nextRect.height, event.clientY - nextRect.top)),
-      });
-    };
-
-    const moveFromWindow = (event: PointerEvent) => {
-      const nextRect = host.getBoundingClientRect();
-      const x = event.clientX - nextRect.left;
-      const y = event.clientY - nextRect.top;
-      if (x < 0 || y < 0 || x > nextRect.width || y > nextRect.height) return;
-      setCustomDrawingCrosshair({ x, y });
-    };
-    host.addEventListener('pointermove', moveCrosshair, true);
-    host.addEventListener('pointerenter', moveCrosshair, true);
-    window.addEventListener('pointermove', moveFromWindow, true);
-    return () => {
-      host.removeEventListener('pointermove', moveCrosshair, true);
-      host.removeEventListener('pointerenter', moveCrosshair, true);
-      window.removeEventListener('pointermove', moveFromWindow, true);
-    };
-  }, [activeDrawTool]);
-
-  useEffect(() => {
     if (!drawRackOpen) return;
     const onEscape = (event: KeyboardEvent) => {
       if (event.key === 'Escape') setDrawRackOpen(false);
@@ -514,6 +441,9 @@ export default function FinancialChart({ symbol, isActive = false, liveTick, req
     const pitchBlackTheme = { ...widget.chart.theme(), background: '#000000' };
     widget.setTheme(pitchBlackTheme);
     widget.chart.applyOptions({ canvas: { background: '#000000' } });
+    // OpenAlgo owns the crosshair. Normal mode follows the pointer exactly;
+    // drawing placement consumes that same native crosshair position.
+    widget.chart.applyOptions({ crosshair: { mode: 'normal' } });
     const priceLevels = new PriceLevels({
       timezone: 'Africa/Lagos',
       quote: () => {
@@ -525,71 +455,6 @@ export default function FinancialChart({ symbol, isActive = false, liveTick, req
     setRendererKind(widget.chart.rendererKind);
     const offRenderer = widget.chart.on('renderer:fallback', () => setRendererKind('canvas2d'));
     widgetRef.current = widget;
-
-    // Keep OpenAlgo responsible for the drawing lifecycle. The small adapter
-    // below only makes placement use the native crosshair position: selecting
-    // a tool primes the chart's own crosshair, and a tap anywhere confirms
-    // whatever native crosshair position is currently active.
-    let nativeCrosshairPoint: { time: number; price: number; paneIndex: number } | null = null;
-    const captureCrosshair = (event: any) => {
-      const time = Number(event?.time);
-      const price = Number(event?.price);
-      const paneIndex = Number(event?.paneIndex ?? 0);
-      if (!Number.isFinite(time) || !Number.isFinite(price) || !Number.isFinite(paneIndex)) return;
-
-      nativeCrosshairPoint = { time, price, paneIndex };
-
-      // OpenAlgo includes the exact container-relative pointer point on the
-      // crosshair event. Prefer it over a second coordinate conversion so the
-      // inspection lens follows the same pixel intersection the user sees.
-      const pointX = Number(event?.point?.x);
-      const pointY = Number(event?.point?.y);
-      const convertedX = widget.chart.timeToCoordinate(time);
-      const convertedY = widget.chart.priceToCoordinate(price, paneIndex);
-      const x = Number.isFinite(pointX) ? pointX : convertedX;
-      const y = Number.isFinite(pointY) ? pointY : convertedY;
-      if (Number.isFinite(x) && Number.isFinite(y)) {
-        setDrawingCrosshair({ time, price, paneIndex, x: Number(x), y: Number(y) });
-      }
-    };
-    const offNativeCrosshair = widget.chart.on('crosshair:move', captureCrosshair);
-    const nativeEmit = widget.chart.emit.bind(widget.chart);
-    widget.chart.emit = ((event: string, payload: any) => {
-      if (event === 'click' && widget.draw.activeTool?.() && nativeCrosshairPoint) {
-        payload = { ...payload, time: nativeCrosshairPoint.time, price: nativeCrosshairPoint.price, paneIndex: nativeCrosshairPoint.paneIndex };
-      }
-      return nativeEmit(event, payload);
-    }) as typeof widget.chart.emit;
-
-    const primeNativeCrosshair = () => {
-      const rect = host.getBoundingClientRect();
-      const x = Math.max(1, Math.min(rect.width - 1, rect.width * 0.5));
-      const y = Math.max(1, Math.min(rect.height - 1, rect.height * 0.5));
-      const chartTime = widget.chart.coordinateToTime(x);
-      const chartPrice = widget.chart.coordinateToPrice(y, 0);
-
-      // Seed the inspection lens immediately when a drawing tool is armed.
-      // The real crosshair event will replace this seed on the next pointer
-      // move, but the lens is never blank between tool selection and movement.
-      if (Number.isFinite(chartTime) && Number.isFinite(chartPrice)) {
-        captureCrosshair({
-          time: chartTime,
-          price: chartPrice,
-          paneIndex: 0,
-          point: { x, y },
-        });
-      }
-
-      const event = new PointerEvent('pointermove', {
-        bubbles: true,
-        clientX: rect.left + x,
-        clientY: rect.top + y,
-        pointerId: 0,
-        pointerType: 'mouse',
-        buttons: 0,
-      });
-      host.dispatchEvent(event);
-    };
 
     const updateSelectedDrawingOverlay = (drawing: any) => {
       if (!drawing) {
@@ -800,8 +665,6 @@ export default function FinancialChart({ symbol, isActive = false, liveTick, req
       offInterval?.();
       offData?.();
       offRenderer?.();
-      offNativeCrosshair?.();
-      setDrawingCrosshair(null);
       offDrawingObjects?.();
       offIndicatorObjects?.();
       offDrawingSelect?.();
@@ -1216,7 +1079,6 @@ export default function FinancialChart({ symbol, isActive = false, liveTick, req
                         onClick={() => {
                           widgetRef.current?.draw.setTool(null);
                           setActiveDrawTool(null);
-                          setDrawingCrosshair(null);
                         }}
                       >
                         <span className="sire-draw-rack__tool-icon"><MousePointer2 size={24} strokeWidth={1.8} /></span>
@@ -1235,11 +1097,6 @@ export default function FinancialChart({ symbol, isActive = false, liveTick, req
                       onClick={() => {
                         const widget = widgetRef.current;
                         if (!widget) return;
-                        // OpenAlgo owns placement, preview, snapping and anchors.
-                        // Prime its native crosshair before the trader's next touch.
-                        widget.draw.setTool(tool.id);
-                        primeNativeCrosshair();
-                        setActiveDrawTool(tool.id);
                       }}
                     >
                       <span className="sire-draw-rack__tool-icon">{(() => { const Icon = universalIcons[tool.id] ?? MousePointer2; return <Icon size={23} strokeWidth={1.8} />; })()}</span>
@@ -1408,9 +1265,9 @@ export default function FinancialChart({ symbol, isActive = false, liveTick, req
         <button
           type="button"
           className="sire-bottom-tools-button"
-          aria-label={drawRackOpen ? 'Close drawing tools' : 'Open drawing tools'}
+          aria-label={drawRackOpen ? 'Close OpenAlgo drawing tools' : 'Open OpenAlgo drawing tools'}
           aria-expanded={drawRackOpen}
-          title={drawRackOpen ? 'Close tools' : 'Tools'}
+          title={drawRackOpen ? 'Close OpenAlgo tools' : 'OpenAlgo drawing tools'}
           onClick={() => setDrawRackOpen(open => !open)}
         >
           <Wrench size={22} strokeWidth={1.8} aria-hidden="true" />
