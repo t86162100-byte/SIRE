@@ -3,7 +3,6 @@ import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, ArrowUpRight, Circle, Crossh
 import { addComparison, comparisonController, PriceLevels, ReplayController, registerInterval, withBarCache } from 'openalgo-charts';
 import 'openalgo-charts/indicators';
 import 'openalgo-charts/draw';
-import 'openalgo-charts/draw';
 import { computeMarketProfile, MarketProfile } from 'openalgo-charts/profile';
 import 'openalgo-charts/trade';
 import 'openalgo-charts/transform';
@@ -963,17 +962,6 @@ export default function FinancialChart({ symbol, isActive = false, liveTick, req
     refreshTpoProfile();
   };
 
-  const visibleGroups = useMemo(() => {
-    const registered = registeredDrawingTools();
-    const groups = DRAW_RACK_GROUPS.map(group => ({ ...group, tools: group.tools.filter(id => availableDrawTools.has(id)) })).filter(group => group.tools.length > 0);
-    const grouped = new Set(groups.flatMap(group => group.tools));
-    const remaining = registered.map(tool => tool.id).filter(id => !grouped.has(id));
-    if (remaining.length) groups.push({ label: 'All other OpenAlgo tools', tools: remaining });
-    return groups;
-  }, [availableDrawTools]);
-
-  const currentGroup = visibleGroups[Math.min(drawGroup, Math.max(visibleGroups.length - 1, 0))] ?? visibleGroups[0];
-
   return (
     <div ref={containerRef} className={`sire-financial-chart${drawRackOpen ? ' sire-draw-rack-open' : ''}${isActive ? ' sire-toolbar-owner' : ''}`}>
       <div className="sire-market-quote" aria-label={`Selected ${marketInstrumentName}`}>
@@ -1039,75 +1027,6 @@ export default function FinancialChart({ symbol, isActive = false, liveTick, req
           </div>
         </div>
       )}
-      <div className={`sire-draw-rack${drawRackOpen ? ' is-open' : ''}`} role="dialog" aria-label="Drawing tools" aria-hidden={!drawRackOpen}>
-          <div className="sire-draw-rack__rail">
-            <button className="sire-draw-rack__close" type="button" aria-label="Close drawing tools" onClick={() => setDrawRackOpen(false)}>×</button>
-            {visibleGroups.map((group, index) => (
-              <button
-                key={group.label}
-                type="button"
-                className={`sire-draw-rack__group${index === drawGroup ? ' is-active' : ''}`}
-                onClick={() => setDrawGroup(index)}
-                title={group.label}
-                aria-label={group.label}
-              >
-                <span className="sire-draw-rack__group-icon">
-                  {(() => {
-                    const Icon = universalIcons[group.tools[0]] ?? MousePointer2;
-                    return <Icon size={21} strokeWidth={1.8} />;
-                  })()}
-                </span>
-                <span className="sire-draw-rack__group-label">{group.label}</span>
-              </button>
-            ))}
-          </div>
-          {currentGroup && (
-            <div className="sire-draw-rack__panel">
-              <div className="sire-draw-rack__panel-head">
-                <strong>{currentGroup.label}</strong>
-                <button type="button" onClick={() => setDrawRackOpen(false)} aria-label="Close">×</button>
-              </div>
-              <div className="sire-draw-rack__tools">
-                {currentGroup.tools.map(toolId => {
-                  if (toolId === '__cursor__') {
-                    return (
-                      <button
-                        key="cursor"
-                        type="button"
-                        className={`sire-draw-rack__tool${activeDrawTool === null ? ' is-active' : ''}`}
-                        title="Cursor"
-                        onClick={() => {
-                          widgetRef.current?.draw.setTool(null);
-                          setActiveDrawTool(null);
-                        }}
-                      >
-                        <span className="sire-draw-rack__tool-icon"><MousePointer2 size={24} strokeWidth={1.8} /></span>
-                        <span>Cursor</span>
-                      </button>
-                    );
-                  }
-                  const tool = registeredDrawingTools().find(item => item.id === toolId);
-                  if (!tool) return null;
-                  return (
-                    <button
-                      key={tool.id}
-                      type="button"
-                      className={`sire-draw-rack__tool${activeDrawTool === tool.id ? ' is-active' : ''}`}
-                      title={tool.name}
-                      onClick={() => {
-                        const widget = widgetRef.current;
-                        if (!widget) return;
-                      }}
-                    >
-                      <span className="sire-draw-rack__tool-icon">{(() => { const Icon = universalIcons[tool.id] ?? MousePointer2; return <Icon size={23} strokeWidth={1.8} />; })()}</span>
-                      <span>{tool.name}</span>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-        </div>
       {selectedIndicator && (
         <div
           className="sire-indicator-selection-bar"
