@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, ArrowUpRight, Circle, Crosshair, Eraser, GitBranch, Highlighter, Minus, MousePointer2, MoveUpRight, Pencil, Plus, RectangleHorizontal, Ruler, Shapes, Slash, Square, Table2, Target, TextCursorInput, Type, Waves } from 'lucide-react';
 import 'openalgo-charts/indicators';
 import 'openalgo-charts/draw';
-import { DRAWING_TOOL_ICONS, iconSvg, registeredDrawingTools } from 'openalgo-charts/draw';
+import { iconSvg, registeredDrawingTools } from 'openalgo-charts/draw';
 import 'openalgo-charts/profile';
 import 'openalgo-charts/trade';
 import 'openalgo-charts/transform';
@@ -77,6 +78,20 @@ export default function FinancialChart({ symbol, liveTick, requestHistory, instr
   const [drawGroup, setDrawGroup] = useState(1);
   const [activeDrawTool, setActiveDrawTool] = useState<string | null>(null);
   const availableDrawTools = useMemo(() => new Set(['__cursor__', ...registeredDrawingTools().map(tool => tool.id)]), []);
+  const universalIcons = useMemo(() => ({
+    cursor: MousePointer2, 'trend-line': Slash, ray: MoveUpRight, 'extended-line': ArrowUpRight,
+    'horizontal-line': Minus, 'horizontal-ray': ArrowRight, 'vertical-line': ArrowUp, 'cross-line': Crosshair,
+    arrow: ArrowUpRight, 'parallel-channel': GitBranch, 'fib-retracement': Waves, 'fib-extension': Waves,
+    'fib-channel': Waves, 'fib-time-zone': Waves, 'fib-fan': GitBranch, 'gann-fan': GitBranch, 'gann-box': RectangleHorizontal,
+    'cyclic-lines': Circle, 'time-cycles': Circle, 'sine-line': Waves, path: Pencil, polyline: Pencil,
+    triangle: Shapes, 'rotated-rectangle': RectangleHorizontal, 'double-curve': Waves, forecast: ArrowUpRight,
+    'price-range': Ruler, 'date-range': Ruler, measure: Ruler, 'long-position': ArrowUp, 'short-position': ArrowDown,
+    rectangle: RectangleHorizontal, ellipse: Circle, circle: Circle, arc: Circle, curve: Waves,
+    highlighter: Highlighter, brush: Pencil, text: Type, note: TextCursorInput, 'price-note': TextCursorInput,
+    callout: TextCursorInput, comment: TextCursorInput, balloon: TextCursorInput, signpost: Target, table: Table2,
+    'price-label': TextCursorInput, 'flag-mark': Target, 'arrow-up': ArrowUp, 'arrow-down': ArrowDown,
+    'arrow-left': ArrowLeft, 'arrow-right': ArrowRight,
+  } as Record<string, React.ComponentType<{ size?: number; strokeWidth?: number }> >), []);
   const widgetRef = useRef<Widget | null>(null);
   const candlesRef = useRef<Candle[]>([]);
   const subscriberRef = useRef<((bar: Candle) => void) | null>(null);
@@ -234,9 +249,10 @@ export default function FinancialChart({ symbol, liveTick, requestHistory, instr
                 aria-label={group.label}
               >
                 <span className="sire-draw-rack__group-icon">
-                  {group.tools[0] === '__cursor__'
-                    ? <span className="sire-draw-rack__cursor-glyph">＋</span>
-                    : DRAWING_TOOL_ICONS[group.tools[0]] && <span dangerouslySetInnerHTML={{ __html: iconSvg(group.tools[0], { size: 22 }) }} />}
+                  {(() => {
+                    const Icon = universalIcons[group.tools[0]] ?? MousePointer2;
+                    return <Icon size={21} strokeWidth={1.8} />;
+                  })()}
                 </span>
                 <span className="sire-draw-rack__group-label">{group.label}</span>
               </button>
@@ -262,7 +278,7 @@ export default function FinancialChart({ symbol, liveTick, requestHistory, instr
                           setActiveDrawTool(null);
                         }}
                       >
-                        <span className="sire-draw-rack__tool-icon sire-draw-rack__cursor-glyph">＋</span>
+                        <span className="sire-draw-rack__tool-icon"><MousePointer2 size={24} strokeWidth={1.8} /></span>
                         <span>Cursor</span>
                       </button>
                     );
@@ -280,7 +296,7 @@ export default function FinancialChart({ symbol, liveTick, requestHistory, instr
                         setActiveDrawTool(tool.id);
                       }}
                     >
-                      <span className="sire-draw-rack__tool-icon" dangerouslySetInnerHTML={{ __html: iconSvg(tool.id, { size: 24 }) }} />
+                      <span className="sire-draw-rack__tool-icon">{(() => { const Icon = universalIcons[tool.id] ?? MousePointer2; return <Icon size={23} strokeWidth={1.8} />; })()}</span>
                       <span>{tool.name}</span>
                     </button>
                   );
