@@ -197,6 +197,7 @@ export default function FinancialChart({ symbol, isActive = false, liveTick, req
   const [replayStartInput, setReplayStartInput] = useState('');
   const [replayEndInput, setReplayEndInput] = useState('');
   const [replayRangeError, setReplayRangeError] = useState<string | null>(null);
+  const [replayDraftSpeed, setReplayDraftSpeed] = useState(1);
   const availableDrawTools = useMemo(() => new Set(['__cursor__', ...registeredDrawingTools().map(tool => tool.id)]), []);
   const universalIcons = useMemo(() => ({
     cursor: MousePointer2, 'trend-line': Slash, ray: MoveUpRight, 'extended-line': ArrowUpRight,
