@@ -759,20 +759,7 @@ export default function FinancialChart({ symbol, isActive = false, liveTick, req
         >
           <span className="sire-bottom-multichart-icon" aria-hidden="true"><span /><span /><span /></span>
         </button>
-        <button
-          type="button"
-          className="sire-bottom-draw-button"
-          aria-label="Open drawing tools"
-          title="Open drawing tools"
-          onClick={() => setDrawRackOpen(open => !open)}
-        >
-          <svg className="sire-bottom-draw-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-            <path d="M2 20c3-3 6-3 9 0s6 3 9 0" />
-            <path d="M21 3l-1.7-1.7L5.2 15.4 3.5 20.5l5.1-1.7L21 6.4z" />
-            <path d="M16.9 4.7l2.4 2.4" />
-          </svg>
-        </button>
-        {timeframeOpen && (
+                {timeframeOpen && (
           <div className="sire-bottom-timeframe-menu">
             {DERIV_INTERVALS.map(interval => (
               <button
