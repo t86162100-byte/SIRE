@@ -14,7 +14,7 @@ export default function App() {
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState('Connecting to Deriv…');
   const [lastError, setLastError] = useState('');
-  const [latest, setLatest] = useState<Tick | null>(null);
+  const [latestBySymbol, setLatestBySymbol] = useState<Record<string, Tick>>({});
   const [researchLabOpen, setResearchLabOpen] = useState(false);
   const selectedRef = useRef<DerivInstrument | null>(null);
   const [chartLayout, setChartLayout] = useState<1 | 2 | 4>(1);
@@ -48,15 +48,29 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    setLatest(null); if (!selected) return; let mounted = true; setLastError(''); setStatus(`Connecting · ${selected.name}`);
-    const removeTick = derivMarketData.onTick(tick => { if (!mounted || tick.symbol !== selected.symbol) return; setLatest(tick); setStatus(`LIVE · ${selected.name}`); });
-    void derivMarketData.request({ forget_all: 'ticks' }).catch(() => undefined).then(() => derivMarketData.subscribe(selected.symbol)).catch(error => { if (mounted) setLastError(error instanceof Error ? error.message : String(error)); });
+    if (!chartSymbols.length) return;
+    let mounted = true;
+    setLastError('');
+    const removeTick = derivMarketData.onTick(tick => {
+      if (!mounted || !chartSymbols.includes(tick.symbol)) return;
+      setLatestBySymbol(current => ({ ...current, [tick.symbol]: tick }));
+      if (tick.symbol === chartSymbols[0]) setStatus(`LIVE · ${instruments.find(item => item.symbol === tick.symbol)?.name || tick.symbol}`);
+    });
+    const subscribeAll = async () => {
+      try {
+        await derivMarketData.request({ forget_all: 'ticks' });
+        for (const chartSymbol of [...new Set(chartSymbols)]) await derivMarketData.subscribe(chartSymbol);
+      } catch (error) {
+        if (mounted) setLastError(error instanceof Error ? error.message : String(error));
+      }
+    };
+    void subscribeAll();
     return () => { mounted = false; removeTick(); };
-  }, [selected?.symbol]);
+  }, [chartSymbols.join('|'), instruments]);
 
   const requestHistory = useCallback(async (request: Record<string, unknown>): Promise<DerivResponse> => typeof request.ticks_history === 'string' ? derivMarketData.history(String(request.ticks_history), Number(request.granularity || 60)) : derivMarketData.request(request), []);
   const filtered = useMemo(() => { const q = search.trim().toLowerCase(); return q ? instruments.filter(item => `${item.name} ${item.symbol}`.toLowerCase().includes(q)) : instruments; }, [instruments, search]);
-  const selectInstrument = (item: DerivInstrument) => { setSelected(item); setSearch(''); };
+  const selectInstrument = (item: DerivInstrument) => { setSelected(item); setSearch(''); setChartSymbols(current => current.length ? current.map((value, index) => index === 0 ? item.symbol : value) : [item.symbol]); };
 
   const chartItems = chartSymbols.slice(0, chartLayout);
   return <main className={`native-terminal-shell${researchLabOpen ? ' sire-research-open' : ''}`}>
@@ -66,7 +80,7 @@ export default function App() {
         {lastError && <div className="native-error-banner">{lastError}</div>}
         <div className="sire-workspace-toolbar"><span>SIRE · OpenAlgo</span><button type="button" className={chartLayout === 1 ? 'active' : ''} onClick={() => setChartLayout(1)}>1</button><button type="button" className={chartLayout === 2 ? 'active' : ''} onClick={() => setChartLayout(2)}>2</button><button type="button" className={chartLayout === 4 ? 'active' : ''} onClick={() => setChartLayout(4)}>4</button><button type="button" className={linked ? 'active' : ''} onClick={() => setLinked(value => !value)}>Link</button></div>
         <div className={`sire-chart-grid sire-chart-grid--${chartLayout}`}>
-          {chartItems.map((chartSymbol, index) => <div className="sire-chart-cell" key={index}>{chartSymbol && <FinancialChart symbol={chartSymbol} liveTick={index === 0 ? latest : null} requestHistory={requestHistory} instruments={instruments.map(item => ({ symbol: item.symbol, name: item.name }))} onSelectInstrument={item => setChartSymbols(current => current.map((value, slot) => slot === index ? item.symbol : value))} onWidgetReady={widget => { const group = linkGroupRef.current || createLinkGroup({ crosshair: true, viewport: true, symbol: linked }); linkGroupRef.current = group; group.add(widget.chart, { symbol: chartSymbol, onSymbol: next => setChartSymbols(current => current.map((value, slot) => slot === index ? next : value)) }); }} />}</div>)}
+          {chartItems.map((chartSymbol, index) => <div className="sire-chart-cell" key={index}>{chartSymbol && <FinancialChart symbol={chartSymbol} liveTick={latestBySymbol[chartSymbol] || null} requestHistory={requestHistory} instruments={instruments.map(item => ({ symbol: item.symbol, name: item.name }))} onSelectInstrument={item => setChartSymbols(current => current.map((value, slot) => slot === index ? item.symbol : value))} onWidgetReady={widget => { const group = linkGroupRef.current || createLinkGroup({ crosshair: true, viewport: true, symbol: linked }); linkGroupRef.current = group; group.add(widget.chart, { symbol: chartSymbol, onSymbol: next => setChartSymbols(current => current.map((value, slot) => slot === index ? next : value)) }); }} />}</div>)}
         </div>
       </section>
     </div>
