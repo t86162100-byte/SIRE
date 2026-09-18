@@ -523,6 +523,7 @@ export default function FinancialChart({ symbol, isActive = false, liveTick, req
   }, []);
 
   useEffect(() => {
+    if (replayRef.current) stopReplay();
     const widget = widgetRef.current;
     if (widget && widget.symbol() !== symbol) widget.setSymbol(symbol, 'Deriv Synthetic Indices');
   }, [symbol]);
@@ -531,6 +532,7 @@ export default function FinancialChart({ symbol, isActive = false, liveTick, req
     const tick = liveTick;
     if (!tick || tick.symbol !== symbol || !Number.isFinite(tick.quote) || !Number.isFinite(tick.epoch)) return;
     latestTickRef.current = tick;
+    if (replayRef.current) return;
     if (tpoEnabledRef.current) window.setTimeout(refreshTpoProfile, 0);
     const widget = widgetRef.current;
     if (!widget) return;
