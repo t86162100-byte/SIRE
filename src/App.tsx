@@ -12,6 +12,7 @@ export default function App() {
   const [instruments, setInstruments] = useState<DerivInstrument[]>([]);
   const [selected, setSelected] = useState<DerivInstrument | null>(null);
   const [search, setSearch] = useState('');
+  const [instrumentSearchOpen, setInstrumentSearchOpen] = useState(false);
   const [status, setStatus] = useState('Connecting to Deriv…');
   const [lastError, setLastError] = useState('');
   const [latestBySymbol, setLatestBySymbol] = useState<Record<string, Tick>>({});
@@ -88,7 +89,7 @@ export default function App() {
       <section className="native-chart-panel">
         {lastError && <div className="native-error-banner">{lastError}</div>}
         <div className="sire-workspace-toolbar"><span>SIRE · OpenAlgo</span><button type="button" className={chartLayout === 1 ? 'active' : ''} onClick={() => setChartLayout(1)}>1</button><button type="button" className={chartLayout === 2 ? 'active' : ''} onClick={() => setChartLayout(2)}>2</button><button type="button" className={chartLayout === 4 ? 'active' : ''} onClick={() => setChartLayout(4)}>4</button><button type="button" className={linked ? 'active' : ''} onClick={() => setLinked(value => !value)}>Link</button></div>
-        <div className={`sire-chart-grid sire-chart-grid--${chartLayout}`}>
+        <div className={`sire-chart-grid sire-chart-grid--${chartLayout}`} onContextMenu={event => event.preventDefault()}>
           {chartItems.map((chartSymbol, index) => <div className="sire-chart-cell" key={index}>{chartSymbol && <FinancialChart
             symbol={chartSymbol}
             liveTick={latestBySymbol[chartSymbol] || null}
@@ -109,7 +110,23 @@ export default function App() {
             onWidgetDestroyed={widget => linkGroupRef.current?.remove(widget.chart)}
           />}</div>)}
         </div>
-      </section>
+        {instrumentSearchOpen && <div className="sire-instrument-search-overlay" onContextMenu={event => event.preventDefault()}>
+          <div className="sire-instrument-search-panel">
+            <div className="sire-instrument-search-head">
+              <strong>Instruments</strong>
+              <button type="button" onClick={() => setInstrumentSearchOpen(false)} aria-label="Close instrument search">×</button>
+            </div>
+            <div className="sire-instrument-search-input">
+              <Search size={16} />
+              <input autoFocus value={search} onChange={event => setSearch(event.target.value)} placeholder="Search instruments" />
+            </div>
+            <div className="sire-instrument-search-list">
+              {filtered.slice(0, 150).map(item => <button key={item.symbol} type="button" onClick={() => { selectInstrument(item); setInstrumentSearchOpen(false); }}>
+                <span><b>{item.name}</b><small>{item.symbol}</small></span><i>{item.exchangeOpen === 0 ? 'OFF' : 'LIVE'}</i>
+              </button>)}
+            </div>
+          </div>
+        </div>}      </section>
     </div>
     {researchLabOpen && <ResearchLab symbol={selected?.symbol || ''} instruments={instruments.map(item => ({ symbol: item.symbol, name: item.name }))} onClose={() => setResearchLabOpen(false)} onSelectInstrument={symbol => { const item = instruments.find(candidate => candidate.symbol === symbol); if (item) setSelected(item); }} />}
   </main>;
