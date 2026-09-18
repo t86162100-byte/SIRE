@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, ArrowUpRight, Circle, Crosshair, Eraser, GitBranch, Highlighter, Minus, MousePointer2, MoveUpRight, Pencil, Plus, RectangleHorizontal, Ruler, Shapes, Slash, Square, Table2, Target, TextCursorInput, Type, Waves } from 'lucide-react';
-import { addComparison, comparisonController, ReplayController, createLinkGroup, type Chart } from 'openalgo-charts';
+import { addComparison, comparisonController, ReplayController } from 'openalgo-charts';
 import 'openalgo-charts/indicators';
 import 'openalgo-charts/draw';
 import { iconSvg, registeredDrawingTools } from 'openalgo-charts/draw';
@@ -254,6 +254,7 @@ export default function FinancialChart({ symbol, liveTick, requestHistory, instr
     widget.chart.on('replay:stop', () => { setReplayActive(false); setReplayState(null); });
   };
   const stopReplay = () => { replayRef.current?.stop(); replayRef.current = null; setReplayActive(false); setReplayState(null); };
+  const exportChartSvg = () => { const widget = widgetRef.current; if (!widget) return; const svg = widget.chart.exportSVG({ background: true }); const blob = new Blob([svg], { type: 'image/svg+xml;charset=utf-8' }); const url = URL.createObjectURL(blob); const anchor = document.createElement('a'); anchor.href = url; anchor.download = `sire-${widget.symbol()}-${widget.interval()}.svg`; anchor.click(); URL.revokeObjectURL(url); };
   const toggleReplay = () => { if (!replayRef.current) startReplay(); else if (replayRef.current.state().playing) replayRef.current.pause(); else replayRef.current.play({ speed: replayRef.current.state().speed }); };
   const addCompare = async (compareSymbol: string) => {
     const widget = widgetRef.current;
@@ -272,10 +273,14 @@ export default function FinancialChart({ symbol, liveTick, requestHistory, instr
     setComparisons(current => current.filter(item => item !== compareSymbol));
   };
 
-  const visibleGroups = DRAW_RACK_GROUPS.map(group => ({
-    ...group,
-    tools: group.tools.filter(id => availableDrawTools.has(id)),
-  })).filter(group => group.tools.length > 0);
+  const visibleGroups = useMemo(() => {
+    const registered = registeredDrawingTools();
+    const groups = DRAW_RACK_GROUPS.map(group => ({ ...group, tools: group.tools.filter(id => availableDrawTools.has(id)) })).filter(group => group.tools.length > 0);
+    const grouped = new Set(groups.flatMap(group => group.tools));
+    const remaining = registered.map(tool => tool.id).filter(id => !grouped.has(id));
+    if (remaining.length) groups.push({ label: 'All other OpenAlgo tools', tools: remaining });
+    return groups;
+  }, [availableDrawTools]);
 
   const currentGroup = visibleGroups[Math.min(drawGroup, Math.max(visibleGroups.length - 1, 0))] ?? visibleGroups[0];
 
@@ -285,6 +290,7 @@ export default function FinancialChart({ symbol, liveTick, requestHistory, instr
         <button type="button" onClick={() => setAdvancedOpen(open => !open)} aria-label="Advanced chart tools">Tools</button>
         {advancedOpen && <div className="sire-advanced-tools__panel">
           <button type="button" onClick={toggleReplay}>{replayState?.playing ? 'Pause replay' : replayActive ? 'Play replay' : 'Chart replay'}</button>
+          <button type="button" onClick={exportChartSvg}>Export SVG</button>
           {replayActive && <><button type="button" onClick={() => replayRef.current?.stepBack()}>Step back</button><button type="button" onClick={() => replayRef.current?.step()}>Step</button><button type="button" onClick={stopReplay}>Exit replay</button></>}
           <div className="sire-advanced-tools__compare"><input value={compareQuery} onChange={event => setCompareQuery(event.target.value)} placeholder="Compare Synthetic Index" /><button type="button" onClick={() => { void addCompare(compareQuery.trim()); setCompareQuery(''); }}>Add</button></div>
           {comparisons.map(item => <button key={item} type="button" onClick={() => removeCompare(item)}>Remove {item}</button>)}
