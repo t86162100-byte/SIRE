@@ -15,7 +15,7 @@ type Tick = { symbol: string; quote: number; epoch: number };
 type HistoryResponse = Record<string, unknown>;
 type HistoryRequester = (request: Record<string, unknown>) => Promise<HistoryResponse>;
 type Instrument = { symbol: string; name: string; pipSize?: number };
-type Props = { symbol: string; liveTick: Tick | null; requestHistory: HistoryRequester; instruments: Instrument[]; onSelectInstrument: (instrument: Instrument) => void; onWidgetReady?: (widget: Widget) => void; onWidgetDestroyed?: (widget: Widget) => void; onInstrumentTap?: () => void };
+type Props = { symbol: string; isActive?: boolean; liveTick: Tick | null; requestHistory: HistoryRequester; instruments: Instrument[]; onSelectInstrument: (instrument: Instrument) => void; onWidgetReady?: (widget: Widget) => void; onWidgetDestroyed?: (widget: Widget) => void; onInstrumentTap?: () => void };
 type Candle = { time: number; open: number; high: number; low: number; close: number; volume?: number };
 type DrawGroup = { label: string; tools: string[] };
 
@@ -157,7 +157,7 @@ async function requestBars(req: BarsRequest, requestHistory: HistoryRequester): 
   throw new Error('Deriv returned no chart history');
 }
 
-export default function FinancialChart({ symbol, liveTick, requestHistory, instruments, onSelectInstrument, onWidgetReady, onWidgetDestroyed, onInstrumentTap }: Props) {
+export default function FinancialChart({ symbol, isActive = false, liveTick, requestHistory, instruments, onSelectInstrument, onWidgetReady, onWidgetDestroyed, onInstrumentTap }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [drawRackOpen, setDrawRackOpen] = useState(false);
   const [drawGroup, setDrawGroup] = useState(1);
