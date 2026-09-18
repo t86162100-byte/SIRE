@@ -75,7 +75,8 @@
 .sire-replay-error{margin-top:6px;font-size:10px;color:#ff8f8f}
 @media(max-width:640px){.sire-replay-setup,.sire-replay-transport{left:8px;right:8px;bottom:52px;min-width:0;max-width:none}.sire-replay-clock{font-size:9px}.sire-replay-speed-row{overflow-x:auto;scrollbar-width:none}.sire-replay-speed-row::-webkit-scrollbar{display:none}.sire-replay-setup-row input{font-size:10px;flex:1;min-width:0}}
 /* SIRE Tools button controls the native OpenAlgo drawing rail. */
-.oac-rail{transform-origin:top left;overflow:hidden;transition:clip-path 420ms cubic-bezier(.22,.61,.36,1),opacity 420ms ease,transform 420ms cubic-bezier(.22,.61,.36,1),background-color 420ms ease,border-color 420ms ease;will-change:clip-path,opacity,transform}
-.oac-rail.sire-oac-rail--closed{clip-path:inset(0 100% 0 0);opacity:0;transform:translateX(-6px);pointer-events:none;background:transparent!important;border-right-color:transparent!important}
-.oac-rail:not(.sire-oac-rail--closed){clip-path:inset(0 0 0 0);opacity:1;transform:translateX(0);pointer-events:auto}
-@media(prefers-reduced-motion:reduce){.oac-rail{transition:none!important}}
+.oac-stage{background:transparent!important}
+.oac-rail{transform-origin:top left;overflow:hidden;visibility:visible;transition:clip-path 420ms cubic-bezier(.22,.61,.36,1),opacity 420ms ease,transform 420ms cubic-bezier(.22,.61,.36,1),background-color 420ms ease,border-color 420ms ease,visibility 0s linear 0s;will-change:clip-path,opacity,transform}
+.oac-rail.sire-oac-rail--closed{clip-path:inset(0 100% 0 0);opacity:0;transform:translateX(-6px);pointer-events:none;visibility:hidden;transition:clip-path 420ms cubic-bezier(.22,.61,.36,1),opacity 420ms ease,transform 420ms cubic-bezier(.22,.61,.36,1),background-color 420ms ease,border-color 420ms ease,visibility 0s linear 420ms;background:transparent!important;border-right-color:transparent!important;box-shadow:none!important}
+.oac-rail:not(.sire-oac-rail--closed){clip-path:inset(0 0 0 0);opacity:1;transform:translateX(0);pointer-events:auto;visibility:visible;box-shadow:inherit}
+@media(prefers-reduced-motion:reduce){.oac-rail{transition:none!important}.oac-rail.sire-oac-rail--closed{visibility:hidden!important}}
