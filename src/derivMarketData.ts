@@ -5,6 +5,7 @@ export type DerivInstrument = {
   submarket: string;
   subgroup: string;
   symbolType: string;
+  pipSize?: number;
   exchangeOpen?: number;
 };
 
@@ -60,7 +61,17 @@ function isSynthetic(item: Record<string, unknown>): boolean {
 function normalize(item: Record<string, unknown>): DerivInstrument | null {
   const symbol = value(item, 'underlying_symbol', 'symbol');
   if (!symbol) return null;
-  return { symbol, name: value(item, 'underlying_symbol_name', 'display_name') || symbol, market: value(item, 'market'), submarket: value(item, 'submarket'), subgroup: value(item, 'subgroup'), symbolType: value(item, 'underlying_symbol_type', 'symbol_type'), exchangeOpen: typeof item.exchange_is_open === 'number' ? item.exchange_is_open : undefined };
+  const pip = Number(item.pip_size ?? item.pip);
+  return {
+    symbol,
+    name: value(item, 'underlying_symbol_name', 'display_name') || symbol,
+    market: value(item, 'market'),
+    submarket: value(item, 'submarket'),
+    subgroup: value(item, 'subgroup'),
+    symbolType: value(item, 'underlying_symbol_type', 'symbol_type'),
+    pipSize: Number.isFinite(pip) && pip > 0 ? pip : undefined,
+    exchangeOpen: typeof item.exchange_is_open === 'number' ? item.exchange_is_open : undefined,
+  };
 }
 
 export class DerivMarketData {
