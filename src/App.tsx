@@ -122,7 +122,7 @@ export default function App() {
       <section className="native-chart-panel">
         {lastError && <div className="native-error-banner">{lastError}</div>}
         <div className="sire-workspace-toolbar"><span>SIRE · OpenAlgo</span><button type="button" className="sire-multichart-button" onClick={openMultiChartManager} aria-label="Multi-chart" title="Multi-chart"><Layers3 size={17} strokeWidth={1.8} /></button><button type="button" className={linked ? 'active' : ''} onClick={() => setLinked(value => !value)}>Link</button></div>
-        <div className={`sire-chart-grid sire-chart-grid--${chartLayout}`} onContextMenu={event => event.preventDefault()}>
+        <div className={`sire-chart-grid sire-chart-grid--${chartLayout} sire-chart-grid--${multiChartPosition}`} onContextMenu={event => event.preventDefault()}>
           {chartItems.map((chartSymbol, index) => <div className={`sire-chart-cell${activeChartIndex === index ? ' sire-chart-cell--active' : ''}`} key={index} onPointerDown={() => setActiveChartIndex(index)}>{chartSymbol && <FinancialChart
             symbol={chartSymbol}
             isActive={activeChartIndex === index}
