@@ -178,9 +178,9 @@ export default function FinancialChart({ symbol, liveTick, requestHistory, instr
   };
   const handleInstrumentPointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
     if (event.pointerType === 'mouse' && event.button !== 0) return;
-    handleInstrumentSwipeStart({
-      touches: [{ clientY: event.clientY }],
-    } as unknown as React.TouchEvent<HTMLDivElement>);
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+    swipeStartYRef.current = event.clientY;
+    swipeAccumulatedRef.current = 0;
     longPressStartYRef.current = event.clientY;
     cancelInstrumentLongPress();
     longPressTimerRef.current = window.setTimeout(() => {
@@ -192,17 +192,26 @@ export default function FinancialChart({ symbol, liveTick, requestHistory, instr
   };
   const handleInstrumentPointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
     const start = longPressStartYRef.current;
-    if (start !== null && Math.abs(event.clientY - start) > 10) cancelInstrumentLongPress();
-    if (start !== null) {
-      handleInstrumentSwipeMove({
-        touches: [{ clientY: event.clientY }],
-      } as unknown as React.TouchEvent<HTMLDivElement>);
-    }
+    if (start === null) return;
+    const delta = event.clientY - start;
+    if (Math.abs(delta) > 10) cancelInstrumentLongPress();
+    if (Math.abs(delta) < 55 || swipeAnimatingRef.current) return;
+    const direction: 1 | -1 = delta < 0 ? 1 : -1;
+    triggerSwipeStep(direction);
+    swipeAnimatingRef.current = true;
+    longPressStartYRef.current = event.clientY;
+    swipeStartYRef.current = event.clientY;
+    swipeAccumulatedRef.current = 0;
+    window.setTimeout(() => { swipeAnimatingRef.current = false; }, 320);
   };
-  const handleInstrumentPointerEnd = () => {
+  const handleInstrumentPointerEnd = (event: React.PointerEvent<HTMLDivElement>) => {
     cancelInstrumentLongPress();
     longPressStartYRef.current = null;
-    handleInstrumentSwipeEnd();
+    swipeStartYRef.current = null;
+    swipeAccumulatedRef.current = 0;
+    if (event.currentTarget.hasPointerCapture?.(event.pointerId)) {
+      event.currentTarget.releasePointerCapture?.(event.pointerId);
+    }
   };
 
   useEffect(() => {
@@ -588,7 +597,6 @@ export default function FinancialChart({ symbol, liveTick, requestHistory, instr
           onPointerMove={handleInstrumentPointerMove}
           onPointerUp={handleInstrumentPointerEnd}
           onPointerCancel={handleInstrumentPointerEnd}
-          onPointerLeave={handleInstrumentPointerEnd}
           onContextMenu={event => event.preventDefault()}
           className={`sire-bottom-instrument-swipe${swipeAnimation ? ` is-swiping-${swipeAnimation}` : ''}`}
           title="Swipe up or down to change instrument"
