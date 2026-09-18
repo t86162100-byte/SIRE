@@ -557,8 +557,9 @@ export default function FinancialChart({ symbol, isActive = false, liveTick, req
     const start = Math.max(0, Math.min(startIndex, fullBars.length - 2));
     const end = Math.max(start + 1, Math.min(endIndex, fullBars.length - 1));
     const replayBars = fullBars.slice(0, end + 1);
-    widget.dataController?.setPaused?.(true);
     replayRef.current?.stop();
+    replayRef.current = null;
+    widget.dataController?.setPaused?.(true);
     const replay = new ReplayController(widget.chart, {
       series: widget.series,
       bars: replayBars,
