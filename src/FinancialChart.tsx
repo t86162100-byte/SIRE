@@ -974,16 +974,6 @@ export default function FinancialChart({ symbol, isActive = false, liveTick, req
         </div>
       </div>
       <button type="button" className="sire-chart-settings-button" aria-label="Chart settings" title="Chart settings" onClick={() => widgetRef.current?.openSettings()}><MoreHorizontal size={18} strokeWidth={2.2} aria-hidden="true" /></button>
-      {activeDrawTool && customDrawingCrosshair && (
-        <div
-          className="sire-custom-drawing-crosshair"
-          aria-hidden="true"
-        >
-          <span className="sire-custom-drawing-crosshair__vertical" style={{ left: customDrawingCrosshair.x }} />
-          <span className="sire-custom-drawing-crosshair__horizontal" style={{ top: customDrawingCrosshair.y }} />
-          <span className="sire-custom-drawing-crosshair__point" style={{ left: customDrawingCrosshair.x, top: customDrawingCrosshair.y }} />
-        </div>
-      )}
       {replayActive && replayState && (
         <div className="sire-replay-transport" role="dialog" aria-label="Chart replay controls">
           <div className="sire-replay-setup-row">
