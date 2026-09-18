@@ -20,7 +20,7 @@ export default function App() {
   const selectedRef = useRef<DerivInstrument | null>(null);
   const [chartLayout, setChartLayout] = useState<1 | 2 | 4>(1);
   const [activeChartIndex, setActiveChartIndex] = useState(0);
-  const [linked, setLinked] = useState(true);
+  const [linked, setLinked] = useState(false);
   const [chartSymbols, setChartSymbols] = useState<string[]>([]);
   const linkGroupRef = useRef<LinkGroup | null>(null);
 
