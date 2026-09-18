@@ -220,6 +220,7 @@ export default function FinancialChart({ symbol, isActive = false, liveTick, req
   const [replayEndInput, setReplayEndInput] = useState('');
   const [replayRangeError, setReplayRangeError] = useState<string | null>(null);
   const [replayDraftSpeed, setReplayDraftSpeed] = useState(1);
+  const [marketQuote, setMarketQuote] = useState<{ price: number; percent: number } | null>(null);
   const availableDrawTools = useMemo(() => new Set(['__cursor__', ...registeredDrawingTools().map(tool => tool.id)]), []);
   const universalIcons = useMemo(() => ({
     cursor: MousePointer2, 'trend-line': Slash, ray: MoveUpRight, 'extended-line': ArrowUpRight,
@@ -257,6 +258,25 @@ export default function FinancialChart({ symbol, isActive = false, liveTick, req
     const nextIndex = instruments.findIndex(item => item.symbol === symbol);
     if (nextIndex >= 0) setSwipeInstrumentIndex(nextIndex);
   }, [instruments, symbol]);
+  const marketInstrument = instruments.find(item => item.symbol === symbol);
+  const marketInstrumentName = marketInstrument?.name || symbol;
+  const marketPriceDecimals = (() => {
+    const tickSize = marketInstrument?.pipSize;
+    if (!tickSize || !Number.isFinite(tickSize) || tickSize <= 0) return 2;
+    const text = String(tickSize);
+    if (text.includes('e-')) return Math.max(0, Number(text.split('e-')[1]));
+    return Math.max(0, text.split('.')[1]?.length ?? 0);
+  })();
+  const formatMarketPrice = (price: number) => price.toLocaleString(undefined, { minimumFractionDigits: marketPriceDecimals, maximumFractionDigits: marketPriceDecimals });
+  const updateMarketQuote = (bars: Candle[], livePrice?: number) => {
+    const sorted = bars.slice().sort((a, b) => a.time - b.time);
+    const latest = sorted[sorted.length - 1];
+    const price = Number.isFinite(livePrice) ? Number(livePrice) : latest?.close;
+    if (!Number.isFinite(price)) return;
+    const previous = sorted.length > 1 ? sorted[sorted.length - 2].close : latest?.open;
+    const percent = Number.isFinite(previous) && Number(previous) !== 0 ? ((Number(price) - Number(previous)) / Number(previous)) * 100 : 0;
+    setMarketQuote({ price: Number(price), percent });
+  };
   const compactInstrumentName = (name: string) => {
     const first = name.trim().split(/\s+/)[0] || symbol;
     return `${first.replace(/[^a-zA-Z]/g, '').toUpperCase().slice(0, 5)}_`;
@@ -417,6 +437,7 @@ export default function FinancialChart({ symbol, isActive = false, liveTick, req
       async getBars(req: BarsRequest) {
         const bars = await requestBars(req, requestHistoryRef.current);
         candlesRef.current = bars;
+        updateMarketQuote(bars);
         resyncRef.current = null;
         return bars;
       },
@@ -680,6 +701,7 @@ export default function FinancialChart({ symbol, isActive = false, liveTick, req
   }, [drawRackOpen]);
 
   useEffect(() => {
+    setMarketQuote(null);
     if (replayRef.current) stopReplay();
     const widget = widgetRef.current;
     if (widget && widget.symbol() !== symbol) widget.setSymbol(symbol, 'Deriv Synthetic Indices');
@@ -689,6 +711,7 @@ export default function FinancialChart({ symbol, isActive = false, liveTick, req
     const tick = liveTick;
     if (!tick || tick.symbol !== symbol || !Number.isFinite(tick.quote) || !Number.isFinite(tick.epoch)) return;
     latestTickRef.current = tick;
+    updateMarketQuote(candlesRef.current, tick.quote);
     if (replayRef.current) return;
     if (tpoEnabledRef.current) window.setTimeout(refreshTpoProfile, 0);
     const widget = widgetRef.current;
@@ -901,6 +924,15 @@ export default function FinancialChart({ symbol, isActive = false, liveTick, req
 
   return (
     <div ref={containerRef} className={`sire-financial-chart${drawRackOpen ? ' sire-draw-rack-open' : ''}${isActive ? ' sire-toolbar-owner' : ''}`}>
+      <div className="sire-market-quote" aria-label={`Selected ${marketInstrumentName}`}>
+        <strong className="sire-market-quote__name">{marketInstrumentName}</strong>
+        <div className="sire-market-quote__value-row">
+          <span className="sire-market-quote__price">{marketQuote ? formatMarketPrice(marketQuote.price) : '—'}</span>
+          <span className={`sire-market-quote__change ${marketQuote && marketQuote.percent > 0 ? 'is-positive' : marketQuote && marketQuote.percent < 0 ? 'is-negative' : 'is-neutral'}`}>
+            {marketQuote ? `${marketQuote.percent >= 0 ? '+' : ''}${marketQuote.percent.toFixed(2)}%` : '—'}
+          </span>
+        </div>
+      </div>
       <div className="sire-advanced-tools">
         <button type="button" onClick={() => setAdvancedOpen(open => !open)} aria-label="Advanced chart tools">Tools</button>
         {advancedOpen && <div className="sire-advanced-tools__panel">
