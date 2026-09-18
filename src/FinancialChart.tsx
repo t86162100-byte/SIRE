@@ -626,7 +626,7 @@ export default function FinancialChart({ symbol, isActive = false, liveTick, req
   const currentGroup = visibleGroups[Math.min(drawGroup, Math.max(visibleGroups.length - 1, 0))] ?? visibleGroups[0];
 
   return (
-    <div ref={containerRef} className={`sire-financial-chart${drawRackOpen ? ' sire-draw-rack-open' : ''}`}>
+    <div ref={containerRef} className={`sire-financial-chart${drawRackOpen ? ' sire-draw-rack-open' : ''}${isActive ? ' sire-toolbar-owner' : ''}`}>
       <div className="sire-advanced-tools">
         <button type="button" onClick={() => setAdvancedOpen(open => !open)} aria-label="Advanced chart tools">Tools</button>
         {advancedOpen && <div className="sire-advanced-tools__panel">
