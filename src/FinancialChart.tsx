@@ -1179,7 +1179,7 @@ export default function FinancialChart({ symbol, isActive = false, liveTick, req
             title="Objects"
             onClick={() => widgetRef.current?.openObjects()}
           >
-            <span aria-hidden="true">Obj</span>
+            <span aria-hidden="true">OBJ</span>
           </button>
           <button
             type="button"
