@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, ArrowUpRight, Circle, Crosshair, Eraser, Eye, GitBranch, Highlighter, KeyRound, Minus, MoreHorizontal, MousePointer2, MoveUpRight, Pencil, Plus, RectangleHorizontal, Settings2, Ruler, Shapes, Slash, Square, Table2, Target, TextCursorInput, Type, Waves, Wrench } from 'lucide-react';
+import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, ArrowUpRight, Circle, Crosshair, Eraser, Eye, GitBranch, Highlighter, KeyRound, Lock, Minus, MoreHorizontal, MousePointer2, MoveUpRight, Pencil, Plus, RectangleHorizontal, Settings2, Ruler, Shapes, Slash, Square, Table2, Target, TextCursorInput, Type, Waves, Wrench } from 'lucide-react';
 import { addComparison, comparisonController, PriceLevels, ReplayController, registerInterval, withBarCache } from 'openalgo-charts';
 import 'openalgo-charts/indicators';
 import 'openalgo-charts/draw';
@@ -196,6 +196,7 @@ export default function FinancialChart({ symbol, isActive = false, liveTick, req
   const [tpoEnabled, setTpoEnabled] = useState(false);
   const [moreMenuOpen, setMoreMenuOpen] = useState(false);
   const [selectedDrawing, setSelectedDrawing] = useState<{ id: string; sourceId: string; name: string; visible: boolean; locked: boolean } | null>(null);
+  const [selectedDrawingPosition, setSelectedDrawingPosition] = useState<{ left: number; top: number } | null>(null);
   const [swipeInstrumentIndex, setSwipeInstrumentIndex] = useState(() => Math.max(0, instruments.findIndex(item => item.symbol === symbol)));
   const swipeStartYRef = useRef<number | null>(null);
   const swipeAccumulatedRef = useRef(0);
@@ -471,6 +472,34 @@ export default function FinancialChart({ symbol, isActive = false, liveTick, req
     setRendererKind(widget.chart.rendererKind);
     const offRenderer = widget.chart.on('renderer:fallback', () => setRendererKind('canvas2d'));
     widgetRef.current = widget;
+    const updateSelectedDrawingOverlay = (drawing: typeof selectedDrawing extends infer T ? any : any) => {
+      if (!drawing) {
+        setSelectedDrawingPosition(null);
+        return;
+      }
+      const rawDoc = widget.draw?.toJSON?.() as any;
+      const drawings = Array.isArray(rawDoc?.drawings) ? rawDoc.drawings : [];
+      const model = drawings.find((item: any) => item?.id === drawing.id || item?.sourceId === drawing.sourceId);
+      const points = Array.isArray(model?.points) ? model.points : [];
+      const chart = widget.chart;
+      const hostRect = host.getBoundingClientRect();
+      const coords = points.map((point: any) => {
+        const time = Number(point?.time);
+        const price = Number(point?.price);
+        if (!Number.isFinite(time) || !Number.isFinite(price)) return null;
+        const x = chart.timeToCoordinate(time);
+        const y = chart.priceToCoordinate(price, Number(model?.paneIndex) || 0);
+        return Number.isFinite(x) && Number.isFinite(y) ? { x, y } : null;
+      }).filter(Boolean) as Array<{ x: number; y: number }>;
+      if (!coords.length) {
+        setSelectedDrawingPosition({ left: hostRect.width / 2, top: Math.max(90, hostRect.height / 2 - 70) });
+        return;
+      }
+      const center = coords.reduce((acc, point) => ({ x: acc.x + point.x / coords.length, y: acc.y + point.y / coords.length }), { x: 0, y: 0 });
+      const left = Math.max(90, Math.min(hostRect.width - 90, center.x));
+      const top = Math.max(72, Math.min(hostRect.height - 120, center.y - 54));
+      setSelectedDrawingPosition({ left, top });
+    };
     const offDrawingObjects = widget.objects.subscribe(objects => {
       const drawing = objects.find(object => object.kind === 'drawing' && object.selected);
       setSelectedDrawing(drawing ? {
@@ -480,7 +509,19 @@ export default function FinancialChart({ symbol, isActive = false, liveTick, req
         visible: drawing.visible,
         locked: drawing.locked === true,
       } : null);
+      updateSelectedDrawingOverlay(drawing);
     });
+    const offDrawingSelect = widget.chart.on('drawing:select', () => {
+      window.requestAnimationFrame(() => {
+        const selected = widget.objects.selection?.().find?.((item: any) => item?.kind === 'drawing');
+        if (selected) updateSelectedDrawingOverlay(selected);
+      });
+    });
+    const onResize = () => {
+      const selected = widget.objects.selection?.().find?.((item: any) => item?.kind === 'drawing');
+      if (selected) updateSelectedDrawingOverlay(selected);
+    };
+    window.addEventListener('resize', onResize);
     onWidgetReady?.(widget);
     setActiveTimeframe(widget.interval());
     const offInterval = widget.on('interval', (event: { interval: string }) => setActiveTimeframe(event.interval));
@@ -522,6 +563,8 @@ export default function FinancialChart({ symbol, isActive = false, liveTick, req
       offData?.();
       offRenderer?.();
       offDrawingObjects?.();
+      offDrawingSelect?.();
+      window.removeEventListener('resize', onResize);
       offReplayStart?.();
       offReplayFrame?.();
       offReplayPlay?.();
@@ -913,7 +956,12 @@ export default function FinancialChart({ symbol, isActive = false, liveTick, req
           )}
         </div>
       {selectedDrawing && (
-        <div className="sire-drawing-selection-bar" role="toolbar" aria-label={`Selected drawing: ${selectedDrawing.name}`}>
+        <div
+          className="sire-drawing-selection-bar"
+          role="toolbar"
+          aria-label={`Selected drawing: ${selectedDrawing.name}`}
+          style={selectedDrawingPosition ? { left: selectedDrawingPosition.left, top: selectedDrawingPosition.top } : undefined}
+        >
           <button
             type="button"
             className="sire-drawing-selection-button"
@@ -938,7 +986,7 @@ export default function FinancialChart({ symbol, isActive = false, liveTick, req
               widget.objects.setLocked(selectedDrawing.id, !selectedDrawing.locked);
             }}
           >
-            <KeyRound size={16} strokeWidth={1.9} aria-hidden="true" />
+            <Lock size={16} strokeWidth={1.9} aria-hidden="true" />
           </button>
           <button
             type="button"
@@ -947,7 +995,7 @@ export default function FinancialChart({ symbol, isActive = false, liveTick, req
             title="Drawing settings"
             onClick={() => widgetRef.current?.objects.openSettings(selectedDrawing.id)}
           >
-            <Settings2 size={16} strokeWidth={1.9} aria-hidden="true" />
+            <MoreHorizontal size={19} strokeWidth={2.1} aria-hidden="true" />
           </button>
           <button
             type="button"
@@ -956,7 +1004,7 @@ export default function FinancialChart({ symbol, isActive = false, liveTick, req
             title="Focus drawing"
             onClick={() => widgetRef.current?.objects.focus(selectedDrawing.id)}
           >
-            <MoveUpRight size={16} strokeWidth={1.9} aria-hidden="true" />
+            <span className="sire-drawing-focus-glyph" aria-hidden="true" />
           </button>
           <button
             type="button"
@@ -969,14 +1017,8 @@ export default function FinancialChart({ symbol, isActive = false, liveTick, req
               widget.objects.remove(selectedDrawing.id);
             }}
           >
-            <Minus size={17} strokeWidth={2.4} aria-hidden="true" />
+            <Minus size={17} strokeWidth={2.2} aria-hidden="true" />
           </button>
-          <div className="sire-drawing-selection-edit" title={selectedDrawing.name}>
-            <span>{selectedDrawing.name}</span>
-            <button type="button" onClick={() => widgetRef.current?.objects.openSettings(selectedDrawing.id)}>
-              Edit
-            </button>
-          </div>
         </div>
       )}
       <div className="sire-bottom-glass-bar">
