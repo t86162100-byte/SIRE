@@ -27,3 +27,11 @@
   .sire-draw-rack__tools{grid-template-columns:repeat(3,minmax(0,1fr))}
 }
 .sire-draw-rack__cursor-glyph{font-size:20px;line-height:1;font-weight:300;color:currentColor}
+.sire-advanced-tools{position:absolute;z-index:19000;top:8px;right:8px;display:flex;flex-direction:column;align-items:flex-end;pointer-events:auto}
+.sire-advanced-tools>button{border:1px solid #2a2e39;background:#131722;color:#d1d4dc;border-radius:4px;padding:6px 10px;font-size:11px;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,.35)}
+.sire-advanced-tools__panel{margin-top:4px;width:min(300px,calc(100vw - 24px));display:flex;flex-direction:column;gap:5px;padding:8px;background:#131722;border:1px solid #2a2e39;border-radius:5px;box-shadow:0 8px 24px rgba(0,0,0,.5)}
+.sire-advanced-tools__panel button{border:1px solid #2a2e39;background:#1b1f2a;color:#d1d4dc;border-radius:3px;padding:6px 8px;font-size:10px;text-align:left;cursor:pointer}
+.sire-advanced-tools__panel button:hover{background:#2a2e39;color:#fff}
+.sire-advanced-tools__compare{display:flex;gap:4px}
+.sire-advanced-tools__compare input{flex:1;min-width:0;border:1px solid #2a2e39;background:#0b0d12;color:#e0e3eb;border-radius:3px;padding:6px 7px;font-size:10px;outline:none}
+.sire-advanced-tools__compare button{flex:0 0 auto}
