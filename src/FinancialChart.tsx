@@ -783,7 +783,6 @@ export default function FinancialChart({ symbol, isActive = false, liveTick, req
         </div>
       )}
       <div className={`sire-draw-rack${drawRackOpen ? ' is-open' : ''}`} role="dialog" aria-label="Drawing tools" aria-hidden={!drawRackOpen}>
-        <div className="sire-draw-rack" role="dialog" aria-label="Drawing tools">
           <div className="sire-draw-rack__rail">
             <button className="sire-draw-rack__close" type="button" aria-label="Close drawing tools" onClick={() => setDrawRackOpen(false)}>×</button>
             {visibleGroups.map((group, index) => (
@@ -852,7 +851,6 @@ export default function FinancialChart({ symbol, isActive = false, liveTick, req
             </div>
           )}
         </div>
-      </div>
       <div className="sire-bottom-glass-bar">
         <div
           onPointerDown={handleInstrumentPointerDown}
