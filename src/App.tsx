@@ -93,7 +93,7 @@ export default function App() {
             symbol={chartSymbol}
             liveTick={latestBySymbol[chartSymbol] || null}
             requestHistory={requestHistory}
-            instruments={instruments.map(item => ({ symbol: item.symbol, name: item.name }))}
+            instruments={instruments.map(item => ({ symbol: item.symbol, name: item.name, pipSize: item.pipSize }))}
             onSelectInstrument={item => {
               setChartSymbols(current => current.map((value, slot) => slot === index ? item.symbol : value));
               if (index === 0) setSelected(current => current?.symbol === item.symbol ? current : instruments.find(candidate => candidate.symbol === item.symbol) || current);
