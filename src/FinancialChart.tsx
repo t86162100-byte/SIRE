@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, ArrowUpRight, Circle, Crosshair, Eraser, GitBranch, Highlighter, Minus, MousePointer2, MoveUpRight, Pencil, Plus, RectangleHorizontal, Ruler, Shapes, Slash, Square, Table2, Target, TextCursorInput, Type, Waves, Wrench } from 'lucide-react';
+import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, ArrowUpRight, Circle, Crosshair, Eraser, GitBranch, Highlighter, Minus, MoreHorizontal, MousePointer2, MoveUpRight, Pencil, Plus, RectangleHorizontal, Ruler, Shapes, Slash, Square, Table2, Target, TextCursorInput, Type, Waves, Wrench } from 'lucide-react';
 import { addComparison, comparisonController, PriceLevels, ReplayController, registerInterval, withBarCache } from 'openalgo-charts';
 import 'openalgo-charts/indicators';
 import 'openalgo-charts/draw';
@@ -43,6 +43,22 @@ for (const [code, seconds] of Object.entries(INTERVAL_SECONDS)) {
   }
 }
 const intervalSeconds = (interval: string) => INTERVAL_SECONDS[interval] ?? 60;
+
+const CHART_TYPES = [
+  { id: 'candlestick', label: 'Candles' },
+  { id: 'hollow-candle', label: 'Hollow Candles' },
+  { id: 'volume-candle', label: 'Volume Candles' },
+  { id: 'bar', label: 'Bars (OHLC)' },
+  { id: 'high-low', label: 'High-Low' },
+  { id: 'line', label: 'Line' },
+  { id: 'line-markers', label: 'Line + Markers' },
+  { id: 'step', label: 'Step Line' },
+  { id: 'area', label: 'Area' },
+  { id: 'hlc-area', label: 'HLC Area' },
+  { id: 'baseline', label: 'Baseline' },
+  { id: 'columns', label: 'Columns' },
+  { id: 'histogram', label: 'Histogram' },
+] as const;
 
 const REPLAY_SPEEDS = [0.25, 0.5, 1, 2, 4, 8] as const;
 const replaySpeedLabel = (speed: number) => `${speed}×`;
@@ -178,6 +194,7 @@ export default function FinancialChart({ symbol, isActive = false, liveTick, req
   const [replayState, setReplayState] = useState<{ index:number; total:number; playing:boolean; speed:number; bar:Candle|null } | null>(null);
   const [rendererKind, setRendererKind] = useState<'canvas2d' | 'webgl2'>('canvas2d');
   const [tpoEnabled, setTpoEnabled] = useState(false);
+  const [moreMenuOpen, setMoreMenuOpen] = useState(false);
   const [swipeInstrumentIndex, setSwipeInstrumentIndex] = useState(() => Math.max(0, instruments.findIndex(item => item.symbol === symbol)));
   const swipeStartYRef = useRef<number | null>(null);
   const swipeAccumulatedRef = useRef(0);
@@ -701,6 +718,29 @@ export default function FinancialChart({ symbol, isActive = false, liveTick, req
     widget.objects.refresh();
   };
 
+  const selectChartType = (chartType: string) => {
+    const widget = widgetRef.current;
+    if (!widget) return;
+    try {
+      widget.setChartType(chartType);
+    } catch {
+      return;
+    }
+    setMoreMenuOpen(false);
+  };
+
+  const captureChartPng = () => {
+    const widget = widgetRef.current;
+    if (!widget) return;
+    widget.chart.downloadScreenshot(`sire-${symbol}-${widget.interval() || 'chart'}.png`);
+    setMoreMenuOpen(false);
+  };
+
+  const exportChartSvgFromMenu = () => {
+    exportChartSvg();
+    setMoreMenuOpen(false);
+  };
+
   const toggleTpo = () => {
     const widget = widgetRef.current;
     if (!widget) return;
@@ -922,6 +962,45 @@ export default function FinancialChart({ symbol, isActive = false, liveTick, req
         >
           <span className="sire-bottom-multichart-icon" aria-hidden="true"><span /><span /><span /></span>
         </button>
+        <button
+          type="button"
+          className="sire-bottom-more-button"
+          aria-label="Open chart menu"
+          aria-expanded={moreMenuOpen}
+          aria-haspopup="menu"
+          title="More chart options"
+          onClick={() => setMoreMenuOpen(open => !open)}
+        >
+          <MoreHorizontal size={23} strokeWidth={2} aria-hidden="true" />
+        </button>
+        {moreMenuOpen && (
+          <div className="sire-bottom-more-menu" role="menu" aria-label="Chart options">
+            <div className="sire-bottom-more-menu__section">
+              <div className="sire-bottom-more-menu__title">Chart type</div>
+              <div className="sire-bottom-more-menu__chart-types">
+                {CHART_TYPES.map(chartType => (
+                  <button
+                    key={chartType.id}
+                    type="button"
+                    role="menuitemradio"
+                    aria-checked={widgetRef.current?.chartType?.() === chartType.id}
+                    className={widgetRef.current?.chartType?.() === chartType.id ? 'active' : ''}
+                    onClick={() => selectChartType(chartType.id)}
+                  >
+                    {chartType.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="sire-bottom-more-menu__section sire-bottom-more-menu__actions">
+              <button type="button" role="menuitem" onClick={toggleTpo}>
+                {tpoEnabled ? 'Hide Market Profile' : 'Market Profile'}
+              </button>
+              <button type="button" role="menuitem" onClick={captureChartPng}>Capture PNG</button>
+              <button type="button" role="menuitem" onClick={exportChartSvgFromMenu}>Export SVG</button>
+            </div>
+          </div>
+        )}
                 {timeframeOpen && (
           <div className="sire-bottom-timeframe-menu">
             {DERIV_INTERVALS.map(interval => (
