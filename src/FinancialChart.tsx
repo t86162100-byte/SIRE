@@ -105,6 +105,13 @@ function aggregateCandles(data: Candle[], seconds: number): Candle[] {
   return [...buckets.values()].sort((a, b) => a.time - b.time);
 }
 
+const REPLAY_SUB_INTERVAL: Record<string, string> = {
+  '2m': '1m', '3m': '1m', '5m': '1m', '10m': '5m', '15m': '5m', '20m': '5m',
+  '30m': '15m', '45m': '15m', '1h': '15m', '2h': '30m', '3h': '30m',
+  '4h': '1h', '6h': '1h', '8h': '1h', '12h': '1h', '1d': '1h', '1w': '1d',
+};
+const replaySubInterval = (interval: string) => REPLAY_SUB_INTERVAL[interval] ?? null;
+
 const FALLBACK_BASE_SECONDS: Record<string, number> = {
   '20m': 600,
   '45m': 900,
