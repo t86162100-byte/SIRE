@@ -73,6 +73,36 @@ function aggregateTicks(data: { epoch: number; quote: number }[], seconds: numbe
   return [...buckets.values()].sort((a, b) => a.time - b.time);
 }
 
+function aggregateCandles(data: Candle[], seconds: number): Candle[] {
+  const buckets = new Map<number, Candle>();
+  for (const candle of data) {
+    const time = Math.floor(candle.time / seconds) * seconds;
+    const current = buckets.get(time);
+    if (!current) {
+      buckets.set(time, {
+        time,
+        open: candle.open,
+        high: candle.high,
+        low: candle.low,
+        close: candle.close,
+      });
+    } else {
+      current.high = Math.max(current.high, candle.high);
+      current.low = Math.min(current.low, candle.low);
+      current.close = candle.close;
+    }
+  }
+  return [...buckets.values()].sort((a, b) => a.time - b.time);
+}
+
+const FALLBACK_BASE_SECONDS: Record<string, number> = {
+  '20m': 600,
+  '45m': 900,
+  '3h': 3600,
+  '6h': 3600,
+  '12h': 3600,
+};
+
 type BarsRequest = { symbol: string; interval: string; from?: number; to?: number; noCache?: boolean };
 
 async function requestBars(req: BarsRequest, requestHistory: HistoryRequester): Promise<Candle[]> {
@@ -86,9 +116,42 @@ async function requestBars(req: BarsRequest, requestHistory: HistoryRequester): 
   };
   if (Number.isFinite(req.from)) request.start = Math.floor(Number(req.from));
   if (req.noCache) request.noCache = true;
-  const result = await requestHistory(request);
+
+  let result: HistoryResponse;
+  try {
+    result = await requestHistory(request);
+  } catch (error) {
+    const fallbackSeconds = FALLBACK_BASE_SECONDS[req.interval];
+    if (!fallbackSeconds) throw error;
+    const fallbackRequest = { ...request, granularity: fallbackSeconds };
+    const fallbackResult = await requestHistory(fallbackRequest);
+    const fallbackCandles = parseCandles(fallbackResult);
+    if (fallbackCandles?.length) return aggregateCandles(fallbackCandles, seconds);
+    const fallbackTicks = parseTicks(fallbackResult);
+    if (fallbackTicks?.length) return aggregateTicks(fallbackTicks, seconds);
+    throw error;
+  }
+
   const candles = parseCandles(result);
-  if (candles) return candles;
+  if (candles) {
+    // Deriv's current API accepts arbitrary integer granularities, but the
+    // legacy public endpoint can return a coarse/underspecified response for
+    // some custom intervals. If a requested custom interval comes back with
+    // only one or two bars, rebuild it from a supported lower timeframe so the
+    // chart never renders one oversized historical candle.
+    const fallbackSeconds = FALLBACK_BASE_SECONDS[req.interval];
+    if (fallbackSeconds && candles.length < 3) {
+      try {
+        const fallbackResult = await requestHistory({ ...request, granularity: fallbackSeconds });
+        const fallbackCandles = parseCandles(fallbackResult);
+        if (fallbackCandles?.length) return aggregateCandles(fallbackCandles, seconds);
+      } catch {
+        // Keep the direct response if the fallback request itself fails.
+      }
+    }
+    return candles;
+  }
+
   const ticks = parseTicks(result);
   if (ticks?.length) return aggregateTicks(ticks, seconds);
   throw new Error('Deriv returned no chart history');
