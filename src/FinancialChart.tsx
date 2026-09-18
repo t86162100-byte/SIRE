@@ -1025,24 +1025,7 @@ export default function FinancialChart({ symbol, isActive = false, liveTick, req
           </span>
         </div>
       </div>
-      <div className="sire-advanced-tools">
-        <button type="button" onClick={() => setAdvancedOpen(open => !open)} aria-label="Advanced chart tools">Tools</button>
-        {advancedOpen && <div className="sire-advanced-tools__panel">
-          <div className="sire-advanced-tools__status">Renderer: {rendererKind === 'webgl2' ? 'WebGL2' : 'Canvas2D'} · OpenAlgo 2.3.2</div>
-          <button type="button" onClick={toggleReplay}>{replayState?.playing ? 'Pause replay' : replayActive ? 'Play replay' : 'Chart replay'}</button>
-          <button type="button" onClick={exportChartSvg}>Export SVG</button>
-          <button type="button" onClick={() => widgetRef.current?.chart.downloadScreenshot(`sire-${symbol}-${widgetRef.current?.interval() || 'chart'}.png`)}>Capture PNG</button>
-          <button type="button" onClick={() => widgetRef.current?.chart.fitContent()}>Fit history</button>
-          <button type="button" onClick={() => widgetRef.current?.chart.resetScale()}>Reset view</button>
-          <button type="button" onClick={() => widgetRef.current?.openSettings()}>Chart settings</button>
-          <button type="button" onClick={() => widgetRef.current?.openIndicatorPicker()}>Indicators</button>
-          <button type="button" onClick={() => widgetRef.current?.openObjects()}>Objects</button>
-          <button type="button" onClick={toggleTpo}>{tpoEnabled ? 'Hide TPO Profile' : 'Market Profile (TPO)'}</button>
-          {replayActive && <><button type="button" onClick={() => replayRef.current?.stepBack()}>Step back</button><button type="button" onClick={() => replayRef.current?.step()}>Step</button><button type="button" onClick={stopReplay}>Exit replay</button></>}
-          <div className="sire-advanced-tools__compare"><input value={compareQuery} onChange={event => setCompareQuery(event.target.value)} placeholder="Compare Synthetic Index" /><button type="button" onClick={() => { void addCompare(compareQuery.trim()); setCompareQuery(''); }}>Add</button></div>
-          {comparisons.map(item => <button key={item} type="button" onClick={() => removeCompare(item)}>Remove {item}</button>)}
-        </div>}
-      </div>
+      <button type="button" className="sire-chart-settings-button" aria-label="Chart settings" title="Chart settings" onClick={() => widgetRef.current?.openSettings()}><MoreHorizontal size={18} strokeWidth={2.2} aria-hidden="true" /></button>
       {replayActive && replayState && (
         <div className="sire-replay-transport" role="dialog" aria-label="Chart replay controls">
           <div className="sire-replay-setup-row">
