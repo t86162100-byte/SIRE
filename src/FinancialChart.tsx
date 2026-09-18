@@ -485,6 +485,42 @@ export default function FinancialChart({ symbol, isActive = false, liveTick, req
     const offRenderer = widget.chart.on('renderer:fallback', () => setRendererKind('canvas2d'));
     widgetRef.current = widget;
 
+    // Keep OpenAlgo responsible for the drawing lifecycle. The small adapter
+    // below only makes placement use the native crosshair position: selecting
+    // a tool primes the chart's own crosshair, and a tap anywhere confirms
+    // whatever native crosshair position is currently active.
+    let nativeCrosshairPoint: { time: number; price: number; paneIndex: number } | null = null;
+    const offNativeCrosshair = widget.chart.on('crosshair:move', (event: any) => {
+      const time = Number(event?.time);
+      const price = Number(event?.price);
+      const paneIndex = Number(event?.paneIndex);
+      if (Number.isFinite(time) && Number.isFinite(price) && Number.isFinite(paneIndex)) {
+        nativeCrosshairPoint = { time, price, paneIndex };
+      }
+    });
+    const nativeEmit = widget.chart.emit.bind(widget.chart);
+    widget.chart.emit = ((event: string, payload: any) => {
+      if (event === 'click' && widget.draw.activeTool?.() && nativeCrosshairPoint) {
+        payload = { ...payload, time: nativeCrosshairPoint.time, price: nativeCrosshairPoint.price, paneIndex: nativeCrosshairPoint.paneIndex };
+      }
+      return nativeEmit(event, payload);
+    }) as typeof widget.chart.emit;
+
+    const primeNativeCrosshair = () => {
+      const rect = host.getBoundingClientRect();
+      const x = Math.max(1, Math.min(rect.width - 1, rect.width * 0.5));
+      const y = Math.max(1, Math.min(rect.height - 1, rect.height * 0.5));
+      const event = new PointerEvent('pointermove', {
+        bubbles: true,
+        clientX: rect.left + x,
+        clientY: rect.top + y,
+        pointerId: 0,
+        pointerType: 'mouse',
+        buttons: 0,
+      });
+      host.dispatchEvent(event);
+    };
+
     const updateSelectedDrawingOverlay = (drawing: any) => {
       if (!drawing) {
         setSelectedDrawingPosition(null);
@@ -694,6 +730,7 @@ export default function FinancialChart({ symbol, isActive = false, liveTick, req
       offInterval?.();
       offData?.();
       offRenderer?.();
+      offNativeCrosshair?.();
       offDrawingObjects?.();
       offIndicatorObjects?.();
       offDrawingSelect?.();
@@ -1116,9 +1153,10 @@ export default function FinancialChart({ symbol, isActive = false, liveTick, req
                       onClick={() => {
                         const widget = widgetRef.current;
                         if (!widget) return;
-                        // OpenAlgo owns the native crosshair, placement preview,
-                        // anchor capture and touch behavior.
+                        // OpenAlgo owns placement, preview, snapping and anchors.
+                        // Prime its native crosshair before the trader's next touch.
                         widget.draw.setTool(tool.id);
+                        primeNativeCrosshair();
                         setActiveDrawTool(tool.id);
                       }}
                     >
