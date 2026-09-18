@@ -26,3 +26,4 @@
   .sire-draw-rack__panel{width:min(286px,calc(100vw - 54px))}
   .sire-draw-rack__tools{grid-template-columns:repeat(3,minmax(0,1fr))}
 }
+.sire-draw-rack__cursor-glyph{font-size:20px;line-height:1;font-weight:300;color:currentColor}
