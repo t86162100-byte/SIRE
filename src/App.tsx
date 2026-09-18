@@ -141,7 +141,7 @@ export default function App() {
             liveTick={latestBySymbol[chartSymbol] || null}
             requestHistory={requestHistory}
             instruments={instruments.map(item => ({ symbol: item.symbol, name: item.name, pipSize: item.pipSize }))}
-            onInstrumentTap={() => setInstrumentSearchOpen(true)}
+            onInstrumentTap={() => openInstrumentPicker('main')}
             onSelectInstrument={item => {
               setChartSymbols(current => current.map((value, slot) => slot === index ? item.symbol : value));
               if (index === 0) setSelected(current => current?.symbol === item.symbol ? current : instruments.find(candidate => candidate.symbol === item.symbol) || current);
@@ -177,7 +177,7 @@ export default function App() {
               <input autoFocus value={search} onChange={event => setSearch(event.target.value)} placeholder="Search instruments" />
             </div>
             <div className="sire-instrument-search-list">
-              {filtered.slice(0, 150).map(item => <button key={item.symbol} type="button" onClick={() => { selectInstrument(item); setInstrumentSearchOpen(false); }}>
+              {filtered.slice(0, 150).map(item => <button key={item.symbol} type="button" onClick={() => { if (instrumentSearchMode === 'multi') { setMultiChartInstrument(item.symbol); setSearch(''); setInstrumentSearchOpen(false); } else { selectInstrument(item); setInstrumentSearchOpen(false); } }}>
                 <span><b>{item.name}</b><small>{item.symbol}</small></span><i>{item.exchangeOpen === 0 ? 'OFF' : 'LIVE'}</i>
               </button>)}
             </div>
