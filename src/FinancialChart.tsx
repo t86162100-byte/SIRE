@@ -221,6 +221,10 @@ export default function FinancialChart({ symbol, isActive = false, liveTick, req
   const [replayRangeError, setReplayRangeError] = useState<string | null>(null);
   const [replayDraftSpeed, setReplayDraftSpeed] = useState(1);
   const [marketQuote, setMarketQuote] = useState<{ price: number; percent: number } | null>(null);
+  const [placementCrosshair, setPlacementCrosshair] = useState<{ left: number; top: number } | null>(null);
+  const placementCrosshairRef = useRef<{ left: number; top: number } | null>(null);
+  const placementPointerIdRef = useRef<number | null>(null);
+  const placementPointerTypeRef = useRef<'mouse' | 'pen' | 'touch'>('touch');
   const availableDrawTools = useMemo(() => new Set(['__cursor__', ...registeredDrawingTools().map(tool => tool.id)]), []);
   const universalIcons = useMemo(() => ({
     cursor: MousePointer2, 'trend-line': Slash, ray: MoveUpRight, 'extended-line': ArrowUpRight,
@@ -424,7 +428,13 @@ export default function FinancialChart({ symbol, isActive = false, liveTick, req
     if (!host) return;
     const onToolEvent = (event: Event) => {
       const detail = (event as CustomEvent<{ tool?: string | null }>).detail;
-      setActiveDrawTool(detail?.tool ?? null);
+      const tool = detail?.tool ?? null;
+      setActiveDrawTool(tool);
+      if (!tool) {
+        placementCrosshairRef.current = null;
+        placementPointerIdRef.current = null;
+        setPlacementCrosshair(null);
+      }
     };
     const off = host.addEventListener('draw:tool', onToolEvent as EventListener);
     return () => host.removeEventListener('draw:tool', onToolEvent as EventListener);
@@ -496,6 +506,140 @@ export default function FinancialChart({ symbol, isActive = false, liveTick, req
     setRendererKind(widget.chart.rendererKind);
     const offRenderer = widget.chart.on('renderer:fallback', () => setRendererKind('canvas2d'));
     widgetRef.current = widget;
+
+    const clampPlacement = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
+
+    const emitPlacementCrosshair = (
+      left: number,
+      top: number,
+      pointerType: 'mouse' | 'pen' | 'touch',
+      pressed: boolean,
+    ) => {
+      const chart = widget.chart as any;
+      const hostRect = host.getBoundingClientRect();
+      const pricePane = chart.panes?.()[0];
+      const pricePaneRect = pricePane?.element?.getBoundingClientRect?.();
+      const paneTop = pricePaneRect ? pricePaneRect.top - hostRect.top : 0;
+      const paneHeight = pricePaneRect?.height ?? hostRect.height;
+      const paneLocalY = clampPlacement(top - paneTop, 0, Math.max(0, paneHeight - 1));
+      const x = clampPlacement(left, 0, Math.max(0, hostRect.width - 1));
+      const time = typeof chart.coordinateToTime === 'function' ? chart.coordinateToTime(x) : null;
+      const price = typeof chart.coordinateToPrice === 'function' ? chart.coordinateToPrice(paneLocalY, 0) : null;
+      const logical = typeof chart.coordinateToLogical === 'function' ? chart.coordinateToLogical(x) : null;
+      const index = Number.isFinite(logical) ? logical : null;
+      const bars = candlesRef.current;
+      let bar: Candle | null = null;
+      if (Number.isFinite(time) && bars.length) {
+        let best = bars[0];
+        let bestDistance = Math.abs(best.time - Number(time));
+        for (let i = 1; i < bars.length; i += 1) {
+          const distance = Math.abs(bars[i].time - Number(time));
+          if (distance < bestDistance) {
+            best = bars[i];
+            bestDistance = distance;
+          }
+        }
+        bar = best;
+      }
+      placementCrosshairRef.current = { left: x, top: paneTop + paneLocalY };
+      setPlacementCrosshair(placementCrosshairRef.current);
+      chart.emit?.('crosshair:move', {
+        time: Number.isFinite(time) ? time : null,
+        index,
+        price: Number.isFinite(price) ? price : null,
+        bar,
+        point: { x, y: paneLocalY },
+        paneIndex: 0,
+        pressed,
+        pointerType,
+        pressure: pointerType === 'touch' ? 0.5 : 0,
+      });
+      return { time: Number.isFinite(time) ? time : null, index, price: Number.isFinite(price) ? price : null, bar, point: { x, y: paneLocalY } };
+    };
+
+    const placementPointFromPointer = (event: PointerEvent) => {
+      const hostRect = host.getBoundingClientRect();
+      const offset = event.pointerType === 'touch' || event.pointerType === 'pen' ? 76 : 0;
+      const rawLeft = event.clientX - hostRect.left;
+      const rawTop = event.clientY - hostRect.top - offset;
+      const pricePane = (widget.chart as any).panes?.()[0];
+      const pricePaneRect = pricePane?.element?.getBoundingClientRect?.();
+      const paneTop = pricePaneRect ? pricePaneRect.top - hostRect.top : 0;
+      const paneBottom = pricePaneRect ? paneTop + pricePaneRect.height : hostRect.height;
+      return { left: clampPlacement(rawLeft, 0, Math.max(0, hostRect.width - 1)), top: clampPlacement(rawTop, paneTop, Math.max(paneTop, paneBottom - 1)) };
+    };
+
+    const isPlacementMode = () => Boolean((widget.draw as any)?.activeTool?.());
+
+    const onPlacementPointerDown = (event: PointerEvent) => {
+      if (!isPlacementMode()) return;
+      if (event.pointerType === 'mouse' && event.button !== 0) return;
+      event.preventDefault();
+      event.stopPropagation();
+      placementPointerIdRef.current = event.pointerId;
+      placementPointerTypeRef.current = event.pointerType === 'pen' ? 'pen' : event.pointerType === 'mouse' ? 'mouse' : 'touch';
+      const point = placementPointFromPointer(event);
+      host.setPointerCapture?.(event.pointerId);
+      emitPlacementCrosshair(point.left, point.top, placementPointerTypeRef.current, true);
+    };
+
+    const onPlacementPointerMove = (event: PointerEvent) => {
+      if (!isPlacementMode()) return;
+      if (placementPointerIdRef.current !== null && event.pointerId !== placementPointerIdRef.current) return;
+      event.preventDefault();
+      event.stopPropagation();
+      const point = placementPointFromPointer(event);
+      emitPlacementCrosshair(point.left, point.top, placementPointerTypeRef.current, true);
+    };
+
+    const onPlacementPointerUp = (event: PointerEvent) => {
+      if (!isPlacementMode()) return;
+      if (placementPointerIdRef.current !== null && event.pointerId !== placementPointerIdRef.current) return;
+      event.preventDefault();
+      event.stopPropagation();
+      const current = placementCrosshairRef.current ?? placementPointFromPointer(event);
+      const placed = emitPlacementCrosshair(current.left, current.top, placementPointerTypeRef.current, false);
+      (widget.chart as any).emit?.('click', {
+        id: null,
+        price: placed.price,
+        time: placed.time,
+        index: placed.index,
+        paneIndex: 0,
+        point: placed.point,
+        shiftKey: event.shiftKey,
+        ctrlKey: event.ctrlKey,
+        metaKey: event.metaKey,
+        modifiers: [],
+        pointerType: placementPointerTypeRef.current,
+        pressure: 0,
+        viaDrag: false,
+      });
+      placementPointerIdRef.current = null;
+      if (host.hasPointerCapture?.(event.pointerId)) host.releasePointerCapture?.(event.pointerId);
+    };
+
+    const onPlacementPointerCancel = (event: PointerEvent) => {
+      if (!isPlacementMode()) return;
+      if (placementPointerIdRef.current !== null && event.pointerId !== placementPointerIdRef.current) return;
+      event.preventDefault();
+      event.stopPropagation();
+      placementPointerIdRef.current = null;
+      if (host.hasPointerCapture?.(event.pointerId)) host.releasePointerCapture?.(event.pointerId);
+      (widget.draw as any)?.cancel?.();
+      placementCrosshairRef.current = null;
+      setPlacementCrosshair(null);
+    };
+
+    const onChartContextMenu = (event: MouseEvent) => {
+      event.preventDefault();
+    };
+
+    host.addEventListener('pointerdown', onPlacementPointerDown, true);
+    host.addEventListener('pointermove', onPlacementPointerMove, true);
+    host.addEventListener('pointerup', onPlacementPointerUp, true);
+    host.addEventListener('pointercancel', onPlacementPointerCancel, true);
+    host.addEventListener('contextmenu', onChartContextMenu, true);
+
     const updateSelectedDrawingOverlay = (drawing: any) => {
       if (!drawing) {
         setSelectedDrawingPosition(null);
@@ -1107,8 +1251,15 @@ export default function FinancialChart({ symbol, isActive = false, liveTick, req
                         className={`sire-draw-rack__tool${activeDrawTool === null ? ' is-active' : ''}`}
                         title="Cursor"
                         onClick={() => {
+
                           widgetRef.current?.draw.setTool(null);
+
                           setActiveDrawTool(null);
+
+                          placementCrosshairRef.current = null;
+
+                          setPlacementCrosshair(null);
+
                         }}
                       >
                         <span className="sire-draw-rack__tool-icon"><MousePointer2 size={24} strokeWidth={1.8} /></span>
@@ -1125,8 +1276,43 @@ export default function FinancialChart({ symbol, isActive = false, liveTick, req
                       className={`sire-draw-rack__tool${activeDrawTool === tool.id ? ' is-active' : ''}`}
                       title={tool.name}
                       onClick={() => {
-                        widgetRef.current?.draw.setTool(tool.id);
+
+                        const widget = widgetRef.current;
+
+                        if (!widget) return;
+
+                        widget.draw.setTool(tool.id);
+
                         setActiveDrawTool(tool.id);
+
+                        window.requestAnimationFrame(() => {
+
+                          const host = containerRef.current;
+
+                          if (!host) return;
+
+                          const rect = host.getBoundingClientRect();
+
+                          const x = rect.width * 0.5;
+
+                          const y = Math.max(70, rect.height * 0.42);
+
+                          const chart = widget.chart as any;
+
+                          const pane = chart.panes?.()[0];
+
+                          const paneRect = pane?.element?.getBoundingClientRect?.();
+
+                          const paneTop = paneRect ? paneRect.top - rect.top : 0;
+
+                          const pointY = Math.max(paneTop, Math.min((paneRect?.bottom ?? rect.bottom) - rect.top - 1, y));
+
+                          const chartHost = host as any;
+
+                          chartHost.__sirePlacementCenter = { x, y: pointY };
+
+                        });
+
                       }}
                     >
                       <span className="sire-draw-rack__tool-icon">{(() => { const Icon = universalIcons[tool.id] ?? MousePointer2; return <Icon size={23} strokeWidth={1.8} />; })()}</span>
@@ -1138,6 +1324,13 @@ export default function FinancialChart({ symbol, isActive = false, liveTick, req
             </div>
           )}
         </div>
+      {placementCrosshair && activeDrawTool && (
+        <div className="sire-placement-crosshair" aria-hidden="true" style={{ left: placementCrosshair.left, top: placementCrosshair.top }}>
+          <span className="sire-placement-crosshair__vertical" />
+          <span className="sire-placement-crosshair__horizontal" />
+          <span className="sire-placement-crosshair__center" />
+        </div>
+      )}
       {selectedIndicator && (
         <div
           className="sire-indicator-selection-bar"
