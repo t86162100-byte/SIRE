@@ -47,6 +47,7 @@ const CHART_TYPES = [
 
 const REPLAY_SPEEDS = [0.5, 1, 2, 5, 10] as const;
 const replaySpeedLabel = (speed: number) => `${speed}×`;
+const REPLAY_HISTORY_PAGE_LIMIT = 100;
 const formatReplayInput = (epoch: number) => new Date(epoch * 1000 + 60 * 60 * 1000).toISOString().slice(0, 16);
 const parseReplayInput = (value: string) => {
   if (!value) return NaN;
@@ -418,7 +419,11 @@ export default function FinancialChart({ symbol, isActive = false, liveTick, req
       theme: 'dark',
       renderer: 'auto',
       persist: `sire-${symbol}`,
-      lookbackBars: 1000,
+      // OpenAlgo's managed loader owns older-history paging. Start with a
+      // substantial recent window, then fetch older pages as the user pans
+      // left; replay can explicitly backfill to an older requested start.
+      lookbackBars: 5000,
+      loading: { pageSize: 5000, maxBars: 500000 },
       navigation: { mousePan: 'both', defaultVisibleBars: 120 },
       animZoom: true,
       animAutoscale: true,
@@ -901,38 +906,96 @@ export default function FinancialChart({ symbol, isActive = false, liveTick, req
     setReplaySetupOpen(false);
   };
 
-  const openReplaySetup = () => {
-    const bars = candlesRef.current.slice().sort((a, b) => a.time - b.time);
-    if (bars.length < 2) return;
-    setReplayStartInput(formatReplayInput(bars[0].time));
-    setReplayEndInput(formatReplayInput(bars[bars.length - 1].time));
-    replaySpeedRef.current = 1;
-    setReplayDraftSpeed(1);
-    setReplayRangeError(null);
-    setReplaySetupOpen(true);
+  const backfillHistoryTo = async (targetEpoch?: number) => {
+    const widget = widgetRef.current;
+    const controller = widget?.dataController;
+    if (!controller) return candlesRef.current.slice().sort((a, b) => a.time - b.time);
+
+    let previousFirst = Infinity;
+    for (let page = 0; page < REPLAY_HISTORY_PAGE_LIMIT; page += 1) {
+      const loaded = controller.bars().slice().sort((a, b) => a.time - b.time);
+      const first = loaded[0];
+      if (!first) break;
+      if (targetEpoch !== undefined && first.time <= targetEpoch) break;
+      if (first.time >= previousFirst) break;
+      previousFirst = first.time;
+
+      const next = await controller.loadMore();
+      const nextBars = next.slice().sort((a, b) => a.time - b.time);
+      const nextFirst = nextBars[0];
+      if (!nextFirst || nextFirst.time >= first.time) break;
+      if (controller.getState().hasMore === false) break;
+    }
+
+    return controller.bars().slice().sort((a, b) => a.time - b.time);
   };
 
-  const startReplayFromInputs = (forceBeginning = false, forceLatest = false) => {
-    const bars = candlesRef.current.slice().sort((a, b) => a.time - b.time);
-    if (bars.length < 2) {
-      setReplayRangeError('Not enough history');
-      return;
-    }
-    const startEpoch = forceBeginning ? bars[0].time : parseReplayInput(replayStartInput);
-    const endEpoch = forceLatest ? bars[bars.length - 1].time : parseReplayInput(replayEndInput);
-    if (!Number.isFinite(startEpoch) || !Number.isFinite(endEpoch) || startEpoch >= endEpoch) {
-      setReplayRangeError('Choose a valid start and end');
-      return;
-    }
-    const startIndex = Math.max(0, bars.findIndex(bar => bar.time >= startEpoch));
-    let endIndex = bars.length - 1;
-    while (endIndex > 0 && bars[endIndex].time > endEpoch) endIndex -= 1;
-    if (endIndex <= startIndex) {
-      setReplayRangeError('Range must contain at least two candles');
-      return;
-    }
+  const openReplaySetup = async () => {
+    setReplayLoading(true);
     setReplayRangeError(null);
-    void startReplay(startIndex, endIndex, replayDraftSpeed);
+    try {
+      // Resolve the actual earliest history available from the provider, not
+      // merely the first page currently resident in the chart.
+      const bars = await backfillHistoryTo();
+      if (bars.length < 2) {
+        setReplayRangeError('Not enough history');
+        return;
+      }
+      setReplayStartInput(formatReplayInput(bars[0].time));
+      setReplayEndInput(formatReplayInput(bars[bars.length - 1].time));
+      replaySpeedRef.current = 1;
+      setReplayDraftSpeed(1);
+      setReplaySetupOpen(true);
+    } finally {
+      setReplayLoading(false);
+    }
+  };
+
+  const startReplayFromInputs = async (forceBeginning = false, forceLatest = false) => {
+    setReplayLoading(true);
+    try {
+      let bars = candlesRef.current.slice().sort((a, b) => a.time - b.time);
+      if (bars.length < 2) {
+        setReplayRangeError('Not enough history');
+        return;
+      }
+
+      const requestedStart = forceBeginning ? undefined : parseReplayInput(replayStartInput);
+      if (!forceBeginning && !Number.isFinite(requestedStart)) {
+        setReplayRangeError('Choose a valid start and end');
+        return;
+      }
+
+      // If the requested replay starts before the currently loaded window,
+      // keep paging backward until that timestamp is resident or the provider
+      // reports exhaustion.
+      bars = await backfillHistoryTo(requestedStart);
+      if (forceBeginning) bars = await backfillHistoryTo();
+
+      if (bars.length < 2) {
+        setReplayRangeError('Not enough history');
+        return;
+      }
+
+      const startEpoch = forceBeginning ? bars[0].time : Number(requestedStart);
+      const endEpoch = forceLatest ? bars[bars.length - 1].time : parseReplayInput(replayEndInput);
+      if (!Number.isFinite(startEpoch) || !Number.isFinite(endEpoch) || startEpoch >= endEpoch) {
+        setReplayRangeError('Choose a valid start and end');
+        return;
+      }
+
+      const startIndex = Math.max(0, bars.findIndex(bar => bar.time >= startEpoch));
+      let endIndex = bars.length - 1;
+      while (endIndex > 0 && bars[endIndex].time > endEpoch) endIndex -= 1;
+      if (endIndex <= startIndex) {
+        setReplayRangeError('Range must contain at least two candles');
+        return;
+      }
+      setReplayRangeError(null);
+      await startReplay(startIndex, endIndex, replayDraftSpeed);
+    } finally {
+      setReplayLoading(false);
+    }
   };
 
   const toggleReplay = () => {
