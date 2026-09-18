@@ -1,6 +1,6 @@
 const NAV_ID = 'sire-bottom-tabs';
 const STYLE_ID = 'sire-navigation-auto-hide-style';
-const HIDE_AFTER = 2600;
+const HIDE_AFTER = 30000;
 
 let hideTimer: number | undefined;
 let lastInteractionAt = Date.now();
