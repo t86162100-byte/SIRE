@@ -111,6 +111,10 @@ export default function FinancialChart({ symbol, liveTick, requestHistory, instr
   const swipeAnimatingRef = useRef(false);
   const holdTimerRef = useRef<number | null>(null);
   const holdTriggeredRef = useRef(false);
+  const timeframeHoldTimerRef = useRef<number | null>(null);
+  const timeframeHoldTriggeredRef = useRef(false);
+  const [timeframeOpen, setTimeframeOpen] = useState(false);
+  const [activeTimeframe, setActiveTimeframe] = useState('1m');
   const [swipeAnimation, setSwipeAnimation] = useState<'up' | 'down' | null>(null);
   const replayRef = useRef<ReplayController | null>(null);
   const availableDrawTools = useMemo(() => new Set(['__cursor__', ...registeredDrawingTools().map(tool => tool.id)]), []);
@@ -170,6 +174,42 @@ export default function FinancialChart({ symbol, liveTick, requestHistory, instr
     swipeInstrument(direction);
     window.setTimeout(() => setSwipeAnimation(null), 320);
   };
+  const clearTimeframeHold = () => {
+    if (timeframeHoldTimerRef.current !== null) {
+      window.clearTimeout(timeframeHoldTimerRef.current);
+      timeframeHoldTimerRef.current = null;
+    }
+  };
+  const handleTimeframePointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (event.pointerType === 'mouse' && event.button !== 0) return;
+    event.preventDefault();
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+    timeframeHoldTriggeredRef.current = false;
+    clearTimeframeHold();
+    timeframeHoldTimerRef.current = window.setTimeout(() => {
+      timeframeHoldTriggeredRef.current = true;
+      setTimeframeOpen(true);
+    }, 600);
+  };
+  const handleTimeframePointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (timeframeHoldTriggeredRef.current) return;
+    if (Math.abs(event.movementX) >= 3 || Math.abs(event.movementY) >= 3) clearTimeframeHold();
+  };
+  const handleTimeframePointerEnd = (event: React.PointerEvent<HTMLDivElement>) => {
+    clearTimeframeHold();
+    timeframeHoldTriggeredRef.current = false;
+    if (event.currentTarget.hasPointerCapture?.(event.pointerId)) {
+      event.currentTarget.releasePointerCapture?.(event.pointerId);
+    }
+  };
+  const selectTimeframe = (interval: string) => {
+    const widget = widgetRef.current;
+    if (!widget) return;
+    setActiveTimeframe(interval);
+    setTimeframeOpen(false);
+    widget.setInterval(interval);
+  };
+
   const clearInstrumentHold = () => {
     if (holdTimerRef.current !== null) {
       window.clearTimeout(holdTimerRef.current);
@@ -316,6 +356,8 @@ export default function FinancialChart({ symbol, liveTick, requestHistory, instr
     const offRenderer = widget.chart.on('renderer:fallback', () => setRendererKind('canvas2d'));
     widgetRef.current = widget;
     onWidgetReady?.(widget);
+    setActiveTimeframe(widget.interval());
+    const offInterval = widget.on('interval', (event: { interval: string }) => setActiveTimeframe(event.interval));
     const offSymbol = widget.on('symbol', (event: { symbol: string }) => {
       const instrument = instrumentsRef.current.find(item => item.symbol === event.symbol);
       if (instrument && instrument.symbol !== symbolRef.current) onSelectInstrumentRef.current(instrument);
@@ -338,6 +380,7 @@ export default function FinancialChart({ symbol, liveTick, requestHistory, instr
     });
     return () => {
       offSymbol?.();
+      offInterval?.();
       offData?.();
       offRenderer?.();
       tpoUnregisterRef.current?.();
@@ -605,6 +648,32 @@ export default function FinancialChart({ symbol, liveTick, requestHistory, instr
           <strong>{compactInstrumentName(instruments[swipeInstrumentIndex]?.name || symbol)}</strong>
           <span className="sire-bottom-instrument-next">{compactInstrumentName(instruments[Math.min(instruments.length - 1, swipeInstrumentIndex + 1)]?.name || '')}</span>
         </div>
+        <div
+          className="sire-bottom-timeframe"
+          onPointerDown={handleTimeframePointerDown}
+          onPointerMove={handleTimeframePointerMove}
+          onPointerUp={handleTimeframePointerEnd}
+          onPointerCancel={handleTimeframePointerEnd}
+          onContextMenu={event => event.preventDefault()}
+          title="Tap and hold to choose timeframe"
+        >
+          <strong>{activeTimeframe}</strong>
+          <span>TIME</span>
+        </div>
+        {timeframeOpen && (
+          <div className="sire-bottom-timeframe-menu">
+            {DERIV_INTERVALS.map(interval => (
+              <button
+                key={interval}
+                type="button"
+                className={interval === activeTimeframe ? 'active' : ''}
+                onClick={() => selectTimeframe(interval)}
+              >
+                {interval}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );
