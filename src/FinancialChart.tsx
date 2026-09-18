@@ -47,11 +47,9 @@ const CHART_TYPES = [
 
 const REPLAY_SPEEDS = [0.5, 1, 2, 5, 10] as const;
 const replaySpeedLabel = (speed: number) => `${speed}×`;
-const REPLAY_HISTORY_PAGE_LIMIT = 5000;
 const FAST_HISTORY_PAGE_SIZE = 5000;
 const FAST_HISTORY_PAGES_PER_BATCH = 8;
 const FAST_HISTORY_CONCURRENCY = 4;
-const FAST_HISTORY_MAX_BARS = 5000000;
 const HISTORY_CACHE_TTL_MS = 15 * 60_000;
 const HISTORY_CACHE_MAX_SYMBOLS = 24;
 type HistoryCacheEntry = { bars: Candle[]; updatedAt: number };
@@ -491,7 +489,15 @@ export default function FinancialChart({ symbol, isActive = false, liveTick, req
           candlesRef.current = cached;
           updateMarketQuote(cached);
           void requestBars({ ...req, noCache: false }, requestHistoryRef.current)
-            .then(fresh => { if (fresh.length) putCachedHistory(req.symbol, req.interval, fresh); })
+            .then(fresh => {
+          if (!fresh.length) return;
+          const current = getCachedHistory(req.symbol, req.interval);
+          const merged = new Map<number, Candle>();
+          for (const bar of [...current, ...fresh]) merged.set(bar.time, bar);
+          const next = [...merged.values()].sort((a, b) => a.time - b.time);
+          putCachedHistory(req.symbol, req.interval, next);
+          candlesRef.current = next;
+        })
             .catch(() => undefined);
           return cached;
         }
@@ -514,7 +520,7 @@ export default function FinancialChart({ symbol, isActive = false, liveTick, req
         };
       },
     };
-    const feed = withBarCache(sourceFeed, { ttlMs: 60_000, max: 32, maxBars: 250_000 });
+    const feed = withBarCache(sourceFeed, { ttlMs: 60_000, max: 32, maxBars: Number.POSITIVE_INFINITY });
     let widget: Widget;
     try {
       widget = createWidget(host, {
@@ -531,7 +537,9 @@ export default function FinancialChart({ symbol, isActive = false, liveTick, req
       // substantial recent window, then fetch older pages as the user pans
       // left; replay can explicitly backfill to an older requested start.
       lookbackBars: 5000,
-      loading: { pageSize: 5000, maxBars: 5000000 },
+      // Page through all available provider history; there is no SIRE bar
+      // ceiling. The loader stops only when the feed reports exhaustion.
+      loading: { pageSize: 5000, maxBars: Number.POSITIVE_INFINITY },
       navigation: { mousePan: 'both', defaultVisibleBars: 120 },
       animZoom: true,
       animAutoscale: true,
@@ -1044,13 +1052,16 @@ export default function FinancialChart({ symbol, isActive = false, liveTick, req
     if (bars.length < 2) return bars;
 
     const goal = Number.isFinite(targetEpoch) ? Number(targetEpoch) : undefined;
-    let pageCount = 0;
+    // Keep paging until the Deriv history endpoint itself reports that there
+    // is no older data. There is deliberately no application-side bar/page
+    // ceiling: the provider's actual historical boundary is the stopping
+    // condition.
 
     // Fetch known, non-overlapping historical ranges concurrently. This is
     // substantially faster than waiting for one loadMore request before
     // starting the next. The DataLayer's merge-by-time semantics make the
     // bulk replacement safe and de-duplicate any provider boundary overlap.
-    while (pageCount < REPLAY_HISTORY_PAGE_LIMIT && bars.length < FAST_HISTORY_MAX_BARS) {
+    while (true) {
       const anchor = bars[0]?.time;
       if (!Number.isFinite(anchor)) break;
       if (goal !== undefined && anchor <= goal) break;
@@ -1084,8 +1095,6 @@ export default function FinancialChart({ symbol, isActive = false, liveTick, req
       putCachedHistory(symbolRef.current, widget.interval(), bars);
       widget.series.setData(bars);
       updateMarketQuote(bars);
-      pageCount += pages.length;
-
       const oldestReturned = older.reduce((min, bar) => Math.min(min, bar.time), Infinity);
       const boundaryHit = pages.some(page => page.length < FAST_HISTORY_PAGE_SIZE);
       if (goal !== undefined && oldestReturned <= goal) break;
