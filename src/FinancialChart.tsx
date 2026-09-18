@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import 'openalgo-charts/indicators';
 import 'openalgo-charts/draw';
-import { iconSvg, registeredDrawingTools } from 'openalgo-charts/draw';
+import { DRAWING_TOOL_ICONS, iconSvg, registeredDrawingTools } from 'openalgo-charts/draw';
 import 'openalgo-charts/profile';
 import 'openalgo-charts/trade';
 import 'openalgo-charts/transform';
@@ -18,13 +18,13 @@ type Candle = { time: number; open: number; high: number; low: number; close: nu
 type DrawGroup = { label: string; tools: string[] };
 
 const DRAW_RACK_GROUPS: DrawGroup[] = [
-  { label: 'Cursor', tools: ['cursor'] },
+  { label: 'Cursor', tools: ['__cursor__'] },
   { label: 'Trend line', tools: ['trend-line', 'ray', 'extended-line', 'horizontal-line', 'horizontal-ray', 'vertical-line', 'cross-line', 'arrow'] },
   { label: 'Channels', tools: ['parallel-channel'] },
   { label: 'Fibonacci & Gann', tools: ['fib-retracement', 'fib-extension', 'fib-channel', 'fib-time-zone', 'fib-fan', 'gann-fan', 'gann-box', 'cyclic-lines', 'time-cycles', 'sine-line'] },
   { label: 'Patterns', tools: ['path', 'polyline', 'triangle', 'rotated-rectangle', 'double-curve'] },
   { label: 'Forecast & measure', tools: ['forecast', 'price-range', 'date-range', 'measure', 'long-position', 'short-position'] },
-  { label: 'Shapes', tools: ['rectangle', 'ellipse', 'circle', 'arc', 'curve', 'highlight', 'brush'] },
+  { label: 'Shapes', tools: ['rectangle', 'ellipse', 'circle', 'arc', 'curve', 'highlighter', 'brush'] },
   { label: 'Annotation', tools: ['text', 'note', 'price-note', 'callout', 'comment', 'balloon', 'signpost', 'table', 'price-label', 'flag-mark'] },
   { label: 'Arrows & marks', tools: ['arrow-up', 'arrow-down', 'arrow-left', 'arrow-right'] },
 ];
@@ -76,7 +76,7 @@ export default function FinancialChart({ symbol, liveTick, requestHistory, instr
   const [drawRackOpen, setDrawRackOpen] = useState(false);
   const [drawGroup, setDrawGroup] = useState(1);
   const [activeDrawTool, setActiveDrawTool] = useState<string | null>(null);
-  const availableDrawTools = useMemo(() => new Set(registeredDrawingTools().map(tool => tool.id)), []);
+  const availableDrawTools = useMemo(() => new Set(['__cursor__', ...registeredDrawingTools().map(tool => tool.id)]), []);
   const widgetRef = useRef<Widget | null>(null);
   const candlesRef = useRef<Candle[]>([]);
   const subscriberRef = useRef<((bar: Candle) => void) | null>(null);
@@ -233,7 +233,11 @@ export default function FinancialChart({ symbol, liveTick, requestHistory, instr
                 title={group.label}
                 aria-label={group.label}
               >
-                <span className="sire-draw-rack__group-icon">{group.tools[0] && <span dangerouslySetInnerHTML={{ __html: iconSvg(group.tools[0], { size: 22 }) }} />}</span>
+                <span className="sire-draw-rack__group-icon">
+                  {group.tools[0] === '__cursor__'
+                    ? <span className="sire-draw-rack__cursor-glyph">＋</span>
+                    : DRAWING_TOOL_ICONS[group.tools[0]] && <span dangerouslySetInnerHTML={{ __html: iconSvg(group.tools[0], { size: 22 }) }} />}
+                </span>
                 <span className="sire-draw-rack__group-label">{group.label}</span>
               </button>
             ))}
@@ -246,6 +250,23 @@ export default function FinancialChart({ symbol, liveTick, requestHistory, instr
               </div>
               <div className="sire-draw-rack__tools">
                 {currentGroup.tools.map(toolId => {
+                  if (toolId === '__cursor__') {
+                    return (
+                      <button
+                        key="cursor"
+                        type="button"
+                        className={`sire-draw-rack__tool${activeDrawTool === null ? ' is-active' : ''}`}
+                        title="Cursor"
+                        onClick={() => {
+                          widgetRef.current?.draw.setTool(null);
+                          setActiveDrawTool(null);
+                        }}
+                      >
+                        <span className="sire-draw-rack__tool-icon sire-draw-rack__cursor-glyph">＋</span>
+                        <span>Cursor</span>
+                      </button>
+                    );
+                  }
                   const tool = registeredDrawingTools().find(item => item.id === toolId);
                   if (!tool) return null;
                   return (
