@@ -20,7 +20,7 @@
 @media(max-width:640px){.sire-workspace-toolbar{top:4px}.sire-workspace-toolbar span{display:none}.sire-chart-grid--2{grid-template-columns:1fr;grid-template-rows:repeat(2,minmax(0,1fr))}.sire-chart-grid--left,.sire-chart-grid--right{grid-template-columns:repeat(2,minmax(0,1fr));grid-template-rows:1fr}.sire-multichart-overlay{padding:52px 8px 8px}.sire-multichart-panel{padding:14px}}
 
 
-.sire-instrument-search-overlay{position:absolute;z-index:26000;inset:0;display:flex;align-items:flex-start;justify-content:center;padding:58px 10px 10px;background:rgba(0,0,0,.28);backdrop-filter:blur(5px);-webkit-backdrop-filter:blur(5px)}
+.sire-instrument-search-overlay{position:absolute;z-index:30000;inset:0;display:flex;align-items:flex-start;justify-content:center;padding:58px 10px 10px;background:rgba(0,0,0,.28);backdrop-filter:blur(5px);-webkit-backdrop-filter:blur(5px)}
 .sire-instrument-search-panel{width:min(360px,calc(100% - 24px));max-height:min(620px,calc(100% - 24px));display:flex;flex-direction:column;overflow:hidden;background:#10141b;border:1px solid #2a303b;border-radius:8px;box-shadow:0 14px 40px rgba(0,0,0,.55)}
 .sire-instrument-search-head{height:42px;display:flex;align-items:center;justify-content:space-between;padding:0 12px;color:#eef2f7;border-bottom:1px solid #252b35}
 .sire-instrument-search-head strong{font:700 13px Arial,sans-serif}
