@@ -113,6 +113,8 @@ export default function FinancialChart({ symbol, liveTick, requestHistory, instr
   const holdTriggeredRef = useRef(false);
   const timeframeHoldTimerRef = useRef<number | null>(null);
   const timeframeHoldTriggeredRef = useRef(false);
+  const timeframeSwipeStartYRef = useRef(0);
+  const timeframeSwipeAnimatingRef = useRef(false);
   const [timeframeOpen, setTimeframeOpen] = useState(false);
   const [activeTimeframe, setActiveTimeframe] = useState('1m');
   const [swipeAnimation, setSwipeAnimation] = useState<'up' | 'down' | null>(null);
@@ -658,7 +660,6 @@ export default function FinancialChart({ symbol, liveTick, requestHistory, instr
           title="Tap and hold to choose timeframe"
         >
           <strong>{activeTimeframe}</strong>
-          <span>TIME</span>
         </div>
         {timeframeOpen && (
           <div className="sire-bottom-timeframe-menu">
