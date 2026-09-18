@@ -491,17 +491,28 @@ export default function FinancialChart({ symbol, isActive = false, liveTick, req
     // a tool primes the chart's own crosshair, and a tap anywhere confirms
     // whatever native crosshair position is currently active.
     let nativeCrosshairPoint: { time: number; price: number; paneIndex: number } | null = null;
-    const offNativeCrosshair = widget.chart.on('crosshair:move', (event: any) => {
+    const captureCrosshair = (event: any) => {
       const time = Number(event?.time);
       const price = Number(event?.price);
-      const paneIndex = Number(event?.paneIndex);
-      if (Number.isFinite(time) && Number.isFinite(price) && Number.isFinite(paneIndex)) {
-        nativeCrosshairPoint = { time, price, paneIndex };
-        const x = widget.chart.timeToCoordinate(time);
-        const y = widget.chart.priceToCoordinate(price, paneIndex);
-        if (Number.isFinite(x) && Number.isFinite(y)) setDrawingCrosshair({ time, price, paneIndex, x: Number(x), y: Number(y) });
+      const paneIndex = Number(event?.paneIndex ?? 0);
+      if (!Number.isFinite(time) || !Number.isFinite(price) || !Number.isFinite(paneIndex)) return;
+
+      nativeCrosshairPoint = { time, price, paneIndex };
+
+      // OpenAlgo includes the exact container-relative pointer point on the
+      // crosshair event. Prefer it over a second coordinate conversion so the
+      // inspection lens follows the same pixel intersection the user sees.
+      const pointX = Number(event?.point?.x);
+      const pointY = Number(event?.point?.y);
+      const convertedX = widget.chart.timeToCoordinate(time);
+      const convertedY = widget.chart.priceToCoordinate(price, paneIndex);
+      const x = Number.isFinite(pointX) ? pointX : convertedX;
+      const y = Number.isFinite(pointY) ? pointY : convertedY;
+      if (Number.isFinite(x) && Number.isFinite(y)) {
+        setDrawingCrosshair({ time, price, paneIndex, x: Number(x), y: Number(y) });
       }
-    });
+    };
+    const offNativeCrosshair = widget.chart.on('crosshair:move', captureCrosshair);
     const nativeEmit = widget.chart.emit.bind(widget.chart);
     widget.chart.emit = ((event: string, payload: any) => {
       if (event === 'click' && widget.draw.activeTool?.() && nativeCrosshairPoint) {
@@ -514,6 +525,21 @@ export default function FinancialChart({ symbol, isActive = false, liveTick, req
       const rect = host.getBoundingClientRect();
       const x = Math.max(1, Math.min(rect.width - 1, rect.width * 0.5));
       const y = Math.max(1, Math.min(rect.height - 1, rect.height * 0.5));
+      const chartTime = widget.chart.coordinateToTime(x);
+      const chartPrice = widget.chart.coordinateToPrice(y, 0);
+
+      // Seed the inspection lens immediately when a drawing tool is armed.
+      // The real crosshair event will replace this seed on the next pointer
+      // move, but the lens is never blank between tool selection and movement.
+      if (Number.isFinite(chartTime) && Number.isFinite(chartPrice)) {
+        captureCrosshair({
+          time: chartTime,
+          price: chartPrice,
+          paneIndex: 0,
+          point: { x, y },
+        });
+      }
+
       const event = new PointerEvent('pointermove', {
         bubbles: true,
         clientX: rect.left + x,
@@ -1080,12 +1106,14 @@ export default function FinancialChart({ symbol, isActive = false, liveTick, req
         const yForPrice = (price: number) => 18 + (1 - (price - localLow) / (localHigh - localLow)) * innerH;
         const crossX = xForTime(drawingCrosshair.time), crossY = yForPrice(drawingCrosshair.price);
         const hostRect = host.getBoundingClientRect(), lensW = 238, lensH = 154;
-        const left = drawingCrosshair.x > hostRect.width * 0.58 ? 10 : Math.max(10, hostRect.width - lensW - 10);
-        const top = drawingCrosshair.y > hostRect.height * 0.46 ? 10 : Math.max(10, hostRect.height - lensH - 10);
+        // Keep the inspection window permanently at the top so it never
+        // covers the crosshair intersection being inspected.
+        const left = Math.max(10, Math.min(hostRect.width - lensW - 10, (hostRect.width - lensW) / 2));
+        const top = 10;
         return (
           <div className="sire-crosshair-magnifier" style={{ left, top, width: lensW }} aria-hidden="true">
             <div className="sire-crosshair-magnifier__readout">
-              <span>{new Date(drawingCrosshair.time * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })}</span>
+              <span>CROSSHAIR · {new Date(drawingCrosshair.time * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })}</span>
               <strong>{formatMarketPrice(drawingCrosshair.price)}</strong>
             </div>
             <svg className="sire-crosshair-magnifier__chart" viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none">
