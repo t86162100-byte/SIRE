@@ -556,16 +556,33 @@ export default function FinancialChart({ symbol, isActive = false, liveTick, req
       }
     });
 
-    widget.chart.subscribeClick((externalId: string) => {
+    // Open the SIRE indicator controls when the user taps the indicator's
+    // canvas legend row/name. The unified click event is the reliable public
+    // path for pane legends; subscribeClick is the legacy hit-only callback.
+    const offIndicatorClick = widget.chart.on('click', (event: any) => {
+      const externalId = typeof event?.id === 'string' ? event.id : '';
       if (!externalId.endsWith('::row')) return;
       const id = externalId.slice(0, -'::row'.length);
       const indicator = widget.objects.list().find(object => object.kind === 'indicator' && object.id === id);
       if (!indicator) return;
+
       const next = { id: indicator.id, name: indicator.name, paneIndex: indicator.paneIndex };
       widget.objects.select(indicator.id);
       selectedIndicatorRef.current = next;
       setSelectedIndicator(next);
-      updateSelectedIndicatorOverlay(next);
+
+      // Use the actual tap point so the small control bar appears beside the
+      // indicator name rather than at a guessed width based on the title text.
+      const point = event?.point;
+      if (point && Number.isFinite(point.x) && Number.isFinite(point.y)) {
+        const hostRect = host.getBoundingClientRect();
+        setSelectedIndicatorPosition({
+          left: Math.max(8, Math.min(hostRect.width - 92, Number(point.x))),
+          top: Math.max(30, Math.min(hostRect.height - 42, Number(point.y) - 4)),
+        });
+      } else {
+        updateSelectedIndicatorOverlay(next);
+      }
     });
 
     const offDrawingObjects = widget.objects.subscribe(objects => {
