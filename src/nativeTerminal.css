@@ -10,3 +10,19 @@
 .sire-chart-cell{position:relative;min-width:0;min-height:0;overflow:hidden;background:#000}
 .sire-chart-cell .sire-financial-chart{position:absolute}
 @media(max-width:640px){.sire-workspace-toolbar{top:4px}.sire-workspace-toolbar span{display:none}.sire-chart-grid--2,.sire-chart-grid--4{grid-template-columns:1fr;grid-template-rows:repeat(auto-fit,minmax(0,1fr))}.sire-chart-grid--4{overflow:auto}.sire-chart-grid--4 .sire-chart-cell{min-height:45vh}}
+
+.sire-chart-grid,.sire-chart-grid *,.sire-bottom-glass-bar,.sire-bottom-glass-bar *{user-select:none;-webkit-user-select:none;-webkit-touch-callout:none}
+.sire-instrument-search-overlay{position:absolute;z-index:26000;inset:0;display:flex;align-items:flex-start;justify-content:center;padding:58px 10px 10px;background:rgba(0,0,0,.28);backdrop-filter:blur(5px);-webkit-backdrop-filter:blur(5px)}
+.sire-instrument-search-panel{width:min(420px,100%);max-height:calc(100% - 10px);display:flex;flex-direction:column;overflow:hidden;background:#10141b;border:1px solid #2a303b;border-radius:12px;box-shadow:0 14px 40px rgba(0,0,0,.55)}
+.sire-instrument-search-head{height:46px;display:flex;align-items:center;justify-content:space-between;padding:0 12px;color:#eef2f7;border-bottom:1px solid #252b35}
+.sire-instrument-search-head strong{font:700 14px Arial,sans-serif}
+.sire-instrument-search-head button{border:0;background:transparent;color:#aeb6c2;font-size:25px;line-height:1;cursor:pointer;padding:5px 8px}
+.sire-instrument-search-input{margin:10px;display:flex;align-items:center;gap:8px;padding:9px 10px;border:1px solid #303744;border-radius:8px;background:#090c11;color:#8993a2}
+.sire-instrument-search-input input{width:100%;min-width:0;border:0;outline:0;background:transparent;color:#edf1f5;font:600 14px Arial,sans-serif}
+.sire-instrument-search-list{overflow:auto;padding:0 8px 8px}
+.sire-instrument-search-list button{width:100%;display:flex;align-items:center;justify-content:space-between;gap:10px;border:0;border-radius:7px;background:transparent;color:#dfe5ec;padding:10px 9px;text-align:left;cursor:pointer}
+.sire-instrument-search-list button:hover{background:#1c222c}
+.sire-instrument-search-list span{display:flex;flex-direction:column;min-width:0}
+.sire-instrument-search-list b{font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sire-instrument-search-list small{font-size:9px;color:#7d8795;margin-top:2px}
+.sire-instrument-search-list i{font-size:8px;color:#87919f;font-style:normal}
