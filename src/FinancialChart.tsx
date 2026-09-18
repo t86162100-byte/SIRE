@@ -632,13 +632,13 @@ export default function FinancialChart({ symbol, isActive = false, liveTick, req
       if (replay.state().playing) replay.play({ speed });
       else replay.seek(replay.state().index);
     }
+    setReplayDraftSpeed(speed);
     setReplayState(current => current ? { ...current, speed } : current);
   };
 
   const replayStepBack = () => replayRef.current?.stepBack();
   const replayStep = () => replayRef.current?.step();
   const exportChartSvg = () => { const widget = widgetRef.current; if (!widget) return; const svg = widget.chart.exportSVG({ background: true }); const blob = new Blob([svg], { type: 'image/svg+xml;charset=utf-8' }); const url = URL.createObjectURL(blob); const anchor = document.createElement('a'); anchor.href = url; anchor.download = `sire-${widget.symbol()}-${widget.interval()}.svg`; anchor.click(); URL.revokeObjectURL(url); };
-  const toggleReplay = () => { if (!replayRef.current) startReplay(); else if (replayRef.current.state().playing) replayRef.current.pause(); else replayRef.current.play({ speed: replayRef.current.state().speed }); };
   const addCompare = async (compareSymbol: string) => {
     const widget = widgetRef.current;
     if (!widget || !compareSymbol || compareSymbol === symbol || comparisons.includes(compareSymbol)) return;
@@ -775,7 +775,7 @@ export default function FinancialChart({ symbol, isActive = false, liveTick, req
           {replayRangeError && <div className="sire-replay-error">{replayRangeError}</div>}
           <div className="sire-replay-speed-row">
             {REPLAY_SPEEDS.map(speed => (
-              <button key={speed} type="button" className={speed === 1 ? 'active' : ''} onClick={() => setReplaySpeed(speed)} title={`Speed ${replaySpeedLabel(speed)}`}>{replaySpeedLabel(speed)}</button>
+              <button key={speed} type="button" className={replayDraftSpeed === speed ? 'active' : ''} onClick={() => { setReplayDraftSpeed(speed); setReplaySpeed(speed); }} title={`Speed ${replaySpeedLabel(speed)}`}>{replaySpeedLabel(speed)}</button>
             ))}
           </div>
         </div>
