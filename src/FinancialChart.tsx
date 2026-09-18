@@ -1,6 +1,7 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import 'openalgo-charts/indicators';
 import 'openalgo-charts/draw';
+import { iconSvg, registeredDrawingTools } from 'openalgo-charts/draw';
 import 'openalgo-charts/profile';
 import 'openalgo-charts/trade';
 import 'openalgo-charts/transform';
@@ -14,6 +15,19 @@ type HistoryRequester = (request: Record<string, unknown>) => Promise<HistoryRes
 type Instrument = { symbol: string; name: string };
 type Props = { symbol: string; liveTick: Tick | null; requestHistory: HistoryRequester; instruments: Instrument[]; onSelectInstrument: (instrument: Instrument) => void };
 type Candle = { time: number; open: number; high: number; low: number; close: number; volume?: number };
+type DrawGroup = { label: string; tools: string[] };
+
+const DRAW_RACK_GROUPS: DrawGroup[] = [
+  { label: 'Cursor', tools: ['cursor'] },
+  { label: 'Trend line', tools: ['trend-line', 'ray', 'extended-line', 'horizontal-line', 'horizontal-ray', 'vertical-line', 'cross-line', 'arrow'] },
+  { label: 'Channels', tools: ['parallel-channel'] },
+  { label: 'Fibonacci & Gann', tools: ['fib-retracement', 'fib-extension', 'fib-channel', 'fib-time-zone', 'fib-fan', 'gann-fan', 'gann-box', 'cyclic-lines', 'time-cycles', 'sine-line'] },
+  { label: 'Patterns', tools: ['path', 'polyline', 'triangle', 'rotated-rectangle', 'double-curve'] },
+  { label: 'Forecast & measure', tools: ['forecast', 'price-range', 'date-range', 'measure', 'long-position', 'short-position'] },
+  { label: 'Shapes', tools: ['rectangle', 'ellipse', 'circle', 'arc', 'curve', 'highlight', 'brush'] },
+  { label: 'Annotation', tools: ['text', 'note', 'price-note', 'callout', 'comment', 'balloon', 'signpost', 'table', 'price-label', 'flag-mark'] },
+  { label: 'Arrows & marks', tools: ['arrow-up', 'arrow-down', 'arrow-left', 'arrow-right'] },
+];
 
 const INTERVAL_SECONDS: Record<string, number> = { '1m': 60, '5m': 300, '15m': 900, '1h': 3600, '1d': 86400, '1w': 604800 };
 const intervalSeconds = (interval: string) => INTERVAL_SECONDS[interval] ?? 60;
@@ -59,6 +73,10 @@ async function requestBars(symbol: string, interval: string, requestHistory: His
 
 export default function FinancialChart({ symbol, liveTick, requestHistory, instruments, onSelectInstrument }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
+  const [drawRackOpen, setDrawRackOpen] = useState(false);
+  const [drawGroup, setDrawGroup] = useState(1);
+  const [activeDrawTool, setActiveDrawTool] = useState<string | null>(null);
+  const availableDrawTools = useMemo(() => new Set(registeredDrawingTools().map(tool => tool.id)), []);
   const widgetRef = useRef<Widget | null>(null);
   const candlesRef = useRef<Candle[]>([]);
   const subscriberRef = useRef<((bar: Candle) => void) | null>(null);
@@ -70,6 +88,42 @@ export default function FinancialChart({ symbol, liveTick, requestHistory, instr
   instrumentsRef.current = instruments;
   onSelectInstrumentRef.current = onSelectInstrument;
   symbolRef.current = symbol;
+
+  useEffect(() => {
+    const host = containerRef.current;
+    if (!host) return;
+    const onDrawButton = (event: MouseEvent) => {
+      const target = event.target as HTMLElement | null;
+      const button = target?.closest<HTMLElement>('[data-mobile-action="draw"]');
+      if (!button) return;
+      event.preventDefault();
+      event.stopPropagation();
+      setDrawRackOpen(open => !open);
+    };
+    host.addEventListener('click', onDrawButton, true);
+    return () => host.removeEventListener('click', onDrawButton, true);
+  }, []);
+
+  useEffect(() => {
+    if (!drawRackOpen) return;
+    const onEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setDrawRackOpen(false);
+    };
+    window.addEventListener('keydown', onEscape);
+    return () => window.removeEventListener('keydown', onEscape);
+  }, [drawRackOpen]);
+
+  useEffect(() => {
+    if (!drawRackOpen) return;
+    const host = containerRef.current;
+    if (!host) return;
+    const onToolEvent = (event: Event) => {
+      const detail = (event as CustomEvent<{ tool?: string | null }>).detail;
+      setActiveDrawTool(detail?.tool ?? null);
+    };
+    const off = host.addEventListener('draw:tool', onToolEvent as EventListener);
+    return () => host.removeEventListener('draw:tool', onToolEvent as EventListener);
+  }, [drawRackOpen]);
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -157,5 +211,64 @@ export default function FinancialChart({ symbol, liveTick, requestHistory, instr
     subscriberRef.current?.(bar);
   }, [liveTick, symbol]);
 
-  return <div ref={containerRef} className="sire-financial-chart" />;
+  const visibleGroups = DRAW_RACK_GROUPS.map(group => ({
+    ...group,
+    tools: group.tools.filter(id => availableDrawTools.has(id)),
+  })).filter(group => group.tools.length > 0);
+
+  const currentGroup = visibleGroups[Math.min(drawGroup, Math.max(visibleGroups.length - 1, 0))] ?? visibleGroups[0];
+
+  return (
+    <div ref={containerRef} className={`sire-financial-chart${drawRackOpen ? ' sire-draw-rack-open' : ''}`}>
+      {drawRackOpen && (
+        <div className="sire-draw-rack" role="dialog" aria-label="Drawing tools">
+          <div className="sire-draw-rack__rail">
+            <button className="sire-draw-rack__close" type="button" aria-label="Close drawing tools" onClick={() => setDrawRackOpen(false)}>×</button>
+            {visibleGroups.map((group, index) => (
+              <button
+                key={group.label}
+                type="button"
+                className={`sire-draw-rack__group${index === drawGroup ? ' is-active' : ''}`}
+                onClick={() => setDrawGroup(index)}
+                title={group.label}
+                aria-label={group.label}
+              >
+                <span className="sire-draw-rack__group-icon">{group.tools[0] && <span dangerouslySetInnerHTML={{ __html: iconSvg(group.tools[0], { size: 22 }) }} />}</span>
+                <span className="sire-draw-rack__group-label">{group.label}</span>
+              </button>
+            ))}
+          </div>
+          {currentGroup && (
+            <div className="sire-draw-rack__panel">
+              <div className="sire-draw-rack__panel-head">
+                <strong>{currentGroup.label}</strong>
+                <button type="button" onClick={() => setDrawRackOpen(false)} aria-label="Close">×</button>
+              </div>
+              <div className="sire-draw-rack__tools">
+                {currentGroup.tools.map(toolId => {
+                  const tool = registeredDrawingTools().find(item => item.id === toolId);
+                  if (!tool) return null;
+                  return (
+                    <button
+                      key={tool.id}
+                      type="button"
+                      className={`sire-draw-rack__tool${activeDrawTool === tool.id ? ' is-active' : ''}`}
+                      title={tool.name}
+                      onClick={() => {
+                        widgetRef.current?.draw.setTool(tool.id);
+                        setActiveDrawTool(tool.id);
+                      }}
+                    >
+                      <span className="sire-draw-rack__tool-icon" dangerouslySetInnerHTML={{ __html: iconSvg(tool.id, { size: 24 }) }} />
+                      <span>{tool.name}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
 }
