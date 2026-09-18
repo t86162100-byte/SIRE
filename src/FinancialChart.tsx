@@ -1114,42 +1114,12 @@ export default function FinancialChart({ symbol, isActive = false, liveTick, req
                       className={`sire-draw-rack__tool${activeDrawTool === tool.id ? ' is-active' : ''}`}
                       title={tool.name}
                       onClick={() => {
-
                         const widget = widgetRef.current;
-
                         if (!widget) return;
-
+                        // OpenAlgo owns the native crosshair, placement preview,
+                        // anchor capture and touch behavior.
                         widget.draw.setTool(tool.id);
-
                         setActiveDrawTool(tool.id);
-
-                        window.requestAnimationFrame(() => {
-
-                          const host = containerRef.current;
-
-                          if (!host) return;
-
-                          const rect = host.getBoundingClientRect();
-
-                          const x = rect.width * 0.5;
-
-                          const y = Math.max(70, rect.height * 0.42);
-
-                          const chart = widget.chart as any;
-
-                          const pane = chart.panes?.()[0];
-
-                          const paneRect = pane?.element?.getBoundingClientRect?.();
-
-                          const paneTop = paneRect ? paneRect.top - rect.top : 0;
-
-                          const pointY = Math.max(paneTop, Math.min((paneRect?.bottom ?? rect.bottom) - rect.top - 1, y));
-
-                          const chartHost = host as any;
-                          chartHost.__sireSetPlacementCrosshair?.(x, pointY);
-
-                        });
-
                       }}
                     >
                       <span className="sire-draw-rack__tool-icon">{(() => { const Icon = universalIcons[tool.id] ?? MousePointer2; return <Icon size={23} strokeWidth={1.8} />; })()}</span>
