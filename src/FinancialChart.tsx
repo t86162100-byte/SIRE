@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Eye, Lock, Minus, MoreHorizontal, Settings2, Shapes, Trash2, Wrench } from 'lucide-react';
-import { addComparison, comparisonController, PriceLevels, ReplayController, registerInterval, withBarCache } from 'openalgo-charts';
+import { addComparison, comparisonController, PriceLevels, ReplayController, ReplayShade, TextWatermark, registerInterval, withBarCache } from 'openalgo-charts';
 import 'openalgo-charts/indicators';
 import 'openalgo-charts/draw';
 import { computeMarketProfile, MarketProfile } from 'openalgo-charts/profile';
@@ -201,11 +201,15 @@ export default function FinancialChart({ symbol, isActive = false, liveTick, req
   const replayShadeRef = useRef<ReplayShade | null>(null);
   const replayMarkRef = useRef<TextWatermark | null>(null);
   const replaySubBarsRef = useRef<{ key: string; bars: Candle[] } | null>(null);
+  const replayShadeRef = useRef<ReplayShade | null>(null);
+  const replayMarkRef = useRef<TextWatermark | null>(null);
+  const replaySubBarsRef = useRef<{ key: string; bars: Candle[] } | null>(null);
   const [replaySetupOpen, setReplaySetupOpen] = useState(false);
   const [replayStartInput, setReplayStartInput] = useState('');
   const [replayEndInput, setReplayEndInput] = useState('');
   const [replayRangeError, setReplayRangeError] = useState<string | null>(null);
   const [replayDraftSpeed, setReplayDraftSpeed] = useState(1);
+  const [replayLoading, setReplayLoading] = useState(false);
   const [replayLoading, setReplayLoading] = useState(false);
   const [marketQuote, setMarketQuote] = useState<{ price: number; percent: number } | null>(null);
   const widgetRef = useRef<Widget | null>(null);
@@ -864,6 +868,7 @@ export default function FinancialChart({ symbol, isActive = false, liveTick, req
   const stopReplay = () => {
     replayRef.current?.stop();
     replayRef.current = null;
+    clearReplayDecorations();
     widgetRef.current?.dataController?.setPaused?.(false);
     setReplayActive(false);
     setReplayState(null);
