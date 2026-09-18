@@ -714,13 +714,6 @@ export default function FinancialChart({ symbol, isActive = false, liveTick, req
       candlesRef.current = bars.slice().sort((a, b) => a.time - b.time);
       updateMarketQuote(candlesRef.current);
       window.setTimeout(refreshTpoProfile, 0);
-
-      // Continue toward the provider boundary only after the fast warmup has
-      // completed. This is deliberately fire-and-forget so the chart remains
-      // interactive while deeper history arrives.
-      void discoverEarliestDerivTick(symbolRef.current, requestHistoryRef.current)
-        .then(() => backfillHistoryTo())
-        .catch(() => undefined);
     });
     setActiveTimeframe(widget.interval());
     const offInterval = widget.on('interval', (event: { interval: string }) => setActiveTimeframe(event.interval));
@@ -1025,11 +1018,12 @@ export default function FinancialChart({ symbol, isActive = false, liveTick, req
       if (!Number.isFinite(anchor)) break;
       if (goal !== undefined && anchor <= goal) break;
 
-      const seconds = intervalSeconds(activeTimeframe || '1m');
+      const interval = widget.interval();
+      const seconds = intervalSeconds(interval);
       const pageSpan = FAST_HISTORY_PAGE_SIZE * seconds;
       const requests = Array.from({ length: FAST_HISTORY_PAGES_PER_BATCH }, (_, index) => ({
         symbol: symbolRef.current,
-        interval: activeTimeframe || '1m',
+        interval,
         to: Math.floor(anchor - 1 - index * pageSpan),
         noCache: false,
       }));
