@@ -105,6 +105,9 @@ export default function FinancialChart({ symbol, liveTick, requestHistory, instr
         .slice(0, 50)
         .map(item => ({ symbol: item.symbol, name: item.name })),
     });
+    const pitchBlackTheme = { ...widget.chart.theme(), background: '#000000' };
+    widget.setTheme(pitchBlackTheme);
+    widget.chart.applyOptions({ canvas: { background: '#000000' } });
     widgetRef.current = widget;
     const offSymbol = widget.on('symbol', (event: { symbol: string }) => {
       const instrument = instrumentsRef.current.find(item => item.symbol === event.symbol);
