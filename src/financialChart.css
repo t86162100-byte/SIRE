@@ -129,3 +129,5 @@
 /* MT5-style drawing inspection lens: visual-only, never intercepts chart input. */
 
 
+
+.sire-replay-progress-row{display:flex;align-items:center;gap:7px;margin-bottom:4px;min-width:0}.sire-replay-progress-row input{flex:1;min-width:120px;height:18px;margin:0;accent-color:#fff;cursor:pointer}.sire-replay-progress-row span{font-size:9px;opacity:.68;white-space:nowrap}.sire-replay-transport button:disabled,.sire-replay-setup button:disabled{opacity:.45;cursor:wait}
