@@ -44,6 +44,15 @@ for (const [code, seconds] of Object.entries(INTERVAL_SECONDS)) {
 }
 const intervalSeconds = (interval: string) => INTERVAL_SECONDS[interval] ?? 60;
 
+const REPLAY_SPEEDS = [0.25, 0.5, 1, 2, 4, 8] as const;
+const replaySpeedLabel = (speed: number) => `${speed}×`;
+const formatReplayInput = (epoch: number) => new Date(epoch * 1000 + 60 * 60 * 1000).toISOString().slice(0, 16);
+const parseReplayInput = (value: string) => {
+  if (!value) return NaN;
+  const ms = Date.parse(`${value}:00+01:00`);
+  return Number.isFinite(ms) ? Math.floor(ms / 1000) : NaN;
+};
+
 function parseCandles(data: HistoryResponse): Candle[] | null {
   if (!Array.isArray(data.candles)) return null;
   const candles = data.candles.map((item: unknown) => {
@@ -184,6 +193,10 @@ export default function FinancialChart({ symbol, isActive = false, liveTick, req
   const [activeTimeframe, setActiveTimeframe] = useState('1m');
   const [swipeAnimation, setSwipeAnimation] = useState<'up' | 'down' | null>(null);
   const replayRef = useRef<ReplayController | null>(null);
+  const [replaySetupOpen, setReplaySetupOpen] = useState(false);
+  const [replayStartInput, setReplayStartInput] = useState('');
+  const [replayEndInput, setReplayEndInput] = useState('');
+  const [replayRangeError, setReplayRangeError] = useState<string | null>(null);
   const availableDrawTools = useMemo(() => new Set(['__cursor__', ...registeredDrawingTools().map(tool => tool.id)]), []);
   const universalIcons = useMemo(() => ({
     cursor: MousePointer2, 'trend-line': Slash, ray: MoveUpRight, 'extended-line': ArrowUpRight,
@@ -286,6 +299,7 @@ export default function FinancialChart({ symbol, isActive = false, liveTick, req
     }
   };
   const selectTimeframe = (interval: string) => {
+    if (replayRef.current) stopReplay();
     const widget = widgetRef.current;
     if (!widget) return;
     setActiveTimeframe(interval);
@@ -451,6 +465,18 @@ export default function FinancialChart({ symbol, isActive = false, liveTick, req
         window.setTimeout(refreshTpoProfile, 0);
       }
     });
+    const renderReplayState = (state: unknown) => setReplayState(state as typeof replayState);
+    const offReplayStart = widget.chart.on('replay:start', renderReplayState);
+    const offReplayFrame = widget.chart.on('replay:frame', renderReplayState);
+    const offReplayPlay = widget.chart.on('replay:play', renderReplayState);
+    const offReplayPause = widget.chart.on('replay:pause', renderReplayState);
+    const offReplayEnd = widget.chart.on('replay:end', renderReplayState);
+    const offReplayStop = widget.chart.on('replay:stop', () => {
+      widget.dataController?.setPaused?.(false);
+      setReplayActive(false);
+      setReplayState(null);
+      window.setTimeout(() => resyncRef.current?.(), 0);
+    });
     tpoUnregisterRef.current = widget.objects.register({
       id: 'sire-market-profile',
       get: () => tpoProfileRef.current ? { kind: 'profile', name: 'Market Profile (TPO)', paneIndex: 0, visible: tpoEnabledRef.current } : null,
@@ -466,6 +492,12 @@ export default function FinancialChart({ symbol, isActive = false, liveTick, req
       offInterval?.();
       offData?.();
       offRenderer?.();
+      offReplayStart?.();
+      offReplayFrame?.();
+      offReplayPlay?.();
+      offReplayPause?.();
+      offReplayEnd?.();
+      offReplayStop?.();
       tpoUnregisterRef.current?.();
       tpoUnregisterRef.current = null;
       tpoProfileRef.current = null;
@@ -517,34 +549,91 @@ export default function FinancialChart({ symbol, isActive = false, liveTick, req
     subscriberRef.current?.(bar);
   }, [liveTick, symbol]);
 
-  const startReplay = () => {
+  const startReplay = (startIndex: number, endIndex: number, speed: number) => {
     const widget = widgetRef.current;
-    const bars = candlesRef.current;
-    if (!widget || bars.length < 10) return;
+    const fullBars = candlesRef.current.slice().sort((a, b) => a.time - b.time);
+    if (!widget || fullBars.length < 2) return false;
+    const start = Math.max(0, Math.min(startIndex, fullBars.length - 2));
+    const end = Math.max(start + 1, Math.min(endIndex, fullBars.length - 1));
+    const replayBars = fullBars.slice(0, end + 1);
     widget.dataController?.setPaused?.(true);
     replayRef.current?.stop();
-    const replay = new ReplayController(widget.chart, { series: widget.series, bars, startIndex: Math.max(1, bars.length - Math.min(200, bars.length - 1)), barMs: 500 });
+    const replay = new ReplayController(widget.chart, {
+      series: widget.series,
+      bars: replayBars,
+      startIndex: start,
+      barMs: 1000,
+      speed,
+    });
     replayRef.current = replay;
     setReplayActive(true);
     setReplayState(replay.state() as typeof replayState);
-    const render = (state: unknown) => setReplayState(state as typeof replayState);
-    widget.chart.on('replay:frame', render);
-    widget.chart.on('replay:play', render);
-    widget.chart.on('replay:pause', render);
-    widget.chart.on('replay:end', render);
-    widget.chart.on('replay:stop', () => {
-      widget.dataController?.setPaused?.(false);
-      setReplayActive(false);
-      setReplayState(null);
-    });
+    setReplaySetupOpen(false);
+    return true;
   };
+
   const stopReplay = () => {
     replayRef.current?.stop();
     replayRef.current = null;
     widgetRef.current?.dataController?.setPaused?.(false);
     setReplayActive(false);
     setReplayState(null);
+    setReplaySetupOpen(false);
   };
+
+  const openReplaySetup = () => {
+    const bars = candlesRef.current.slice().sort((a, b) => a.time - b.time);
+    if (bars.length < 2) return;
+    setReplayStartInput(formatReplayInput(bars[0].time));
+    setReplayEndInput(formatReplayInput(bars[bars.length - 1].time));
+    setReplayRangeError(null);
+    setReplaySetupOpen(true);
+  };
+
+  const startReplayFromInputs = (forceBeginning = false, forceLatest = false) => {
+    const bars = candlesRef.current.slice().sort((a, b) => a.time - b.time);
+    if (bars.length < 2) {
+      setReplayRangeError('Not enough history');
+      return;
+    }
+    const startEpoch = forceBeginning ? bars[0].time : parseReplayInput(replayStartInput);
+    const endEpoch = forceLatest ? bars[bars.length - 1].time : parseReplayInput(replayEndInput);
+    if (!Number.isFinite(startEpoch) || !Number.isFinite(endEpoch) || startEpoch >= endEpoch) {
+      setReplayRangeError('Choose a valid start and end');
+      return;
+    }
+    const startIndex = Math.max(0, bars.findIndex(bar => bar.time >= startEpoch));
+    let endIndex = bars.findIndex(bar => bar.time <= endEpoch);
+    if (endIndex < 0) endIndex = bars.length - 1;
+    if (endIndex <= startIndex) {
+      setReplayRangeError('Range must contain at least two candles');
+      return;
+    }
+    setReplayRangeError(null);
+    return startReplay(startIndex, endIndex, replayState?.speed || 1);
+  };
+
+  const toggleReplay = () => {
+    const replay = replayRef.current;
+    if (!replay) {
+      openReplaySetup();
+      return;
+    }
+    if (replay.state().playing) replay.pause();
+    else replay.play({ speed: replay.state().speed });
+  };
+
+  const setReplaySpeed = (speed: number) => {
+    const replay = replayRef.current;
+    if (replay) {
+      if (replay.state().playing) replay.play({ speed });
+      else replay.seek(replay.state().index);
+    }
+    setReplayState(current => current ? { ...current, speed } : current);
+  };
+
+  const replayStepBack = () => replayRef.current?.stepBack();
+  const replayStep = () => replayRef.current?.step();
   const exportChartSvg = () => { const widget = widgetRef.current; if (!widget) return; const svg = widget.chart.exportSVG({ background: true }); const blob = new Blob([svg], { type: 'image/svg+xml;charset=utf-8' }); const url = URL.createObjectURL(blob); const anchor = document.createElement('a'); anchor.href = url; anchor.download = `sire-${widget.symbol()}-${widget.interval()}.svg`; anchor.click(); URL.revokeObjectURL(url); };
   const toggleReplay = () => { if (!replayRef.current) startReplay(); else if (replayRef.current.state().playing) replayRef.current.pause(); else replayRef.current.play({ speed: replayRef.current.state().speed }); };
   const addCompare = async (compareSymbol: string) => {
@@ -645,6 +734,49 @@ export default function FinancialChart({ symbol, isActive = false, liveTick, req
           {comparisons.map(item => <button key={item} type="button" onClick={() => removeCompare(item)}>Remove {item}</button>)}
         </div>}
       </div>
+      {replayActive && replayState && (
+        <div className="sire-replay-transport" role="dialog" aria-label="Chart replay controls">
+          <div className="sire-replay-setup-row">
+            <input aria-label="Replay start date and time" type="datetime-local" value={replayStartInput} onChange={event => setReplayStartInput(event.target.value)} title="Start" />
+            <span aria-hidden="true">↔</span>
+            <input aria-label="Replay stop date and time" type="datetime-local" value={replayEndInput} onChange={event => setReplayEndInput(event.target.value)} title="Stop" />
+            <button type="button" onClick={() => startReplayFromInputs(false, false)} aria-label="Apply replay range" title="Apply range">✓</button>
+          </div>
+          <div className="sire-replay-transport-row">
+            <button type="button" onClick={replayStepBack} aria-label="Previous replay bar" title="Previous">⏮</button>
+            <button type="button" onClick={toggleReplay} aria-label={replayState.playing ? 'Pause replay' : 'Play replay'} title={replayState.playing ? 'Pause' : 'Play'}>{replayState.playing ? 'Ⅱ' : '▶'}</button>
+            <button type="button" onClick={replayStep} aria-label="Next replay bar" title="Next">⏭</button>
+            <button type="button" onClick={stopReplay} aria-label="Exit replay" title="Exit">×</button>
+            <span className="sire-replay-clock">{replayState.bar ? new Date(replayState.bar.time * 1000 + 60 * 60 * 1000).toISOString().slice(0, 16).replace('T', ' ') : ''}</span>
+          </div>
+          <div className="sire-replay-speed-row">
+            {REPLAY_SPEEDS.map(speed => (
+              <button key={speed} type="button" className={replayState.speed === speed ? 'active' : ''} onClick={() => setReplaySpeed(speed)} title={`Speed ${replaySpeedLabel(speed)}`}>{replaySpeedLabel(speed)}</button>
+            ))}
+          </div>
+        </div>
+      )}
+      {replaySetupOpen && !replayActive && (
+        <div className="sire-replay-setup" role="dialog" aria-label="Set replay range">
+          <div className="sire-replay-setup-row">
+            <input aria-label="Replay start date and time" type="datetime-local" value={replayStartInput} onChange={event => setReplayStartInput(event.target.value)} title="Start" />
+            <span aria-hidden="true">↔</span>
+            <input aria-label="Replay stop date and time" type="datetime-local" value={replayEndInput} onChange={event => setReplayEndInput(event.target.value)} title="Stop" />
+          </div>
+          <div className="sire-replay-quick-row">
+            <button type="button" onClick={() => startReplayFromInputs(true, true)} aria-label="Replay from beginning to latest" title="Beginning to latest">⏮▶</button>
+            <button type="button" onClick={() => startReplayFromInputs(false, true)} aria-label="Replay selected start to latest" title="Start to latest">▶⏭</button>
+            <button type="button" onClick={() => startReplayFromInputs(false, false)} aria-label="Replay selected range" title="Start to stop">↔▶</button>
+            <button type="button" onClick={() => setReplaySetupOpen(false)} aria-label="Close replay setup" title="Close">×</button>
+          </div>
+          {replayRangeError && <div className="sire-replay-error">{replayRangeError}</div>}
+          <div className="sire-replay-speed-row">
+            {REPLAY_SPEEDS.map(speed => (
+              <button key={speed} type="button" className={speed === 1 ? 'active' : ''} onClick={() => setReplaySpeed(speed)} title={`Speed ${replaySpeedLabel(speed)}`}>{replaySpeedLabel(speed)}</button>
+            ))}
+          </div>
+        </div>
+      )}
       {drawRackOpen && (
         <div className="sire-draw-rack" role="dialog" aria-label="Drawing tools">
           <div className="sire-draw-rack__rail">
@@ -749,6 +881,15 @@ export default function FinancialChart({ symbol, isActive = false, liveTick, req
           onClick={() => widgetRef.current?.openIndicatorPicker()}
         >
           <span className="sire-bottom-indicator-icon" aria-hidden="true">ƒ</span>
+        </button>
+        <button
+          type="button"
+          className="sire-bottom-replay-button"
+          aria-label={replayActive ? (replayState?.playing ? 'Pause replay' : 'Play replay') : 'Open replay'}
+          title={replayActive ? (replayState?.playing ? 'Pause replay' : 'Play replay') : 'Replay'}
+          onClick={toggleReplay}
+        >
+          <span aria-hidden="true">{replayActive ? (replayState?.playing ? 'Ⅱ' : '▶') : '⏱'}</span>
         </button>
         <button
           type="button"
