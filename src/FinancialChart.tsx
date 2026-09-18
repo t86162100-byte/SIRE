@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, ArrowUpRight, Circle, Crosshair, Eraser, Eye, GitBranch, Highlighter, Lock, Minus, MoreHorizontal, MousePointer2, MoveUpRight, Pencil, Plus, RectangleHorizontal, Ruler, Shapes, Slash, Square, Table2, Target, TextCursorInput, Type, Waves, Wrench } from 'lucide-react';
+import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, ArrowUpRight, Circle, Crosshair, Eraser, Eye, GitBranch, Highlighter, Lock, Minus, MoreHorizontal, MousePointer2, Settings2, Trash2, MoveUpRight, Pencil, Plus, RectangleHorizontal, Ruler, Shapes, Slash, Square, Table2, Target, TextCursorInput, Type, Waves, Wrench } from 'lucide-react';
 import { addComparison, comparisonController, PriceLevels, ReplayController, registerInterval, withBarCache } from 'openalgo-charts';
 import 'openalgo-charts/indicators';
 import 'openalgo-charts/draw';
@@ -197,7 +197,10 @@ export default function FinancialChart({ symbol, isActive = false, liveTick, req
   const [moreMenuOpen, setMoreMenuOpen] = useState(false);
   const [selectedDrawing, setSelectedDrawing] = useState<{ id: string; sourceId: string; name: string; visible: boolean; locked: boolean } | null>(null);
   const [selectedDrawingPosition, setSelectedDrawingPosition] = useState<{ left: number; top: number } | null>(null);
+  const [selectedIndicator, setSelectedIndicator] = useState<{ id: string; name: string; paneIndex: number } | null>(null);
+  const [selectedIndicatorPosition, setSelectedIndicatorPosition] = useState<{ left: number; top: number } | null>(null);
   const [swipeInstrumentIndex, setSwipeInstrumentIndex] = useState(() => Math.max(0, instruments.findIndex(item => item.symbol === symbol)));
+  const selectedIndicatorRef = useRef<{ id: string; name: string; paneIndex: number } | null>(null);
   const swipeStartYRef = useRef<number | null>(null);
   const swipeAccumulatedRef = useRef(0);
   const swipeAnimatingRef = useRef(false);
@@ -500,6 +503,50 @@ export default function FinancialChart({ symbol, isActive = false, liveTick, req
       const top = Math.max(72, Math.min(hostRect.height - 120, center.y - 54));
       setSelectedDrawingPosition({ left, top });
     };
+    const updateSelectedIndicatorOverlay = (indicator: { id: string; name: string; paneIndex: number } | null) => {
+      if (!indicator) {
+        setSelectedIndicatorPosition(null);
+        return;
+      }
+      const hostRect = host.getBoundingClientRect();
+      const pane = widget.chart.panes()[indicator.paneIndex];
+      const paneRect = pane?.element?.getBoundingClientRect?.();
+      const paneTop = paneRect ? paneRect.top - hostRect.top : 8;
+      const indicatorRows = widget.objects.list().filter((item: any) => item?.kind === 'indicator' && Number(item?.paneIndex) === indicator.paneIndex);
+      const rowIndex = Math.max(0, indicatorRows.findIndex((item: any) => item?.id === indicator.id));
+      const left = Math.max(8, Math.min(hostRect.width - 92, 8 + Math.max(46, indicator.name.length * 6.5 + 8)));
+      const top = Math.max(6, Math.min(hostRect.height - 42, paneTop + 4 + rowIndex * 18));
+      setSelectedIndicatorPosition({ left, top });
+    };
+
+    const offIndicatorObjects = widget.objects.subscribe(objects => {
+      if (selectedIndicatorRef.current) {
+        const current = objects.find(object => object.kind === 'indicator' && object.id === selectedIndicatorRef.current?.id);
+        if (!current) {
+          selectedIndicatorRef.current = null;
+          setSelectedIndicator(null);
+          setSelectedIndicatorPosition(null);
+        } else {
+          const next = { id: current.id, name: current.name, paneIndex: current.paneIndex };
+          selectedIndicatorRef.current = next;
+          setSelectedIndicator(next);
+          updateSelectedIndicatorOverlay(next);
+        }
+      }
+    });
+
+    widget.chart.subscribeClick((externalId: string) => {
+      if (!externalId.endsWith('::row')) return;
+      const id = externalId.slice(0, -'::row'.length);
+      const indicator = widget.objects.list().find(object => object.kind === 'indicator' && object.id === id);
+      if (!indicator) return;
+      const next = { id: indicator.id, name: indicator.name, paneIndex: indicator.paneIndex };
+      widget.objects.select(indicator.id);
+      selectedIndicatorRef.current = next;
+      setSelectedIndicator(next);
+      updateSelectedIndicatorOverlay(next);
+    });
+
     const offDrawingObjects = widget.objects.subscribe(objects => {
       const drawing = objects.find(object => object.kind === 'drawing' && object.selected);
       setSelectedDrawing(drawing ? {
@@ -528,6 +575,14 @@ export default function FinancialChart({ symbol, isActive = false, liveTick, req
       });
     };
     host.addEventListener('pointerdown', onDrawingInteraction, true);
+    const onIndicatorInteraction = (event: PointerEvent) => {
+      const target = event.target as Element | null;
+      if (target?.closest?.('.sire-indicator-selection-bar')) return;
+      selectedIndicatorRef.current = null;
+      setSelectedIndicator(null);
+      setSelectedIndicatorPosition(null);
+    };
+    host.addEventListener('pointerdown', onIndicatorInteraction, true);
     const offDrawingSelect = widget.chart.on('drawing:select', () => {
       window.requestAnimationFrame(() => {
         const selected = widget.objects.selection?.().find?.((item: any) => item?.kind === 'drawing');
@@ -537,6 +592,7 @@ export default function FinancialChart({ symbol, isActive = false, liveTick, req
     const onResize = () => {
       const selected = widget.objects.selection?.().find?.((item: any) => item?.kind === 'drawing');
       if (selected) updateSelectedDrawingOverlay(selected);
+      if (selectedIndicatorRef.current) updateSelectedIndicatorOverlay(selectedIndicatorRef.current);
     };
     window.addEventListener('resize', onResize);
     onWidgetReady?.(widget);
@@ -580,9 +636,11 @@ export default function FinancialChart({ symbol, isActive = false, liveTick, req
       offData?.();
       offRenderer?.();
       offDrawingObjects?.();
+      offIndicatorObjects?.();
       offDrawingSelect?.();
       window.removeEventListener('resize', onResize);
       host.removeEventListener('pointerdown', onDrawingInteraction, true);
+      host.removeEventListener('pointerdown', onIndicatorInteraction, true);
       offReplayStart?.();
       offReplayFrame?.();
       offReplayPlay?.();
@@ -973,6 +1031,41 @@ export default function FinancialChart({ symbol, isActive = false, liveTick, req
             </div>
           )}
         </div>
+      {selectedIndicator && (
+        <div
+          className="sire-indicator-selection-bar"
+          role="toolbar"
+          aria-label={`Selected indicator: ${selectedIndicator.name}`}
+          style={selectedIndicatorPosition ? { left: selectedIndicatorPosition.left, top: selectedIndicatorPosition.top } : undefined}
+          onPointerDown={event => event.stopPropagation()}
+        >
+          <button
+            type="button"
+            className="sire-indicator-selection-button"
+            aria-label="Indicator settings"
+            title="Indicator settings"
+            onClick={() => widgetRef.current?.objects.openSettings(selectedIndicator.id)}
+          >
+            <Settings2 size={15} strokeWidth={2} aria-hidden="true" />
+          </button>
+          <button
+            type="button"
+            className="sire-indicator-selection-button sire-indicator-selection-delete"
+            aria-label="Delete indicator"
+            title="Delete indicator"
+            onClick={() => {
+              const widget = widgetRef.current;
+              if (!widget) return;
+              widget.objects.remove(selectedIndicator.id);
+              selectedIndicatorRef.current = null;
+              setSelectedIndicator(null);
+              setSelectedIndicatorPosition(null);
+            }}
+          >
+            <Trash2 size={15} strokeWidth={2} aria-hidden="true" />
+          </button>
+        </div>
+      )}
       {selectedDrawing && (
         <div
           className="sire-drawing-selection-bar"
