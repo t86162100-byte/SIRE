@@ -1039,6 +1039,20 @@ export default function FinancialChart({ symbol, isActive = false, liveTick, req
       <button type="button" className="sire-chart-settings-button" aria-label="Chart settings" title="Chart settings" onClick={() => widgetRef.current?.openSettings()}><MoreHorizontal size={18} strokeWidth={2.2} aria-hidden="true" /></button>
       {replayActive && replayState && (
         <div className="sire-replay-transport" role="dialog" aria-label="Chart replay controls">
+          <div className="sire-replay-progress-row">
+            <input
+              type="range"
+              min="0"
+              max={Math.max(0, replayState.total - 1)}
+              step="1"
+              value={Math.min(replayState.index, Math.max(0, replayState.total - 1))}
+              onChange={event => replaySeek(Number(event.target.value))}
+              aria-label="Replay position"
+              title="Scrub replay"
+            />
+            <span>{replayState.index + 1}/{replayState.total}</span>
+            {replayState.subSteps > 1 && <span>· {replayState.subIndex + 1}/{replayState.subSteps}</span>}
+          </div>
           <div className="sire-replay-setup-row">
             <input aria-label="Replay start date and time" type="datetime-local" value={replayStartInput} onChange={event => setReplayStartInput(event.target.value)} title="Start" />
             <span aria-hidden="true">↔</span>
