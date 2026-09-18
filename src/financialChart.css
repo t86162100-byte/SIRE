@@ -75,7 +75,7 @@
 .sire-replay-error{margin-top:6px;font-size:10px;color:#ff8f8f}
 @media(max-width:640px){.sire-replay-setup,.sire-replay-transport{left:8px;right:8px;bottom:52px;min-width:0;max-width:none}.sire-replay-clock{font-size:9px}.sire-replay-speed-row{overflow-x:auto;scrollbar-width:none}.sire-replay-speed-row::-webkit-scrollbar{display:none}.sire-replay-setup-row input{font-size:10px;flex:1;min-width:0}}
 /* SIRE Tools button controls the native OpenAlgo drawing rail. */
-.oac-rail{transform-origin:top left;overflow:hidden;transition:width 340ms cubic-bezier(.22,.61,.36,1),max-width 340ms cubic-bezier(.22,.61,.36,1),padding 340ms cubic-bezier(.22,.61,.36,1),border-color 220ms ease,background-color 220ms ease,clip-path 340ms cubic-bezier(.22,.61,.36,1),opacity 220ms ease,transform 340ms cubic-bezier(.22,.61,.36,1);will-change:width,max-width,padding,clip-path,opacity,transform}
-.oac-rail.sire-oac-rail--closed{width:0!important;max-width:0!important;min-width:0!important;padding-left:0!important;padding-right:0!important;border-right-color:transparent!important;background:transparent!important;clip-path:inset(0 100% 0 0);opacity:0;transform:translateX(-8px);pointer-events:none}
+.oac-rail{transform-origin:top left;overflow:hidden;transition:clip-path 420ms cubic-bezier(.22,.61,.36,1),opacity 420ms ease,transform 420ms cubic-bezier(.22,.61,.36,1),background-color 420ms ease,border-color 420ms ease;will-change:clip-path,opacity,transform}
+.oac-rail.sire-oac-rail--closed{clip-path:inset(0 100% 0 0);opacity:0;transform:translateX(-6px);pointer-events:none;background:transparent!important;border-right-color:transparent!important}
 .oac-rail:not(.sire-oac-rail--closed){clip-path:inset(0 0 0 0);opacity:1;transform:translateX(0);pointer-events:auto}
 @media(prefers-reduced-motion:reduce){.oac-rail{transition:none!important}}
