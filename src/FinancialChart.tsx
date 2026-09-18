@@ -174,7 +174,7 @@ export default function FinancialChart({ symbol, isActive = false, liveTick, req
   const [compareQuery, setCompareQuery] = useState('');
   const [comparisons, setComparisons] = useState<string[]>([]);
   const [replayActive, setReplayActive] = useState(false);
-  const [replayState, setReplayState] = useState<{ index:number; total:number; playing:boolean; speed:number; bar:Candle|null } | null>(null);
+  const [replayState, setReplayState] = useState<{ index:number; total:number; playing:boolean; speed:number; bar:Candle|null; subIndex:number; subSteps:number } | null>(null);
   const [rendererKind, setRendererKind] = useState<'canvas2d' | 'webgl2'>('canvas2d');
   const [tpoEnabled, setTpoEnabled] = useState(false);
   const [moreMenuOpen, setMoreMenuOpen] = useState(false);
@@ -669,6 +669,9 @@ export default function FinancialChart({ symbol, isActive = false, liveTick, req
       onWidgetDestroyed?.(widget);
       replayRef.current?.stop();
       replayRef.current = null;
+      replayShadeRef.current = null;
+      replayMarkRef.current = null;
+      replaySubBarsRef.current = null;
       widget.destroy();
       widgetRef.current = null;
       candlesRef.current = [];
