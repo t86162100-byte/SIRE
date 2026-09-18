@@ -55,6 +55,6 @@
 @media(max-width:640px){.sire-bottom-draw-button{left:130px;top:11px;width:46px;height:44px}.sire-bottom-draw-button:before{top:-11px;height:66px}}
 .sire-bottom-indicator-button{position:absolute;left:184px;top:14px;width:48px;height:44px;pointer-events:auto;border:0;background:transparent;color:#f3f4f6;border-radius:9px;display:flex;align-items:center;justify-content:center;cursor:pointer;touch-action:manipulation;padding:0;box-sizing:border-box}.sire-bottom-indicator-button:before{content:"";position:absolute;left:-1px;top:-14px;height:72px;width:1px;background:rgba(255,255,255,.18);box-shadow:0 0 8px rgba(255,255,255,.05);pointer-events:none}.sire-bottom-indicator-button:hover,.sire-bottom-indicator-button:focus-visible{background:rgba(255,255,255,.08);outline:none}.sire-bottom-indicator-icon{font-family:Georgia,"Times New Roman",serif;font-size:27px;font-style:normal;font-weight:400;line-height:1;transform:translateY(-1px)}@media(max-width:640px){.sire-bottom-indicator-button{left:176px;top:11px;width:46px;height:44px}.sire-bottom-indicator-button:before{top:-11px;height:66px}.sire-bottom-indicator-icon{font-size:26px}}
 
-.sire-bottom-glass-bar{transition:opacity .12s ease,transform .12s ease}
 .sire-financial-chart:not(.sire-toolbar-owner) .sire-bottom-glass-bar{display:none}
 .sire-financial-chart.sire-toolbar-owner .sire-bottom-glass-bar{position:fixed;left:12px;right:12px;bottom:12px;width:auto}
+@media(max-width:640px){.sire-financial-chart.sire-toolbar-owner .sire-bottom-glass-bar{left:8px;right:8px;bottom:8px}}
