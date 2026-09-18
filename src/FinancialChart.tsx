@@ -187,6 +187,7 @@ export default function FinancialChart({ symbol, isActive = false, liveTick, req
   const [drawRackOpen, setDrawRackOpen] = useState(false);
   const [drawGroup, setDrawGroup] = useState(1);
   const [activeDrawTool, setActiveDrawTool] = useState<string | null>(null);
+  const [drawingCrosshair, setDrawingCrosshair] = useState<{ time: number; price: number; paneIndex: number; x: number; y: number } | null>(null);
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [compareQuery, setCompareQuery] = useState('');
   const [comparisons, setComparisons] = useState<string[]>([]);
@@ -496,6 +497,9 @@ export default function FinancialChart({ symbol, isActive = false, liveTick, req
       const paneIndex = Number(event?.paneIndex);
       if (Number.isFinite(time) && Number.isFinite(price) && Number.isFinite(paneIndex)) {
         nativeCrosshairPoint = { time, price, paneIndex };
+        const x = widget.chart.timeToCoordinate(time);
+        const y = widget.chart.priceToCoordinate(price, paneIndex);
+        if (Number.isFinite(x) && Number.isFinite(y)) setDrawingCrosshair({ time, price, paneIndex, x: Number(x), y: Number(y) });
       }
     });
     const nativeEmit = widget.chart.emit.bind(widget.chart);
@@ -731,6 +735,7 @@ export default function FinancialChart({ symbol, isActive = false, liveTick, req
       offData?.();
       offRenderer?.();
       offNativeCrosshair?.();
+      setDrawingCrosshair(null);
       offDrawingObjects?.();
       offIndicatorObjects?.();
       offDrawingSelect?.();
@@ -1052,6 +1057,54 @@ export default function FinancialChart({ symbol, isActive = false, liveTick, req
         </div>
       </div>
       <button type="button" className="sire-chart-settings-button" aria-label="Chart settings" title="Chart settings" onClick={() => widgetRef.current?.openSettings()}><MoreHorizontal size={18} strokeWidth={2.2} aria-hidden="true" /></button>
+      {activeDrawTool && drawingCrosshair && drawingCrosshair.paneIndex === 0 && candlesRef.current.length > 1 && (() => {
+        const host = containerRef.current;
+        if (!host) return null;
+        const width = 226, height = 142, pad = 16;
+        const bars = candlesRef.current.slice().sort((a, b) => a.time - b.time);
+        let nearest = 0, nearestDistance = Infinity;
+        bars.forEach((bar, index) => {
+          const distance = Math.abs(bar.time - drawingCrosshair.time);
+          if (distance < nearestDistance) { nearestDistance = distance; nearest = index; }
+        });
+        const localBars = bars.slice(Math.max(0, nearest - 4), Math.min(bars.length, nearest + 5));
+        if (localBars.length < 2) return null;
+        const low = Math.min(...localBars.map(bar => bar.low), drawingCrosshair.price);
+        const high = Math.max(...localBars.map(bar => bar.high), drawingCrosshair.price);
+        const range = Math.max(high - low, Math.abs(high) * 0.000001, 1e-9);
+        const localLow = low - range * 0.12, localHigh = high + range * 0.12;
+        const innerW = width - pad * 2, innerH = height - 30;
+        const firstTime = localBars[0].time, lastTime = localBars[localBars.length - 1].time;
+        const span = Math.max(lastTime - firstTime, intervalSeconds(activeTimeframe));
+        const xForTime = (time: number) => pad + Math.max(0, Math.min(1, (time - firstTime) / span)) * innerW;
+        const yForPrice = (price: number) => 18 + (1 - (price - localLow) / (localHigh - localLow)) * innerH;
+        const crossX = xForTime(drawingCrosshair.time), crossY = yForPrice(drawingCrosshair.price);
+        const hostRect = host.getBoundingClientRect(), lensW = 238, lensH = 154;
+        const left = drawingCrosshair.x > hostRect.width * 0.58 ? 10 : Math.max(10, hostRect.width - lensW - 10);
+        const top = drawingCrosshair.y > hostRect.height * 0.46 ? 10 : Math.max(10, hostRect.height - lensH - 10);
+        return (
+          <div className="sire-crosshair-magnifier" style={{ left, top, width: lensW }} aria-hidden="true">
+            <div className="sire-crosshair-magnifier__readout">
+              <span>{new Date(drawingCrosshair.time * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })}</span>
+              <strong>{formatMarketPrice(drawingCrosshair.price)}</strong>
+            </div>
+            <svg className="sire-crosshair-magnifier__chart" viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none">
+              <line x1={crossX} x2={crossX} y1="16" y2={height - 8} className="sire-crosshair-magnifier__crosshair" />
+              <line x1={pad} x2={width - pad} y1={crossY} y2={crossY} className="sire-crosshair-magnifier__crosshair" />
+              {localBars.map(bar => {
+                const x = xForTime(bar.time), openY = yForPrice(bar.open), closeY = yForPrice(bar.close);
+                const highY = yForPrice(bar.high), lowY = yForPrice(bar.low);
+                const bullish = bar.close >= bar.open, bodyTop = Math.min(openY, closeY), bodyHeight = Math.max(2, Math.abs(closeY - openY));
+                return <g key={bar.time}>
+                  <line x1={x} x2={x} y1={highY} y2={lowY} className={bullish ? 'sire-crosshair-magnifier__wick is-up' : 'sire-crosshair-magnifier__wick is-down'} />
+                  <rect x={x - 4} y={bodyTop} width="8" height={bodyHeight} rx="1" className={bullish ? 'sire-crosshair-magnifier__body is-up' : 'sire-crosshair-magnifier__body is-down'} />
+                </g>;
+              })}
+              <circle cx={crossX} cy={crossY} r="3.5" className="sire-crosshair-magnifier__point" />
+            </svg>
+          </div>
+        );
+      })()}
       {replayActive && replayState && (
         <div className="sire-replay-transport" role="dialog" aria-label="Chart replay controls">
           <div className="sire-replay-setup-row">
@@ -1135,6 +1188,7 @@ export default function FinancialChart({ symbol, isActive = false, liveTick, req
                         onClick={() => {
                           widgetRef.current?.draw.setTool(null);
                           setActiveDrawTool(null);
+                          setDrawingCrosshair(null);
                         }}
                       >
                         <span className="sire-draw-rack__tool-icon"><MousePointer2 size={24} strokeWidth={1.8} /></span>
