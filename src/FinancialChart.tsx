@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, ArrowUpRight, Circle, Crosshair, Eraser, GitBranch, Highlighter, Minus, MousePointer2, MoveUpRight, Pencil, Plus, RectangleHorizontal, Ruler, Shapes, Slash, Square, Table2, Target, TextCursorInput, Type, Waves } from 'lucide-react';
-import { addComparison, comparisonController, PriceLevels, ReplayController, isWebGL2Supported, registerInterval, withBarCache } from 'openalgo-charts';
+import { addComparison, comparisonController, PriceLevels, ReplayController, registerInterval, withBarCache } from 'openalgo-charts';
 import 'openalgo-charts/indicators';
 import 'openalgo-charts/draw';
 import { iconSvg, registeredDrawingTools } from 'openalgo-charts/draw';
@@ -431,7 +431,7 @@ export default function FinancialChart({ symbol, liveTick, requestHistory, instr
       <div className="sire-advanced-tools">
         <button type="button" onClick={() => setAdvancedOpen(open => !open)} aria-label="Advanced chart tools">Tools</button>
         {advancedOpen && <div className="sire-advanced-tools__panel">
-          <div className="sire-advanced-tools__status">Renderer: {rendererKind === 'webgl2' && isWebGL2Supported() ? 'WebGL2' : 'Canvas2D'} · OpenAlgo 2.3.2</div>
+          <div className="sire-advanced-tools__status">Renderer: {rendererKind === 'webgl2' ? 'WebGL2' : 'Canvas2D'} · OpenAlgo 2.3.2</div>
           <button type="button" onClick={toggleReplay}>{replayState?.playing ? 'Pause replay' : replayActive ? 'Play replay' : 'Chart replay'}</button>
           <button type="button" onClick={exportChartSvg}>Export SVG</button>
           <button type="button" onClick={() => widgetRef.current?.chart.downloadScreenshot(`sire-${symbol}-${widgetRef.current?.interval() || 'chart'}.png`)}>Capture PNG</button>
