@@ -33,8 +33,11 @@ export default function App() {
     setActiveChartIndex(current => Math.min(current, chartLayout - 1));
   }, [chartLayout]);
   useEffect(() => {
-    if (!linkGroupRef.current) linkGroupRef.current = createLinkGroup({ crosshair: true, viewport: true, symbol: linked });
-    else linkGroupRef.current.setOptions({ crosshair: true, viewport: true, symbol: linked });
+    // Keep charts completely independent unless Link is explicitly enabled.
+    linkGroupRef.current?.destroy();
+    linkGroupRef.current = linked
+      ? createLinkGroup({ crosshair: true, viewport: true, symbol: true })
+      : null;
     return () => {};
   }, [linked]);
   useEffect(() => () => { linkGroupRef.current?.destroy(); linkGroupRef.current = null; }, []);
@@ -106,7 +109,8 @@ export default function App() {
               if (index === 0) setSelected(current => current?.symbol === item.symbol ? current : instruments.find(candidate => candidate.symbol === item.symbol) || current);
             }}
             onWidgetReady={widget => {
-              const group = linkGroupRef.current || createLinkGroup({ crosshair: true, viewport: true, symbol: linked });
+              if (!linked) return;
+              const group = linkGroupRef.current || createLinkGroup({ crosshair: true, viewport: true, symbol: true });
               linkGroupRef.current = group;
               group.add(widget.chart, {
                 symbol: chartSymbol,
