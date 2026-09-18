@@ -11,7 +11,7 @@
 .sire-chart-cell .sire-financial-chart{position:absolute}
 @media(max-width:640px){.sire-workspace-toolbar{top:4px}.sire-workspace-toolbar span{display:none}.sire-chart-grid--2,.sire-chart-grid--4{grid-template-columns:1fr;grid-template-rows:repeat(auto-fit,minmax(0,1fr))}.sire-chart-grid--4{overflow:auto}.sire-chart-grid--4 .sire-chart-cell{min-height:45vh}}
 
-.sire-chart-grid,.sire-chart-grid *,.sire-bottom-glass-bar,.sire-bottom-glass-bar *{user-select:none;-webkit-user-select:none;-webkit-touch-callout:none}
+
 .sire-instrument-search-overlay{position:absolute;z-index:26000;inset:0;display:flex;align-items:flex-start;justify-content:center;padding:58px 10px 10px;background:rgba(0,0,0,.28);backdrop-filter:blur(5px);-webkit-backdrop-filter:blur(5px)}
 .sire-instrument-search-panel{width:min(420px,100%);max-height:calc(100% - 10px);display:flex;flex-direction:column;overflow:hidden;background:#10141b;border:1px solid #2a303b;border-radius:12px;box-shadow:0 14px 40px rgba(0,0,0,.55)}
 .sire-instrument-search-head{height:46px;display:flex;align-items:center;justify-content:space-between;padding:0 12px;color:#eef2f7;border-bottom:1px solid #252b35}
