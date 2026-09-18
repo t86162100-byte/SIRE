@@ -45,7 +45,7 @@ const CHART_TYPES = [
   { id: 'histogram', label: 'Histogram' },
 ] as const;
 
-const REPLAY_SPEEDS = [0.25, 0.5, 1, 2, 4, 8] as const;
+const REPLAY_SPEEDS = [0.5, 1, 2, 5, 10] as const;
 const replaySpeedLabel = (speed: number) => `${speed}×`;
 const formatReplayInput = (epoch: number) => new Date(epoch * 1000 + 60 * 60 * 1000).toISOString().slice(0, 16);
 const parseReplayInput = (value: string) => {
