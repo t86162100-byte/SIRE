@@ -194,7 +194,7 @@ export default function FinancialChart({ symbol, liveTick, requestHistory, instr
     const start = longPressStartYRef.current;
     if (start === null) return;
     const delta = event.clientY - start;
-    if (Math.abs(delta) > 10) cancelInstrumentLongPress();
+    if (Math.abs(delta) > 20) cancelInstrumentLongPress();
     if (Math.abs(delta) < 55 || swipeAnimatingRef.current) return;
     const direction: 1 | -1 = delta < 0 ? 1 : -1;
     triggerSwipeStep(direction);
