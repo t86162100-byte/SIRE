@@ -569,10 +569,15 @@ export default function FinancialChart({ symbol, isActive = false, liveTick, req
       return { left: clampPlacement(rawLeft, 0, Math.max(0, hostRect.width - 1)), top: clampPlacement(rawTop, paneTop, Math.max(paneTop, paneBottom - 1)) };
     };
 
+    const isPlacementUiTarget = (target: EventTarget | null) => {
+      const element = target as Element | null;
+      return Boolean(element?.closest?.('.sire-draw-rack, .sire-bottom-glass-bar, .sire-drawing-selection-bar, .sire-indicator-selection-bar, .sire-chart-settings-button'));
+    };
+
     const isPlacementMode = () => Boolean((widget.draw as any)?.activeTool?.());
 
     const onPlacementPointerDown = (event: PointerEvent) => {
-      if (!isPlacementMode()) return;
+      if (!isPlacementMode() || isPlacementUiTarget(event.target)) return;
       if (event.pointerType === 'mouse' && event.button !== 0) return;
       event.preventDefault();
       event.stopPropagation();
@@ -584,7 +589,7 @@ export default function FinancialChart({ symbol, isActive = false, liveTick, req
     };
 
     const onPlacementPointerMove = (event: PointerEvent) => {
-      if (!isPlacementMode()) return;
+      if (!isPlacementMode() || isPlacementUiTarget(event.target)) return;
       if (placementPointerIdRef.current !== null && event.pointerId !== placementPointerIdRef.current) return;
       event.preventDefault();
       event.stopPropagation();
@@ -593,7 +598,7 @@ export default function FinancialChart({ symbol, isActive = false, liveTick, req
     };
 
     const onPlacementPointerUp = (event: PointerEvent) => {
-      if (!isPlacementMode()) return;
+      if (!isPlacementMode() || isPlacementUiTarget(event.target)) return;
       if (placementPointerIdRef.current !== null && event.pointerId !== placementPointerIdRef.current) return;
       event.preventDefault();
       event.stopPropagation();
@@ -619,7 +624,7 @@ export default function FinancialChart({ symbol, isActive = false, liveTick, req
     };
 
     const onPlacementPointerCancel = (event: PointerEvent) => {
-      if (!isPlacementMode()) return;
+      if (!isPlacementMode() || isPlacementUiTarget(event.target)) return;
       if (placementPointerIdRef.current !== null && event.pointerId !== placementPointerIdRef.current) return;
       event.preventDefault();
       event.stopPropagation();
@@ -634,6 +639,9 @@ export default function FinancialChart({ symbol, isActive = false, liveTick, req
       event.preventDefault();
     };
 
+    (host as any).__sireSetPlacementCrosshair = (left: number, top: number) => {
+      emitPlacementCrosshair(left, top, 'touch', false);
+    };
     host.addEventListener('pointerdown', onPlacementPointerDown, true);
     host.addEventListener('pointermove', onPlacementPointerMove, true);
     host.addEventListener('pointerup', onPlacementPointerUp, true);
