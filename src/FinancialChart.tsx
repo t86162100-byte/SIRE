@@ -48,6 +48,10 @@ const CHART_TYPES = [
 const REPLAY_SPEEDS = [0.5, 1, 2, 5, 10] as const;
 const replaySpeedLabel = (speed: number) => `${speed}×`;
 const REPLAY_HISTORY_PAGE_LIMIT = 5000;
+const FAST_HISTORY_PAGE_SIZE = 5000;
+const FAST_HISTORY_PAGES_PER_BATCH = 8;
+const FAST_HISTORY_CONCURRENCY = 4;
+const FAST_HISTORY_MAX_BARS = 5000000;
 const formatReplayInput = (epoch: number) => new Date(epoch * 1000 + 60 * 60 * 1000).toISOString().slice(0, 16);
 const parseReplayInput = (value: string) => {
   if (!value) return NaN;
@@ -460,10 +464,9 @@ export default function FinancialChart({ symbol, isActive = false, liveTick, req
     const host = containerRef.current;
     const sourceFeed = {
       async getBars(req: BarsRequest) {
-        // Explicitly discover Deriv's earliest available tick for every
-        // Synthetic Index before the chart history is considered complete.
-        // The controller then pages backward until that boundary is reached.
-        await discoverEarliestDerivTick(req.symbol, requestHistoryRef.current);
+        // Never block the first chart paint on an expensive earliest-history
+        // probe. Deriv history is paged aggressively in the background after
+        // the first 5,000 candles are on screen.
         const bars = await requestBars(req, requestHistoryRef.current);
         candlesRef.current = bars;
         updateMarketQuote(bars);
@@ -704,13 +707,20 @@ export default function FinancialChart({ symbol, isActive = false, liveTick, req
     };
     window.addEventListener('resize', onResize);
     onWidgetReady?.(widget);
-    // Do not leave the chart at an arbitrary recent-history boundary. Once
-    // the first page is ready, explicitly walk the managed history all the way
-    // back to the earliest Deriv tick boundary discovered for this symbol.
+    // Paint immediately with the first page, then aggressively warm the
+    // historical window in parallel. Do not make chart readiness depend on
+    // finding the provider's absolute first tick.
     void backfillHistoryTo().then(bars => {
       candlesRef.current = bars.slice().sort((a, b) => a.time - b.time);
       updateMarketQuote(candlesRef.current);
       window.setTimeout(refreshTpoProfile, 0);
+
+      // Continue toward the provider boundary only after the fast warmup has
+      // completed. This is deliberately fire-and-forget so the chart remains
+      // interactive while deeper history arrives.
+      void discoverEarliestDerivTick(symbolRef.current, requestHistoryRef.current)
+        .then(() => backfillHistoryTo())
+        .catch(() => undefined);
     });
     setActiveTimeframe(widget.interval());
     const offInterval = widget.on('interval', (event: { interval: string }) => setActiveTimeframe(event.interval));
@@ -998,37 +1008,73 @@ export default function FinancialChart({ symbol, isActive = false, liveTick, req
 
   const backfillHistoryTo = async (targetEpoch?: number) => {
     const widget = widgetRef.current;
-    const controller = widget?.dataController;
-    if (!controller) return candlesRef.current.slice().sort((a, b) => a.time - b.time);
+    if (!widget) return candlesRef.current.slice().sort((a, b) => a.time - b.time);
 
-    const earliest = earliestTickCache.get(symbolRef.current);
-    const goal = targetEpoch === undefined ? earliest : targetEpoch;
-    let previousFirst = Infinity;
-    for (let page = 0; page < REPLAY_HISTORY_PAGE_LIMIT; page += 1) {
-      const loaded = controller.bars().slice().sort((a, b) => a.time - b.time);
-      const first = loaded[0];
-      if (!first) break;
-      if (goal !== undefined && first.time <= goal) break;
-      if (first.time >= previousFirst) break;
-      previousFirst = first.time;
+    let bars = candlesRef.current.slice().sort((a, b) => a.time - b.time);
+    if (bars.length < 2) return bars;
 
-      const next = await controller.loadMore();
-      const nextBars = next.slice().sort((a, b) => a.time - b.time);
-      const nextFirst = nextBars[0];
-      if (!nextFirst || nextFirst.time >= first.time) break;
-      if (controller.getState().hasMore === false) break;
+    const goal = Number.isFinite(targetEpoch) ? Number(targetEpoch) : undefined;
+    let pageCount = 0;
+
+    // Fetch known, non-overlapping historical ranges concurrently. This is
+    // substantially faster than waiting for one loadMore request before
+    // starting the next. The DataLayer's merge-by-time semantics make the
+    // bulk replacement safe and de-duplicate any provider boundary overlap.
+    while (pageCount < REPLAY_HISTORY_PAGE_LIMIT && bars.length < FAST_HISTORY_MAX_BARS) {
+      const anchor = bars[0]?.time;
+      if (!Number.isFinite(anchor)) break;
+      if (goal !== undefined && anchor <= goal) break;
+
+      const seconds = intervalSeconds(activeTimeframe || '1m');
+      const pageSpan = FAST_HISTORY_PAGE_SIZE * seconds;
+      const requests = Array.from({ length: FAST_HISTORY_PAGES_PER_BATCH }, (_, index) => ({
+        symbol: symbolRef.current,
+        interval: activeTimeframe || '1m',
+        to: Math.floor(anchor - 1 - index * pageSpan),
+        noCache: false,
+      }));
+
+      const pages: Candle[][] = [];
+      for (let offset = 0; offset < requests.length; offset += FAST_HISTORY_CONCURRENCY) {
+        const batch = requests.slice(offset, offset + FAST_HISTORY_CONCURRENCY);
+        const results = await Promise.all(batch.map(req =>
+          requestBars(req, requestHistoryRef.current).catch(() => [] as Candle[])
+        ));
+        pages.push(...results);
+      }
+
+      const older = pages.flat().filter(bar => bar.time < anchor);
+      if (!older.length) break;
+
+      const merged = new Map<number, Candle>();
+      for (const bar of [...bars, ...older]) merged.set(bar.time, bar);
+      bars = [...merged.values()].sort((a, b) => a.time - b.time);
+      candlesRef.current = bars;
+      widget.series.setData(bars);
+      updateMarketQuote(bars);
+      pageCount += pages.length;
+
+      const oldestReturned = older.reduce((min, bar) => Math.min(min, bar.time), Infinity);
+      const boundaryHit = pages.some(page => page.length < FAST_HISTORY_PAGE_SIZE);
+      if (goal !== undefined && oldestReturned <= goal) break;
+      if (boundaryHit) break;
+
+      // Yield to rendering/input between batches so deep history never
+      // monopolizes the main thread on mobile.
+      await new Promise<void>(resolve => window.setTimeout(resolve, 0));
     }
 
-    return controller.bars().slice().sort((a, b) => a.time - b.time);
+    return bars;
   };
 
   const openReplaySetup = async () => {
     setReplayLoading(true);
     setReplayRangeError(null);
     try {
-      // Resolve the actual earliest history available from the provider, not
-      // merely the first page currently resident in the chart.
-      const bars = await backfillHistoryTo();
+      // Use the history already resident in the fast warm cache. Deep
+      // history continues loading independently and is fetched on demand if
+      // the user chooses an older replay start.
+      const bars = candlesRef.current.slice().sort((a, b) => a.time - b.time);
       if (bars.length < 2) {
         setReplayRangeError('Not enough history');
         return;
