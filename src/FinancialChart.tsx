@@ -1266,6 +1266,7 @@ export default function FinancialChart({ symbol, isActive = false, liveTick, req
         </div>
       )}
       <div className="sire-bottom-glass-bar">
+        <div className="sire-bottom-scroll-track">
         <div
           onPointerDown={handleInstrumentPointerDown}
           onPointerMove={handleInstrumentPointerMove}
@@ -1366,7 +1367,16 @@ export default function FinancialChart({ symbol, isActive = false, liveTick, req
             </div>
           </div>
         )}
-                {timeframeOpen && (
+                <button
+          type="button"
+          className="sire-bottom-obj-button"
+          aria-label="Open objects"
+          title="Objects"
+          onClick={() => widgetRef.current?.openObjects()}
+        >
+          <span aria-hidden="true">Obj</span>
+        </button>
+        {timeframeOpen && (
           <div className="sire-bottom-timeframe-menu">
             {DERIV_INTERVALS.map(interval => (
               <button
@@ -1380,6 +1390,7 @@ export default function FinancialChart({ symbol, isActive = false, liveTick, req
             ))}
           </div>
         )}
+        </div>
       </div>
     </div>
   );
