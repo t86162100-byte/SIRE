@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, ArrowUpRight, Circle, Crosshair, Eraser, GitBranch, Highlighter, Minus, MousePointer2, MoveUpRight, Pencil, Plus, RectangleHorizontal, Ruler, Shapes, Slash, Square, Table2, Target, TextCursorInput, Type, Waves } from 'lucide-react';
+import { addComparison, comparisonController, ReplayController, createLinkGroup, type Chart } from 'openalgo-charts';
 import 'openalgo-charts/indicators';
 import 'openalgo-charts/draw';
 import { iconSvg, registeredDrawingTools } from 'openalgo-charts/draw';
@@ -14,7 +15,7 @@ type Tick = { symbol: string; quote: number; epoch: number };
 type HistoryResponse = Record<string, unknown>;
 type HistoryRequester = (request: Record<string, unknown>) => Promise<HistoryResponse>;
 type Instrument = { symbol: string; name: string };
-type Props = { symbol: string; liveTick: Tick | null; requestHistory: HistoryRequester; instruments: Instrument[]; onSelectInstrument: (instrument: Instrument) => void };
+type Props = { symbol: string; liveTick: Tick | null; requestHistory: HistoryRequester; instruments: Instrument[]; onSelectInstrument: (instrument: Instrument) => void; onWidgetReady?: (widget: Widget) => void; onWidgetDestroyed?: (widget: Widget) => void };
 type Candle = { time: number; open: number; high: number; low: number; close: number; volume?: number };
 type DrawGroup = { label: string; tools: string[] };
 
@@ -72,11 +73,17 @@ async function requestBars(symbol: string, interval: string, requestHistory: His
   throw new Error('Deriv returned no chart history');
 }
 
-export default function FinancialChart({ symbol, liveTick, requestHistory, instruments, onSelectInstrument }: Props) {
+export default function FinancialChart({ symbol, liveTick, requestHistory, instruments, onSelectInstrument, onWidgetReady, onWidgetDestroyed }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [drawRackOpen, setDrawRackOpen] = useState(false);
   const [drawGroup, setDrawGroup] = useState(1);
   const [activeDrawTool, setActiveDrawTool] = useState<string | null>(null);
+  const [advancedOpen, setAdvancedOpen] = useState(false);
+  const [compareQuery, setCompareQuery] = useState('');
+  const [comparisons, setComparisons] = useState<string[]>([]);
+  const [replayActive, setReplayActive] = useState(false);
+  const [replayState, setReplayState] = useState<{ index:number; total:number; playing:boolean; speed:number; bar:Candle|null } | null>(null);
+  const replayRef = useRef<ReplayController | null>(null);
   const availableDrawTools = useMemo(() => new Set(['__cursor__', ...registeredDrawingTools().map(tool => tool.id)]), []);
   const universalIcons = useMemo(() => ({
     cursor: MousePointer2, 'trend-line': Slash, ray: MoveUpRight, 'extended-line': ArrowUpRight,
@@ -178,6 +185,7 @@ export default function FinancialChart({ symbol, liveTick, requestHistory, instr
     widget.setTheme(pitchBlackTheme);
     widget.chart.applyOptions({ canvas: { background: '#000000' } });
     widgetRef.current = widget;
+    onWidgetReady?.(widget);
     const offSymbol = widget.on('symbol', (event: { symbol: string }) => {
       const instrument = instrumentsRef.current.find(item => item.symbol === event.symbol);
       if (instrument && instrument.symbol !== symbolRef.current) onSelectInstrumentRef.current(instrument);
@@ -189,6 +197,9 @@ export default function FinancialChart({ symbol, liveTick, requestHistory, instr
       offSymbol?.();
       offData?.();
       subscriberRef.current = null;
+      onWidgetDestroyed?.(widget);
+      replayRef.current?.stop();
+      replayRef.current = null;
       widget.destroy();
       widgetRef.current = null;
       candlesRef.current = [];
@@ -226,6 +237,41 @@ export default function FinancialChart({ symbol, liveTick, requestHistory, instr
     subscriberRef.current?.(bar);
   }, [liveTick, symbol]);
 
+  const startReplay = () => {
+    const widget = widgetRef.current;
+    const bars = candlesRef.current;
+    if (!widget || bars.length < 10) return;
+    replayRef.current?.stop();
+    const replay = new ReplayController(widget.chart, { series: widget.series, bars, startIndex: Math.max(1, bars.length - Math.min(200, bars.length - 1)), barMs: 500 });
+    replayRef.current = replay;
+    setReplayActive(true);
+    setReplayState(replay.state() as typeof replayState);
+    const render = (state: unknown) => setReplayState(state as typeof replayState);
+    widget.chart.on('replay:frame', render);
+    widget.chart.on('replay:play', render);
+    widget.chart.on('replay:pause', render);
+    widget.chart.on('replay:end', render);
+    widget.chart.on('replay:stop', () => { setReplayActive(false); setReplayState(null); });
+  };
+  const stopReplay = () => { replayRef.current?.stop(); replayRef.current = null; setReplayActive(false); setReplayState(null); };
+  const toggleReplay = () => { if (!replayRef.current) startReplay(); else if (replayRef.current.state().playing) replayRef.current.pause(); else replayRef.current.play({ speed: replayRef.current.state().speed }); };
+  const addCompare = async (compareSymbol: string) => {
+    const widget = widgetRef.current;
+    if (!widget || !compareSymbol || compareSymbol === symbol || comparisons.includes(compareSymbol)) return;
+    const bars = await requestBars(compareSymbol, widget.interval(), requestHistoryRef.current);
+    addComparison(widget.chart, { symbol: compareSymbol, bars });
+    comparisonController(widget.chart).setMode('percentage');
+    setComparisons(current => [...current, compareSymbol]);
+  };
+  const removeCompare = (compareSymbol: string) => {
+    const widget = widgetRef.current;
+    if (!widget) return;
+    const controller = comparisonController(widget.chart);
+    const handle = controller.list().find(item => item.symbol === compareSymbol);
+    if (handle) controller.remove(handle);
+    setComparisons(current => current.filter(item => item !== compareSymbol));
+  };
+
   const visibleGroups = DRAW_RACK_GROUPS.map(group => ({
     ...group,
     tools: group.tools.filter(id => availableDrawTools.has(id)),
@@ -235,6 +281,15 @@ export default function FinancialChart({ symbol, liveTick, requestHistory, instr
 
   return (
     <div ref={containerRef} className={`sire-financial-chart${drawRackOpen ? ' sire-draw-rack-open' : ''}`}>
+      <div className="sire-advanced-tools">
+        <button type="button" onClick={() => setAdvancedOpen(open => !open)} aria-label="Advanced chart tools">Tools</button>
+        {advancedOpen && <div className="sire-advanced-tools__panel">
+          <button type="button" onClick={toggleReplay}>{replayState?.playing ? 'Pause replay' : replayActive ? 'Play replay' : 'Chart replay'}</button>
+          {replayActive && <><button type="button" onClick={() => replayRef.current?.stepBack()}>Step back</button><button type="button" onClick={() => replayRef.current?.step()}>Step</button><button type="button" onClick={stopReplay}>Exit replay</button></>}
+          <div className="sire-advanced-tools__compare"><input value={compareQuery} onChange={event => setCompareQuery(event.target.value)} placeholder="Compare Synthetic Index" /><button type="button" onClick={() => { void addCompare(compareQuery.trim()); setCompareQuery(''); }}>Add</button></div>
+          {comparisons.map(item => <button key={item} type="button" onClick={() => removeCompare(item)}>Remove {item}</button>)}
+        </div>}
+      </div>
       {drawRackOpen && (
         <div className="sire-draw-rack" role="dialog" aria-label="Drawing tools">
           <div className="sire-draw-rack__rail">
