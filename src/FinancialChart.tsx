@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Eye, Lock, Minus, MoreHorizontal, Settings2, Shapes, Trash2, Wrench } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Eye, History, Lock, Minus, MoreHorizontal, Pause, Play, RotateCcw, Settings2, SkipBack, SkipForward, Trash2, Wrench, X } from 'lucide-react';
 import { addComparison, comparisonController, PriceLevels, ReplayController, ReplayShade, TextWatermark, registerInterval, withBarCache } from 'openalgo-charts';
 import 'openalgo-charts/indicators';
 import 'openalgo-charts/draw';
@@ -214,6 +214,7 @@ export default function FinancialChart({ symbol, isActive = false, liveTick, req
   const [replayRangeError, setReplayRangeError] = useState<string | null>(null);
   const [replayDraftSpeed, setReplayDraftSpeed] = useState(1);
   const [replayLoading, setReplayLoading] = useState(false);
+  const replaySpeedRef = useRef(1);
   const [marketQuote, setMarketQuote] = useState<{ price: number; percent: number } | null>(null);
   const widgetRef = useRef<Widget | null>(null);
   const candlesRef = useRef<Candle[]>([]);
@@ -634,7 +635,11 @@ export default function FinancialChart({ symbol, isActive = false, liveTick, req
         window.setTimeout(refreshTpoProfile, 0);
       }
     });
-    const renderReplayState = (state: unknown) => setReplayState(state as typeof replayState);
+    const renderReplayState = (state: unknown) => {
+      const next = state as typeof replayState;
+      if (next) replaySpeedRef.current = next.speed;
+      setReplayState(next);
+    };
     const offReplayStart = widget.chart.on('replay:start', renderReplayState);
     const offReplayFrame = widget.chart.on('replay:frame', (state: unknown) => { renderReplayState(state); syncReplayDecorations(state as typeof replayState); });
     const offReplayPlay = widget.chart.on('replay:play', renderReplayState);
@@ -858,6 +863,7 @@ export default function FinancialChart({ symbol, isActive = false, liveTick, req
     const start = Math.max(0, Math.min(startIndex, fullBars.length - 2));
     const end = Math.max(start + 1, Math.min(endIndex, fullBars.length - 1));
     setReplayLoading(true);
+    replaySpeedRef.current = speed;
     const subBars = await loadReplaySubBars(fullBars, start, end);
     if (!widgetRef.current || widgetRef.current !== widget) {
       setReplayLoading(false);
@@ -900,6 +906,7 @@ export default function FinancialChart({ symbol, isActive = false, liveTick, req
     if (bars.length < 2) return;
     setReplayStartInput(formatReplayInput(bars[0].time));
     setReplayEndInput(formatReplayInput(bars[bars.length - 1].time));
+    replaySpeedRef.current = 1;
     setReplayDraftSpeed(1);
     setReplayRangeError(null);
     setReplaySetupOpen(true);
@@ -935,15 +942,13 @@ export default function FinancialChart({ symbol, isActive = false, liveTick, req
       return;
     }
     if (replay.state().playing) replay.pause();
-    else replay.play({ speed: replay.state().speed });
+    else replay.play({ speed: replaySpeedRef.current });
   };
 
   const setReplaySpeed = (speed: number) => {
     const replay = replayRef.current;
-    if (replay) {
-      if (replay.state().playing) replay.play({ speed });
-      else replay.seek(replay.state().index);
-    }
+    replaySpeedRef.current = speed;
+    if (replay && replay.state().playing) replay.play({ speed });
     setReplayDraftSpeed(speed);
     setReplayState(current => current ? { ...current, speed } : current);
   };
@@ -951,6 +956,27 @@ export default function FinancialChart({ symbol, isActive = false, liveTick, req
   const replayStepBack = () => replayRef.current?.stepBack();
   const replayStep = () => replayRef.current?.step();
   const replaySeek = (index: number) => replayRef.current?.seek(index);
+  const replayJumpStart = () => replayRef.current?.seek(0);
+  const replayJumpEnd = () => {
+    const replay = replayRef.current;
+    if (replay) replay.seek(Math.max(0, replay.state().total - 1));
+  };
+  useEffect(() => {
+    if (!replayActive) return;
+    const onReplayKey = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (target && ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName)) return;
+      if (event.key === ' ') { event.preventDefault(); toggleReplay(); }
+      else if (event.key === 'ArrowLeft') { event.preventDefault(); replayStepBack(); }
+      else if (event.key === 'ArrowRight') { event.preventDefault(); replayStep(); }
+      else if (event.key === 'Home') { event.preventDefault(); replayJumpStart(); }
+      else if (event.key === 'End') { event.preventDefault(); replayJumpEnd(); }
+      else if (event.key === 'Escape') { event.preventDefault(); stopReplay(); }
+    };
+    window.addEventListener('keydown', onReplayKey);
+    return () => window.removeEventListener('keydown', onReplayKey);
+  }, [replayActive]);
+
   const exportChartSvg = () => { const widget = widgetRef.current; if (!widget) return; const svg = widget.chart.exportSVG({ background: true }); const blob = new Blob([svg], { type: 'image/svg+xml;charset=utf-8' }); const url = URL.createObjectURL(blob); const anchor = document.createElement('a'); anchor.href = url; anchor.download = `sire-${widget.symbol()}-${widget.interval()}.svg`; anchor.click(); URL.revokeObjectURL(url); };
   const addCompare = async (compareSymbol: string) => {
     const widget = widgetRef.current;
@@ -1056,36 +1082,26 @@ export default function FinancialChart({ symbol, isActive = false, liveTick, req
       <button type="button" className="sire-chart-settings-button" aria-label="Chart settings" title="Chart settings" onClick={() => widgetRef.current?.openSettings()}><MoreHorizontal size={18} strokeWidth={2.2} aria-hidden="true" /></button>
       {replayActive && replayState && (
         <div className="sire-replay-transport" role="dialog" aria-label="Chart replay controls">
-          <div className="sire-replay-progress-row">
-            <input
-              type="range"
-              min="0"
-              max={Math.max(0, replayState.total - 1)}
-              step="1"
-              value={Math.min(replayState.index, Math.max(0, replayState.total - 1))}
-              onChange={event => replaySeek(Number(event.target.value))}
-              aria-label="Replay position"
-              title="Scrub replay"
-            />
-            <span>{replayState.index + 1}/{replayState.total}</span>
-            {replayState.subSteps > 1 && <span>· {replayState.subIndex + 1}/{replayState.subSteps}</span>}
+          <div className="sire-replay-head">
+            <span className="sire-replay-badge"><History size={13} strokeWidth={2.1} aria-hidden="true" /> REPLAY</span>
+            <span className="sire-replay-clock">{replayState.bar ? new Date(replayState.bar.time * 1000 + 60 * 60 * 1000).toISOString().slice(0, 16).replace('T', ' ') : ''}</span>
+            <span className="sire-replay-count">{replayState.index + 1}/{replayState.total}{replayState.subSteps > 1 ? ` · ${replayState.subIndex + 1}/${replayState.subSteps}` : ''}</span>
           </div>
-          <div className="sire-replay-setup-row">
-            <input aria-label="Replay start date and time" type="datetime-local" value={replayStartInput} onChange={event => setReplayStartInput(event.target.value)} title="Start" />
-            <span aria-hidden="true">↔</span>
-            <input aria-label="Replay stop date and time" type="datetime-local" value={replayEndInput} onChange={event => setReplayEndInput(event.target.value)} title="Stop" />
-            <button type="button" onClick={() => startReplayFromInputs(false, false)} aria-label="Apply replay range" title="Apply range">✓</button>
+          <div className="sire-replay-progress-row">
+            <button type="button" onClick={replayJumpStart} aria-label="Jump to replay start" title="Start"><SkipBack size={15} /></button>
+            <input type="range" min="0" max={Math.max(0, replayState.total - 1)} step="1" value={Math.min(replayState.index, Math.max(0, replayState.total - 1))} onChange={event => replaySeek(Number(event.target.value))} aria-label="Replay position" title="Scrub replay" />
+            <button type="button" onClick={replayJumpEnd} aria-label="Jump to replay end" title="End"><SkipForward size={15} /></button>
           </div>
           <div className="sire-replay-transport-row">
-            <button type="button" onClick={replayStepBack} aria-label="Previous replay bar" title="Previous">⏮</button>
-            <button type="button" onClick={toggleReplay} aria-label={replayState.playing ? 'Pause replay' : 'Play replay'} title={replayState.playing ? 'Pause' : 'Play'}>{replayState.playing ? 'Ⅱ' : '▶'}</button>
-            <button type="button" onClick={replayStep} aria-label="Next replay bar" title="Next">⏭</button>
-            <button type="button" onClick={stopReplay} aria-label="Exit replay" title="Exit">×</button>
-            <span className="sire-replay-clock">{replayState.bar ? new Date(replayState.bar.time * 1000 + 60 * 60 * 1000).toISOString().slice(0, 16).replace('T', ' ') : ''}</span>
+            <button type="button" onClick={replayStepBack} aria-label="Previous replay bar" title="Previous"><ChevronLeft size={17} /></button>
+            <button type="button" className="sire-replay-play" onClick={toggleReplay} aria-label={replayState.playing ? 'Pause replay' : 'Play replay'} title={replayState.playing ? 'Pause' : 'Play'}>{replayState.playing ? <Pause size={16} fill="currentColor" /> : <Play size={16} fill="currentColor" />}</button>
+            <button type="button" onClick={replayStep} aria-label="Next replay bar" title="Next"><ChevronRight size={17} /></button>
+            <button type="button" onClick={stopReplay} aria-label="Exit replay" title="Exit replay"><X size={17} /></button>
+            <button type="button" onClick={() => replaySeek(Math.max(0, replayState.index - 10))} aria-label="Back ten bars" title="Back 10 bars"><RotateCcw size={15} /></button>
           </div>
           <div className="sire-replay-speed-row">
             {REPLAY_SPEEDS.map(speed => (
-              <button key={speed} type="button" className={replayState.speed === speed ? 'active' : ''} onClick={() => setReplaySpeed(speed)} title={`Speed ${replaySpeedLabel(speed)}`}>{replaySpeedLabel(speed)}</button>
+              <button key={speed} type="button" className={replaySpeedRef.current === speed ? 'active' : ''} onClick={() => setReplaySpeed(speed)} title={`Speed ${replaySpeedLabel(speed)}`}>{replaySpeedLabel(speed)}</button>
             ))}
           </div>
         </div>
@@ -1263,7 +1279,7 @@ export default function FinancialChart({ symbol, isActive = false, liveTick, req
           title={replayActive ? (replayState?.playing ? 'Pause replay' : 'Play replay') : 'Replay'}
           onClick={toggleReplay}
         >
-          <span aria-hidden="true">{replayActive ? (replayState?.playing ? 'Ⅱ' : '▶') : '⏱'}</span>
+          <span aria-hidden="true">{replayActive ? (replayState?.playing ? <Pause size={18} fill="currentColor" /> : <Play size={18} fill="currentColor" />) : <History size={20} />}</span>
         </button>
         <button
           type="button"
