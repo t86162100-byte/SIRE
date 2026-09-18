@@ -16,8 +16,7 @@ function style() {
   const el = document.createElement('style');
   el.id = STYLE_ID;
   el.textContent = `
-    #${NAV_ID}.nav-auto-hidden{opacity:0!important;transform:translateX(-50%)!important;pointer-events:auto!important}
-    #${NAV_ID}.nav-auto-hidden button{pointer-events:none!important}
+    #${NAV_ID}.nav-auto-hidden{display:none!important;opacity:0!important;pointer-events:none!important}
     #${NAV_ID}{transition:opacity .28s ease,transform .28s ease!important}
   `;
   document.head.appendChild(el);
@@ -118,22 +117,8 @@ function bindNav() {
   }
   if (nav.dataset.autoHideBound !== 'true') {
     nav.dataset.autoHideBound = 'true';
-    nav.addEventListener('pointerdown', event => {
-      if (nav.classList.contains('nav-auto-hidden')) {
-        event.preventDefault();
-        event.stopPropagation();
-        return;
-      }
-      reveal();
-    }, { passive: false });
-    nav.addEventListener('click', event => {
-      if (nav.classList.contains('nav-auto-hidden')) {
-        event.preventDefault();
-        event.stopPropagation();
-        return;
-      }
-      reveal();
-    }, { passive: false });
+    nav.addEventListener('pointerdown', () => reveal(), { passive: true });
+    nav.addEventListener('click', () => reveal(), { passive: true });
   }
 
   // React may recreate the nav while Quote is mounting. Preserve the timer state.
