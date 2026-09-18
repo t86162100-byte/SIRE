@@ -257,8 +257,7 @@ export default function FinancialChart({ symbol, liveTick, requestHistory, instr
     clearTimeframeHold();
     timeframeHoldTimerRef.current = window.setTimeout(() => {
       timeframeHoldTriggeredRef.current = true;
-      setTimeframeOpen(true);
-    }, 600);
+      setTimeframeOpen(true);    }, 600);
   };
   const handleTimeframePointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
     if (timeframeHoldTriggeredRef.current) return;
@@ -557,8 +556,7 @@ export default function FinancialChart({ symbol, liveTick, requestHistory, instr
     setComparisons(current => [...current, compareSymbol]);
   };
   const removeCompare = (compareSymbol: string) => {
-    const widget = widgetRef.current;
-    if (!widget) return;
+    const widget = widgetRef.current;    if (!widget) return;
     const controller = comparisonController(widget.chart);
     const handle = controller.list().find(item => item.symbol === compareSymbol);
     if (handle) controller.remove(handle);
@@ -743,6 +741,16 @@ export default function FinancialChart({ symbol, liveTick, requestHistory, instr
         >
           <strong>{activeTimeframe}</strong>
         </div>
+        <button
+          type="button"
+          className="sire-bottom-draw-button"
+          aria-label="Open drawing tools"
+          title="Open drawing tools"
+          onClick={() => setDrawRackOpen(open => !open)}
+        >
+          <span className="sire-bottom-draw-pen"><Pencil size={18} strokeWidth={2} /></span>
+          <Waves className="sire-bottom-draw-wave" size={18} strokeWidth={1.8} />
+        </button>
         {timeframeOpen && (
           <div className="sire-bottom-timeframe-menu">
             {DERIV_INTERVALS.map(interval => (
