@@ -1126,7 +1126,6 @@ export default function FinancialChart({ symbol, isActive = false, liveTick, req
       {activeDrawTool && customDrawingCrosshair && (
         <div
           className="sire-custom-drawing-crosshair"
-          style={{ left: customDrawingCrosshair.x, top: customDrawingCrosshair.y }}
           aria-hidden="true"
         >
           <span className="sire-custom-drawing-crosshair__vertical" style={{ left: customDrawingCrosshair.x }} />
