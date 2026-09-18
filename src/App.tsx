@@ -45,6 +45,12 @@ export default function App() {
   }, [linked]);
   useEffect(() => () => { linkGroupRef.current?.destroy(); linkGroupRef.current = null; }, []);
   useEffect(() => {
+    const openMultiChart = () => setMultiChartOpen(true);
+    window.addEventListener('sire:open-multichart', openMultiChart);
+    return () => window.removeEventListener('sire:open-multichart', openMultiChart);
+  }, []);
+
+  useEffect(() => {
     const open = () => setResearchLabOpen(true);
     window.addEventListener('sire:open-research', open);
     return () => window.removeEventListener('sire:open-research', open);
