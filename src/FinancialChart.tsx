@@ -523,6 +523,15 @@ export default function FinancialChart({ symbol, isActive = false, liveTick, req
   }, []);
 
   useEffect(() => {
+    const host = containerRef.current;
+    if (!host) return;
+    const rail = host.querySelector<HTMLElement>('.oac-rail');
+    if (!rail) return;
+    rail.classList.toggle('sire-oac-rail--closed', !drawRackOpen);
+    rail.setAttribute('aria-hidden', String(!drawRackOpen));
+  }, [drawRackOpen]);
+
+  useEffect(() => {
     if (replayRef.current) stopReplay();
     const widget = widgetRef.current;
     if (widget && widget.symbol() !== symbol) widget.setSymbol(symbol, 'Deriv Synthetic Indices');
