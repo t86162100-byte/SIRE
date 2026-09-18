@@ -787,22 +787,39 @@ export default function FinancialChart({ symbol, isActive = false, liveTick, req
   const loadReplaySubBars = async (fullBars: Candle[], startIndex: number, endIndex: number) => {
     const widget = widgetRef.current;
     if (!widget) return null;
-    const finer = replaySubInterval(widget.interval());
-    if (!finer) return null;
-    const key = `${symbolRef.current}|${widget.interval()}|${fullBars[startIndex]?.time ?? 0}|${fullBars[endIndex]?.time ?? 0}`;
+    const displayInterval = widget.interval();
+    const finer = replaySubInterval(displayInterval);
+    const useTicks = displayInterval === '1m';
+    if (!finer && !useTicks) return null;
+    const key = `${symbolRef.current}|${displayInterval}|${fullBars[startIndex]?.time ?? 0}|${fullBars[endIndex]?.time ?? 0}`;
     if (replaySubBarsRef.current?.key === key) return replaySubBarsRef.current.bars;
     const from = fullBars[startIndex]?.time;
     const to = fullBars[endIndex]?.time;
     if (!Number.isFinite(from) || !Number.isFinite(to)) return null;
     try {
-      const bars = await requestBars({
-        symbol: symbolRef.current,
-        interval: finer,
-        from,
-        to: Number(to) + intervalSeconds(widget.interval()),
-        noCache: true,
-      }, requestHistoryRef.current);
-      const sub = bars.filter(bar => bar.time >= Number(from) && bar.time <= Number(to) + intervalSeconds(widget.interval()));
+      let sub: Candle[] = [];
+      if (useTicks) {
+        const tickResult = await requestHistoryRef.current({
+          ticks_history: symbolRef.current,
+          start: Math.floor(Number(from)),
+          end: Math.floor(Number(to)) + intervalSeconds(displayInterval),
+          count: 5000,
+          style: 'ticks',
+          subscribe: 0,
+          noCache: true,
+        });
+        const ticks = parseTicks(tickResult) ?? [];
+        sub = aggregateTicks(ticks, 1).filter(bar => bar.time >= Number(from) && bar.time <= Number(to) + intervalSeconds(displayInterval));
+      } else {
+        const bars = await requestBars({
+          symbol: symbolRef.current,
+          interval: finer as string,
+          from,
+          to: Number(to) + intervalSeconds(displayInterval),
+          noCache: true,
+        }, requestHistoryRef.current);
+        sub = bars.filter(bar => bar.time >= Number(from) && bar.time <= Number(to) + intervalSeconds(displayInterval));
+      }
       if (!sub.length) return null;
       replaySubBarsRef.current = { key, bars: sub };
       return sub;
