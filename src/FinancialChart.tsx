@@ -47,7 +47,7 @@ const CHART_TYPES = [
 
 const REPLAY_SPEEDS = [0.5, 1, 2, 5, 10] as const;
 const replaySpeedLabel = (speed: number) => `${speed}×`;
-const REPLAY_HISTORY_PAGE_LIMIT = 100;
+const REPLAY_HISTORY_PAGE_LIMIT = 5000;
 const formatReplayInput = (epoch: number) => new Date(epoch * 1000 + 60 * 60 * 1000).toISOString().slice(0, 16);
 const parseReplayInput = (value: string) => {
   if (!value) return NaN;
@@ -499,7 +499,7 @@ export default function FinancialChart({ symbol, isActive = false, liveTick, req
       // substantial recent window, then fetch older pages as the user pans
       // left; replay can explicitly backfill to an older requested start.
       lookbackBars: 5000,
-      loading: { pageSize: 5000, maxBars: 500000 },
+      loading: { pageSize: 5000, maxBars: 5000000 },
       navigation: { mousePan: 'both', defaultVisibleBars: 120 },
       animZoom: true,
       animAutoscale: true,
@@ -704,6 +704,14 @@ export default function FinancialChart({ symbol, isActive = false, liveTick, req
     };
     window.addEventListener('resize', onResize);
     onWidgetReady?.(widget);
+    // Do not leave the chart at an arbitrary recent-history boundary. Once
+    // the first page is ready, explicitly walk the managed history all the way
+    // back to the earliest Deriv tick boundary discovered for this symbol.
+    void backfillHistoryTo().then(bars => {
+      candlesRef.current = bars.slice().sort((a, b) => a.time - b.time);
+      updateMarketQuote(candlesRef.current);
+      window.setTimeout(refreshTpoProfile, 0);
+    });
     setActiveTimeframe(widget.interval());
     const offInterval = widget.on('interval', (event: { interval: string }) => setActiveTimeframe(event.interval));
     const offSymbol = widget.on('symbol', (event: { symbol: string }) => {
