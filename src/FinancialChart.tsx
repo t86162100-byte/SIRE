@@ -105,6 +105,8 @@ export default function FinancialChart({ symbol, liveTick, requestHistory, instr
   const [replayState, setReplayState] = useState<{ index:number; total:number; playing:boolean; speed:number; bar:Candle|null } | null>(null);
   const [rendererKind, setRendererKind] = useState<'canvas2d' | 'webgl2'>('canvas2d');
   const [tpoEnabled, setTpoEnabled] = useState(false);
+  const [swipeInstrumentIndex, setSwipeInstrumentIndex] = useState(() => Math.max(0, instruments.findIndex(item => item.symbol === symbol)));
+  const swipeStartYRef = useRef<number | null>(null);
   const replayRef = useRef<ReplayController | null>(null);
   const availableDrawTools = useMemo(() => new Set(['__cursor__', ...registeredDrawingTools().map(tool => tool.id)]), []);
   const universalIcons = useMemo(() => ({
@@ -139,6 +141,30 @@ export default function FinancialChart({ symbol, liveTick, requestHistory, instr
   onSelectInstrumentRef.current = onSelectInstrument;
   symbolRef.current = symbol;
   tpoEnabledRef.current = tpoEnabled;
+  useEffect(() => {
+    const nextIndex = instruments.findIndex(item => item.symbol === symbol);
+    if (nextIndex >= 0) setSwipeInstrumentIndex(nextIndex);
+  }, [instruments, symbol]);
+  const compactInstrumentName = (name: string) => {
+    const first = name.trim().split(/\s+/)[0] || symbol;
+    return `${first.replace(/[^a-zA-Z]/g, '').toUpperCase().slice(0, 5)}_`;
+  };
+  const swipeInstrument = (direction: 1 | -1) => {
+    if (!instruments.length) return;
+    const currentIndex = Math.max(0, instruments.findIndex(item => item.symbol === symbol));
+    const nextIndex = Math.max(0, Math.min(instruments.length - 1, currentIndex + direction));
+    const next = instruments[nextIndex];
+    if (next && next.symbol !== symbol) onSelectInstrument(next);
+  };
+  const handleInstrumentSwipeStart = (event: React.TouchEvent<HTMLDivElement>) => { swipeStartYRef.current = event.touches[0]?.clientY ?? null; };
+  const handleInstrumentSwipeEnd = (event: React.TouchEvent<HTMLDivElement>) => {
+    const start = swipeStartYRef.current;
+    swipeStartYRef.current = null;
+    if (start === null) return;
+    const delta = (event.changedTouches[0]?.clientY ?? start) - start;
+    if (Math.abs(delta) < 18) return;
+    swipeInstrument(delta < 0 ? 1 : -1);
+  };
 
   useEffect(() => {
     const host = containerRef.current;
@@ -517,7 +543,18 @@ export default function FinancialChart({ symbol, liveTick, requestHistory, instr
           )}
         </div>
       )}
-      <div className="sire-bottom-glass-bar" aria-hidden="true" />
+      <div className="sire-bottom-glass-bar">
+        <div
+          className="sire-bottom-instrument-swipe"
+          onTouchStart={handleInstrumentSwipeStart}
+          onTouchEnd={handleInstrumentSwipeEnd}
+          title="Swipe up or down to change instrument"
+        >
+          <span className="sire-bottom-instrument-prev">{compactInstrumentName(instruments[Math.max(0, swipeInstrumentIndex - 1)]?.name || '')}</span>
+          <strong>{compactInstrumentName(instruments[swipeInstrumentIndex]?.name || symbol)}</strong>
+          <span className="sire-bottom-instrument-next">{compactInstrumentName(instruments[Math.min(instruments.length - 1, swipeInstrumentIndex + 1)]?.name || '')}</span>
+        </div>
+      </div>
     </div>
   );
 }
