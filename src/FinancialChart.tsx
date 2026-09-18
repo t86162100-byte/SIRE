@@ -114,6 +114,7 @@ export default function FinancialChart({ symbol, liveTick, requestHistory, instr
   const timeframeHoldTimerRef = useRef<number | null>(null);
   const timeframeHoldTriggeredRef = useRef(false);
   const timeframeSwipeStartYRef = useRef(0);
+  const timeframeSwipeAccumulatedRef = useRef(0);
   const timeframeSwipeAnimatingRef = useRef(false);
   const [timeframeOpen, setTimeframeOpen] = useState(false);
   const [activeTimeframe, setActiveTimeframe] = useState('1m');
@@ -186,6 +187,8 @@ export default function FinancialChart({ symbol, liveTick, requestHistory, instr
     if (event.pointerType === 'mouse' && event.button !== 0) return;
     event.preventDefault();
     event.currentTarget.setPointerCapture?.(event.pointerId);
+    timeframeSwipeStartYRef.current = event.clientY;
+    timeframeSwipeAccumulatedRef.current = 0;
     timeframeHoldTriggeredRef.current = false;
     clearTimeframeHold();
     timeframeHoldTimerRef.current = window.setTimeout(() => {
@@ -195,11 +198,26 @@ export default function FinancialChart({ symbol, liveTick, requestHistory, instr
   };
   const handleTimeframePointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
     if (timeframeHoldTriggeredRef.current) return;
-    if (Math.abs(event.movementX) >= 3 || Math.abs(event.movementY) >= 3) clearTimeframeHold();
+    const delta = event.clientY - timeframeSwipeStartYRef.current;
+    if (Math.abs(delta) >= 8) clearTimeframeHold();
+    if (Math.abs(delta) < 45 || timeframeSwipeAnimatingRef.current) return;
+
+    const direction: 1 | -1 = delta < 0 ? 1 : -1;
+    const currentIndex = DERIV_INTERVALS.indexOf(activeTimeframe);
+    const nextIndex = Math.max(0, Math.min(DERIV_INTERVALS.length - 1, currentIndex + direction));
+    if (nextIndex !== currentIndex) {
+      timeframeSwipeAnimatingRef.current = true;
+      selectTimeframe(DERIV_INTERVALS[nextIndex]);
+      window.setTimeout(() => { timeframeSwipeAnimatingRef.current = false; }, 280);
+    }
+    timeframeSwipeStartYRef.current = event.clientY;
+    timeframeSwipeAccumulatedRef.current = 0;
   };
   const handleTimeframePointerEnd = (event: React.PointerEvent<HTMLDivElement>) => {
     clearTimeframeHold();
     timeframeHoldTriggeredRef.current = false;
+    timeframeSwipeStartYRef.current = 0;
+    timeframeSwipeAccumulatedRef.current = 0;
     if (event.currentTarget.hasPointerCapture?.(event.pointerId)) {
       event.currentTarget.releasePointerCapture?.(event.pointerId);
     }
