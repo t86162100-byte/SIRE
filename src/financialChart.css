@@ -69,7 +69,7 @@
 
 .sire-financial-chart:not(.sire-toolbar-owner) .sire-bottom-glass-bar{display:none}
 .sire-financial-chart.sire-toolbar-owner .sire-bottom-glass-bar{position:fixed;left:50%;right:auto;bottom:40px;width:220px;max-width:calc(100% - 24px);transform:translateX(-50%)}
-@media(max-width:640px){.sire-financial-chart.sire-toolbar-owner .sire-bottom-glass-bar{left:50%;right:auto;bottom:34px;width:200px;max-width:calc(100% - 16px);transform:translateX(-50%)}}
+@media(max-width:640px){.sire-financial-chart.sire-toolbar-owner .sire-bottom-glass-bar{left:50%;right:auto;bottom:34px;width:300px;max-width:calc(100% - 16px);transform:translateX(-50%)}}
 
 
 .sire-replay-setup,.sire-replay-transport{position:absolute;z-index:60;right:14px;bottom:58px;min-width:0;max-width:calc(100% - 28px);padding:0;border:0;border-radius:0;background:transparent;box-shadow:none;backdrop-filter:none;-webkit-backdrop-filter:none;color:#f3f4f6;box-sizing:border-box}
