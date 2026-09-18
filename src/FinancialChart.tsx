@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, ArrowUpRight, Circle, Crosshair, Eraser, GitBranch, Highlighter, Minus, MousePointer2, MoveUpRight, Pencil, Plus, RectangleHorizontal, Ruler, Shapes, Slash, Square, Table2, Target, TextCursorInput, Type, Waves } from 'lucide-react';
-import { addComparison, comparisonController, ReplayController, isWebGL2Supported, registerInterval, withBarCache } from 'openalgo-charts';
+import { addComparison, comparisonController, PriceLevels, ReplayController, isWebGL2Supported, registerInterval, withBarCache } from 'openalgo-charts';
 import 'openalgo-charts/indicators';
 import 'openalgo-charts/draw';
 import { iconSvg, registeredDrawingTools } from 'openalgo-charts/draw';
@@ -125,6 +125,7 @@ export default function FinancialChart({ symbol, liveTick, requestHistory, instr
   const subscriberRef = useRef<((bar: Candle) => void) | null>(null);
   const resyncRef = useRef<(() => void) | null>(null);
   const lastLiveEpochRef = useRef<number | null>(null);
+  const latestTickRef = useRef<Tick | null>(null);
   const requestHistoryRef = useRef(requestHistory);
   const instrumentsRef = useRef(instruments);
   const onSelectInstrumentRef = useRef(onSelectInstrument);
@@ -214,6 +215,8 @@ export default function FinancialChart({ symbol, liveTick, requestHistory, instr
       statusline: true,
       indicators: true,
       mobile: 'auto',
+      timezone: 'Africa/Lagos',
+      axisChrome: { sessionClock: true, barCountdown: true },
       symbolSearch: async (query: string) => instrumentsRef.current
         .filter(item => `${item.name} ${item.symbol}`.toLowerCase().includes(query.trim().toLowerCase()))
         .slice(0, 50)
@@ -222,6 +225,14 @@ export default function FinancialChart({ symbol, liveTick, requestHistory, instr
     const pitchBlackTheme = { ...widget.chart.theme(), background: '#000000' };
     widget.setTheme(pitchBlackTheme);
     widget.chart.applyOptions({ canvas: { background: '#000000' } });
+    const priceLevels = new PriceLevels({
+      timezone: 'Africa/Lagos',
+      quote: () => {
+        const current = latestTickRef.current;
+        return current ? { bid: current.bid, ask: current.ask } : undefined;
+      },
+    });
+    widget.chart.addPrimitive(priceLevels, 0);
     setRendererKind(widget.chart.rendererKind);
     const offRenderer = widget.chart.on('renderer:fallback', () => setRendererKind('canvas2d'));
     widgetRef.current = widget;
@@ -265,6 +276,7 @@ export default function FinancialChart({ symbol, liveTick, requestHistory, instr
   useEffect(() => {
     const tick = liveTick;
     if (!tick || tick.symbol !== symbol || !Number.isFinite(tick.quote) || !Number.isFinite(tick.epoch)) return;
+    latestTickRef.current = tick;
     const widget = widgetRef.current;
     if (!widget) return;
     const seconds = intervalSeconds(widget.interval());
