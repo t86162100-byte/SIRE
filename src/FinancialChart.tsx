@@ -242,7 +242,7 @@ export default function FinancialChart({ symbol, liveTick, requestHistory, instr
       animAutoscale: true,
       branding: false,
       rail: true,
-      topbar: true,
+      topbar: false,
       statusline: true,
       indicators: true,
       mobile: 'auto',
