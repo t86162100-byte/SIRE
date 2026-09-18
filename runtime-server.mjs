@@ -48,7 +48,7 @@ async function handleDirectGptRequest(parsed) {
   return { text: gpt.text, responseId: gpt.responseId || '', model: gpt.model, provider: gpt.provider, directGptTest: true };
 }
 
-startAgentWorker().catch(error => console.error('[SIRE agent worker]', error));
+if (process.env.SIRE_AGENT_WORKER_ENABLED === 'true') startAgentWorker().catch(error => console.error('[SIRE agent worker]', error));
 
 const server = http.createServer(async (req,res) => {
   if (req.method === 'OPTIONS') { res.writeHead(204,{ 'Access-Control-Allow-Origin':'*','Access-Control-Allow-Methods':'GET,POST,PUT,DELETE,OPTIONS','Access-Control-Allow-Headers':'Content-Type, Authorization' }); return res.end(); }
