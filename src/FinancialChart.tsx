@@ -433,11 +433,20 @@ export default function FinancialChart({ symbol, isActive = false, liveTick, req
       });
     };
 
+    const moveFromWindow = (event: PointerEvent) => {
+      const nextRect = host.getBoundingClientRect();
+      const x = event.clientX - nextRect.left;
+      const y = event.clientY - nextRect.top;
+      if (x < 0 || y < 0 || x > nextRect.width || y > nextRect.height) return;
+      setCustomDrawingCrosshair({ x, y });
+    };
     host.addEventListener('pointermove', moveCrosshair, true);
     host.addEventListener('pointerenter', moveCrosshair, true);
+    window.addEventListener('pointermove', moveFromWindow, true);
     return () => {
       host.removeEventListener('pointermove', moveCrosshair, true);
       host.removeEventListener('pointerenter', moveCrosshair, true);
+      window.removeEventListener('pointermove', moveFromWindow, true);
     };
   }, [activeDrawTool]);
 
