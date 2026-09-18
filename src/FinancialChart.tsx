@@ -416,7 +416,7 @@ export default function FinancialChart({ symbol, isActive = false, liveTick, req
       topbar: false,
       statusline: true,
       indicators: true,
-      mobile: 'auto',
+      mobile: 'never',
       timezone: 'Africa/Lagos',
       axisChrome: { sessionClock: true, barCountdown: true },
       symbolSearch: async (query: string) => instrumentsRef.current
