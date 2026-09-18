@@ -511,6 +511,23 @@ export default function FinancialChart({ symbol, isActive = false, liveTick, req
       } : null);
       updateSelectedDrawingOverlay(drawing);
     });
+
+    // Re-show the floating controls whenever a drawing is touched/selected.
+    const onDrawingInteraction = () => {
+      window.requestAnimationFrame(() => {
+        const selected = widget.objects.selection?.().find?.((item: any) => item?.kind === 'drawing');
+        if (!selected) return;
+        setSelectedDrawing({
+          id: selected.id,
+          sourceId: selected.sourceId,
+          name: selected.name,
+          visible: selected.visible,
+          locked: selected.locked === true,
+        });
+        updateSelectedDrawingOverlay(selected);
+      });
+    };
+    host.addEventListener('pointerdown', onDrawingInteraction, true);
     const offDrawingSelect = widget.chart.on('drawing:select', () => {
       window.requestAnimationFrame(() => {
         const selected = widget.objects.selection?.().find?.((item: any) => item?.kind === 'drawing');
@@ -565,6 +582,7 @@ export default function FinancialChart({ symbol, isActive = false, liveTick, req
       offDrawingObjects?.();
       offDrawingSelect?.();
       window.removeEventListener('resize', onResize);
+      host.removeEventListener('pointerdown', onDrawingInteraction, true);
       offReplayStart?.();
       offReplayFrame?.();
       offReplayPlay?.();
