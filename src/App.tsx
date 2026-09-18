@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Search } from 'lucide-react';
+import { Layers3, Search } from 'lucide-react';
 import { createLinkGroup, type LinkGroup } from 'openalgo-charts';
 import ResearchLab from './ResearchLab';
 import FinancialChart from './FinancialChart';
@@ -21,6 +21,9 @@ export default function App() {
   const [chartLayout, setChartLayout] = useState<1 | 2>(1);
   const [activeChartIndex, setActiveChartIndex] = useState(0);
   const [linked, setLinked] = useState(false);
+  const [multiChartOpen, setMultiChartOpen] = useState(false);
+  const [multiChartInstrument, setMultiChartInstrument] = useState('');
+  const [multiChartPosition, setMultiChartPosition] = useState<'up' | 'down' | 'left' | 'right'>('right');
   const [chartSymbols, setChartSymbols] = useState<string[]>([]);
   const linkGroupRef = useRef<LinkGroup | null>(null);
 
@@ -90,12 +93,35 @@ export default function App() {
   const selectInstrument = (item: DerivInstrument) => { setSelected(item); setSearch(''); setChartSymbols(current => current.length ? current.map((value, index) => index === 0 ? item.symbol : value) : [item.symbol]); };
 
   const chartItems = chartSymbols.slice(0, chartLayout);
+  const openMultiChartManager = () => {
+    setMultiChartInstrument(chartSymbols[1] || instruments[1]?.symbol || instruments[0]?.symbol || '');
+    setMultiChartOpen(true);
+  };
+  const confirmMultiChart = () => {
+    if (!multiChartInstrument) return;
+    setChartSymbols(current => [current[0] || selected?.symbol || instruments[0]?.symbol || multiChartInstrument, multiChartInstrument]);
+    setChartLayout(2);
+    setMultiChartOpen(false);
+  };
+  const removeSecondChart = () => {
+    setChartSymbols(current => [current[0] || selected?.symbol || instruments[0]?.symbol || '']);
+    setChartLayout(1);
+    setActiveChartIndex(0);
+    setMultiChartOpen(false);
+  };
+  const makeSecondMainChart = () => {
+    if (!chartSymbols[1]) return;
+    setChartSymbols(current => [current[1], current[0] || current[1]]);
+    setActiveChartIndex(0);
+    setSelected(instruments.find(item => item.symbol === chartSymbols[1]) || selected);
+    setMultiChartOpen(false);
+  };
   return <main className={`native-terminal-shell${researchLabOpen ? ' sire-research-open' : ''}`}>
     <div className="native-terminal-body">
       <aside className="native-symbol-sidebar"><div className="sidebar-search"><Search size={15} /><input value={search} onChange={event => setSearch(event.target.value)} placeholder="Search" /></div><div className="sidebar-meta"><span>DERIV SYNTHETIC</span><b>{instruments.length}</b></div><div className="native-symbol-list">{filtered.slice(0, 150).map(item => <button key={item.symbol} className={selected?.symbol === item.symbol ? 'active' : ''} onClick={() => selectInstrument(item)}><span><b>{item.name}</b><small>{item.symbol}</small></span><i>{item.exchangeOpen === 0 ? 'OFF' : 'LIVE'}</i></button>)}</div></aside>
       <section className="native-chart-panel">
         {lastError && <div className="native-error-banner">{lastError}</div>}
-        <div className="sire-workspace-toolbar"><span>SIRE · OpenAlgo</span><button type="button" className={chartLayout === 1 ? 'active' : ''} onClick={() => setChartLayout(1)}>1</button><button type="button" className={chartLayout === 2 ? 'active' : ''} onClick={() => setChartLayout(2)}>2</button><button type="button" className={linked ? 'active' : ''} onClick={() => setLinked(value => !value)}>Link</button></div>
+        <div className="sire-workspace-toolbar"><span>SIRE · OpenAlgo</span><button type="button" className="sire-multichart-button" onClick={openMultiChartManager} aria-label="Multi-chart" title="Multi-chart"><Layers3 size={17} strokeWidth={1.8} /></button><button type="button" className={linked ? 'active' : ''} onClick={() => setLinked(value => !value)}>Link</button></div>
         <div className={`sire-chart-grid sire-chart-grid--${chartLayout}`} onContextMenu={event => event.preventDefault()}>
           {chartItems.map((chartSymbol, index) => <div className={`sire-chart-cell${activeChartIndex === index ? ' sire-chart-cell--active' : ''}`} key={index} onPointerDown={() => setActiveChartIndex(index)}>{chartSymbol && <FinancialChart
             symbol={chartSymbol}
@@ -120,6 +146,14 @@ export default function App() {
             onWidgetDestroyed={widget => linkGroupRef.current?.remove(widget.chart)}
           />}</div>)}
         </div>
+        {multiChartOpen && <div className="sire-multichart-overlay" onContextMenu={event => event.preventDefault()}>
+          <div className="sire-multichart-panel">
+            <div className="sire-multichart-head"><div><strong>Multi-chart</strong><small>{chartLayout === 2 ? 'Manage the second window' : 'Add a second window'}</small></div><button type="button" onClick={() => setMultiChartOpen(false)} aria-label="Close multi-chart manager">×</button></div>
+            <label className="sire-multichart-field"><span>Instrument</span><select value={multiChartInstrument} onChange={event => setMultiChartInstrument(event.target.value)}>{instruments.map(item => <option key={item.symbol} value={item.symbol}>{item.name} · {item.symbol}</option>)}</select></label>
+            <div className="sire-multichart-field"><span>New window position</span><div className="sire-multichart-directions">{(['up','down','left','right'] as const).map(position => <button key={position} type="button" className={multiChartPosition === position ? 'active' : ''} onClick={() => setMultiChartPosition(position)}>{position === 'up' ? '↑ Up' : position === 'down' ? '↓ Down' : position === 'left' ? '← Left' : '→ Right'}</button>)}</div></div>
+            <div className="sire-multichart-actions">{chartLayout === 2 && <><button type="button" className="danger" onClick={removeSecondChart}>Delete window</button><button type="button" onClick={makeSecondMainChart}>Make selected main</button></>}<button type="button" className="primary" onClick={confirmMultiChart}>{chartLayout === 2 ? 'Apply' : 'Confirm'}</button></div>
+          </div>
+        </div>}
         {instrumentSearchOpen && <div className="sire-instrument-search-overlay" onContextMenu={event => event.preventDefault()}>
           <div className="sire-instrument-search-panel">
             <div className="sire-instrument-search-head">
