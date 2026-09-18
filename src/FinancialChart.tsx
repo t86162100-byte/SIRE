@@ -694,11 +694,54 @@ export default function FinancialChart({ symbol, isActive = false, liveTick, req
   useEffect(() => {
     const host = containerRef.current;
     if (!host) return;
-    const rail = host.querySelector<HTMLElement>('.oac-rail');
-    if (!rail) return;
-    rail.classList.toggle('sire-oac-rail--closed', !drawRackOpen);
-    rail.setAttribute('aria-hidden', String(!drawRackOpen));
-  }, [drawRackOpen]);
+    const positionRail = () => {
+      const rail = host.querySelector<HTMLElement>('.oac-rail');
+      if (!rail) return;
+      rail.classList.toggle('sire-oac-rail--closed', !drawRackOpen);
+      rail.setAttribute('aria-hidden', String(!drawRackOpen));
+
+      if (!drawRackOpen) {
+        rail.style.removeProperty('--sire-rail-top');
+        return;
+      }
+
+      const quote = host.querySelector<HTMLElement>('.sire-market-quote');
+      const hostRect = host.getBoundingClientRect();
+      const quoteRect = quote?.getBoundingClientRect();
+      const quoteBottom = quoteRect ? quoteRect.bottom - hostRect.top : 0;
+
+      // OpenAlgo indicator legends are canvas-rendered, so measure their row
+      // count from the chart objects rather than looking for DOM elements.
+      const widget = widgetRef.current;
+      const mainPaneIndicators = widget?.objects.list?.().filter(
+        (item: any) => item?.kind === 'indicator' && Number(item?.paneIndex) === 0 && item?.visible !== false
+      ) ?? [];
+      const indicatorLegendBottom = mainPaneIndicators.length
+        ? 6 + mainPaneIndicators.length * 24 + 4
+        : 0;
+
+      // Keep the drawing rail below the SIRE quote and any main-pane legend
+      // rows, with a small breathing gap so nothing is covered.
+      const top = Math.ceil(Math.max(quoteBottom + 8, indicatorLegendBottom));
+      rail.style.setProperty('--sire-rail-top', `${Math.max(0, top)}px`);
+    };
+
+    positionRail();
+    const observer = new MutationObserver(() => window.requestAnimationFrame(positionRail));
+    observer.observe(host, { childList: true, subtree: true });
+    const resizeObserver = new ResizeObserver(positionRail);
+    resizeObserver.observe(host);
+    const onResize = () => positionRail();
+    window.addEventListener('resize', onResize);
+
+    return () => {
+      observer.disconnect();
+      resizeObserver.disconnect();
+      window.removeEventListener('resize', onResize);
+      const rail = host.querySelector<HTMLElement>('.oac-rail');
+      rail?.style.removeProperty('--sire-rail-top');
+    };
+  }, [drawRackOpen, symbol, marketQuote, instruments]);
 
   useEffect(() => {
     setMarketQuote(null);
