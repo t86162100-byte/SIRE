@@ -10,6 +10,69 @@ let touchRevealed = false;
 let pointerStartX: number | null = null;
 let pointerStartY: number | null = null;
 let pointerRevealed = false;
+let barCollapseTimer: number | undefined;
+let barObserver: MutationObserver | undefined;
+
+function currentGlassBar() {
+  return document.querySelector('.sire-bottom-glass-bar') as HTMLElement | null;
+}
+
+function replayIsActive() {
+  return !!document.querySelector('.sire-replay-transport');
+}
+
+function setBarRolledUp(rolledUp: boolean) {
+  const bar = currentGlassBar();
+  if (!bar) return;
+  bar.classList.toggle('sire-bar-rolled-up', rolledUp);
+}
+
+function rollBarUp() {
+  setBarRolledUp(true);
+}
+
+function armBarCollapse(ms = HIDE_AFTER) {
+  if (barCollapseTimer !== undefined) window.clearTimeout(barCollapseTimer);
+  if (replayIsActive()) {
+    rollBarUp();
+    return;
+  }
+  barCollapseTimer = window.setTimeout(() => {
+    rollBarUp();
+  }, ms);
+}
+
+function revealBar() {
+  const bar = currentGlassBar();
+  if (!bar) return;
+  setBarRolledUp(false);
+  armBarCollapse();
+}
+
+function wireGlassBar() {
+  const bar = currentGlassBar();
+  if (!bar || bar.dataset.rollBound === 'true') return;
+  bar.dataset.rollBound = 'true';
+  bar.addEventListener('pointerdown', event => {
+    if (bar.classList.contains('sire-bar-rolled-up')) {
+      event.stopPropagation();
+      revealBar();
+      return;
+    }
+    armBarCollapse();
+  }, { passive: true });
+  bar.addEventListener('click', () => armBarCollapse(), { passive: true });
+  armBarCollapse();
+}
+
+function bindBarObserver() {
+  if (barObserver) return;
+  barObserver = new MutationObserver(() => {
+    wireGlassBar();
+    if (replayIsActive()) rollBarUp();
+  });
+  barObserver.observe(document.documentElement, { childList: true, subtree: true });
+}
 
 function style() {
   if (document.getElementById(STYLE_ID)) return;
@@ -47,6 +110,7 @@ function reveal(ms = HIDE_AFTER) {
   const nav = currentNav();
   if (nav) nav.classList.remove('nav-auto-hidden');
   syncGlassBar();
+  wireGlassBar();
   if (hideTimer !== undefined) window.clearTimeout(hideTimer);
   hideTimer = window.setTimeout(() => hideIfInactive(), ms);
 }
@@ -150,8 +214,9 @@ function start() {
   wirePointerSwipe();
   hideTimer = window.setTimeout(hideIfInactive, HIDE_AFTER);
 
-  const observer = new MutationObserver(() => bindNav());
+  const observer = new MutationObserver(() => { bindNav(); wireGlassBar(); if (replayIsActive()) rollBarUp(); });
   observer.observe(document.documentElement, { childList: true, subtree: true });
+  bindBarObserver();
   window.setInterval(() => {
     bindNav();
     hideIfInactive();
