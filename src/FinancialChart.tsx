@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, ArrowUpRight, Circle, Crosshair, Eraser, Eye, GitBranch, Highlighter, Lock, Minus, MoreHorizontal, MousePointer2, Settings2, Trash2, MoveUpRight, Pencil, Plus, RectangleHorizontal, Ruler, Shapes, Slash, Square, Table2, Target, TextCursorInput, Type, Waves, Wrench } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { Eye, Lock, Minus, MoreHorizontal, Settings2, Shapes, Trash2, Wrench } from 'lucide-react';
 import { addComparison, comparisonController, PriceLevels, ReplayController, registerInterval, withBarCache } from 'openalgo-charts';
 import 'openalgo-charts/indicators';
 import 'openalgo-charts/draw';
@@ -16,20 +16,6 @@ type HistoryRequester = (request: Record<string, unknown>) => Promise<HistoryRes
 type Instrument = { symbol: string; name: string; pipSize?: number };
 type Props = { symbol: string; isActive?: boolean; liveTick: Tick | null; requestHistory: HistoryRequester; instruments: Instrument[]; onSelectInstrument: (instrument: Instrument) => void; onWidgetReady?: (widget: Widget) => void; onWidgetDestroyed?: (widget: Widget) => void; onInstrumentTap?: () => void };
 type Candle = { time: number; open: number; high: number; low: number; close: number; volume?: number };
-type DrawGroup = { label: string; tools: string[] };
-
-const DRAW_RACK_GROUPS: DrawGroup[] = [
-  { label: 'Cursor', tools: ['__cursor__'] },
-  { label: 'Trend line', tools: ['trend-line', 'ray', 'extended-line', 'horizontal-line', 'horizontal-ray', 'vertical-line', 'cross-line', 'arrow'] },
-  { label: 'Channels', tools: ['parallel-channel'] },
-  { label: 'Fibonacci & Gann', tools: ['fib-retracement', 'fib-extension', 'fib-channel', 'fib-time-zone', 'fib-fan', 'gann-fan', 'gann-box', 'cyclic-lines', 'time-cycles', 'sine-line'] },
-  { label: 'Patterns', tools: ['path', 'polyline', 'triangle', 'rotated-rectangle', 'double-curve'] },
-  { label: 'Forecast & measure', tools: ['forecast', 'price-range', 'date-range', 'measure', 'long-position', 'short-position'] },
-  { label: 'Shapes', tools: ['rectangle', 'ellipse', 'circle', 'arc', 'curve', 'highlighter', 'brush'] },
-  { label: 'Annotation', tools: ['text', 'note', 'price-note', 'callout', 'comment', 'balloon', 'signpost', 'table', 'price-label', 'flag-mark'] },
-  { label: 'Arrows & marks', tools: ['arrow-up', 'arrow-down', 'arrow-left', 'arrow-right'] },
-];
-
 const INTERVAL_SECONDS: Record<string, number> = {
   '1m': 60, '2m': 120, '3m': 180, '5m': 300, '10m': 600, '15m': 900, '20m': 1200,
   '30m': 1800, '45m': 2700, '1h': 3600, '2h': 7200, '3h': 10800, '4h': 14400,
