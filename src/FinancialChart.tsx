@@ -588,6 +588,7 @@ export default function FinancialChart({ symbol, isActive = false, liveTick, req
     if (bars.length < 2) return;
     setReplayStartInput(formatReplayInput(bars[0].time));
     setReplayEndInput(formatReplayInput(bars[bars.length - 1].time));
+    setReplayDraftSpeed(1);
     setReplayRangeError(null);
     setReplaySetupOpen(true);
   };
@@ -605,14 +606,14 @@ export default function FinancialChart({ symbol, isActive = false, liveTick, req
       return;
     }
     const startIndex = Math.max(0, bars.findIndex(bar => bar.time >= startEpoch));
-    let endIndex = bars.findIndex(bar => bar.time <= endEpoch);
-    if (endIndex < 0) endIndex = bars.length - 1;
+    let endIndex = bars.length - 1;
+    while (endIndex > 0 && bars[endIndex].time > endEpoch) endIndex -= 1;
     if (endIndex <= startIndex) {
       setReplayRangeError('Range must contain at least two candles');
       return;
     }
     setReplayRangeError(null);
-    return startReplay(startIndex, endIndex, replayState?.speed || 1);
+    return startReplay(startIndex, endIndex, replayDraftSpeed);
   };
 
   const toggleReplay = () => {
