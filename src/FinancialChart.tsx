@@ -4,7 +4,7 @@ import { addComparison, comparisonController, PriceLevels, ReplayController, isW
 import 'openalgo-charts/indicators';
 import 'openalgo-charts/draw';
 import { iconSvg, registeredDrawingTools } from 'openalgo-charts/draw';
-import 'openalgo-charts/profile';
+import { computeMarketProfile, MarketProfile } from 'openalgo-charts/profile';
 import 'openalgo-charts/trade';
 import 'openalgo-charts/transform';
 import 'openalgo-charts/webgl';
@@ -14,7 +14,7 @@ import './financialChart.css';
 type Tick = { symbol: string; quote: number; epoch: number };
 type HistoryResponse = Record<string, unknown>;
 type HistoryRequester = (request: Record<string, unknown>) => Promise<HistoryResponse>;
-type Instrument = { symbol: string; name: string };
+type Instrument = { symbol: string; name: string; pipSize?: number };
 type Props = { symbol: string; liveTick: Tick | null; requestHistory: HistoryRequester; instruments: Instrument[]; onSelectInstrument: (instrument: Instrument) => void; onWidgetReady?: (widget: Widget) => void; onWidgetDestroyed?: (widget: Widget) => void };
 type Candle = { time: number; open: number; high: number; low: number; close: number; volume?: number };
 type DrawGroup = { label: string; tools: string[] };
@@ -104,6 +104,7 @@ export default function FinancialChart({ symbol, liveTick, requestHistory, instr
   const [replayActive, setReplayActive] = useState(false);
   const [replayState, setReplayState] = useState<{ index:number; total:number; playing:boolean; speed:number; bar:Candle|null } | null>(null);
   const [rendererKind, setRendererKind] = useState<'canvas2d' | 'webgl2'>('canvas2d');
+  const [tpoEnabled, setTpoEnabled] = useState(false);
   const replayRef = useRef<ReplayController | null>(null);
   const availableDrawTools = useMemo(() => new Set(['__cursor__', ...registeredDrawingTools().map(tool => tool.id)]), []);
   const universalIcons = useMemo(() => ({
@@ -126,6 +127,9 @@ export default function FinancialChart({ symbol, liveTick, requestHistory, instr
   const resyncRef = useRef<(() => void) | null>(null);
   const lastLiveEpochRef = useRef<number | null>(null);
   const latestTickRef = useRef<Tick | null>(null);
+  const tpoEnabledRef = useRef(false);
+  const tpoProfileRef = useRef<MarketProfile | null>(null);
+  const tpoUnregisterRef = useRef<(() => void) | null>(null);
   const requestHistoryRef = useRef(requestHistory);
   const instrumentsRef = useRef(instruments);
   const onSelectInstrumentRef = useRef(onSelectInstrument);
@@ -134,6 +138,7 @@ export default function FinancialChart({ symbol, liveTick, requestHistory, instr
   instrumentsRef.current = instruments;
   onSelectInstrumentRef.current = onSelectInstrument;
   symbolRef.current = symbol;
+  tpoEnabledRef.current = tpoEnabled;
 
   useEffect(() => {
     const host = containerRef.current;
@@ -242,12 +247,28 @@ export default function FinancialChart({ symbol, liveTick, requestHistory, instr
       if (instrument && instrument.symbol !== symbolRef.current) onSelectInstrumentRef.current(instrument);
     });
     const offData = widget.on('data', (event: { bars?: Candle[] }) => {
-      if (Array.isArray(event.bars)) candlesRef.current = event.bars;
+      if (Array.isArray(event.bars)) {
+        candlesRef.current = event.bars;
+        window.setTimeout(refreshTpoProfile, 0);
+      }
+    });
+    tpoUnregisterRef.current = widget.objects.register({
+      id: 'sire-market-profile',
+      get: () => tpoProfileRef.current ? { kind: 'profile', name: 'Market Profile (TPO)', paneIndex: 0, visible: tpoEnabledRef.current } : null,
+      setVisible: on => {
+        if (on !== tpoEnabledRef.current) toggleTpo();
+      },
+      remove: () => {
+        if (tpoEnabledRef.current) toggleTpo();
+      },
     });
     return () => {
       offSymbol?.();
       offData?.();
       offRenderer?.();
+      tpoUnregisterRef.current?.();
+      tpoUnregisterRef.current = null;
+      tpoProfileRef.current = null;
       subscriberRef.current = null;
       onWidgetDestroyed?.(widget);
       replayRef.current?.stop();
@@ -277,6 +298,7 @@ export default function FinancialChart({ symbol, liveTick, requestHistory, instr
     const tick = liveTick;
     if (!tick || tick.symbol !== symbol || !Number.isFinite(tick.quote) || !Number.isFinite(tick.epoch)) return;
     latestTickRef.current = tick;
+    if (tpoEnabledRef.current) window.setTimeout(refreshTpoProfile, 0);
     const widget = widgetRef.current;
     if (!widget) return;
     const seconds = intervalSeconds(widget.interval());
@@ -342,6 +364,57 @@ export default function FinancialChart({ symbol, liveTick, requestHistory, instr
     setComparisons(current => current.filter(item => item !== compareSymbol));
   };
 
+  const refreshTpoProfile = () => {
+    const widget = widgetRef.current;
+    if (!widget || !tpoEnabledRef.current || candlesRef.current.length < 2) return;
+    const instrument = instrumentsRef.current.find(item => item.symbol === symbolRef.current);
+    const tickSize = instrument?.pipSize && instrument.pipSize > 0 ? instrument.pipSize : 0.01;
+    const result = computeMarketProfile(candlesRef.current, {
+      tickSize,
+      rowTicks: Math.max(1, Math.round(0.5 / tickSize)),
+      session: 'day',
+      blockMinutes: 30,
+      valueAreaPercent: 0.7,
+      initialBalancePeriods: 2,
+      compositeSessions: 1,
+      tailEdges: 0,
+      timezone: 'Africa/Lagos',
+    });
+    let profile = tpoProfileRef.current;
+    if (!profile) {
+      profile = new MarketProfile(result, {
+        blockDisplay: 'auto',
+        showSessionLabel: true,
+        showPoc: true,
+        showValueArea: true,
+        showInitialBalance: true,
+        showSinglePrints: true,
+        fillValueArea: true,
+      });
+      tpoProfileRef.current = profile;
+      widget.chart.addPrimitive(profile, 0);
+    } else {
+      profile.setData(result);
+    }
+    widget.objects.refresh();
+  };
+
+  const toggleTpo = () => {
+    const widget = widgetRef.current;
+    if (!widget) return;
+    if (tpoEnabledRef.current) {
+      tpoEnabledRef.current = false;
+      setTpoEnabled(false);
+      if (tpoProfileRef.current) widget.chart.removePrimitive(tpoProfileRef.current);
+      tpoProfileRef.current = null;
+      widget.objects.refresh();
+      return;
+    }
+    tpoEnabledRef.current = true;
+    setTpoEnabled(true);
+    refreshTpoProfile();
+  };
+
   const visibleGroups = useMemo(() => {
     const registered = registeredDrawingTools();
     const groups = DRAW_RACK_GROUPS.map(group => ({ ...group, tools: group.tools.filter(id => availableDrawTools.has(id)) })).filter(group => group.tools.length > 0);
@@ -367,6 +440,7 @@ export default function FinancialChart({ symbol, liveTick, requestHistory, instr
           <button type="button" onClick={() => widgetRef.current?.openSettings()}>Chart settings</button>
           <button type="button" onClick={() => widgetRef.current?.openIndicatorPicker()}>Indicators</button>
           <button type="button" onClick={() => widgetRef.current?.openObjects()}>Objects</button>
+          <button type="button" onClick={toggleTpo}>{tpoEnabled ? 'Hide TPO Profile' : 'Market Profile (TPO)'}</button>
           {replayActive && <><button type="button" onClick={() => replayRef.current?.stepBack()}>Step back</button><button type="button" onClick={() => replayRef.current?.step()}>Step</button><button type="button" onClick={stopReplay}>Exit replay</button></>}
           <div className="sire-advanced-tools__compare"><input value={compareQuery} onChange={event => setCompareQuery(event.target.value)} placeholder="Compare Synthetic Index" /><button type="button" onClick={() => { void addCompare(compareQuery.trim()); setCompareQuery(''); }}>Add</button></div>
           {comparisons.map(item => <button key={item} type="button" onClick={() => removeCompare(item)}>Remove {item}</button>)}
