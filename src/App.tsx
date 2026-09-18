@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Search } from 'lucide-react';
+import { createLinkGroup, type LinkGroup } from 'openalgo-charts';
 import ResearchLab from './ResearchLab';
 import FinancialChart from './FinancialChart';
 import { derivMarketData, type DerivInstrument, type DerivTick, type DerivResponse } from './derivMarketData';
@@ -16,8 +17,22 @@ export default function App() {
   const [latest, setLatest] = useState<Tick | null>(null);
   const [researchLabOpen, setResearchLabOpen] = useState(false);
   const selectedRef = useRef<DerivInstrument | null>(null);
+  const [chartLayout, setChartLayout] = useState<1 | 2 | 4>(1);
+  const [linked, setLinked] = useState(true);
+  const [chartSymbols, setChartSymbols] = useState<string[]>([]);
+  const linkGroupRef = useRef<LinkGroup | null>(null);
 
   useEffect(() => { selectedRef.current = selected; }, [selected]);
+  useEffect(() => {
+    if (!instruments.length) return;
+    setChartSymbols(current => Array.from({ length: chartLayout }, (_, index) => current[index] || (index === 0 ? (selected?.symbol || instruments[0].symbol) : instruments[index % instruments.length].symbol)));
+  }, [chartLayout, instruments, selected?.symbol]);
+  useEffect(() => {
+    if (!linkGroupRef.current) linkGroupRef.current = createLinkGroup({ crosshair: true, viewport: true, symbol: linked });
+    else linkGroupRef.current.setOptions({ crosshair: true, viewport: true, symbol: linked });
+    return () => {};
+  }, [linked]);
+  useEffect(() => () => { linkGroupRef.current?.destroy(); linkGroupRef.current = null; }, []);
   useEffect(() => {
     const open = () => setResearchLabOpen(true);
     window.addEventListener('sire:open-research', open);
@@ -43,5 +58,18 @@ export default function App() {
   const filtered = useMemo(() => { const q = search.trim().toLowerCase(); return q ? instruments.filter(item => `${item.name} ${item.symbol}`.toLowerCase().includes(q)) : instruments; }, [instruments, search]);
   const selectInstrument = (item: DerivInstrument) => { setSelected(item); setSearch(''); };
 
-  return <main className={`native-terminal-shell${researchLabOpen ? ' sire-research-open' : ''}`}><div className="native-terminal-body"><aside className="native-symbol-sidebar"><div className="sidebar-search"><Search size={15} /><input value={search} onChange={event => setSearch(event.target.value)} placeholder="Search" /></div><div className="sidebar-meta"><span>DERIV SYNTHETIC</span><b>{instruments.length}</b></div><div className="native-symbol-list">{filtered.slice(0, 150).map(item => <button key={item.symbol} className={selected?.symbol === item.symbol ? 'active' : ''} onClick={() => selectInstrument(item)}><span><b>{item.name}</b><small>{item.symbol}</small></span><i>{item.exchangeOpen === 0 ? 'OFF' : 'LIVE'}</i></button>)}</div></aside><section className="native-chart-panel">{lastError && <div className="native-error-banner">{lastError}</div>}{selected && <FinancialChart symbol={selected.symbol} liveTick={latest} requestHistory={requestHistory} instruments={instruments.map(item => ({ symbol: item.symbol, name: item.name }))} onSelectInstrument={item => { const match = instruments.find(candidate => candidate.symbol === item.symbol); if (match) selectInstrument(match); }} />}</section></div>{researchLabOpen && <ResearchLab symbol={selected?.symbol || ''} instruments={instruments.map(item => ({ symbol: item.symbol, name: item.name }))} onClose={() => setResearchLabOpen(false)} onSelectInstrument={symbol => { const item = instruments.find(candidate => candidate.symbol === symbol); if (item) setSelected(item); }} />}</main>;
+  const chartItems = chartSymbols.slice(0, chartLayout);
+  return <main className={`native-terminal-shell${researchLabOpen ? ' sire-research-open' : ''}`}>
+    <div className="native-terminal-body">
+      <aside className="native-symbol-sidebar"><div className="sidebar-search"><Search size={15} /><input value={search} onChange={event => setSearch(event.target.value)} placeholder="Search" /></div><div className="sidebar-meta"><span>DERIV SYNTHETIC</span><b>{instruments.length}</b></div><div className="native-symbol-list">{filtered.slice(0, 150).map(item => <button key={item.symbol} className={selected?.symbol === item.symbol ? 'active' : ''} onClick={() => selectInstrument(item)}><span><b>{item.name}</b><small>{item.symbol}</small></span><i>{item.exchangeOpen === 0 ? 'OFF' : 'LIVE'}</i></button>)}</div></aside>
+      <section className="native-chart-panel">
+        {lastError && <div className="native-error-banner">{lastError}</div>}
+        <div className="sire-workspace-toolbar"><span>SIRE · OpenAlgo</span><button type="button" className={chartLayout === 1 ? 'active' : ''} onClick={() => setChartLayout(1)}>1</button><button type="button" className={chartLayout === 2 ? 'active' : ''} onClick={() => setChartLayout(2)}>2</button><button type="button" className={chartLayout === 4 ? 'active' : ''} onClick={() => setChartLayout(4)}>4</button><button type="button" className={linked ? 'active' : ''} onClick={() => setLinked(value => !value)}>Link</button></div>
+        <div className={`sire-chart-grid sire-chart-grid--${chartLayout}`}>
+          {chartItems.map((chartSymbol, index) => <div className="sire-chart-cell" key={index}>{chartSymbol && <FinancialChart symbol={chartSymbol} liveTick={index === 0 ? latest : null} requestHistory={requestHistory} instruments={instruments.map(item => ({ symbol: item.symbol, name: item.name }))} onSelectInstrument={item => setChartSymbols(current => current.map((value, slot) => slot === index ? item.symbol : value))} onWidgetReady={widget => { const group = linkGroupRef.current || createLinkGroup({ crosshair: true, viewport: true, symbol: linked }); linkGroupRef.current = group; group.add(widget.chart, { symbol: chartSymbol, onSymbol: next => setChartSymbols(current => current.map((value, slot) => slot === index ? next : value)) }); }} />}</div>)}
+        </div>
+      </section>
+    </div>
+    {researchLabOpen && <ResearchLab symbol={selected?.symbol || ''} instruments={instruments.map(item => ({ symbol: item.symbol, name: item.name }))} onClose={() => setResearchLabOpen(false)} onSelectInstrument={symbol => { const item = instruments.find(candidate => candidate.symbol === symbol); if (item) setSelected(item); }} />}
+  </main>;
 }
