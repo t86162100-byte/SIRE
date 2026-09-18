@@ -722,11 +722,15 @@ export default function FinancialChart({ symbol, isActive = false, liveTick, req
       if (instrument && instrument.symbol !== symbolRef.current) onSelectInstrumentRef.current(instrument);
     });
     const offData = widget.on('data', () => {
-      // The widget's data event reports the retained bar count, not the bar
-      // array. Read the authoritative managed-history store so prepend pages
-      // immediately become available to replay and profile features.
-      const loaded = widget.dataController?.bars();
-      if (loaded) candlesRef.current = loaded.slice().sort((a, b) => a.time - b.time);
+      // Prefer the chart series because the fast history warmer bulk-replaces
+      // the primary series while the managed controller may still only know
+      // about its original first page.
+      const loaded = widget.series.getData?.();
+      if (loaded?.length) candlesRef.current = loaded.slice().sort((a, b) => a.time - b.time);
+      else {
+        const managed = widget.dataController?.bars();
+        if (managed?.length) candlesRef.current = managed.slice().sort((a, b) => a.time - b.time);
+      }
       window.setTimeout(refreshTpoProfile, 0);
     });
     const renderReplayState = (state: unknown) => {
