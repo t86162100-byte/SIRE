@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, ArrowUpRight, Circle, Crosshair, Eraser, GitBranch, Highlighter, Minus, MoreHorizontal, MousePointer2, MoveUpRight, Pencil, Plus, RectangleHorizontal, Ruler, Shapes, Slash, Square, Table2, Target, TextCursorInput, Type, Waves, Wrench } from 'lucide-react';
+import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, ArrowUpRight, Circle, Crosshair, Eraser, Eye, GitBranch, Highlighter, KeyRound, Minus, MoreHorizontal, MousePointer2, MoveUpRight, Pencil, Plus, RectangleHorizontal, Settings2, Ruler, Shapes, Slash, Square, Table2, Target, TextCursorInput, Type, Waves, Wrench } from 'lucide-react';
 import { addComparison, comparisonController, PriceLevels, ReplayController, registerInterval, withBarCache } from 'openalgo-charts';
 import 'openalgo-charts/indicators';
 import 'openalgo-charts/draw';
@@ -195,6 +195,7 @@ export default function FinancialChart({ symbol, isActive = false, liveTick, req
   const [rendererKind, setRendererKind] = useState<'canvas2d' | 'webgl2'>('canvas2d');
   const [tpoEnabled, setTpoEnabled] = useState(false);
   const [moreMenuOpen, setMoreMenuOpen] = useState(false);
+  const [selectedDrawing, setSelectedDrawing] = useState<{ id: string; sourceId: string; name: string; visible: boolean; locked: boolean } | null>(null);
   const [swipeInstrumentIndex, setSwipeInstrumentIndex] = useState(() => Math.max(0, instruments.findIndex(item => item.symbol === symbol)));
   const swipeStartYRef = useRef<number | null>(null);
   const swipeAccumulatedRef = useRef(0);
@@ -470,6 +471,16 @@ export default function FinancialChart({ symbol, isActive = false, liveTick, req
     setRendererKind(widget.chart.rendererKind);
     const offRenderer = widget.chart.on('renderer:fallback', () => setRendererKind('canvas2d'));
     widgetRef.current = widget;
+    const offDrawingObjects = widget.objects.subscribe(objects => {
+      const drawing = objects.find(object => object.kind === 'drawing' && object.selected);
+      setSelectedDrawing(drawing ? {
+        id: drawing.id,
+        sourceId: drawing.sourceId,
+        name: drawing.name,
+        visible: drawing.visible,
+        locked: drawing.locked === true,
+      } : null);
+    });
     onWidgetReady?.(widget);
     setActiveTimeframe(widget.interval());
     const offInterval = widget.on('interval', (event: { interval: string }) => setActiveTimeframe(event.interval));
@@ -510,6 +521,7 @@ export default function FinancialChart({ symbol, isActive = false, liveTick, req
       offInterval?.();
       offData?.();
       offRenderer?.();
+      offDrawingObjects?.();
       offReplayStart?.();
       offReplayFrame?.();
       offReplayPlay?.();
@@ -900,6 +912,73 @@ export default function FinancialChart({ symbol, isActive = false, liveTick, req
             </div>
           )}
         </div>
+      {selectedDrawing && (
+        <div className="sire-drawing-selection-bar" role="toolbar" aria-label={`Selected drawing: ${selectedDrawing.name}`}>
+          <button
+            type="button"
+            className="sire-drawing-selection-button"
+            aria-label={selectedDrawing.visible ? 'Hide drawing' : 'Show drawing'}
+            title={selectedDrawing.visible ? 'Hide drawing' : 'Show drawing'}
+            onClick={() => {
+              const widget = widgetRef.current;
+              if (!widget) return;
+              widget.objects.setVisible(selectedDrawing.id, !selectedDrawing.visible);
+            }}
+          >
+            <Eye size={16} strokeWidth={1.9} aria-hidden="true" />
+          </button>
+          <button
+            type="button"
+            className={`sire-drawing-selection-button sire-drawing-selection-lock${selectedDrawing.locked ? ' is-locked' : ''}`}
+            aria-label={selectedDrawing.locked ? 'Unlock drawing' : 'Lock drawing'}
+            title={selectedDrawing.locked ? 'Unlock drawing' : 'Lock drawing'}
+            onClick={() => {
+              const widget = widgetRef.current;
+              if (!widget) return;
+              widget.objects.setLocked(selectedDrawing.id, !selectedDrawing.locked);
+            }}
+          >
+            <KeyRound size={16} strokeWidth={1.9} aria-hidden="true" />
+          </button>
+          <button
+            type="button"
+            className="sire-drawing-selection-button"
+            aria-label="Drawing settings"
+            title="Drawing settings"
+            onClick={() => widgetRef.current?.objects.openSettings(selectedDrawing.id)}
+          >
+            <Settings2 size={16} strokeWidth={1.9} aria-hidden="true" />
+          </button>
+          <button
+            type="button"
+            className="sire-drawing-selection-button"
+            aria-label="Focus drawing"
+            title="Focus drawing"
+            onClick={() => widgetRef.current?.objects.focus(selectedDrawing.id)}
+          >
+            <MoveUpRight size={16} strokeWidth={1.9} aria-hidden="true" />
+          </button>
+          <button
+            type="button"
+            className="sire-drawing-selection-button sire-drawing-selection-delete"
+            aria-label="Delete drawing"
+            title="Delete drawing"
+            onClick={() => {
+              const widget = widgetRef.current;
+              if (!widget) return;
+              widget.objects.remove(selectedDrawing.id);
+            }}
+          >
+            <Minus size={17} strokeWidth={2.4} aria-hidden="true" />
+          </button>
+          <div className="sire-drawing-selection-edit" title={selectedDrawing.name}>
+            <span>{selectedDrawing.name}</span>
+            <button type="button" onClick={() => widgetRef.current?.objects.openSettings(selectedDrawing.id)}>
+              Edit
+            </button>
+          </div>
+        </div>
+      )}
       <div className="sire-bottom-glass-bar">
         <div
           onPointerDown={handleInstrumentPointerDown}
