@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, ArrowUpRight, Circle, Crosshair, Eraser, GitBranch, Highlighter, Minus, MousePointer2, MoveUpRight, Pencil, Plus, RectangleHorizontal, Ruler, Shapes, Slash, Square, Table2, Target, TextCursorInput, Type, Waves } from 'lucide-react';
-import { addComparison, comparisonController, ReplayController } from 'openalgo-charts';
+import { addComparison, comparisonController, ReplayController, isWebGL2Supported, registerInterval, withBarCache } from 'openalgo-charts';
 import 'openalgo-charts/indicators';
 import 'openalgo-charts/draw';
 import { iconSvg, registeredDrawingTools } from 'openalgo-charts/draw';
@@ -31,7 +31,16 @@ const DRAW_RACK_GROUPS: DrawGroup[] = [
   { label: 'Arrows & marks', tools: ['arrow-up', 'arrow-down', 'arrow-left', 'arrow-right'] },
 ];
 
-const INTERVAL_SECONDS: Record<string, number> = { '1m': 60, '5m': 300, '15m': 900, '1h': 3600, '1d': 86400, '1w': 604800 };
+const INTERVAL_SECONDS: Record<string, number> = {
+  '1m': 60, '2m': 120, '3m': 180, '5m': 300, '10m': 600, '15m': 900,
+  '30m': 1800, '1h': 3600, '2h': 7200, '4h': 14400, '1d': 86400, '1w': 604800,
+};
+const DERIV_INTERVALS = Object.keys(INTERVAL_SECONDS);
+for (const [code, seconds] of Object.entries(INTERVAL_SECONDS)) {
+  if (!['1m', '5m', '15m', '1h', '1d', '1w'].includes(code)) {
+    registerInterval({ code, bucketing: { mode: 'interval', seconds } });
+  }
+}
 const intervalSeconds = (interval: string) => INTERVAL_SECONDS[interval] ?? 60;
 
 function parseCandles(data: HistoryResponse): Candle[] | null {
@@ -63,9 +72,20 @@ function aggregateTicks(data: { epoch: number; quote: number }[], seconds: numbe
   return [...buckets.values()].sort((a, b) => a.time - b.time);
 }
 
-async function requestBars(symbol: string, interval: string, requestHistory: HistoryRequester): Promise<Candle[]> {
-  const seconds = intervalSeconds(interval);
-  const result = await requestHistory({ ticks_history: symbol, end: 'latest', count: 1500, style: 'candles', granularity: seconds });
+type BarsRequest = { symbol: string; interval: string; from?: number; to?: number; noCache?: boolean };
+
+async function requestBars(req: BarsRequest, requestHistory: HistoryRequester): Promise<Candle[]> {
+  const seconds = intervalSeconds(req.interval);
+  const request: Record<string, unknown> = {
+    ticks_history: req.symbol,
+    end: Number.isFinite(req.to) ? Math.floor(Number(req.to)) : 'latest',
+    count: 5000,
+    style: 'candles',
+    granularity: seconds,
+  };
+  if (Number.isFinite(req.from)) request.start = Math.floor(Number(req.from));
+  if (req.noCache) request.noCache = true;
+  const result = await requestHistory(request);
   const candles = parseCandles(result);
   if (candles) return candles;
   const ticks = parseTicks(result);
@@ -83,6 +103,7 @@ export default function FinancialChart({ symbol, liveTick, requestHistory, instr
   const [comparisons, setComparisons] = useState<string[]>([]);
   const [replayActive, setReplayActive] = useState(false);
   const [replayState, setReplayState] = useState<{ index:number; total:number; playing:boolean; speed:number; bar:Candle|null } | null>(null);
+  const [rendererKind, setRendererKind] = useState<'canvas2d' | 'webgl2'>('canvas2d');
   const replayRef = useRef<ReplayController | null>(null);
   const availableDrawTools = useMemo(() => new Set(['__cursor__', ...registeredDrawingTools().map(tool => tool.id)]), []);
   const universalIcons = useMemo(() => ({
@@ -102,6 +123,8 @@ export default function FinancialChart({ symbol, liveTick, requestHistory, instr
   const widgetRef = useRef<Widget | null>(null);
   const candlesRef = useRef<Candle[]>([]);
   const subscriberRef = useRef<((bar: Candle) => void) | null>(null);
+  const resyncRef = useRef<(() => void) | null>(null);
+  const lastLiveEpochRef = useRef<number | null>(null);
   const requestHistoryRef = useRef(requestHistory);
   const instrumentsRef = useRef(instruments);
   const onSelectInstrumentRef = useRef(onSelectInstrument);
@@ -150,17 +173,25 @@ export default function FinancialChart({ symbol, liveTick, requestHistory, instr
   useEffect(() => {
     if (!containerRef.current) return;
     const host = containerRef.current;
-    const feed = {
-      async getBars(req: { symbol: string; interval: string }) {
-        const bars = await requestBars(req.symbol, req.interval, requestHistoryRef.current);
+    const sourceFeed = {
+      async getBars(req: BarsRequest) {
+        const bars = await requestBars(req, requestHistoryRef.current);
         candlesRef.current = bars;
+        resyncRef.current = null;
         return bars;
       },
-      subscribeBars(req: { symbol: string; interval: string }, onBar: (bar: Candle) => void) {
+      subscribeBars(req: BarsRequest, onBar: (bar: Candle) => void, options?: { seedFrom?: Candle; onResync?: () => void }) {
         subscriberRef.current = bar => { if (req.symbol === symbolRef.current) onBar(bar); };
-        return () => { subscriberRef.current = null; };
+        resyncRef.current = options?.onResync ?? null;
+        lastLiveEpochRef.current = options?.seedFrom?.time ?? null;
+        return () => {
+          subscriberRef.current = null;
+          resyncRef.current = null;
+          lastLiveEpochRef.current = null;
+        };
       },
     };
+    const feed = withBarCache(sourceFeed, { ttlMs: 60_000, max: 32, maxBars: 250_000 });
     let widget: Widget;
     try {
       widget = createWidget(host, {
@@ -168,14 +199,21 @@ export default function FinancialChart({ symbol, liveTick, requestHistory, instr
       symbol,
       exchange: 'Deriv Synthetic Indices',
       interval: '1m',
+      intervals: DERIV_INTERVALS,
       chartType: 'candlestick',
       theme: 'dark',
       renderer: 'auto',
+      persist: `sire-${symbol}`,
+      lookbackBars: 1000,
+      navigation: { mousePan: 'both', defaultVisibleBars: 120 },
+      animZoom: true,
+      animAutoscale: true,
+      branding: false,
       rail: true,
       topbar: true,
       statusline: true,
       indicators: true,
-      mobile: 'always',
+      mobile: 'auto',
       symbolSearch: async (query: string) => instrumentsRef.current
         .filter(item => `${item.name} ${item.symbol}`.toLowerCase().includes(query.trim().toLowerCase()))
         .slice(0, 50)
@@ -184,6 +222,8 @@ export default function FinancialChart({ symbol, liveTick, requestHistory, instr
     const pitchBlackTheme = { ...widget.chart.theme(), background: '#000000' };
     widget.setTheme(pitchBlackTheme);
     widget.chart.applyOptions({ canvas: { background: '#000000' } });
+    setRendererKind(widget.chart.rendererKind);
+    const offRenderer = widget.chart.on('renderer:fallback', () => setRendererKind('canvas2d'));
     widgetRef.current = widget;
     onWidgetReady?.(widget);
     const offSymbol = widget.on('symbol', (event: { symbol: string }) => {
@@ -196,6 +236,7 @@ export default function FinancialChart({ symbol, liveTick, requestHistory, instr
     return () => {
       offSymbol?.();
       offData?.();
+      offRenderer?.();
       subscriberRef.current = null;
       onWidgetDestroyed?.(widget);
       replayRef.current?.stop();
@@ -227,6 +268,11 @@ export default function FinancialChart({ symbol, liveTick, requestHistory, instr
     const widget = widgetRef.current;
     if (!widget) return;
     const seconds = intervalSeconds(widget.interval());
+    const previousEpoch = lastLiveEpochRef.current;
+    if (previousEpoch !== null && tick.epoch - previousEpoch > Math.max(seconds * 2, 120)) {
+      resyncRef.current?.();
+    }
+    lastLiveEpochRef.current = tick.epoch;
     const time = Math.floor(tick.epoch / seconds) * seconds;
     const last = candlesRef.current[candlesRef.current.length - 1];
     const bar: Candle = last?.time === time
@@ -241,6 +287,7 @@ export default function FinancialChart({ symbol, liveTick, requestHistory, instr
     const widget = widgetRef.current;
     const bars = candlesRef.current;
     if (!widget || bars.length < 10) return;
+    widget.dataController?.setPaused?.(true);
     replayRef.current?.stop();
     const replay = new ReplayController(widget.chart, { series: widget.series, bars, startIndex: Math.max(1, bars.length - Math.min(200, bars.length - 1)), barMs: 500 });
     replayRef.current = replay;
@@ -251,15 +298,25 @@ export default function FinancialChart({ symbol, liveTick, requestHistory, instr
     widget.chart.on('replay:play', render);
     widget.chart.on('replay:pause', render);
     widget.chart.on('replay:end', render);
-    widget.chart.on('replay:stop', () => { setReplayActive(false); setReplayState(null); });
+    widget.chart.on('replay:stop', () => {
+      widget.dataController?.setPaused?.(false);
+      setReplayActive(false);
+      setReplayState(null);
+    });
   };
-  const stopReplay = () => { replayRef.current?.stop(); replayRef.current = null; setReplayActive(false); setReplayState(null); };
+  const stopReplay = () => {
+    replayRef.current?.stop();
+    replayRef.current = null;
+    widgetRef.current?.dataController?.setPaused?.(false);
+    setReplayActive(false);
+    setReplayState(null);
+  };
   const exportChartSvg = () => { const widget = widgetRef.current; if (!widget) return; const svg = widget.chart.exportSVG({ background: true }); const blob = new Blob([svg], { type: 'image/svg+xml;charset=utf-8' }); const url = URL.createObjectURL(blob); const anchor = document.createElement('a'); anchor.href = url; anchor.download = `sire-${widget.symbol()}-${widget.interval()}.svg`; anchor.click(); URL.revokeObjectURL(url); };
   const toggleReplay = () => { if (!replayRef.current) startReplay(); else if (replayRef.current.state().playing) replayRef.current.pause(); else replayRef.current.play({ speed: replayRef.current.state().speed }); };
   const addCompare = async (compareSymbol: string) => {
     const widget = widgetRef.current;
     if (!widget || !compareSymbol || compareSymbol === symbol || comparisons.includes(compareSymbol)) return;
-    const bars = await requestBars(compareSymbol, widget.interval(), requestHistoryRef.current);
+    const bars = await requestBars({ symbol: compareSymbol, interval: widget.interval() }, requestHistoryRef.current);
     addComparison(widget.chart, { symbol: compareSymbol, bars });
     comparisonController(widget.chart).setMode('percentage');
     setComparisons(current => [...current, compareSymbol]);
@@ -289,8 +346,15 @@ export default function FinancialChart({ symbol, liveTick, requestHistory, instr
       <div className="sire-advanced-tools">
         <button type="button" onClick={() => setAdvancedOpen(open => !open)} aria-label="Advanced chart tools">Tools</button>
         {advancedOpen && <div className="sire-advanced-tools__panel">
+          <div className="sire-advanced-tools__status">Renderer: {rendererKind === 'webgl2' && isWebGL2Supported() ? 'WebGL2' : 'Canvas2D'} · OpenAlgo 2.3.2</div>
           <button type="button" onClick={toggleReplay}>{replayState?.playing ? 'Pause replay' : replayActive ? 'Play replay' : 'Chart replay'}</button>
           <button type="button" onClick={exportChartSvg}>Export SVG</button>
+          <button type="button" onClick={() => widgetRef.current?.chart.downloadScreenshot(`sire-${symbol}-${widgetRef.current?.interval() || 'chart'}.png`)}>Capture PNG</button>
+          <button type="button" onClick={() => widgetRef.current?.chart.fitContent()}>Fit history</button>
+          <button type="button" onClick={() => widgetRef.current?.chart.resetScale()}>Reset view</button>
+          <button type="button" onClick={() => widgetRef.current?.openSettings()}>Chart settings</button>
+          <button type="button" onClick={() => widgetRef.current?.openIndicatorPicker()}>Indicators</button>
+          <button type="button" onClick={() => widgetRef.current?.openObjects()}>Objects</button>
           {replayActive && <><button type="button" onClick={() => replayRef.current?.stepBack()}>Step back</button><button type="button" onClick={() => replayRef.current?.step()}>Step</button><button type="button" onClick={stopReplay}>Exit replay</button></>}
           <div className="sire-advanced-tools__compare"><input value={compareQuery} onChange={event => setCompareQuery(event.target.value)} placeholder="Compare Synthetic Index" /><button type="button" onClick={() => { void addCompare(compareQuery.trim()); setCompareQuery(''); }}>Add</button></div>
           {comparisons.map(item => <button key={item} type="button" onClick={() => removeCompare(item)}>Remove {item}</button>)}
