@@ -752,6 +752,15 @@ export default function FinancialChart({ symbol, isActive = false, liveTick, req
         </button>
         <button
           type="button"
+          className="sire-bottom-multichart-button"
+          aria-label="Open multi-chart manager"
+          title="Multi-chart"
+          onClick={() => window.dispatchEvent(new CustomEvent('sire:open-multichart'))}
+        >
+          <span className="sire-bottom-multichart-icon" aria-hidden="true"><span /><span /><span /></span>
+        </button>
+        <button
+          type="button"
           className="sire-bottom-draw-button"
           aria-label="Open drawing tools"
           title="Open drawing tools"
