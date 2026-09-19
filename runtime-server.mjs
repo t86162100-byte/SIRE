@@ -75,7 +75,7 @@ async function checkDerivPublicMarketData() {
         if (Number(parsed?.req_id) === 900001) {
           clearTimeout(timer);
           const count = Array.isArray(parsed?.active_symbols) ? parsed.active_symbols.length : 0;
-          finish(count ? { ok:true, stage:'active_symbols', symbolCount:count } : { ok:false, stage:'active_symbols', error:'Deriv connected, but returned an empty active-symbol catalogue.' });
+          finish(count ? { ok:true, stage:'active_symbols', symbolCount:count, activeSymbols: parsed.active_symbols } : { ok:false, stage:'active_symbols', error:'Deriv connected, but returned an empty active-symbol catalogue.' });
         }
       } catch (error) {
         clearTimeout(timer);
