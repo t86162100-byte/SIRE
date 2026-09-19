@@ -182,7 +182,7 @@ export default function FinancialChart({
       loading: {
         pageSize: 5000,
       },
-      toolbar: {
+      topbar: {
         symbol: true,
         interval: true,
         chartType: true,
