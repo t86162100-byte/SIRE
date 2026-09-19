@@ -222,6 +222,10 @@ export class DerivMarketData {
     return this.request({ ticks: symbol, subscribe: 1 });
   }
 
+  async forget(subscriptionId: string): Promise<void> {
+    await this.request({ forget: subscriptionId });
+  }
+
   async history(symbol: string, granularity: number, end?: number | 'latest', count = 5000): Promise<DerivResponse> {
     const response = await this.request({
       ticks_history: symbol,
