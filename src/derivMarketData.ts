@@ -30,7 +30,8 @@ export type DerivBar = {
 };
 
 export const DERIV_DIRECT_WS_URL = 'wss://ws.binaryws.com/websockets/v3';
-export const DERIV_WS_URL = typeof window !== 'undefined'
+export const DERIV_WS_URL = DERIV_DIRECT_WS_URL;
+export const DERIV_PROXY_WS_URL = typeof window !== 'undefined'
   ? `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}/deriv/ws`
   : DERIV_DIRECT_WS_URL;
 export const DERIV_REQUEST_TIMEOUT = 20000;
@@ -148,6 +149,7 @@ export function derivBar(candle: any): DerivBar | null {
 
 export class DerivMarketDataClient {
   private socket: WebSocket | null = null;
+  private socketUrl = DERIV_WS_URL;
   private opening: Promise<WebSocket> | null = null;
   private pending = new Map<number, Pending>();
   private subscriptions = new Map<number, { symbol: string; handler: TickHandler; upstreamId?: string }>();
@@ -185,6 +187,15 @@ export class DerivMarketDataClient {
             break;
           }
         }
+      } else {
+        for (const [token, waiter] of this.subscriptionWaiters) {
+          if (waiter.symbol === symbol) {
+            window.clearTimeout(waiter.timer);
+            this.subscriptionWaiters.delete(token);
+            waiter.resolve('');
+            break;
+          }
+        }
       }
       for (const subscription of this.subscriptions.values()) {
         if (subscription.symbol === symbol) subscription.handler({ symbol, price, epoch });
@@ -212,7 +223,7 @@ export class DerivMarketDataClient {
     if (this.opening) return this.opening;
 
     this.opening = new Promise<WebSocket>((resolve, reject) => {
-      const socket = new WebSocket(DERIV_WS_URL);
+      const socket = new WebSocket(this.socketUrl);
       const timer = window.setTimeout(() => {
         socket.close();
         reject(new Error('Deriv market-data connection timed out.'));
