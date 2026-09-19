@@ -81,11 +81,15 @@ function syntheticInstrument(item: any): DerivInstrument | null {
   const type = String(item.underlying_symbol_type || '').toLowerCase();
   const submarket = String(item.submarket || '').toLowerCase();
   const subgroup = String(item.subgroup || '').toLowerCase();
-  if (!(market.includes('synthetic') || type.includes('synthetic') || submarket.includes('synthetic') || subgroup.includes('synthetic'))) return null;
-  const symbol = String(item.underlying_symbol || '').trim();
+  const symbol = String(item.underlying_symbol || item.symbol || '').trim();
   if (!symbol) return null;
-  const pip = Number(item.pip_size);
-  return { symbol, name: String(item.underlying_symbol_name || symbol), market: String(item.market || ''), submarket: String(item.submarket || ''), subgroup: String(item.subgroup || ''), symbolType: String(item.underlying_symbol_type || ''), pipSize: Number.isFinite(pip) ? pip : undefined, exchangeOpen: Number.isFinite(Number(item.exchange_is_open)) ? Number(item.exchange_is_open) : undefined };
+  // Deriv's current active_symbols response normally includes market/type metadata.
+  // Keep a symbol-prefix fallback as well because some compatibility responses omit
+  // those fields; otherwise the entire synthetic instrument list can disappear.
+  const synthetic = market.includes('synthetic') || type.includes('synthetic') || submarket.includes('synthetic') || subgroup.includes('synthetic') || /^(1HZ|R_|RDBULL|RDBEAR|JD|stp)/i.test(symbol);
+  if (!synthetic) return null;
+  const pip = Number(item.pip_size ?? item.pip);
+  return { symbol, name: String(item.underlying_symbol_name || item.display_name || symbol), market: String(item.market || 'synthetic_index'), submarket: String(item.submarket || 'synthetic'), subgroup: String(item.subgroup || ''), symbolType: String(item.underlying_symbol_type || item.symbol_type || 'synthetic_index'), pipSize: Number.isFinite(pip) ? pip : undefined, exchangeOpen: Number.isFinite(Number(item.exchange_is_open)) ? Number(item.exchange_is_open) : undefined };
 }
 
 export async function fetchSyntheticInstruments(): Promise<DerivInstrument[]> {
@@ -165,7 +169,7 @@ export function createDerivDataFeed(onQuote?: (quote: { symbol: string; price: n
     async getBars({ symbol, interval }: { symbol: string; interval: string }) { return fetchChartHistory(symbol, interval); },
     subscribeBars({ symbol, interval }: { symbol: string; interval: string }, onBar: (bar: DerivBar) => void, options?: { seedFrom?: DerivBar }) {
       const seconds = DERIV_INTERVAL_SECONDS[interval]; let stopped = false; let socket: WebSocket | null = null; let reconnect: number | null = null; let current = options?.seedFrom ? { ...options.seedFrom } : null;
-      const connect = () => { if (stopped) return; socket = new WebSocket(DERIV_WS_URL); socket.onopen = () => { if (!stopped && socket) socket.send(JSON.stringify({ ticks: symbol, subscribe: 1, req_id: nextDerivRequestId() })); }; socket.onmessage = event => { let data: any; try { data = JSON.parse(String(event.data)); } catch { return; } if (data.msg_type !== 'tick' || data.tick?.symbol !== symbol) return; const epoch = Number(data.tick.epoch), price = Number(data.tick.quote); if (!Number.isFinite(epoch) || !Number.isFinite(price)) return; const next = tickToBar(current, epoch, price, seconds); onQuote?.({ symbol, price }); if (!current || next.time !== current.time || next.close !== current.close || next.high !== current.high || next.low !== current.low) { current = next; onBar({ ...next }); } }; socket.onclose = () => { socket = null; if (!stopped) reconnect = window.setTimeout(connect, 1000); }; socket.onerror = () => {}; };
+      const connect = () => { if (stopped) return; socket = new WebSocket(DERIV_WS_URL); socket.onopen = () => { if (!stopped && socket) socket.send(JSON.stringify({ ticks: symbol, subscribe: 1, req_id: nextDerivRequestId() })); }; socket.onmessage = event => { let data: any; try { data = JSON.parse(String(event.data)); } catch { return; } if (data.error) { console.error('[DERIV TICKS]', symbol, data.error.message || data.error.code || data.error); return; } if (data.msg_type !== 'tick' || data.tick?.symbol !== symbol) return; const epoch = Number(data.tick.epoch), price = Number(data.tick.quote); if (!Number.isFinite(epoch) || !Number.isFinite(price)) return; const next = tickToBar(current, epoch, price, seconds); onQuote?.({ symbol, price }); if (!current || next.time !== current.time || next.close !== current.close || next.high !== current.high || next.low !== current.low) { current = next; onBar({ ...next }); } }; socket.onclose = () => { socket = null; if (!stopped) reconnect = window.setTimeout(connect, 1000); }; socket.onerror = () => {}; };
       connect(); return () => { stopped = true; if (reconnect !== null) window.clearTimeout(reconnect); if (socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ forget_all: 'ticks' })); socket?.close(); socket = null; };
     },
   };
