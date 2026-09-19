@@ -337,8 +337,6 @@ export async function fetchAllDerivHistory(symbol: string, interval: string, max
       end = Math.max(1, oldest - 1);
     }
     return all.slice(-maxBars);
-  } finally {
-    client.close();
   }
 }
 
