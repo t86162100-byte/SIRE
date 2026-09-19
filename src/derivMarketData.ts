@@ -27,9 +27,13 @@ type Pending = {
   timer: number;
 };
 
+// Deriv's documented legacy market-data WebSocket accepts the public test app
+// id and exposes ticks_history directly. Keep it first for historical paging;
+// the newer Options public endpoint remains the fallback for current market data.
 const ENDPOINTS = [
+  'wss://ws.derivws.com/websockets/v3?app_id=1089',
   'wss://api.derivws.com/trading/v1/options/ws/public',
-  'wss://ws.binaryws.com/websockets/v3',
+  'wss://ws.binaryws.com/websockets/v3?app_id=1089',
 ];
 
 function messageText(data: unknown): Promise<string> {
@@ -218,7 +222,10 @@ export class DerivMarketData {
         count: pageSize,
         style: 'candles',
         granularity,
-
+        // When the requested boundary reaches the provider/license edge,
+        // ask Deriv to adjust the start boundary rather than silently shifting
+        // the requested window forward.
+        adjust_start_time: 1,
       };
       if (lowerBound !== undefined) request.start = lowerBound;
       const response = await this.request(request);
