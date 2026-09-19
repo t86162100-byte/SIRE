@@ -292,19 +292,37 @@ export class DerivMarketDataClient {
   }
 }
 
+async function fetchDerivHistoryPage(symbol: string, seconds: number, end: number | 'latest', count: number) {
+  if (typeof window !== 'undefined') {
+    const response = await fetch('/api/sire/deriv/history', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      cache: 'no-store',
+      body: JSON.stringify({ symbol, granularity: seconds, end, count }),
+    });
+    let body: any = null;
+    try { body = await response.json(); } catch {}
+    if (!response.ok) throw new Error(body?.error || `Deriv history request failed (HTTP ${response.status}).`);
+    return body;
+  }
+  const client = new DerivMarketDataClient();
+  try {
+    return await client.request({ ticks_history: symbol, end, count, style: 'candles', granularity: seconds, adjust_start_time: 1, subscribe: 0 });
+  } finally {
+    client.close();
+  }
+}
+
 export async function fetchAllDerivHistory(symbol: string, interval: string, maxBars = DERIV_INITIAL_BARS) {
   const seconds = DERIV_INTERVAL_SECONDS[interval];
   if (!seconds) throw new Error(`Unsupported Deriv interval: ${interval}`);
-  const client = new DerivMarketDataClient();
   try {
     const all: DerivBar[] = [];
     let end: number | 'latest' = 'latest';
     let previousOldest = Infinity;
     while (all.length < maxBars) {
       const count = Math.min(DERIV_PAGE_SIZE, maxBars - all.length);
-      const data = await client.request({
-        ticks_history: symbol, end, count, style: 'candles', granularity: seconds, adjust_start_time: 1, subscribe: 0,
-      });
+      const data = await fetchDerivHistoryPage(symbol, seconds, end, count);
       const page = Array.isArray(data?.candles)
         ? data.candles.map(derivBar).filter(Boolean) as DerivBar[]
         : [];
@@ -327,17 +345,9 @@ export async function fetchAllDerivHistory(symbol: string, interval: string, max
 export async function fetchOlderDerivHistory(symbol: string, interval: string, end: number, count = DERIV_PAGE_SIZE) {
   const seconds = DERIV_INTERVAL_SECONDS[interval];
   if (!seconds) throw new Error(`Unsupported Deriv interval: ${interval}`);
-  const client = new DerivMarketDataClient();
-  try {
-    const data = await client.request({
-      ticks_history: symbol, end: Math.max(1, Math.floor(end)), count,
-      style: 'candles', granularity: seconds, adjust_start_time: 1, subscribe: 0,
-    });
-    return (Array.isArray(data?.candles) ? data.candles.map(derivBar).filter(Boolean) as DerivBar[] : [])
-      .sort((a, b) => a.time - b.time);
-  } finally {
-    client.close();
-  }
+  const data = await fetchDerivHistoryPage(symbol, seconds, Math.max(1, Math.floor(end)), count);
+  return (Array.isArray(data?.candles) ? data.candles.map(derivBar).filter(Boolean) as DerivBar[] : [])
+    .sort((a, b) => a.time - b.time);
 }
 
 export function tickToBar(previous: DerivBar | null, epoch: number, price: number, seconds: number): DerivBar {
