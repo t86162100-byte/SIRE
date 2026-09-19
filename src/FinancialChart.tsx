@@ -47,17 +47,15 @@ const CHART_TYPES = [
 
 const REPLAY_SPEEDS = [0.5, 1, 2, 5, 10] as const;
 const replaySpeedLabel = (speed: number) => `${speed}×`;
-// Six years of 24/7 1-minute candles is ~3.16M bars. Keep the
-// acquisition target above that so every registered timeframe can request a
-// six-year+ analysis window; the chart itself remains independently bounded.
-const ANALYSIS_HISTORY_YEARS = 6;
-const ANALYSIS_HISTORY_REQUEST_BARS = 3_200_000;
+// Historical acquisition is provider-bounded, not year-bounded. Each left-edge
+// request fetches a small page batch, then OpenAlgo can ask again as the user
+// keeps scrolling backward. This lets a 3-year instrument stop at 3 years while
+// a 10-year instrument remains navigable through all 10 years (or more).
 const FAST_HISTORY_PAGE_SIZE = 5000;
-const LEFT_EDGE_HISTORY_REQUEST_BARS = ANALYSIS_HISTORY_REQUEST_BARS;
-const FAST_HISTORY_PAGES_PER_BATCH = Math.ceil(LEFT_EDGE_HISTORY_REQUEST_BARS / FAST_HISTORY_PAGE_SIZE);
+const FAST_HISTORY_PAGES_PER_BATCH = 4;
 const CHART_HISTORY_MAX_BARS = 200_000;
 const CHART_HISTORY_SEED_BARS = 5_000;
-const FAST_HISTORY_CONCURRENCY = 4;
+const FAST_HISTORY_CONCURRENCY = 2;
 const HISTORY_CACHE_TTL_MS = 15 * 60_000;
 const HISTORY_CACHE_MAX_SYMBOLS = 24;
 type HistoryCacheEntry = { bars: Candle[]; updatedAt: number };
@@ -551,9 +549,9 @@ export default function FinancialChart({ symbol, isActive = false, liveTick, req
       // Keep GPU rendering out of the history-growth path on mobile.
       renderer: 'canvas2d',
       persist: `sire-${symbol}`,
-      // OpenAlgo's managed loader owns older-history paging. Start with a
-      // substantial recent window, then fetch older pages as the user pans
-      // left; replay can explicitly backfill to an older requested start.
+      // Start with a recent rendering window. Older pages are fetched only
+      // when the user actually pans left; the application archive can retain
+      // much more history than the active Canvas2D rendering window.
       lookbackBars: 5000,
       // Page through all available provider history; there is no SIRE bar
       // ceiling. The loader stops only when the feed reports exhaustion.
@@ -778,8 +776,12 @@ export default function FinancialChart({ symbol, isActive = false, liveTick, req
       // about its original first page.
       const loaded = widget.series.getData?.();
       if (loaded?.length) {
-        candlesRef.current = loaded.slice().sort((a, b) => a.time - b.time);
-        putCachedHistory(symbolRef.current, widget.interval(), candlesRef.current);
+        const active = loaded.slice().sort((a, b) => a.time - b.time);
+        const archived = getCachedHistory(symbolRef.current, widget.interval());
+        const merged = new Map<number, Candle>();
+        for (const bar of [...archived, ...active]) merged.set(bar.time, bar);
+        putCachedHistory(symbolRef.current, widget.interval(), [...merged.values()].sort((a, b) => a.time - b.time));
+        candlesRef.current = active;
       }
       else {
         const managed = widget.dataController?.bars();
@@ -936,17 +938,28 @@ export default function FinancialChart({ symbol, isActive = false, liveTick, req
     const bar: Candle = last?.time === time
       ? { ...last, high: Math.max(last.high, tick.quote), low: Math.min(last.low, tick.quote), close: tick.quote }
       : { time, open: tick.quote, high: tick.quote, low: tick.quote, close: tick.quote };
-    if (last?.time === time) candlesRef.current[candlesRef.current.length - 1] = bar;
-    else {
-      candlesRef.current.push(bar);
-      // The full historical archive lives in historyCache. The live chart
-      // keeps a bounded rendering window so mobile Canvas2D never has to paint
-      // an unbounded series after repeated left-edge paging.
-      if (candlesRef.current.length > CHART_HISTORY_MAX_BARS) {
-        candlesRef.current.splice(0, candlesRef.current.length - CHART_HISTORY_MAX_BARS);
+
+    // Always keep the newest forming bar in the full application archive.
+    // The active OpenAlgo window may be far in the past because the user is
+    // scrolling backward, so do not inject today's live bar into that old
+    // rendering window.
+    const archived = getCachedHistory(symbolRef.current, widget.interval());
+    const archiveMap = new Map<number, Candle>();
+    for (const cachedBar of archived) archiveMap.set(cachedBar.time, cachedBar);
+    archiveMap.set(bar.time, bar);
+    putCachedHistory(symbolRef.current, widget.interval(), [...archiveMap.values()].sort((a, b) => a.time - b.time));
+
+    const activeIsNearLive = last?.time === time || !last || tick.epoch - last.time <= Math.max(seconds * 2, 120);
+    if (activeIsNearLive) {
+      if (last?.time === time) candlesRef.current[candlesRef.current.length - 1] = bar;
+      else {
+        candlesRef.current.push(bar);
+        if (candlesRef.current.length > CHART_HISTORY_MAX_BARS) {
+          candlesRef.current.splice(0, candlesRef.current.length - CHART_HISTORY_MAX_BARS);
+        }
       }
+      subscriberRef.current?.(bar);
     }
-    subscriberRef.current?.(bar);
   }, [liveTick, symbol]);
 
   const loadReplaySubBars = async (fullBars: Candle[], startIndex: number, endIndex: number) => {
