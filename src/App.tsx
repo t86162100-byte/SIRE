@@ -3,7 +3,7 @@ import { Search } from 'lucide-react';
 import { createLinkGroup, type LinkGroup } from 'openalgo-charts';
 import ResearchLab from './ResearchLab';
 import FinancialChart from './FinancialChart';
-import { fetchDerivInstruments, type DerivInstrument } from './derivMarketData';
+import { normalizeDerivInstrument, sortDerivInstruments, type DerivInstrument } from './derivMarketData';
 import { SireErrorScreen } from './SireErrorBoundary';
 import './nativeTerminal.css';
 
@@ -29,14 +29,20 @@ export default function App() {
 
   useEffect(() => {
     let cancelled = false;
-    const startup = async () => {
+    const startup = async (): Promise<DerivInstrument[]> => {
       const healthResponse = await fetch('/api/sire/deriv/health', { cache: 'no-store' });
       let health: any = null;
       try { health = await healthResponse.json(); } catch {}
       if (!healthResponse.ok || !health?.ok) {
         throw new Error(`Deriv startup health check failed at ${health?.stage || 'unknown stage'}: ${health?.error || `HTTP ${healthResponse.status}`}`);
       }
-      return fetchDerivInstruments();
+      if (!Array.isArray(health?.activeSymbols)) {
+        throw new Error('Deriv startup health check connected successfully but did not return the active instrument catalogue.');
+      }
+      const items = health.activeSymbols
+        .map((item: any) => normalizeDerivInstrument(item))
+        .filter(Boolean) as DerivInstrument[];
+      return sortDerivInstruments(items);
     };
     startup().then(items => {
       if (cancelled) return;
