@@ -193,6 +193,10 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
   const historyLoadingRef = useRef(false);
   const historyExhaustedRef = useRef(false);
   const oldestLoadedTimeRef = useRef<number | null>(null);
+  // Keep the full history loaded, but don't fit hundreds of candles into the
+  // initial mobile viewport. The chart engine can auto-fit after setData(), so
+  // we explicitly establish a readable first viewport once per symbol/timeframe.
+  const initialViewportContextRef = useRef('');
   instrumentsRef.current = instruments;
   onSelectInstrumentRef.current = onSelectInstrument;
   symbolRef.current = symbol;
@@ -474,6 +478,8 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
       setActiveTimeframe(widget.interval());
       const offInterval = widget.on('interval', (event: { interval: string }) => {
         setActiveTimeframe(event.interval);
+        timeframeRef.current = event.interval;
+        initialViewportContextRef.current = '';
         historyLoadingRef.current = false;
         historyExhaustedRef.current = false;
         oldestLoadedTimeRef.current = null;
@@ -484,7 +490,11 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
       });
       const offSymbol = widget.on('symbol', (event: { symbol: string }) => {
         const instrument = instrumentsRef.current.find(item => item.symbol === event.symbol);
-        if (instrument && instrument.symbol !== symbolRef.current) onSelectInstrumentRef.current(instrument);
+        if (instrument && instrument.symbol !== symbolRef.current) {
+          symbolRef.current = instrument.symbol;
+          initialViewportContextRef.current = '';
+          onSelectInstrumentRef.current(instrument);
+        }
       });
       const syncQuoteFromSeries = () => {
         const live = lastLiveQuoteRef.current;
@@ -497,7 +507,34 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
         const percent = previous?.close ? ((last.close - previous.close) / previous.close) * 100 : 0;
         setMarketQuote({ price: last.close, percent });
       };
-      const offData = widget.on('data', (event: any) => { if (event?.error) { const error = event.error instanceof Error ? event.error : new Error(String(event.error)); reportDiagnostic({ level: 'error', code: 'CHART_DATA_ERROR', message: 'Chart data load failed: ' + error.message, detail: 'The chart data controller reported a history/load failure.', ...diagnosticErrorDetails(error, 'openalgo widget data event') }); } syncQuoteFromSeries(); });
+      const offData = widget.on('data', (event: any) => {
+        if (event?.error) {
+          const error = event.error instanceof Error ? event.error : new Error(String(event.error));
+          reportDiagnostic({ level: 'error', code: 'CHART_DATA_ERROR', message: 'Chart data load failed: ' + error.message, detail: 'The chart data controller reported a history/load failure.', ...diagnosticErrorDetails(error, 'openalgo widget data event') });
+        }
+        syncQuoteFromSeries();
+
+        // The 500-bar history is retained for panning/history loading, but the
+        // initial viewport should show a readable number of candles. Without
+        // this, mobile auto-fit can compress 500 D1 candles into thin histogram-
+        // looking vertical strokes.
+        const series = widget.chart.primarySeries();
+        const bars = (series?.getData?.() || []) as DerivBar[];
+        const contextKey = `${symbolRef.current}:${timeframeRef.current}`;
+        if (!event?.error && bars.length > 0 && initialViewportContextRef.current !== contextKey) {
+          initialViewportContextRef.current = contextKey;
+          const visibleBars = timeframeRef.current === '1d' || timeframeRef.current === '1w' ? 32 : 40;
+          window.requestAnimationFrame(() => {
+            if (widgetRef.current !== widget) return;
+            const currentSeries = widget.chart.primarySeries();
+            const currentBars = (currentSeries?.getData?.() || []) as DerivBar[];
+            if (!currentBars.length) return;
+            const to = currentBars.length - 1;
+            const from = Math.max(0, to - visibleBars + 1);
+            widget.chart.timeScale?.().setVisibleLogicalRange?.({ from, to });
+          });
+        }
+      });
 
       // Load history progressively as the user pans toward the oldest loaded bar.
       // The chart keeps everything already loaded, while older pages are fetched
