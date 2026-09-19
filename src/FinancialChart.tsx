@@ -169,8 +169,9 @@ export function createDerivDataFeed(onQuote?: (quote: { symbol: string; price: n
     async getBars({ symbol, interval }: { symbol: string; interval: string }) { return fetchChartHistory(symbol, interval); },
     subscribeBars({ symbol, interval }: { symbol: string; interval: string }, onBar: (bar: DerivBar) => void, options?: { seedFrom?: DerivBar }) {
       const seconds = DERIV_INTERVAL_SECONDS[interval]; let stopped = false; let socket: WebSocket | null = null; let reconnect: number | null = null; let current = options?.seedFrom ? { ...options.seedFrom } : null;
-      const connect = () => { if (stopped) return; socket = new WebSocket(DERIV_WS_URL); socket.onopen = () => { if (!stopped && socket) socket.send(JSON.stringify({ ticks: symbol, subscribe: 1, req_id: nextDerivRequestId() })); }; socket.onmessage = event => { let data: any; try { data = JSON.parse(String(event.data)); } catch { return; } if (data.error) { console.error('[DERIV TICKS]', symbol, data.error.message || data.error.code || data.error); return; } if (data.msg_type !== 'tick' || data.tick?.symbol !== symbol) return; const epoch = Number(data.tick.epoch), price = Number(data.tick.quote); if (!Number.isFinite(epoch) || !Number.isFinite(price)) return; const next = tickToBar(current, epoch, price, seconds); onQuote?.({ symbol, price }); if (!current || next.time !== current.time || next.close !== current.close || next.high !== current.high || next.low !== current.low) { current = next; onBar({ ...next }); } }; socket.onclose = () => { socket = null; if (!stopped) reconnect = window.setTimeout(connect, 1000); }; socket.onerror = () => {}; };
-      connect(); return () => { stopped = true; if (reconnect !== null) window.clearTimeout(reconnect); if (socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ forget_all: 'ticks' })); socket?.close(); socket = null; };
+      const connect = () => { if (stopped) return; socket = new WebSocket(DERIV_WS_URL); socket.onopen = () => { if (!stopped && socket) socket.send(JSON.stringify({ ticks: symbol, subscribe: 1, req_id: nextDerivRequestId() })); }; socket.onmessage = event => { let data: any; try { data = JSON.parse(String(event.data)); } catch { return; } if (data.error) { console.error('[DERIV TICKS]', symbol, data.error.message || data.error.code || data.error); return; } if (data.msg_type !== 'tick') return;
+        if (data.tick?.symbol && data.tick.symbol !== symbol) return; const epoch = Number(data.tick.epoch), price = Number(data.tick.quote); if (!Number.isFinite(epoch) || !Number.isFinite(price)) return; const next = tickToBar(current, epoch, price, seconds); onQuote?.({ symbol, price }); if (!current || next.time !== current.time || next.close !== current.close || next.high !== current.high || next.low !== current.low) { current = next; onBar({ ...next }); } }; socket.onclose = () => { socket = null; if (!stopped) reconnect = window.setTimeout(connect, 1000); }; socket.onerror = () => {}; };
+      connect(); return () => { stopped = true; if (reconnect !== null) window.clearTimeout(reconnect);  socket?.close(); socket = null; };
     },
   };
 }
@@ -610,6 +611,10 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
           socket.send(JSON.stringify({ ticks: symbol, subscribe: 1, req_id: nextDerivRequestId() }));
         }
       };
+      socket.onclose = () => {
+        socket = null;
+        if (!stopped) reconnect = window.setTimeout(connect, 1000);
+      };
       socket.onmessage = event => {
         let data: any;
         try { data = JSON.parse(String(event.data)); } catch { return; }
@@ -626,22 +631,19 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
         current = next;
         const series = widgetRef.current?.primarySeries();
         if (series) {
-          const updater = (series as any).update;
-          if (typeof updater === 'function') updater.call(series, next);
-          else {
-            const bars = ((series as any).getData?.() || []) as DerivBar[];
-            const replaced = bars.length && bars[bars.length - 1].time === next.time ? [...bars.slice(0, -1), next] : [...bars, next];
-            (series as any).setData?.(replaced);
-          }
+          // Do not rely on the chart package's optional `update()` implementation
+          // for the live Deriv stream. Replacing only the last bar makes the live
+          // tick path deterministic across renderer versions and mobile browsers.
+          const bars = ((series as any).getData?.() || []) as DerivBar[];
+          const replaced = bars.length && bars[bars.length - 1].time === next.time
+            ? [...bars.slice(0, -1), next]
+            : [...bars, next];
+          (series as any).setData?.(replaced);
         }
         const bars = ((widgetRef.current?.primarySeries()?.getData?.() || []) as DerivBar[]);
         const previousClosed = bars.length > 1 ? bars[bars.length - 2] : null;
         const percent = previousClosed?.close ? ((price - previousClosed.close) / previousClosed.close) * 100 : 0;
         setMarketQuote({ price, percent });
-      };
-      socket.onclose = () => {
-        socket = null;
-        if (!stopped) reconnect = window.setTimeout(connect, 1000);
       };
       socket.onerror = () => {};
     };
