@@ -35,7 +35,7 @@ export const DERIV_PROXY_WS_URL = typeof window !== 'undefined'
   ? `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}/deriv/ws`
   : DERIV_DIRECT_WS_URL;
 export const DERIV_REQUEST_TIMEOUT = 20000;
-export const DERIV_PAGE_SIZE = 1000;
+export const DERIV_PAGE_SIZE = 500;
 export const DERIV_INITIAL_BARS = 500; // Startup window only; older candles are loaded progressively.
 
 export const DERIV_INTERVAL_SECONDS: Record<string, number> = {
