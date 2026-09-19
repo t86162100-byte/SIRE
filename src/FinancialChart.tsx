@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { ChevronLeft, ChevronRight, Eye, History, Lock, Minus, MoreHorizontal, Pause, Play, RotateCcw, Settings2, SkipBack, SkipForward, Trash2, Wrench, X } from 'lucide-react';
-import { registerInterval } from 'openalgo-charts';
+import { registerInterval, ReplayController } from 'openalgo-charts';
 import 'openalgo-charts/indicators';
 import 'openalgo-charts/draw';
 import 'openalgo-charts/trade';
@@ -118,12 +118,12 @@ function tickToBar(previous: DerivBar | null, epoch: number, price: number, seco
   return { ...previous, high: Math.max(previous.high, price), low: Math.min(previous.low, price), close: price };
 }
 
-export function createDerivDataFeed() {
+export function createDerivDataFeed(onQuote?: (quote: { symbol: string; price: number }) => void) {
   return {
     async getBars({ symbol, interval }: { symbol: string; interval: string }) { return fetchAllDerivHistory(symbol, interval); },
     subscribeBars({ symbol, interval }: { symbol: string; interval: string }, onBar: (bar: DerivBar) => void, options?: { seedFrom?: DerivBar }) {
       const seconds = DERIV_INTERVAL_SECONDS[interval]; let stopped = false; let socket: WebSocket | null = null; let reconnect: number | null = null; let current = options?.seedFrom ? { ...options.seedFrom } : null;
-      const connect = () => { if (stopped) return; socket = new WebSocket(DERIV_WS_URL); socket.onopen = () => { if (!stopped && socket) socket.send(JSON.stringify({ ticks: symbol, subscribe: 1, req_id: nextDerivRequestId() })); }; socket.onmessage = event => { let data: any; try { data = JSON.parse(String(event.data)); } catch { return; } if (data.msg_type !== 'tick' || data.tick?.symbol !== symbol) return; const epoch = Number(data.tick.epoch), price = Number(data.tick.quote); if (!Number.isFinite(epoch) || !Number.isFinite(price)) return; const next = tickToBar(current, epoch, price, seconds); if (!current || next.time !== current.time || next.close !== current.close || next.high !== current.high || next.low !== current.low) { current = next; onBar({ ...next }); } }; socket.onclose = () => { socket = null; if (!stopped) reconnect = window.setTimeout(connect, 1000); }; socket.onerror = () => {}; };
+      const connect = () => { if (stopped) return; socket = new WebSocket(DERIV_WS_URL); socket.onopen = () => { if (!stopped && socket) socket.send(JSON.stringify({ ticks: symbol, subscribe: 1, req_id: nextDerivRequestId() })); }; socket.onmessage = event => { let data: any; try { data = JSON.parse(String(event.data)); } catch { return; } if (data.msg_type !== 'tick' || data.tick?.symbol !== symbol) return; const epoch = Number(data.tick.epoch), price = Number(data.tick.quote); if (!Number.isFinite(epoch) || !Number.isFinite(price)) return; const next = tickToBar(current, epoch, price, seconds); onQuote?.({ symbol, price }); if (!current || next.time !== current.time || next.close !== current.close || next.high !== current.high || next.low !== current.low) { current = next; onBar({ ...next }); } }; socket.onclose = () => { socket = null; if (!stopped) reconnect = window.setTimeout(connect, 1000); }; socket.onerror = () => {}; };
       connect(); return () => { stopped = true; if (reconnect !== null) window.clearTimeout(reconnect); if (socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ forget_all: 'ticks' })); socket?.close(); socket = null; };
     },
   };
@@ -145,6 +145,7 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
   const replaySpeedRef = useRef(1);
   const [rendererKind, setRendererKind] = useState<'canvas2d' | 'webgl2'>('canvas2d');
   const [tpoEnabled, setTpoEnabled] = useState(false);
+  const [marketQuote, setMarketQuote] = useState<{ price: number; percent: number } | null>(null);
   const [moreMenuOpen, setMoreMenuOpen] = useState(false);
   const [selectedDrawing, setSelectedDrawing] = useState<{ id: string; sourceId: string; name: string; visible: boolean; locked: boolean } | null>(null);
   const [selectedDrawingPosition, setSelectedDrawingPosition] = useState<{ left: number; top: number } | null>(null);
@@ -166,6 +167,7 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
   const [activeTimeframe, setActiveTimeframe] = useState('1m');
   const [swipeAnimation, setSwipeAnimation] = useState<'up' | 'down' | null>(null);
   const widgetRef = useRef<Widget | null>(null);
+  const replayRef = useRef<ReplayController | null>(null);
   const dataFeedRef = useRef<ReturnType<typeof createDerivDataFeed> | null>(null);
   const instrumentsRef = useRef(instruments);
   const onSelectInstrumentRef = useRef(onSelectInstrument);
@@ -175,8 +177,12 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
   symbolRef.current = symbol;
   const marketInstrument = instruments.find(item => item.symbol === symbol);
   const marketInstrumentName = marketInstrument?.name || symbol;
-  const marketQuote = null;
-  const formatMarketPrice = (_price: number) => '—';
+  const formatMarketPrice = (price: number) => {
+    if (!Number.isFinite(price)) return '—';
+    const pipSize = Number(marketInstrument?.pipSize);
+    const decimals = Number.isFinite(pipSize) && pipSize > 0 ? Math.max(0, Math.min(8, Math.ceil(-Math.log10(pipSize)))) : 2;
+    return price.toFixed(decimals);
+  };
 
   useEffect(() => {
     const nextIndex = instruments.findIndex(item => item.symbol === symbol);
@@ -261,34 +267,84 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
     if (event.currentTarget.hasPointerCapture?.(event.pointerId)) event.currentTarget.releasePointerCapture?.(event.pointerId);
   };
 
-  const stopReplay = () => { setReplayActive(false); setReplayState(null); setReplaySetupOpen(false); };
-  const toggleReplay = () => setReplaySetupOpen(open => !open);
-  const replayStep = () => {};
-  const replayStepBack = () => {};
-  const replayJumpStart = () => {};
-  const replayJumpEnd = () => {};
-  const replaySeek = (_index: number) => {};
-  const setReplaySpeed = (speed: number) => { replaySpeedRef.current = speed; setReplayDraftSpeed(speed); };
-  const startReplayFromInputs = (_fromBeginning: boolean, _toLatest: boolean) => setReplayRangeError('No chart data source is connected.');
-  const selectChartType = (chartType: string) => {
-    const widget = widgetRef.current; if (!widget) return;
-    try { widget.setChartType(chartType); } catch { return; }
-    setMoreMenuOpen(false);
+  const stopReplay = () => {
+    replayRef.current?.stop();
+    replayRef.current = null;
+    widgetRef.current?.dataController?.setPaused(false);
+    setReplayActive(false);
+    setReplayState(null);
+    setReplaySetupOpen(false);
   };
-  const captureChartPng = () => {
-    const widget = widgetRef.current; if (!widget) return;
-    widget.chart.downloadScreenshot(`sire-${symbol}-${widget.interval() || 'chart'}.png`); setMoreMenuOpen(false);
+  const toggleReplay = () => {
+    const replay = replayRef.current;
+    if (replay) {
+      const state = replay.state();
+      if (state.playing) replay.pause();
+      else replay.play({ speed: replaySpeedRef.current });
+      setReplayState(replay.state());
+      return;
+    }
+    setReplaySetupOpen(open => !open);
   };
-  const exportChartSvg = () => {
-    const widget = widgetRef.current; if (!widget) return;
-    const svg = widget.chart.exportSVG({ background: true });
-    const blob = new Blob([svg], { type: 'image/svg+xml;charset=utf-8' });
-    const url = URL.createObjectURL(blob); const anchor = document.createElement('a'); anchor.href = url;
-    anchor.download = `sire-${widget.symbol()}-${widget.interval()}.svg`; anchor.click(); URL.revokeObjectURL(url);
+  const replayStep = () => replayRef.current?.step();
+  const replayStepBack = () => replayRef.current?.stepBack();
+  const replayJumpStart = () => replayRef.current?.seek(0);
+  const replayJumpEnd = () => {
+    const replay = replayRef.current;
+    if (replay) replay.seek(Math.max(0, replay.state().total - 1));
   };
-  const exportChartSvgFromMenu = () => { exportChartSvg(); setMoreMenuOpen(false); };
-  const addCompare = async (_compareSymbol: string) => {};
-  const removeCompare = (_compareSymbol: string) => setComparisons(current => current.filter(item => item !== _compareSymbol));
+  const replaySeek = (index: number) => replayRef.current?.seek(index);
+  const setReplaySpeed = (speed: number) => { replaySpeedRef.current = speed; setReplayDraftSpeed(speed); if (replayRef.current?.state().playing) replayRef.current.play({ speed }); };
+  const startReplayFromInputs = async (fromBeginning: boolean, toLatest: boolean) => {
+    setReplayRangeError(null);
+    const widget = widgetRef.current;
+    if (!widget) { setReplayRangeError('Chart is still loading.'); return; }
+    replayRef.current?.stop();
+    replayRef.current = null;
+
+    const series = widget.primarySeries();
+    if (!series) { setReplayRangeError('No chart data is loaded yet.'); return; }
+
+    let allBars = (series.getData?.() || []) as DerivBar[];
+    if (!allBars.length) {
+      try {
+        allBars = await fetchAllDerivHistory(symbol, activeTimeframe);
+        if (allBars.length) series.setData(allBars);
+      } catch (error) {
+        setReplayRangeError(error instanceof Error ? error.message : 'Unable to load chart history for replay.');
+        return;
+      }
+    }
+    allBars = [...allBars].sort((a, b) => a.time - b.time);
+
+    const parseReplayTime = (value: string) => {
+      if (!value) return null;
+      const ms = new Date(value).getTime();
+      return Number.isFinite(ms) ? Math.floor(ms / 1000) : null;
+    };
+    const startTime = fromBeginning ? null : parseReplayTime(replayStartInput);
+    const endTime = toLatest ? null : parseReplayTime(replayEndInput);
+    if (!fromBeginning && replayStartInput && startTime === null) { setReplayRangeError('Invalid replay start date/time.'); return; }
+    if (!toLatest && replayEndInput && endTime === null) { setReplayRangeError('Invalid replay end date/time.'); return; }
+    if (startTime !== null && endTime !== null && startTime > endTime) { setReplayRangeError('Replay start must be before replay end.'); return; }
+
+    const bars = allBars.filter(bar => (startTime === null || bar.time >= startTime) && (endTime === null || bar.time <= endTime));
+    if (bars.length < 2) { setReplayRangeError('Not enough chart history in the selected replay range.'); return; }
+
+    widget.dataController?.setPaused(true);
+    const replay = new ReplayController(widget.chart, {
+      series,
+      bars,
+      startIndex: 0,
+      barMs: 1000,
+      speed: replaySpeedRef.current,
+      onFrame: state => setReplayState(state),
+    });
+    replayRef.current = replay;
+    setReplayActive(true);
+    setReplaySetupOpen(false);
+    setReplayState(replay.state());
+  };
   const toggleTpo = () => setTpoEnabled(value => !value);
 
   useEffect(() => {
@@ -303,7 +359,16 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
     const host = containerRef.current;
     let widget: Widget;
     try {
-      const feed = dataFeedRef.current || createDerivDataFeed();
+      const feed = dataFeedRef.current || createDerivDataFeed(quote => {
+        if (quote.symbol !== symbolRef.current) return;
+        setMarketQuote(current => {
+          const series = widgetRef.current?.primarySeries();
+          const bars = (series?.getData?.() || []) as DerivBar[];
+          const previousClosed = bars.length > 1 ? bars[bars.length - 2] : null;
+          const percent = previousClosed?.close ? ((quote.price - previousClosed.close) / previousClosed.close) * 100 : (current?.percent || 0);
+          return { price: quote.price, percent };
+        });
+      });
       dataFeedRef.current = feed;
       widget = createWidget(host, {
         symbol,
@@ -347,6 +412,15 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
         const instrument = instrumentsRef.current.find(item => item.symbol === event.symbol);
         if (instrument && instrument.symbol !== symbolRef.current) onSelectInstrumentRef.current(instrument);
       });
+      const syncQuoteFromSeries = () => {
+        const bars = (widget.primarySeries()?.getData?.() || []) as DerivBar[];
+        const last = bars[bars.length - 1];
+        if (!last || !Number.isFinite(last.close)) return;
+        const previous = bars.length > 1 ? bars[bars.length - 2] : null;
+        const percent = previous?.close ? ((last.close - previous.close) / previous.close) * 100 : 0;
+        setMarketQuote({ price: last.close, percent });
+      };
+      const offData = widget.on('data', syncQuoteFromSeries);
       const updateDrawingOverlay = (drawing: any) => {
         if (!drawing) { setSelectedDrawingPosition(null); return; }
         const rect = host.getBoundingClientRect();
@@ -386,7 +460,8 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
       });
       onWidgetReady?.(widget);
       return () => {
-        offSymbol?.(); offInterval?.(); offRenderer?.();
+        replayRef.current?.stop(); replayRef.current = null; widget.dataController?.setPaused(false);
+        offSymbol?.(); offInterval?.(); offRenderer?.(); offData?.();
         offIndicatorObjects?.(); offDrawingObjects?.(); offDrawingSelect?.();
         onWidgetDestroyed?.(widget); widget.destroy(); widgetRef.current = null;
       };
@@ -399,6 +474,7 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
   }, []);
 
   useEffect(() => {
+    setMarketQuote(null);
     const widget = widgetRef.current;
     if (widget && widget.symbol() !== symbol) widget.setSymbol(symbol, 'SYNTHETIC');
   }, [symbol]);
