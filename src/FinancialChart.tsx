@@ -538,6 +538,13 @@ export default function FinancialChart({ symbol, isActive = false, liveTick, req
         putCachedHistory(req.symbol, req.interval, bars);
         candlesRef.current = bars;
         updateMarketQuote(bars);
+        // Force a fresh autoscale after the first real bars arrive. This is
+        // especially important after a persisted chart state was restored.
+        window.requestAnimationFrame(() => {
+          const current = widgetRef.current;
+          current?.chart.setAutoScale?.(true);
+          current?.chart.resetScale?.();
+        });
         resyncRef.current = null;
         return bars;
       },
@@ -594,6 +601,12 @@ export default function FinancialChart({ symbol, isActive = false, liveTick, req
     const pitchBlackTheme = { ...widget.chart.theme(), background: '#000000' };
     widget.setTheme(pitchBlackTheme);
     widget.chart.applyOptions({ canvas: { background: '#000000' } });
+    // A persisted/manual price-axis range can survive symbol reloads and leave
+    // the ladder on an old 0..1 placeholder even though Deriv is now supplying
+    // real prices (for example ~951 for WLDAUD). Always return the primary
+    // price axis to autoscale when a new symbol/chart instance is created.
+    widget.chart.setAutoScale?.(true);
+    widget.chart.resetScale?.();
     // OpenAlgo owns the crosshair. Normal mode follows the pointer exactly;
     // drawing placement consumes that same native crosshair position.
     widget.chart.applyOptions({ crosshair: { mode: 'normal' } });
