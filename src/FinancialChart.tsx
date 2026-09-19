@@ -46,9 +46,10 @@ export type DerivBar = { time: number; open: number; high: number; low: number; 
 const DERIV_WS_URL = 'wss://api.derivws.com/trading/v1/options/ws/public';
 const DERIV_REQUEST_TIMEOUT = 20000;
 const DERIV_PAGE_SIZE = 5000;
-// Keep the live chart bounded. Loading the entire available synthetic history into
-// a mobile canvas can cause the renderer to become blank after the first bars appear.
-const DERIV_INITIAL_BARS = 5000;
+// Load a safe first page, then keep paging older candles on demand until Deriv
+// reports that there is no more history. This avoids a mobile renderer overload
+// without imposing a permanent historical-data limit.
+const DERIV_INITIAL_BARS = DERIV_PAGE_SIZE;
 const DERIV_INTERVAL_SECONDS: Record<string, number> = Object.fromEntries(Object.entries(INTERVAL_SECONDS));
 let derivRequestId = 0;
 const nextDerivRequestId = () => ++derivRequestId;
@@ -442,7 +443,15 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
       const offRenderer = widget.chart.on('renderer:fallback', () => setRendererKind('canvas2d'));
       widgetRef.current = widget;
       setActiveTimeframe(widget.interval());
-      const offInterval = widget.on('interval', (event: { interval: string }) => setActiveTimeframe(event.interval));
+      const offInterval = widget.on('interval', (event: { interval: string }) => {
+        setActiveTimeframe(event.interval);
+        // A timeframe change starts a new history chain. The next data event
+        // establishes the oldest candle for that timeframe, and the history
+        // loader can then continue paging all the way back.
+        historyLoadingRef.current = false;
+        historyExhaustedRef.current = false;
+        oldestLoadedTimeRef.current = null;
+      });
       const offSymbol = widget.on('symbol', (event: { symbol: string }) => {
         const instrument = instrumentsRef.current.find(item => item.symbol === event.symbol);
         if (instrument && instrument.symbol !== symbolRef.current) onSelectInstrumentRef.current(instrument);
@@ -479,9 +488,11 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
             }
             const series = widget.primarySeries();
             if (!series) return;
-            series.prependData?.(older);
+            // OpenAlgo's prependData merges/deduplicates older bars while
+            // preserving the currently loaded history and viewport.
+            series.prependData(older);
             oldestLoadedTimeRef.current = older[0].time;
-            if (older.length < DERIV_PAGE_SIZE) historyExhaustedRef.current = true;
+            if (older.length < DERIV_PAGE_SIZE || older[0].time <= 1) historyExhaustedRef.current = true;
           } catch (error) {
             console.error('Failed to load older chart history', error);
           } finally {
