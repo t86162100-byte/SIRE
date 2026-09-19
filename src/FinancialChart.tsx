@@ -476,7 +476,7 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
         const percent = previous?.close ? ((last.close - previous.close) / previous.close) * 100 : 0;
         setMarketQuote({ price: last.close, percent });
       };
-      const offData = widget.on('data', (event: any) => { if (event?.error) { const error = event.error instanceof Error ? event.error : new Error(String(event.error)); reportDiagnostic({ level: 'error', code: 'CHART_DATA_ERROR', message: 'Chart data load failed: ' + error.message, detail: 'The chart data controller reported a history/load failure.', ...diagnosticErrorDetails(error, 'openalgo widget data event') }); } syncQuoteFromSeries(); }); } syncQuoteFromSeries(); });
+      const offData = widget.on('data', (event: any) => { if (event?.error) { const error = event.error instanceof Error ? event.error : new Error(String(event.error)); reportDiagnostic({ level: 'error', code: 'CHART_DATA_ERROR', message: 'Chart data load failed: ' + error.message, detail: 'The chart data controller reported a history/load failure.', ...diagnosticErrorDetails(error, 'openalgo widget data event') }); } syncQuoteFromSeries(); });
 
       // Load history progressively as the user pans toward the oldest loaded bar.
       // The chart keeps everything already loaded, while older pages are fetched
