@@ -101,7 +101,7 @@ export async function fetchAllDerivHistory(symbol: string, interval: string): Pr
   try {
     const all: DerivBar[] = []; let end: number | 'latest' = 'latest'; let previousOldest = Infinity;
     while (true) {
-      const data = await derivRequest(socket, { ticks_history: symbol, end, count: DERIV_PAGE_SIZE, style: 'candles', granularity: seconds, adjust_start_time: 1, subscribe: 0 });
+      const data = await derivRequest(socket, { ticks_history: symbol, end, count: DERIV_PAGE_SIZE, style: 'candles', granularity: seconds, adjust_start_time: 1 });
       const page = (Array.isArray(data.candles) ? data.candles.map(derivBar).filter(Boolean) as DerivBar[] : []).sort((a, b) => a.time - b.time);
       if (!page.length) break;
       const seen = new Set(all.map(bar => bar.time)); for (const bar of page) if (!seen.has(bar.time)) all.push(bar); all.sort((a, b) => a.time - b.time);
