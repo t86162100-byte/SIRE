@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { ChevronLeft, ChevronRight, History, MoreHorizontal, Pause, Play, Wrench, X } from 'lucide-react';
 import { createChart, registerInterval, type Chart } from 'openalgo-charts';
 import { derivMarketData } from './derivMarketData';
 import './financialChart.css';
@@ -65,6 +66,17 @@ export default function FinancialChart({
   const liveSubscriptionIdRef = useRef<string | null>(null);
   const destroyedRef = useRef(false);
   const [error, setError] = useState('');
+  const [activeTimeframe, setActiveTimeframe] = useState('1m');
+  const [timeframeOpen, setTimeframeOpen] = useState(false);
+  const [moreMenuOpen, setMoreMenuOpen] = useState(false);
+  const [drawRackOpen, setDrawRackOpen] = useState(false);
+  const [marketQuote, setMarketQuote] = useState<{ price: number; percent: number } | null>(null);
+  const [replayOpen, setReplayOpen] = useState(false);
+
+  const compactInstrumentName = (name: string) => {
+    const first = name.trim().split(/\s+/)[0] || symbol;
+    return `${first.replace(/[^a-zA-Z]/g, '').toUpperCase().slice(0, 5)}_`;
+  };
 
   useEffect(() => { symbolRef.current = symbol; }, [symbol]);
 
@@ -101,6 +113,14 @@ export default function FinancialChart({
       if (bars.length) chart.timeScale.fitContent(160);
       oldestRef.current = bars[0]?.time ?? null;
       liveCandleRef.current = bars[bars.length - 1] ?? null;
+      const latest = bars[bars.length - 1];
+      const previous = bars[bars.length - 2];
+      if (latest) {
+        const percent = previous && previous.close !== 0
+          ? ((latest.close - previous.close) / previous.close) * 100
+          : 0;
+        setMarketQuote({ price: latest.close, percent });
+      }
     };
 
     const loadHistory = async (end?: number): Promise<Candle[]> => {
@@ -157,6 +177,9 @@ export default function FinancialChart({
         if (next === previous) return;
         liveCandleRef.current = next;
         series.update(next);
+        const previousClose = previous?.close ?? next.open;
+        const percent = previousClose !== 0 ? ((next.close - previousClose) / previousClose) * 100 : 0;
+        setMarketQuote({ price: next.close, percent });
       });
       liveUnsubscribeRef.current = removeTick;
       try {
@@ -223,15 +246,182 @@ export default function FinancialChart({
     })();
   }, [symbol]);
 
+  const instrumentIndex = Math.max(0, instruments.findIndex(item => item.symbol === symbol));
+  const previousInstrument = instruments[Math.max(0, instrumentIndex - 1)];
+  const nextInstrument = instruments[Math.min(Math.max(0, instruments.length - 1), instrumentIndex + 1)];
+
   return (
     <div
       ref={hostRef}
-      className="sire-financial-chart financial-chart-host"
-      onDoubleClick={onInstrumentTap}
+      className="sire-financial-chart sire-toolbar-owner financial-chart-host"
       onContextMenu={event => event.preventDefault()}
       data-sire-market-data="deriv-direct"
     >
       {error && <div className="sire-chart-runtime-error">{error}</div>}
+
+      <div className="sire-market-quote" aria-label={`Selected ${symbol}`}>
+        <strong className="sire-market-quote__name">{instruments.find(item => item.symbol === symbol)?.name || symbol}</strong>
+        <div className="sire-market-quote__value-row">
+          <span className="sire-market-quote__price">{marketQuote ? marketQuote.price.toLocaleString(undefined, { maximumFractionDigits: 8 }) : '—'}</span>
+          <span className={`sire-market-quote__change ${marketQuote && marketQuote.percent > 0 ? 'is-positive' : marketQuote && marketQuote.percent < 0 ? 'is-negative' : 'is-neutral'}`}>
+            {marketQuote ? `${marketQuote.percent >= 0 ? '+' : ''}${marketQuote.percent.toFixed(2)}%` : '—'}
+          </span>
+        </div>
+      </div>
+
+      <button
+        type="button"
+        className="sire-chart-settings-button"
+        aria-label="Chart settings"
+        title="Chart settings"
+        onClick={() => setMoreMenuOpen(open => !open)}
+      >
+        <MoreHorizontal size={18} strokeWidth={2.2} aria-hidden="true" />
+      </button>
+
+      <div className="sire-bottom-glass-bar">
+        <div className="sire-bottom-scroll-track">
+          <div
+            className="sire-bottom-instrument-swipe"
+            title="Change instrument"
+            onClick={onInstrumentTap}
+          >
+            <span className="sire-bottom-instrument-prev">{compactInstrumentName(previousInstrument?.name || '')}</span>
+            <strong>{compactInstrumentName(instruments.find(item => item.symbol === symbol)?.name || symbol)}</strong>
+            <span className="sire-bottom-instrument-next">{compactInstrumentName(nextInstrument?.name || '')}</span>
+          </div>
+
+          <div
+            className="sire-bottom-timeframe"
+            title="Choose timeframe"
+            onClick={() => setTimeframeOpen(open => !open)}
+          >
+            <strong>{activeTimeframe}</strong>
+          </div>
+
+          <button type="button" className="sire-bottom-indicator-button" aria-label="Indicators" title="Indicators">
+            <span className="sire-bottom-indicator-icon" aria-hidden="true">ƒ</span>
+          </button>
+
+          <button
+            type="button"
+            className="sire-bottom-replay-button"
+            aria-label="Replay"
+            title="Replay"
+            onClick={() => setReplayOpen(open => !open)}
+          >
+            {replayOpen ? <Pause size={18} fill="currentColor" /> : <History size={20} />}
+          </button>
+
+          <button
+            type="button"
+            className="sire-bottom-tools-button"
+            aria-label="Open OpenAlgo drawing tools"
+            title="OpenAlgo drawing tools"
+            onClick={() => setDrawRackOpen(open => !open)}
+          >
+            <Wrench size={22} strokeWidth={1.8} aria-hidden="true" />
+          </button>
+
+          <button
+            type="button"
+            className="sire-bottom-multichart-button"
+            aria-label="Open multi-chart manager"
+            title="Multi-chart"
+            onClick={() => window.dispatchEvent(new CustomEvent('sire:open-multichart'))}
+          >
+            <span className="sire-bottom-multichart-icon" aria-hidden="true"><span /><span /><span /></span>
+          </button>
+
+          <button
+            type="button"
+            className="sire-bottom-more-button"
+            aria-label="More chart options"
+            title="More chart options"
+            onClick={() => setMoreMenuOpen(open => !open)}
+          >
+            <MoreHorizontal size={23} strokeWidth={2} aria-hidden="true" />
+          </button>
+
+          <button
+            type="button"
+            className="sire-bottom-obj-button"
+            aria-label="Objects"
+            title="Objects"
+          >
+            <span aria-hidden="true">OBJ</span>
+          </button>
+
+          {timeframeOpen && (
+            <div className="sire-bottom-timeframe-menu">
+              {Object.keys(INTERVAL_SECONDS).map(interval => (
+                <button
+                  key={interval}
+                  type="button"
+                  className={interval === activeTimeframe ? 'active' : ''}
+                  onClick={() => {
+                    setActiveTimeframe(interval);
+                    setTimeframeOpen(false);
+                  }}
+                >
+                  {interval}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {moreMenuOpen && (
+            <div className="sire-bottom-more-menu" role="menu" aria-label="Chart options">
+              <div className="sire-bottom-more-menu__section">
+                <div className="sire-bottom-more-menu__title">Chart type</div>
+                <div className="sire-bottom-more-menu__chart-types">
+                  {[
+                    ['candlestick', 'Candles'],
+                    ['hollow-candle', 'Hollow Candles'],
+                    ['bar', 'Bars (OHLC)'],
+                    ['line', 'Line'],
+                    ['area', 'Area'],
+                    ['baseline', 'Baseline'],
+                  ].map(([id, label]) => (
+                    <button key={id} type="button" role="menuitemradio" aria-checked={id === 'candlestick'}>{label}</button>
+                  ))}
+                </div>
+              </div>
+              <div className="sire-bottom-more-menu__section sire-bottom-more-menu__actions">
+                <button type="button" role="menuitem">Market Profile</button>
+                <button type="button" role="menuitem">Capture PNG</button>
+                <button type="button" role="menuitem">Export SVG</button>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {drawRackOpen && (
+        <div
+          className="sire-advanced-tools"
+          aria-label="OpenAlgo drawing tools"
+          style={{ left: 8, top: 58, right: 'auto' }}
+        >
+          <button type="button" onClick={() => setDrawRackOpen(false)}>OpenAlgo tools</button>
+        </div>
+      )}
+
+      {replayOpen && (
+        <div className="sire-replay-transport" role="dialog" aria-label="Chart replay controls">
+          <div className="sire-replay-head">
+            <span className="sire-replay-badge"><History size={13} /> REPLAY</span>
+            <span className="sire-replay-clock">{activeTimeframe}</span>
+            <span className="sire-replay-count">LIVE</span>
+          </div>
+          <div className="sire-replay-transport-row">
+            <button type="button" aria-label="Previous"><ChevronLeft size={17} /></button>
+            <button type="button" className="sire-replay-play" aria-label="Play"><Play size={16} fill="currentColor" /></button>
+            <button type="button" aria-label="Next"><ChevronRight size={17} /></button>
+            <button type="button" aria-label="Close replay" onClick={() => setReplayOpen(false)}><X size={17} /></button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
