@@ -40,8 +40,24 @@ const CHART_TYPES = [
 const REPLAY_SPEEDS = [0.5, 1, 2, 5, 10] as const;
 const replaySpeedLabel = (speed: number) => `${speed}×`;
 
+type ChartDiagnostic = DerivFeedDiagnostic & { id: number; timestamp: number };
 
-import { createDerivDataFeed, DERIV_INTERVAL_SECONDS, DERIV_PAGE_SIZE, fetchAllDerivHistory, fetchOlderDerivHistory, tickToBar, type DerivBar, type DerivInstrument } from './derivMarketData';
+function diagnosticLabel(level: ChartDiagnostic['level']) { return level === 'error' ? 'ERROR' : level === 'warning' ? 'WARNING' : 'OK'; }
+
+function ChartDiagnosticsPanel({ open, events, symbol, interval, quoteAgeMs, bars, renderer, width, height, onClose, onRetry }: { open: boolean; events: ChartDiagnostic[]; symbol: string; interval: string; quoteAgeMs: number | null; bars: number; renderer: string; width: number; height: number; onClose: () => void; onRetry: () => void }) {
+  if (!open) return null;
+  const activeError = [...events].reverse().find(event => event.level === 'error');
+  const liveText = quoteAgeMs === null ? 'No live tick received yet' : Math.round(quoteAgeMs / 1000) + 's since last live tick';
+  return <div className="sire-chart-diagnostics" role="dialog" aria-label="Chart diagnostics">
+    <div className="sire-chart-diagnostics__head"><div><strong>Chart diagnostics</strong><small>{symbol} · {interval} · {activeError ? 'issue detected' : 'monitoring'}</small></div><button type="button" onClick={onClose} aria-label="Close chart diagnostics">×</button></div>
+    <div className="sire-chart-diagnostics__metrics"><span>History <b>{bars}</b></span><span>Live <b>{liveText}</b></span><span>Renderer <b>{renderer}</b></span><span>Canvas <b>{width}×{height}</b></span></div>
+    {activeError && <div className="sire-chart-diagnostics__active"><b>{diagnosticLabel(activeError.level)} · {activeError.code}</b><span>{activeError.message}</span>{activeError.detail && <small>Why: {activeError.detail}</small>}<button type="button" onClick={onRetry}>Retry chart data</button></div>}
+    <div className="sire-chart-diagnostics__list">{events.length ? events.slice(-10).reverse().map(event => <div key={event.id} className={'sire-chart-diagnostics__event is-' + event.level}><div><b>{diagnosticLabel(event.level)} · {event.code}</b><time>{new Date(event.timestamp).toLocaleTimeString()}</time></div><span>{event.message}</span>{event.detail && <small>{event.detail}</small>}</div>) : <div className="sire-chart-diagnostics__empty">No chart faults detected. Monitoring history, live ticks, candle updates, renderer health, chart size and frontend errors.</div>}</div>
+  </div>;
+}
+
+
+import { createDerivDataFeed, DERIV_INTERVAL_SECONDS, DERIV_PAGE_SIZE, fetchAllDerivHistory, fetchOlderDerivHistory, tickToBar, type DerivBar, type DerivInstrument, type DerivFeedDiagnostic } from './derivMarketData';
 
 export { type DerivInstrument, type DerivBar } from './derivMarketData';
 
@@ -65,6 +81,10 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
   const [tpoEnabled, setTpoEnabled] = useState(false);
   const [marketQuote, setMarketQuote] = useState<{ price: number; percent: number } | null>(null);
   const lastLiveQuoteRef = useRef<{ symbol: string; price: number; epoch: number } | null>(null);
+  const [diagnosticsOpen, setDiagnosticsOpen] = useState(false);
+  const [diagnostics, setDiagnostics] = useState<ChartDiagnostic[]>([]);
+  const diagnosticIdRef = useRef(0);
+  const lastTickAtRef = useRef<number | null>(null);
   const [moreMenuOpen, setMoreMenuOpen] = useState(false);
   const [selectedDrawing, setSelectedDrawing] = useState<{ id: string; sourceId: string; name: string; visible: boolean; locked: boolean } | null>(null);
   const [selectedDrawingPosition, setSelectedDrawingPosition] = useState<{ left: number; top: number } | null>(null);
@@ -101,6 +121,8 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
   timeframeRef.current = activeTimeframe;
   const marketInstrument = instruments.find(item => item.symbol === symbol);
   const marketInstrumentName = marketInstrument?.name || symbol;
+  const reportDiagnostic = (event: DerivFeedDiagnostic) => { const item: ChartDiagnostic = { ...event, id: ++diagnosticIdRef.current, timestamp: Date.now() }; setDiagnostics(current => [...current, item].slice(-30)); if (event.level === 'error') setDiagnosticsOpen(true); };
+
   const formatMarketPrice = (price: number) => {
     if (!Number.isFinite(price)) return '—';
     const pipSize = Number(marketInstrument?.pipSize);
@@ -302,14 +324,18 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
     try {
       const feed = dataFeedRef.current || createDerivDataFeed(quote => {
         if (quote.symbol !== symbolRef.current) return;
-        setMarketQuote(current => {
-          const series = widgetRef.current?.primarySeries();
-          const bars = (series?.getData?.() || []) as DerivBar[];
-          const previousClosed = bars.length > 1 ? bars[bars.length - 2] : null;
-          const percent = previousClosed?.close ? ((quote.price - previousClosed.close) / previousClosed.close) * 100 : (current?.percent || 0);
-          return { price: quote.price, percent };
-        });
-      });
+        lastTickAtRef.current = Date.now();
+        lastLiveQuoteRef.current = quote;
+        const series = widgetRef.current?.primarySeries();
+        const bars = (series?.getData?.() || []) as DerivBar[];
+        const previous = bars[bars.length - 1] || null;
+        const seconds = DERIV_INTERVAL_SECONDS[timeframeRef.current] || 60;
+        const next = tickToBar(previous, quote.epoch, quote.price, seconds);
+        if (series?.update) series.update(next);
+        const previousClosed = bars.length > 1 ? bars[bars.length - 2] : null;
+        const percent = previousClosed?.close ? ((quote.price - previousClosed.close) / previousClosed.close) * 100 : 0;
+        setMarketQuote({ price: quote.price, percent });
+      }, reportDiagnostic);
       dataFeedRef.current = feed;
       widget = createWidget(host, {
         symbol,
@@ -345,7 +371,7 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
       widget.chart.resetScale?.();
       widget.chart.applyOptions({ crosshair: { mode: 'normal' } });
       setRendererKind(widget.chart.rendererKind);
-      const offRenderer = widget.chart.on('renderer:fallback', () => setRendererKind('canvas2d'));
+      const offRenderer = widget.chart.on('renderer:fallback', () => { setRendererKind('canvas2d'); reportDiagnostic({ level: 'warning', code: 'CHART_RENDERER_FALLBACK', message: 'Chart renderer fell back to Canvas 2D.', detail: 'The requested renderer was unavailable, so the chart switched rendering backends.' }); });
       widgetRef.current = widget;
       setActiveTimeframe(widget.interval());
       const offInterval = widget.on('interval', (event: { interval: string }) => {
@@ -370,7 +396,7 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
         const percent = previous?.close ? ((last.close - previous.close) / previous.close) * 100 : 0;
         setMarketQuote({ price: last.close, percent });
       };
-      const offData = widget.on('data', syncQuoteFromSeries);
+      const offData = widget.on('data', (event: any) => { if (event?.error) { const message = event.error instanceof Error ? event.error.message : String(event.error); reportDiagnostic({ level: 'error', code: 'CHART_DATA_ERROR', message: 'Chart data load failed: ' + message, detail: 'The chart data controller reported a history/load failure.' }); } const bars = (widget.primarySeries()?.getData?.() || []) as DerivBar[]; if (!bars.length) reportDiagnostic({ level: 'error', code: 'CHART_NO_CANDLES', message: 'No historical candles are loaded for ' + symbolRef.current + ' ' + timeframeRef.current + '.', detail: 'The primary price series is empty.' }); syncQuoteFromSeries(); });
 
       // Load history progressively as the user pans toward the oldest loaded bar.
       // The chart keeps everything already loaded, while older pages are fetched
@@ -461,6 +487,27 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
   }, []);
 
   useEffect(() => {
+    const host = containerRef.current;
+    if (!host) return;
+    const onWindowError = (event: ErrorEvent) => reportDiagnostic({ level: 'error', code: 'CHART_FRONTEND_ERROR', message: event.message || 'A frontend error occurred while the chart was running.' });
+    const onUnhandled = (event: PromiseRejectionEvent) => reportDiagnostic({ level: 'error', code: 'CHART_UNHANDLED_REJECTION', message: 'An unhandled chart promise failed: ' + String(event.reason || 'Unknown rejection') });
+    window.addEventListener('error', onWindowError); window.addEventListener('unhandledrejection', onUnhandled);
+    const timer = window.setInterval(() => {
+      const widget = widgetRef.current; const series = widget?.primarySeries(); const bars = (series?.getData?.() || []) as DerivBar[]; const rect = host.getBoundingClientRect();
+      if (rect.width < 2 || rect.height < 2) { reportDiagnostic({ level: 'error', code: 'CHART_ZERO_SIZE', message: 'The chart container has no usable size.', detail: 'Measured ' + Math.round(rect.width) + '×' + Math.round(rect.height) + 'px.' }); return; }
+      if (!bars.length) { reportDiagnostic({ level: 'error', code: 'CHART_NO_CANDLES', message: 'No historical candles are currently loaded.', detail: 'The price pane has no primary OHLC data to render.' }); return; }
+      const instrument = instrumentsRef.current.find(item => item.symbol === symbolRef.current); const marketClosed = instrument?.exchangeOpen === 0 || instrument?.tradingSuspended === 1; const tickAge = lastTickAtRef.current === null ? null : Date.now() - lastTickAtRef.current;
+      if (!marketClosed && tickAge === null) reportDiagnostic({ level: 'warning', code: 'LIVE_PRICE_NOT_RECEIVED', message: 'No live price has been received yet.', detail: 'History is present, but the Deriv tick stream has not delivered a quote.' });
+      if (!marketClosed && tickAge !== null && tickAge > 10000) reportDiagnostic({ level: 'error', code: 'LIVE_TICK_STALE', message: 'Live price updates are stale: ' + Math.round(tickAge / 1000) + 's since the last tick.', detail: 'The live tick stream or the SIRE-to-chart delivery path stopped updating.' });
+      const live = lastLiveQuoteRef.current; const last = bars[bars.length - 1];
+      if (live && tickAge !== null && tickAge < 5000 && Math.abs(last.close - live.price) > Math.max(Math.abs(live.price) * 1e-8, 1e-10)) reportDiagnostic({ level: 'warning', code: 'LIVE_RENDER_LAG', message: 'A fresh live tick arrived, but the chart candle has not caught up.', detail: 'Live price=' + live.price + '; chart close=' + last.close + '. The chart rendering/data-update path is lagging.' });
+      if (!Number.isFinite(last.close)) reportDiagnostic({ level: 'error', code: 'CANDLE_PRICE_INVALID', message: 'The latest candle contains an invalid close price.', detail: 'The price pane cannot safely render this OHLC value.' });
+      if (!host.querySelector('canvas')) reportDiagnostic({ level: 'error', code: 'CHART_CANVAS_MISSING', message: 'The chart has data but no canvas renderer is present.', detail: 'The chart surface is missing from the DOM.' });
+    }, 2500);
+    return () => { window.clearInterval(timer); window.removeEventListener('error', onWindowError); window.removeEventListener('unhandledrejection', onUnhandled); };
+  }, [symbol]);
+
+  useEffect(() => {
     const widget = widgetRef.current;
     if (!widget || !symbol) return;
     setMarketQuote(null);
@@ -500,6 +547,8 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
 
   return (
     <div ref={containerRef} className={`sire-financial-chart${drawRackOpen ? ' sire-draw-rack-open' : ''}${isActive ? ' sire-toolbar-owner' : ''}`}>
+      <button type="button" className={'sire-chart-diagnostics-button' + (diagnostics.some(event => event.level === 'error') ? ' has-error' : '')} onClick={() => setDiagnosticsOpen(open => !open)} aria-label="Open chart diagnostics" title="Chart diagnostics"><Wrench size={14} />{diagnostics.some(event => event.level === 'error') ? 'ISSUE' : 'OK'}</button>
+      <ChartDiagnosticsPanel open={diagnosticsOpen} events={diagnostics} symbol={symbol} interval={activeTimeframe} quoteAgeMs={lastTickAtRef.current === null ? null : Date.now() - lastTickAtRef.current} bars={((widgetRef.current?.primarySeries()?.getData?.() || []) as DerivBar[]).length} renderer={rendererKind} width={Math.round(containerRef.current?.getBoundingClientRect().width || 0)} height={Math.round(containerRef.current?.getBoundingClientRect().height || 0)} onClose={() => setDiagnosticsOpen(false)} onRetry={() => { setDiagnostics([]); lastTickAtRef.current = null; lastLiveQuoteRef.current = null; setMarketQuote(null); void widgetRef.current?.reload?.(); }} />
       <div className="sire-market-quote" aria-label={`Selected ${marketInstrumentName}`}>
         <strong className="sire-market-quote__name">{marketInstrumentName}</strong>
         <div className="sire-market-quote__value-row">
