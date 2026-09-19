@@ -1,50 +1,76 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Search } from 'lucide-react';
 import { createLinkGroup, type LinkGroup } from 'openalgo-charts';
 import ResearchLab from './ResearchLab';
 import FinancialChart from './FinancialChart';
-import { derivMarketData, type DerivInstrument, type DerivTick, type DerivResponse } from './derivMarketData';
 import './nativeTerminal.css';
 
+type DerivInstrument = {
+  symbol: string;
+  name: string;
+  market: string;
+  submarket: string;
+  subgroup: string;
+  symbolType: string;
+  pipSize?: number;
+  exchangeOpen?: number;
+};
+
+const LOCAL_SYNTHETIC_INSTRUMENTS: DerivInstrument[] = [
+  ['R_10','Volatility 10 Index'],['R_25','Volatility 25 Index'],['R_50','Volatility 50 Index'],
+  ['R_75','Volatility 75 Index'],['R_100','Volatility 100 Index'],
+  ['1HZ10V','Volatility 10 (1s) Index'],['1HZ25V','Volatility 25 (1s) Index'],['1HZ50V','Volatility 50 (1s) Index'],
+  ['1HZ75V','Volatility 75 (1s) Index'],['1HZ100V','Volatility 100 (1s) Index'],
+  ['RDBULL','Bull Market Index'],['RDBEAR','Bear Market Index'],
+  ['RDBULL1000','Bull Market Index 1000'],['RDBEAR1000','Bear Market Index 1000'],
+  ['JD10','Jump 10 Index'],['JD25','Jump 25 Index'],['JD50','Jump 50 Index'],['JD75','Jump 75 Index'],['JD100','Jump 100 Index'],
+  ['BOOM300','Boom 300 Index'],['BOOM500','Boom 500 Index'],['BOOM1000','Boom 1000 Index'],
+  ['CRASH300','Crash 300 Index'],['CRASH500','Crash 500 Index'],['CRASH1000','Crash 1000 Index'],
+  ['STPRNG','Step Index'],['RDBREAK100','Range Break 100 Index'],['RDBREAK200','Range Break 200 Index'],
+  ['DRIFT_SWITCH','Drift Switch Index'],
+].map(([symbol,name]) => ({
+  symbol, name, market:'Synthetic', submarket:'Synthetic Indices', subgroup:'', symbolType:'synthetic',
+  pipSize:0.01, exchangeOpen:1,
+}));
+
 export default function App() {
-  const [instruments, setInstruments] = useState<DerivInstrument[]>([]);
-  const [selected, setSelected] = useState<DerivInstrument | null>(null);
+  const instruments = LOCAL_SYNTHETIC_INSTRUMENTS;
+  const [selected, setSelected] = useState<DerivInstrument | null>(instruments[0] || null);
   const [search, setSearch] = useState('');
   const [instrumentSearchOpen, setInstrumentSearchOpen] = useState(false);
   const [instrumentSearchMode, setInstrumentSearchMode] = useState<'main' | 'multi'>('main');
-  const [status, setStatus] = useState('Connecting to Deriv…');
-  const [lastError, setLastError] = useState('');
-  const [latestBySymbol, setLatestBySymbol] = useState<Record<string, DerivTick>>({});
   const [researchLabOpen, setResearchLabOpen] = useState(false);
-  const selectedRef = useRef<DerivInstrument | null>(null);
   const [chartLayout, setChartLayout] = useState<1 | 2>(1);
   const [activeChartIndex, setActiveChartIndex] = useState(0);
   const [linked, setLinked] = useState(false);
   const [multiChartOpen, setMultiChartOpen] = useState(false);
   const [multiChartInstrument, setMultiChartInstrument] = useState('');
   const [multiChartPosition, setMultiChartPosition] = useState<'up' | 'down' | 'left' | 'right'>('right');
-  // Keep the chart independent from the instrument catalogue request.
-  // Deriv can load a known synthetic symbol even if active_symbols is slow/unavailable.
   const [chartSymbols, setChartSymbols] = useState<string[]>(['R_100']);
   const linkGroupRef = useRef<LinkGroup | null>(null);
 
-  useEffect(() => { selectedRef.current = selected; }, [selected]);
   useEffect(() => {
     if (!instruments.length) return;
-    setChartSymbols(current => Array.from({ length: chartLayout }, (_, index) => current[index] || (index === 0 ? (selected?.symbol || instruments[0].symbol) : instruments[index % instruments.length].symbol)));
-  }, [chartLayout, instruments, selected?.symbol]);
+    setChartSymbols(current => Array.from(
+      { length: chartLayout },
+      (_, index) => current[index] || (index === 0 ? (selected?.symbol || instruments[0].symbol) : instruments[index % instruments.length].symbol),
+    ));
+  }, [chartLayout, selected?.symbol]);
+
   useEffect(() => {
     setActiveChartIndex(current => Math.min(current, chartLayout - 1));
   }, [chartLayout]);
+
   useEffect(() => {
-    // Keep charts completely independent unless Link is explicitly enabled.
     linkGroupRef.current?.destroy();
     linkGroupRef.current = linked
       ? createLinkGroup({ crosshair: true, viewport: true, symbol: true })
       : null;
     return () => {};
   }, [linked]);
+
   useEffect(() => () => { linkGroupRef.current?.destroy(); linkGroupRef.current = null; }, []);
+
   useEffect(() => {
     const openMultiChart = () => setMultiChartOpen(true);
     window.addEventListener('sire:open-multichart', openMultiChart);
@@ -52,45 +78,10 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    if (!chartSymbols.length) return;
-    let mounted = true;
-    const removeTick = derivMarketData.onTick(tick => {
-      if (!mounted || !chartSymbols.includes(tick.symbol)) return;
-      setLatestBySymbol(current => ({ ...current, [tick.symbol]: tick }));
-      if (tick.symbol === chartSymbols[0]) {
-        setStatus(`LIVE · ${instruments.find(item => item.symbol === tick.symbol)?.name || tick.symbol}`);
-      }
-    });
-    const subscribeAll = async () => {
-      try {
-        await derivMarketData.request({ forget_all: 'ticks' });
-        for (const chartSymbol of [...new Set(chartSymbols)]) await derivMarketData.subscribe(chartSymbol);
-      } catch (error) {
-        if (mounted) setLastError(error instanceof Error ? error.message : String(error));
-      }
-    };
-    void subscribeAll();
-    return () => { mounted = false; removeTick(); };
-  }, [chartSymbols.join('|'), instruments]);
-
-  const requestHistory = useCallback(async (request: Record<string, unknown>): Promise<DerivResponse> => {
-    return derivMarketData.request(request);
-  }, []);
-
-  useEffect(() => {
     const open = () => setResearchLabOpen(true);
     window.addEventListener('sire:open-research', open);
     return () => window.removeEventListener('sire:open-research', open);
   }, []);
-
-  useEffect(() => {
-    let mounted = true;
-    const load = async () => { try { setStatus('Connecting to Deriv…'); setLastError(''); const list = await derivMarketData.getSyntheticIndices(); if (!mounted) return; setInstruments(list); setSelected(current => current && list.some(item => item.symbol === current.symbol) ? current : list[0]); setStatus(`Deriv connected · ${list.length} Synthetic Indices`); } catch (error) { if (!mounted) return; setStatus('Deriv connection failed'); setLastError(error instanceof Error ? error.message : String(error)); } };
-    void load();
-    const removeStatus = derivMarketData.onStatus(next => { if (!mounted) return; if (next === 'connecting') setStatus('Connecting to Deriv…'); if (next === 'connected') setStatus(selectedRef.current ? `LIVE · ${selectedRef.current.name}` : 'Deriv connected'); if (next === 'closed') setStatus('Reconnecting to Deriv…'); if (next === 'error') setStatus('Deriv connection error'); });
-    return () => { mounted = false; removeStatus(); };
-  }, []);
-
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -145,13 +136,10 @@ export default function App() {
     <div className="native-terminal-body">
       <aside className="native-symbol-sidebar"><div className="sidebar-search"><Search size={15} /><input value={search} onChange={event => setSearch(event.target.value)} placeholder="Search" /></div><div className="sidebar-meta"><span>DERIV SYNTHETIC</span><b>{instruments.length}</b></div><div className="native-symbol-list">{filtered.slice(0, 150).map(item => <button key={item.symbol} className={selected?.symbol === item.symbol ? 'active' : ''} onClick={() => selectInstrument(item)}><span><b>{item.name}</b><small>{item.symbol}</small></span><i>{item.exchangeOpen === 0 ? 'OFF' : 'LIVE'}</i></button>)}</div></aside>
       <section className="native-chart-panel">
-        {lastError && <div className="native-error-banner">{lastError}</div>}
         <div className={`sire-chart-grid sire-chart-grid--${chartLayout}${chartLayout === 2 ? ` sire-chart-grid--${multiChartPosition}` : ''}`} onContextMenu={event => event.preventDefault()}>
           {chartItems.map((chartSymbol, index) => <div className={`sire-chart-cell${activeChartIndex === index ? ' sire-chart-cell--active' : ''}`} key={index} onPointerDown={() => setActiveChartIndex(index)}>{chartSymbol && <FinancialChart
             symbol={chartSymbol}
             isActive={activeChartIndex === index}
-            liveTick={latestBySymbol[chartSymbol] || null}
-            requestHistory={requestHistory}
             instruments={instruments.map(item => ({ symbol: item.symbol, name: item.name, pipSize: item.pipSize }))}
             onInstrumentTap={() => openInstrumentPicker('main')}
             onSelectInstrument={item => {
