@@ -380,7 +380,7 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
         const previousClosed = bars.length > 1 ? bars[bars.length - 2] : null;
         const percent = previousClosed?.close ? ((quote.price - previousClosed.close) / previousClosed.close) * 100 : 0;
         setMarketQuote({ price: quote.price, percent });
-        reportDiagnostic({ level: 'info', code: 'LIVE_FRAME_APPLIED', message: 'Live price and forming candle update applied to the chart series.', detail: 'The price pane and its bar timing/countdown should advance from this same live update frame.' });
+        // Healthy tick updates are intentionally not logged individually; the monitor checks their effect on the chart.
       }, reportDiagnostic);
       dataFeedRef.current = feed;
       widget = createWidget(host, {
@@ -445,7 +445,7 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
         const percent = previous?.close ? ((last.close - previous.close) / previous.close) * 100 : 0;
         setMarketQuote({ price: last.close, percent });
       };
-      const offData = widget.on('data', (event: any) => { if (event?.error) { const message = event.error instanceof Error ? event.error.message : String(event.error); reportDiagnostic({ level: 'error', code: 'CHART_DATA_ERROR', message: 'Chart data load failed: ' + message, detail: 'The chart data controller reported a history/load failure.' }); } const bars = (widget.chart.primarySeries()?.getData?.() || []) as DerivBar[]; if (!bars.length) reportDiagnostic({ level: 'error', code: 'CHART_NO_CANDLES', message: 'No historical candles are loaded for ' + symbolRef.current + ' ' + timeframeRef.current + '.', detail: 'The primary price series is empty.' }); syncQuoteFromSeries(); });
+      const offData = widget.on('data', (event: any) => { if (event?.error) { const message = event.error instanceof Error ? event.error.message : String(event.error); reportDiagnostic({ level: 'error', code: 'CHART_DATA_ERROR', message: 'Chart data load failed: ' + message, detail: 'The chart data controller reported a history/load failure.' }); } syncQuoteFromSeries(); });
 
       // Load history progressively as the user pans toward the oldest loaded bar.
       // The chart keeps everything already loaded, while older pages are fetched
