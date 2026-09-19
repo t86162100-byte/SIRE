@@ -1323,9 +1323,9 @@ export default function FinancialChart({ symbol, isActive = false, liveTick, req
       // Merge into the application archive first. The archive may contain
       // millions of bars; only the bounded rendering window is given to
       // OpenAlgo, which prevents the mobile series canvas from going blank.
-      const cachedAll = getCachedHistory(symbolRef.current, interval);
+      const cachedArchive = getCachedHistory(symbolRef.current, interval);
       const archived = new Map<number, Candle>();
-      for (const bar of [...cachedAll, ...older]) archived.set(bar.time, bar);
+      for (const bar of [...cachedArchive, ...older]) archived.set(bar.time, bar);
       const allHistory = [...archived.values()].sort((a, b) => a.time - b.time);
       putCachedHistory(symbolRef.current, interval, allHistory);
 
