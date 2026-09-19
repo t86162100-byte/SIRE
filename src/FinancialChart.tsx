@@ -257,9 +257,47 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
         const instrument = instrumentsRef.current.find(item => item.symbol === event.symbol);
         if (instrument && instrument.symbol !== symbolRef.current) onSelectInstrumentRef.current(instrument);
       });
+      const updateDrawingOverlay = (drawing: any) => {
+        if (!drawing) { setSelectedDrawingPosition(null); return; }
+        const rect = host.getBoundingClientRect();
+        setSelectedDrawingPosition({ left: Math.max(90, rect.width / 2), top: Math.max(90, rect.height / 2 - 70) });
+      };
+      const updateIndicatorOverlay = (indicator: { id: string; name: string; paneIndex: number } | null) => {
+        if (!indicator) { setSelectedIndicatorPosition(null); return; }
+        const rect = host.getBoundingClientRect();
+        setSelectedIndicatorPosition({ left: Math.max(8, Math.min(rect.width - 92, 8 + Math.max(46, indicator.name.length * 6.5 + 8))), top: 14 });
+      };
+      const offIndicatorObjects = widget.objects.subscribe(objects => {
+        const current = selectedIndicatorRef.current;
+        if (!current) return;
+        const item = objects.find(object => object.kind === 'indicator' && object.id === current.id);
+        if (!item) {
+          selectedIndicatorRef.current = null;
+          setSelectedIndicator(null);
+          setSelectedIndicatorPosition(null);
+          return;
+        }
+        const next = { id: item.id, name: item.name, paneIndex: item.paneIndex };
+        selectedIndicatorRef.current = next;
+        setSelectedIndicator(next);
+        updateIndicatorOverlay(next);
+      });
+      const offDrawingObjects = widget.objects.subscribe(objects => {
+        const drawing = objects.find(object => object.kind === 'drawing' && object.selected);
+        setSelectedDrawing(drawing ? {
+          id: drawing.id, sourceId: drawing.sourceId, name: drawing.name,
+          visible: drawing.visible, locked: drawing.locked === true,
+        } : null);
+        updateDrawingOverlay(drawing);
+      });
+      const offDrawingSelect = widget.chart.on('drawing:select', () => {
+        const drawing = widget.objects.selection?.().find?.((item: any) => item?.kind === 'drawing');
+        if (drawing) updateDrawingOverlay(drawing);
+      });
       onWidgetReady?.(widget);
       return () => {
         offSymbol?.(); offInterval?.(); offRenderer?.();
+        offIndicatorObjects?.(); offDrawingObjects?.(); offDrawingSelect?.();
         onWidgetDestroyed?.(widget); widget.destroy(); widgetRef.current = null;
       };
     } catch (error) {
