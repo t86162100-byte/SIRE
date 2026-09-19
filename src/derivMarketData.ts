@@ -408,22 +408,52 @@ async function fetchDerivHistoryPage(symbol: string, seconds: number, end: numbe
   // while keeping the live tick stream on the existing direct WebSocket client.
   if (typeof window !== 'undefined') {
     try {
-      const response = await window.fetch('/api/sire/deriv/history', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        cache: 'no-store',
-        body: JSON.stringify(payload),
+      // Use XHR for this one-shot endpoint instead of fetch/Response methods.
+      // Some browser/runtime combinations can throw an internal ".call is not
+      // a function" while invoking fetch/Response methods. XHR avoids that
+      // runtime path and gives us the raw response text directly.
+      const data = await new Promise<any>((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        const timer = window.setTimeout(() => {
+          xhr.abort();
+          reject(new Error('SIRE Deriv history endpoint timed out after 20 seconds.'));
+        }, DERIV_REQUEST_TIMEOUT);
+        xhr.open('POST', '/api/sire/deriv/history', true);
+        xhr.setRequestHeader('Content-Type', 'application/json');
+        xhr.setRequestHeader('Cache-Control', 'no-cache');
+        xhr.onreadystatechange = () => {
+          if (xhr.readyState !== XMLHttpRequest.DONE) return;
+          window.clearTimeout(timer);
+          const status = xhr.status;
+          const rawBody = xhr.responseText || '';
+          let parsed: any = {};
+          try {
+            parsed = rawBody ? JSON.parse(rawBody) : {};
+          } catch {
+            reject(new Error(`SIRE Deriv history endpoint returned invalid JSON (HTTP ${status}).`));
+            return;
+          }
+          if (status < 200 || status >= 300 || parsed?.error) {
+            reject(new Error(parsed?.error || `SIRE Deriv history endpoint returned HTTP ${status}.`));
+            return;
+          }
+          resolve(parsed);
+        };
+        xhr.onerror = () => {
+          window.clearTimeout(timer);
+          reject(new Error('SIRE Deriv history endpoint network request failed.'));
+        };
+        xhr.onabort = () => {
+          window.clearTimeout(timer);
+          reject(new Error('SIRE Deriv history endpoint request was aborted.'));
+        };
+        try {
+          xhr.send(JSON.stringify(payload));
+        } catch (error) {
+          window.clearTimeout(timer);
+          reject(error);
+        }
       });
-      const rawBody = await response.text();
-      let data: any = {};
-      try {
-        data = rawBody ? JSON.parse(rawBody) : {};
-      } catch {
-        throw new Error(`SIRE Deriv history endpoint returned invalid JSON (HTTP ${response.status}).`);
-      }
-      if (!response.ok || data?.error) {
-        throw new Error(data?.error || `SIRE Deriv history endpoint returned HTTP ${response.status}.`);
-      }
       return data;
     } catch (serverError) {
       // Fall back to a direct browser request if the SIRE adapter is unavailable.
