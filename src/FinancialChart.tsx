@@ -104,6 +104,7 @@ async function loadAllAvailableHistory(
   symbol: string,
   interval: string,
   requestHistory: HistoryRequester,
+  onPage?: (page: Candle[], archive: Candle[]) => void,
 ): Promise<Candle[]> {
   const key = historyCacheKey(symbol, interval);
   const existing = fullHistoryLoads.get(key);
@@ -150,6 +151,7 @@ async function loadAllAvailableHistory(
       // repeatedly sorting the entire multi-million-bar archive.
       archive = [...strictlyOlder, ...archive];
       putCachedHistoryOrdered(symbol, interval, archive);
+      onPage?.(strictlyOlder, archive);
 
       const oldest = archive[0]?.time;
       if (!Number.isFinite(oldest) || oldest >= lastOldest) break;
@@ -520,6 +522,37 @@ export default function FinancialChart({ symbol, isActive = false, liveTick, req
     return () => window.removeEventListener('keydown', onEscape);
   }, [drawRackOpen]);
 
+  const publishBackfillPageToChart = (page: Candle[], archive: Candle[]) => {
+    const widget = widgetRef.current;
+    if (!widget || !page.length) return;
+
+    const active = candlesRef.current.slice().sort((a, b) => a.time - b.time);
+    if (!active.length) return;
+
+    const oldestActive = active[0]?.time;
+    const older = page.filter(bar => Number.isFinite(oldestActive) ? bar.time < oldestActive : true);
+    if (!older.length) return;
+
+    const merged = new Map<number, Candle>();
+    for (const bar of [...older, ...active]) merged.set(bar.time, bar);
+    const next = [...merged.values()].sort((a, b) => a.time - b.time);
+
+    const prependData = (widget.series as any).prependData;
+    if (next.length <= CHART_HISTORY_MAX_BARS && typeof prependData === 'function') {
+      prependData.call(widget.series, older);
+      candlesRef.current = next;
+      return;
+    }
+
+    // Keep the complete archive growing while the mobile OpenAlgo rendering
+    // window stays bounded once it reaches the safety ceiling.
+    if (active.length < CHART_HISTORY_MAX_BARS) {
+      const bounded = next.slice(-CHART_HISTORY_MAX_BARS);
+      widget.series.setData(bounded);
+      candlesRef.current = bounded;
+    }
+  };
+
   useEffect(() => {
     if (!containerRef.current) return;
     const host = containerRef.current;
@@ -883,13 +916,16 @@ export default function FinancialChart({ symbol, isActive = false, liveTick, req
     // The archive is refreshed from the newest page first, then the historical
     // cursor moves monotonically backward. Live ticks continue updating the
     // current candles while this archive backfill runs.
-    void loadAllAvailableHistory(symbol, widget.interval(), requestHistoryRef.current).catch(error => {
+    void loadAllAvailableHistory(symbol, widget.interval(), requestHistoryRef.current, publishBackfillPageToChart).catch(error => {
       console.warn('[SIRE] Automatic Deriv history backfill stopped; left-edge paging remains available.', error);
     });
     setActiveTimeframe(widget.interval());
     const offInterval = widget.on('interval', (event: { interval: string }) => {
       historyExhaustedKeyRef.current = null;
       setActiveTimeframe(event.interval);
+      void loadAllAvailableHistory(symbolRef.current, event.interval, requestHistoryRef.current, publishBackfillPageToChart).catch(error => {
+        console.warn('[SIRE] Automatic Deriv interval backfill stopped; left-edge paging remains available.', error);
+      });
     });
     const offSymbol = widget.on('symbol', (event: { symbol: string }) => {
       const instrument = instrumentsRef.current.find(item => item.symbol === event.symbol);
@@ -1042,7 +1078,12 @@ export default function FinancialChart({ symbol, isActive = false, liveTick, req
     historyExhaustedKeyRef.current = null;
     if (replayRef.current) stopReplay();
     const widget = widgetRef.current;
-    if (widget && widget.symbol() !== symbol) widget.setSymbol(symbol, 'Deriv Synthetic Indices');
+    if (widget && widget.symbol() !== symbol) {
+      widget.setSymbol(symbol, 'Deriv Synthetic Indices');
+    }
+    void loadAllAvailableHistory(symbol, widget?.interval?.() ?? activeTimeframe, requestHistoryRef.current, publishBackfillPageToChart).catch(error => {
+      console.warn('[SIRE] Automatic Deriv symbol backfill stopped; left-edge paging remains available.', error);
+    });
   }, [symbol]);
 
   useEffect(() => {
@@ -1364,10 +1405,17 @@ export default function FinancialChart({ symbol, isActive = false, liveTick, req
     setReplayLoading(true);
     setReplayRangeError(null);
     try {
-      // Use the history already resident in the fast warm cache. Deep
-      // history continues loading independently and is fetched on demand if
-      // the user chooses an older replay start.
-      const bars = candlesRef.current.slice().sort((a, b) => a.time - b.time);
+      // Replay controls use the complete provider-bounded archive, not only
+      // the mobile rendering window. The archive is filled continuously from
+      // the latest Deriv candle backward, so the displayed start date moves
+      // backward as more history arrives.
+      const widget = widgetRef.current;
+      const archived = widget
+        ? getCachedHistory(symbolRef.current, widget.interval())
+        : [];
+      const bars = archived.length
+        ? archived
+        : candlesRef.current.slice().sort((a, b) => a.time - b.time);
       if (bars.length < 2) {
         setReplayRangeError('Not enough history');
         return;
