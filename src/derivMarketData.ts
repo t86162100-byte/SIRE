@@ -204,11 +204,13 @@ export class DerivMarketData {
     const pageSize = Math.min(Math.max(Math.floor(count), 1), 5000);
     let pageEnd: number | 'latest' = end ?? 'latest';
     const lowerBound = Number.isFinite(start) ? Math.floor(Number(start)) : undefined;
-    // No calendar-age cutoff and no fixed maximum page count. When a
-    // caller supplies an explicit start, continue until that exact start is
-    // reached or Deriv returns fewer than a full page (the provider boundary).
-    // Open-ended chart requests remain a single 5,000-bar page; FinancialChart
-    // performs its own left-edge paging using the actual oldest returned bar.
+    // No calendar-age cutoff and no fixed maximum page count.
+    // For daily/weekly charts, an open-ended request is fully walked back to
+    // Deriv's actual first available candle. This makes D1/W1 open with the
+    // complete instrument history instead of only the newest 5,000 bars.
+    // Intraday charts remain paged on demand because a full 1m archive can be
+    // millions of candles and should not block chart startup.
+    const loadCompleteDailyWeeklyHistory = lowerBound === undefined && granularity >= 86400;
     for (;;) {
       const request: Record<string, unknown> = {
         ticks_history: symbol,
@@ -230,7 +232,11 @@ export class DerivMarketData {
       if (!candles.length) break;
       allCandles.push(...candles);
 
-      // An apparently short page is not proof that the provider's historical archive is exhausted.\n      // Continue walking backward until Deriv returns no candles; this is required for\n      // instruments whose history contains gaps or whose server-side paging returns\n      // fewer than the requested page size at an intermediate boundary.\n      if (lowerBound === undefined) break;
+      // An apparently short page is not proof that the provider's historical archive is exhausted.
+      // Continue walking backward until Deriv returns no candles; this is required for
+      // instruments whose history contains gaps or whose server-side paging returns
+      // fewer than the requested page size at an intermediate boundary.
+      if (lowerBound === undefined && !loadCompleteDailyWeeklyHistory) break;
 
       const epochs = candles.map(c => Number(c.epoch)).filter(Number.isFinite);
       if (!epochs.length) break;
