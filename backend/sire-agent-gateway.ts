@@ -1,6 +1,5 @@
 /* SIRE Agent Gateway - provider-neutral autonomous tool-calling runtime. */
 import { createServer } from 'node:http';
-import { autonomousEnvironmentAudit } from './sire-autonomy';
 import { AGENT_CAPABILITIES, connectorRequest, discoverConnectors, enqueueAgentTask, webSearch } from './agent-tools';
 
 const PORT = Number(process.env.SIRE_AGENT_PORT || 10001);
@@ -13,12 +12,11 @@ const ALLOW_WRITES = process.env.SIRE_AGENT_ALLOW_WRITES === 'true';
 const tools = [
   { type: 'function', function: { name: 'web_search', description: 'Search the live public web and return source results.', parameters: { type: 'object', properties: { query: { type: 'string' }, limit: { type: 'number' } }, required: ['query'] } } },
   { type: 'function', function: { name: 'list_connectors', description: 'Discover configured SIRE connectors and permissions.', parameters: { type: 'object', properties: {} } } },
-  { type: 'function', function: { name: 'inspect_sire', description: 'Inspect SIRE catalogue, persisted market data coverage and capability gaps.', parameters: { type: 'object', properties: {} } } },
   { type: 'function', function: { name: 'connector_request', description: 'Call an authenticated connector. Writes require SIRE_AGENT_ALLOW_WRITES=true.', parameters: { type: 'object', properties: { connectorId: { type: 'string' }, path: { type: 'string' }, method: { type: 'string', enum: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'] }, permission: { type: 'string', enum: ['read', 'write', 'execute', 'deploy'] }, body: { type: 'object' } }, required: ['connectorId', 'path'] } } },
   { type: 'function', function: { name: 'create_background_task', description: 'Create a durable task for the always-on worker.', parameters: { type: 'object', properties: { task: { type: 'string' }, priority: { type: 'number' }, continuous: { type: 'boolean' }, metadata: { type: 'object' } }, required: ['task'] } } },
 ];
 
-const SYSTEM = `You are SIRE, an autonomous intelligence operating across the entire SIRE workspace. Inspect SIRE data, search the live web, discover authenticated connectors, and use authorized services. Inspect before acting. Never claim an action happened unless a tool confirms it. Separate facts from inference. For long-running work create durable background tasks. You have ${MAX_STEPS} tool steps.`;
+const SYSTEM = `You are SIRE, an autonomous intelligence operating across the entire SIRE workspace. Search the live web, discover authenticated connectors, and use authorized services. Inspect before acting. Never claim an action happened unless a tool confirms it. Separate facts from inference. For long-running work create durable background tasks. You have ${MAX_STEPS} tool steps.`;
 
 function json(res: any, status: number, body: unknown) {
   res.writeHead(status, { 'content-type': 'application/json; charset=utf-8', 'access-control-allow-origin': '*', 'access-control-allow-headers': 'content-type, authorization', 'access-control-allow-methods': 'POST, GET, OPTIONS' });
@@ -50,7 +48,6 @@ export async function runAgent(input: string) {
         switch (call.function?.name) {
           case 'web_search': output = await webSearch(String(args.query || ''), Number(args.limit || 8)); break;
           case 'list_connectors': output = { connectors: discoverConnectors(), capabilities: AGENT_CAPABILITIES }; break;
-          case 'inspect_sire': output = await autonomousEnvironmentAudit(); break;
           case 'create_background_task': output = await enqueueAgentTask({ task: String(args.task || ''), priority: Number(args.priority || 0), continuous: Boolean(args.continuous), metadata: args.metadata || {} }); break;
           case 'connector_request': {
             const permission = (args.permission || 'read') as 'read' | 'write' | 'execute' | 'deploy';
