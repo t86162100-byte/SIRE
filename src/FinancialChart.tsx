@@ -263,7 +263,7 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
     replayRef.current?.stop();
     replayRef.current = null;
 
-    const series = widget.primarySeries();
+    const series = widget.chart.primarySeries();
     if (!series) { setReplayRangeError('No chart data is loaded yet.'); return; }
 
     let allBars = (series.getData?.() || []) as DerivBar[];
@@ -326,7 +326,7 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
         if (quote.symbol !== symbolRef.current) return;
         lastTickAtRef.current = Date.now();
         lastLiveQuoteRef.current = quote;
-        const series = widgetRef.current?.primarySeries();
+        const series = widgetRef.current?.chart.primarySeries();
         const bars = (series?.getData?.() || []) as DerivBar[];
         const previous = bars[bars.length - 1] || null;
         const seconds = DERIV_INTERVAL_SECONDS[timeframeRef.current] || 60;
@@ -395,7 +395,7 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
       const syncQuoteFromSeries = () => {
         const live = lastLiveQuoteRef.current;
         if (live && live.symbol === symbolRef.current && Math.floor(Date.now() / 1000) - live.epoch < 10) return;
-        const bars = (widget.primarySeries()?.getData?.() || []) as DerivBar[];
+        const bars = (widget.chart.primarySeries()?.getData?.() || []) as DerivBar[];
         const last = bars[bars.length - 1];
         if (bars.length && oldestLoadedTimeRef.current === null) oldestLoadedTimeRef.current = bars[0].time;
         if (!last || !Number.isFinite(last.close)) return;
@@ -403,7 +403,7 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
         const percent = previous?.close ? ((last.close - previous.close) / previous.close) * 100 : 0;
         setMarketQuote({ price: last.close, percent });
       };
-      const offData = widget.on('data', (event: any) => { if (event?.error) { const message = event.error instanceof Error ? event.error.message : String(event.error); reportDiagnostic({ level: 'error', code: 'CHART_DATA_ERROR', message: 'Chart data load failed: ' + message, detail: 'The chart data controller reported a history/load failure.' }); } const bars = (widget.primarySeries()?.getData?.() || []) as DerivBar[]; if (!bars.length) reportDiagnostic({ level: 'error', code: 'CHART_NO_CANDLES', message: 'No historical candles are loaded for ' + symbolRef.current + ' ' + timeframeRef.current + '.', detail: 'The primary price series is empty.' }); syncQuoteFromSeries(); });
+      const offData = widget.on('data', (event: any) => { if (event?.error) { const message = event.error instanceof Error ? event.error.message : String(event.error); reportDiagnostic({ level: 'error', code: 'CHART_DATA_ERROR', message: 'Chart data load failed: ' + message, detail: 'The chart data controller reported a history/load failure.' }); } const bars = (widget.chart.primarySeries()?.getData?.() || []) as DerivBar[]; if (!bars.length) reportDiagnostic({ level: 'error', code: 'CHART_NO_CANDLES', message: 'No historical candles are loaded for ' + symbolRef.current + ' ' + timeframeRef.current + '.', detail: 'The primary price series is empty.' }); syncQuoteFromSeries(); });
 
       // Load history progressively as the user pans toward the oldest loaded bar.
       // The chart keeps everything already loaded, while older pages are fetched
@@ -424,7 +424,7 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
               historyExhaustedRef.current = true;
               return;
             }
-            const series = widget.primarySeries();
+            const series = widget.chart.primarySeries();
             if (!series) return;
             // OpenAlgo's prependData merges/deduplicates older bars while
             // preserving the currently loaded history and viewport.
@@ -558,7 +558,7 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
   return (
     <div ref={containerRef} className={`sire-financial-chart${drawRackOpen ? ' sire-draw-rack-open' : ''}${isActive ? ' sire-toolbar-owner' : ''}`}>
       <button type="button" className={'sire-chart-diagnostics-button' + (diagnostics.some(event => event.level === 'error') ? ' has-error' : '')} onClick={() => setDiagnosticsOpen(open => !open)} aria-label="Open chart diagnostics" title="Chart diagnostics"><Wrench size={14} />{diagnostics.some(event => event.level === 'error') ? 'ISSUE' : 'OK'}</button>
-      <ChartDiagnosticsPanel open={diagnosticsOpen} events={diagnostics} symbol={symbol} interval={activeTimeframe} quoteAgeMs={lastTickAtRef.current === null ? null : Date.now() - lastTickAtRef.current} bars={((widgetRef.current?.primarySeries()?.getData?.() || []) as DerivBar[]).length} renderer={rendererKind} width={Math.round(containerRef.current?.getBoundingClientRect().width || 0)} height={Math.round(containerRef.current?.getBoundingClientRect().height || 0)} onClose={() => setDiagnosticsOpen(false)} onRetry={() => { setDiagnostics([]); lastTickAtRef.current = null; lastLiveQuoteRef.current = null; setMarketQuote(null); void widgetRef.current?.reload?.(); }} />
+      <ChartDiagnosticsPanel open={diagnosticsOpen} events={diagnostics} symbol={symbol} interval={activeTimeframe} quoteAgeMs={lastTickAtRef.current === null ? null : Date.now() - lastTickAtRef.current} bars={((widgetRef.current?.chart.primarySeries()?.getData?.() || []) as DerivBar[]).length} renderer={rendererKind} width={Math.round(containerRef.current?.getBoundingClientRect().width || 0)} height={Math.round(containerRef.current?.getBoundingClientRect().height || 0)} onClose={() => setDiagnosticsOpen(false)} onRetry={() => { setDiagnostics([]); lastTickAtRef.current = null; lastLiveQuoteRef.current = null; setMarketQuote(null); void widgetRef.current?.reload?.(); }} />
       <div className="sire-market-quote" aria-label={`Selected ${marketInstrumentName}`}>
         <strong className="sire-market-quote__name">{marketInstrumentName}</strong>
         <div className="sire-market-quote__value-row">
