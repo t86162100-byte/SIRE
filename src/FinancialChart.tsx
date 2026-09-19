@@ -46,6 +46,9 @@ export type DerivBar = { time: number; open: number; high: number; low: number; 
 const DERIV_WS_URL = 'wss://api.derivws.com/trading/v1/options/ws/public';
 const DERIV_REQUEST_TIMEOUT = 20000;
 const DERIV_PAGE_SIZE = 5000;
+// Keep the live chart bounded. Loading the entire available synthetic history into
+// a mobile canvas can cause the renderer to become blank after the first bars appear.
+const DERIV_CHART_BARS = 5000;
 const DERIV_INTERVAL_SECONDS: Record<string, number> = Object.fromEntries(Object.entries(INTERVAL_SECONDS));
 let derivRequestId = 0;
 const nextDerivRequestId = () => ++derivRequestId;
@@ -95,20 +98,27 @@ function derivBar(candle: any): DerivBar | null {
   return [time, open, high, low, close].every(Number.isFinite) ? { time, open, high, low, close, volume: 0 } : null;
 }
 
-export async function fetchAllDerivHistory(symbol: string, interval: string): Promise<DerivBar[]> {
+export async function fetchAllDerivHistory(symbol: string, interval: string, maxBars = DERIV_CHART_BARS): Promise<DerivBar[]> {
   const seconds = DERIV_INTERVAL_SECONDS[interval]; if (!seconds) throw new Error(`Unsupported Deriv interval: ${interval}`);
   const socket = await openDerivSocket();
   try {
     const all: DerivBar[] = []; let end: number | 'latest' = 'latest'; let previousOldest = Infinity;
-    while (true) {
-      const data = await derivRequest(socket, { ticks_history: symbol, end, count: DERIV_PAGE_SIZE, style: 'candles', granularity: seconds, adjust_start_time: 1 });
+    while (all.length < maxBars) {
+      const count = Math.min(DERIV_PAGE_SIZE, maxBars - all.length);
+      const data = await derivRequest(socket, { ticks_history: symbol, end, count, style: 'candles', granularity: seconds, adjust_start_time: 1 });
       const page = (Array.isArray(data.candles) ? data.candles.map(derivBar).filter(Boolean) as DerivBar[] : []).sort((a, b) => a.time - b.time);
       if (!page.length) break;
       const seen = new Set(all.map(bar => bar.time)); for (const bar of page) if (!seen.has(bar.time)) all.push(bar); all.sort((a, b) => a.time - b.time);
-      const oldest = page[0].time; if (page.length < DERIV_PAGE_SIZE || oldest <= 0 || oldest >= previousOldest) break; previousOldest = oldest; end = Math.max(1, oldest - 1); await derivSleep(75);
+      const oldest = page[0].time;
+      if (page.length < count || oldest <= 0 || oldest >= previousOldest) break;
+      previousOldest = oldest; end = Math.max(1, oldest - 1); await derivSleep(75);
     }
-    return all;
+    return all.slice(-maxBars);
   } finally { socket.close(); }
+}
+
+async function fetchChartHistory(symbol: string, interval: string): Promise<DerivBar[]> {
+  return fetchAllDerivHistory(symbol, interval, DERIV_CHART_BARS);
 }
 
 function tickToBar(previous: DerivBar | null, epoch: number, price: number, seconds: number): DerivBar {
@@ -120,7 +130,7 @@ function tickToBar(previous: DerivBar | null, epoch: number, price: number, seco
 
 export function createDerivDataFeed(onQuote?: (quote: { symbol: string; price: number }) => void) {
   return {
-    async getBars({ symbol, interval }: { symbol: string; interval: string }) { return fetchAllDerivHistory(symbol, interval); },
+    async getBars({ symbol, interval }: { symbol: string; interval: string }) { return fetchChartHistory(symbol, interval); },
     subscribeBars({ symbol, interval }: { symbol: string; interval: string }, onBar: (bar: DerivBar) => void, options?: { seedFrom?: DerivBar }) {
       const seconds = DERIV_INTERVAL_SECONDS[interval]; let stopped = false; let socket: WebSocket | null = null; let reconnect: number | null = null; let current = options?.seedFrom ? { ...options.seedFrom } : null;
       const connect = () => { if (stopped) return; socket = new WebSocket(DERIV_WS_URL); socket.onopen = () => { if (!stopped && socket) socket.send(JSON.stringify({ ticks: symbol, subscribe: 1, req_id: nextDerivRequestId() })); }; socket.onmessage = event => { let data: any; try { data = JSON.parse(String(event.data)); } catch { return; } if (data.msg_type !== 'tick' || data.tick?.symbol !== symbol) return; const epoch = Number(data.tick.epoch), price = Number(data.tick.quote); if (!Number.isFinite(epoch) || !Number.isFinite(price)) return; const next = tickToBar(current, epoch, price, seconds); onQuote?.({ symbol, price }); if (!current || next.time !== current.time || next.close !== current.close || next.high !== current.high || next.low !== current.low) { current = next; onBar({ ...next }); } }; socket.onclose = () => { socket = null; if (!stopped) reconnect = window.setTimeout(connect, 1000); }; socket.onerror = () => {}; };
@@ -308,7 +318,7 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
     let allBars = (series.getData?.() || []) as DerivBar[];
     if (!allBars.length) {
       try {
-        allBars = await fetchAllDerivHistory(symbol, activeTimeframe);
+        allBars = await fetchChartHistory(symbol, activeTimeframe);
         if (allBars.length) series.setData(allBars);
       } catch (error) {
         setReplayRangeError(error instanceof Error ? error.message : 'Unable to load chart history for replay.');
@@ -374,14 +384,14 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
         symbol,
         exchange: 'SYNTHETIC',
         feed,
-        loading: { retainedBars: Number.MAX_SAFE_INTEGER },
+        loading: { retainedBars: DERIV_CHART_BARS },
         interval: '1m',
         intervals: CHART_INTERVALS,
         chartType: 'candlestick',
         theme: 'dark',
         renderer: 'canvas2d',
         navigation: { mousePan: 'both', defaultVisibleBars: 10 },
-        lookbackBars: Number.MAX_SAFE_INTEGER,
+        lookbackBars: DERIV_CHART_BARS,
         animZoom: true,
         animAutoscale: true,
         branding: false,
@@ -484,7 +494,7 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
         widget.setSymbol(symbol, 'SYNTHETIC');
         // Explicitly seed the new symbol after switching. This keeps the chart
         // visible even when the widget's internal symbol reload is asynchronous.
-        const bars = await fetchAllDerivHistory(symbol, activeTimeframe);
+        const bars = await fetchChartHistory(symbol, activeTimeframe);
         if (cancelled || widgetRef.current !== widget) return;
         const series = widget.primarySeries();
         if (series && bars.length) {
