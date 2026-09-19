@@ -348,21 +348,21 @@ export class DerivMarketDataClient {
 }
 
 async function fetchDerivHistoryPage(symbol: string, seconds: number, end: number | 'latest', count: number) {
-  if (typeof window !== 'undefined') {
-    const response = await fetch('/api/sire/deriv/history', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      cache: 'no-store',
-      body: JSON.stringify({ symbol, granularity: seconds, end, count }),
-    });
-    let body: any = null;
-    try { body = await response.json(); } catch {}
-    if (!response.ok) throw new Error(body?.error || `Deriv history request failed (HTTP ${response.status}).`);
-    return body;
-  }
+  // Use the same public Deriv WebSocket path in the browser for both live ticks
+  // and historical candles. This avoids routing progressive history through a
+  // server adapter that can fail independently of the working market-data
+  // connection.
   const client = new DerivMarketDataClient();
   try {
-    return await client.request({ ticks_history: symbol, end, count, style: 'candles', granularity: seconds, adjust_start_time: 1, subscribe: 0 });
+    return await client.request({
+      ticks_history: symbol,
+      end,
+      count,
+      style: 'candles',
+      granularity: seconds,
+      adjust_start_time: 1,
+      subscribe: 0,
+    });
   } finally {
     client.close();
   }
