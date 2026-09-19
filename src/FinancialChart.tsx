@@ -50,6 +50,8 @@ function analyzeChartHealth(events: ChartDiagnostic[], snapshot: { bars: number;
   if (find('CHART_ZERO_SIZE')) return { state: 'ISSUE', subsystem: 'Layout/DOM', cause: 'The chart container has no usable dimensions.', evidence: snapshot.width + '×' + snapshot.height + 'px was measured.', next: 'Fix the parent layout or visibility before debugging market data.' };
   if (!snapshot.hasCanvas) return { state: 'ISSUE', subsystem: 'Chart renderer', cause: 'No chart canvas is mounted.', evidence: 'The chart host contains no canvas element.', next: 'Inspect widget creation, renderer initialization and teardown.' };
   if (!snapshot.hasPrimarySeries) return { state: 'ISSUE', subsystem: 'OpenAlgo chart API', cause: 'The primary price series is unavailable through widget.chart.', evidence: 'SIRE could not obtain widget.chart.primarySeries().', next: 'Inspect the installed OpenAlgo Charts API/version and object shape.' };
+  if (find('HISTORY_OLDER_LOAD_FAILED')) { const event = find('HISTORY_OLDER_LOAD_FAILED')!; return { state: 'ISSUE', subsystem: 'Progressive Deriv history', cause: event.message, evidence: event.detail || 'SIRE attempted to load older candles and the request failed.', next: 'Check the historical endpoint and the exact request details in the diagnostic log.' }; }
+  if (find('HISTORY_INITIAL_WINDOW') && snapshot.bars > 0) { const event = find('HISTORY_INITIAL_WINDOW')!; return { state: 'HEALTHY', subsystem: 'Deriv history', cause: `${snapshot.bars} startup candles are loaded; this is the initial window, not a history ceiling.`, evidence: event.detail || `SIRE starts with ${DERIV_INITIAL_BARS} candles and can fetch older pages progressively.`, next: 'Pan/scroll toward the oldest candle. SIRE will request another page and log exactly what Deriv returned.' }; }
   if (snapshot.bars === 0 || find('HISTORY_EMPTY') || find('HISTORY_LOAD_FAILED')) { const event = find('HISTORY_LOAD_FAILED') || find('HISTORY_EMPTY'); return { state: 'ISSUE', subsystem: 'Deriv history', cause: event?.message || 'No historical candles are available.', evidence: event?.detail || 'The primary series contains zero usable OHLC bars.', next: 'Check the SIRE history endpoint, Deriv response and symbol/granularity validation.' }; }
   if (find('LIVE_TICK_SUBSCRIPTION_FAILED')) { const event = find('LIVE_TICK_SUBSCRIPTION_FAILED')!; return { state: 'ISSUE', subsystem: 'Deriv live transport', cause: event.message, evidence: event.detail || 'The live subscription did not complete.', next: 'Check the /deriv/ws proxy, Deriv public WebSocket and subscription response.' }; }
   if (find('LIVE_TICK_STALE') || (snapshot.tickAgeMs !== null && snapshot.tickAgeMs > 10000)) return { state: 'ISSUE', subsystem: 'Deriv live transport', cause: 'The live tick stream is stale.', evidence: snapshot.tickAgeMs === null ? 'No live tick timestamp exists.' : Math.round(snapshot.tickAgeMs / 1000) + 's since the last tick.', next: 'Check the browser→SIRE WebSocket→Deriv path and reconnect state.' };
@@ -89,17 +91,20 @@ function ChartDiagnosticsPanel({ open, events, symbol, interval, quoteAgeMs, bar
   const activeError = [...events].reverse().find(event => event.level === 'error');
   const liveText = quoteAgeMs === null ? 'No live tick received yet' : Math.round(quoteAgeMs / 1000) + 's since last live tick';
   const diagnosis = analyzeChartHealth(events, { bars, tickAgeMs: quoteAgeMs, width, height, hasCanvas, hasPrimarySeries });
+  const historyInitial = [...events].reverse().find(event => event.code === 'HISTORY_INITIAL_WINDOW');
+  const historyOlder = events.filter(event => event.code === 'HISTORY_OLDER_LOADED').length;
+  const historyRequests = events.filter(event => event.code === 'HISTORY_OLDER_REQUEST_STARTED').length;
   const allText = events.map(diagnosticText).join('\n\n');
   const copy = async (id: number | 'all', value: string) => { if (await copyDiagnosticText(value)) { setCopiedId(id); window.setTimeout(() => setCopiedId(current => current === id ? null : current), 1400); } };
   return <div className="sire-chart-diagnostics" role="dialog" aria-label="Chart diagnostics">
     <div className="sire-chart-diagnostics__head"><div><strong>Chart diagnostics</strong><small>{symbol} · {interval} · {events.length} log entries · continuous monitoring</small></div><div className="sire-chart-diagnostics__head-actions"><button type="button" className="sire-chart-diagnostics__copy-all" onClick={() => void copy('all', allText)} disabled={!events.length}>{copiedId === 'all' ? 'Copied' : 'Copy all'}</button><button type="button" onClick={onClose} aria-label="Close chart diagnostics">×</button></div></div>
     <div className={'sire-chart-diagnostics__diagnosis is-' + diagnosis.state.toLowerCase()}><div><b>{diagnosis.state === 'HEALTHY' ? 'Chart is healthy' : diagnosis.state === 'ISSUE' ? 'Issue identified' : 'Checking chart'}</b><span>{diagnosis.subsystem}</span></div><strong>What is happening: </strong>{diagnosis.cause}<small><b>Evidence:</b> {diagnosis.evidence}</small><small><b>Next check:</b> {diagnosis.next}</small></div>
-    <div className="sire-chart-diagnostics__metrics"><span>History <b>{bars}</b></span><span>Live <b>{liveText}</b></span><span>Renderer <b>{renderer}</b></span><span>Canvas <b>{width}×{height}</b></span><span>Series <b>{hasPrimarySeries ? 'OK' : 'Missing'}</b></span></div>
+    <div className="sire-chart-diagnostics__metrics"><span>History <b>{bars}</b>{historyInitial ? ` / ${DERIV_INITIAL_BARS} initial` : ''}</span><span>Older pages <b>{historyOlder}</b> / {historyRequests}</span><span>Live <b>{liveText}</b></span><span>Renderer <b>{renderer}</b></span><span>Canvas <b>{width}×{height}</b></span><span>Series <b>{hasPrimarySeries ? 'OK' : 'Missing'}</b></span></div>
     {activeError && <div className="sire-chart-diagnostics__active"><b>{diagnosticLabel(activeError.level)} · {activeError.code}</b><span>{activeError.message}</span>{activeError.detail && <small>Why: {activeError.detail}</small>}<button type="button" onClick={onRetry}>Retry chart data</button></div>}
     <div className="sire-chart-diagnostics__list">{events.length ? events.map(event => <div key={event.id} className={'sire-chart-diagnostics__event is-' + event.level}><div><b>{diagnosticLabel(event.level)} · {event.code}</b><time>{new Date(event.timestamp).toLocaleTimeString()}</time><button type="button" className="sire-chart-diagnostics__copy" onClick={() => void copy(event.id, diagnosticText(event))}>{copiedId === event.id ? 'Copied' : 'Copy'}</button></div><span>{event.message}</span>{event.detail && <small>{event.detail}</small>}</div>) : <div className="sire-chart-diagnostics__empty">No chart faults detected. Monitoring all chart layers continuously.</div>}</div>
   </div>;
 }
-import { createDerivDataFeed, DERIV_INTERVAL_SECONDS, DERIV_PAGE_SIZE, fetchAllDerivHistory, fetchOlderDerivHistory, tickToBar, type DerivBar, type DerivInstrument, type DerivFeedDiagnostic } from './derivMarketData';
+import { createDerivDataFeed, DERIV_INTERVAL_SECONDS, DERIV_PAGE_SIZE, DERIV_INITIAL_BARS, fetchAllDerivHistory, fetchOlderDerivHistory, tickToBar, type DerivBar, type DerivInstrument, type DerivFeedDiagnostic } from './derivMarketData';
 
 export { type DerivInstrument, type DerivBar } from './derivMarketData';
 
@@ -454,16 +459,21 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
         if (historyLoadingRef.current || historyExhaustedRef.current) return;
         const currentSymbol = symbolRef.current;
         const currentInterval = timeframeRef.current;
+        const series = widget.chart.primarySeries();
+        const seriesBars = (series?.getData?.() || []) as DerivBar[];
+        if (oldestLoadedTimeRef.current === null && seriesBars.length) oldestLoadedTimeRef.current = seriesBars[0].time;
         const oldest = oldestLoadedTimeRef.current;
         if (!currentSymbol || !oldest) return;
 
         historyLoadingRef.current = true;
+        reportDiagnostic({ level: 'info', code: 'HISTORY_OLDER_REQUEST_STARTED', message: `Requesting older ${currentInterval} candles for ${currentSymbol}.`, detail: `Current oldest candle: ${new Date(oldest * 1000).toISOString()}. Requesting up to ${DERIV_PAGE_SIZE} older candles from Deriv.` });
         void (async () => {
           try {
             const older = await fetchOlderDerivHistory(currentSymbol, currentInterval, oldest - 1, DERIV_PAGE_SIZE);
             if (widgetRef.current !== widget || symbolRef.current !== currentSymbol || timeframeRef.current !== currentInterval) return;
             if (!older.length) {
               historyExhaustedRef.current = true;
+              reportDiagnostic({ level: 'info', code: 'HISTORY_EXHAUSTED', message: `No older ${currentInterval} candles were returned for ${currentSymbol}.`, detail: `The progressive loader reached the oldest history available from the Deriv endpoint for this request.` });
               return;
             }
             const series = widget.chart.primarySeries();
@@ -472,8 +482,14 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
             // preserving the currently loaded history and viewport.
             series.prependData(older);
             oldestLoadedTimeRef.current = older[0].time;
-            if (older.length < DERIV_PAGE_SIZE || older[0].time <= 1) historyExhaustedRef.current = true;
+            reportDiagnostic({ level: 'info', code: 'HISTORY_OLDER_LOADED', message: `Loaded ${older.length} older ${currentInterval} candles for ${currentSymbol}.`, detail: `Deriv returned ${older.length} usable candles. New oldest candle: ${new Date(older[0].time * 1000).toISOString()}. Total chart history is now approximately ${(series.getData?.() || []).length} candles.` });
+            if (older.length < DERIV_PAGE_SIZE || older[0].time <= 1) {
+              historyExhaustedRef.current = true;
+              reportDiagnostic({ level: 'info', code: 'HISTORY_EXHAUSTED', message: `Reached the end of available ${currentInterval} history for ${currentSymbol}.`, detail: `The last page contained ${older.length} candles (requested ${DERIV_PAGE_SIZE}), so no further full page is expected.` });
+            }
           } catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            reportDiagnostic({ level: 'error', code: 'HISTORY_OLDER_LOAD_FAILED', message: `Older history failed for ${currentSymbol} ${currentInterval}: ${message}`, detail: `The progressive loader was trying to extend history beyond the initial ${DERIV_INITIAL_BARS}-candle startup window.` });
             console.error('Failed to load older chart history', error);
           } finally {
             historyLoadingRef.current = false;
