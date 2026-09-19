@@ -316,28 +316,26 @@ async function fetchDerivHistoryPage(symbol: string, seconds: number, end: numbe
 export async function fetchAllDerivHistory(symbol: string, interval: string, maxBars = DERIV_INITIAL_BARS) {
   const seconds = DERIV_INTERVAL_SECONDS[interval];
   if (!seconds) throw new Error(`Unsupported Deriv interval: ${interval}`);
-  try {
-    const all: DerivBar[] = [];
-    let end: number | 'latest' = 'latest';
-    let previousOldest = Infinity;
-    while (all.length < maxBars) {
-      const count = Math.min(DERIV_PAGE_SIZE, maxBars - all.length);
-      const data = await fetchDerivHistoryPage(symbol, seconds, end, count);
-      const page = Array.isArray(data?.candles)
-        ? data.candles.map(derivBar).filter(Boolean) as DerivBar[]
-        : [];
-      page.sort((a, b) => a.time - b.time);
-      if (!page.length) break;
-      const seen = new Set(all.map(bar => bar.time));
-      for (const bar of page) if (!seen.has(bar.time)) all.push(bar);
-      all.sort((a, b) => a.time - b.time);
-      const oldest = page[0].time;
-      if (page.length < count || oldest <= 0 || oldest >= previousOldest) break;
-      previousOldest = oldest;
-      end = Math.max(1, oldest - 1);
-    }
-    return all.slice(-maxBars);
+  const all: DerivBar[] = [];
+  let end: number | 'latest' = 'latest';
+  let previousOldest = Infinity;
+  while (all.length < maxBars) {
+    const count = Math.min(DERIV_PAGE_SIZE, maxBars - all.length);
+    const data = await fetchDerivHistoryPage(symbol, seconds, end, count);
+    const page = Array.isArray(data?.candles)
+      ? data.candles.map(derivBar).filter(Boolean) as DerivBar[]
+      : [];
+    page.sort((a, b) => a.time - b.time);
+    if (!page.length) break;
+    const seen = new Set(all.map(bar => bar.time));
+    for (const bar of page) if (!seen.has(bar.time)) all.push(bar);
+    all.sort((a, b) => a.time - b.time);
+    const oldest = page[0].time;
+    if (page.length < count || oldest <= 0 || oldest >= previousOldest) break;
+    previousOldest = oldest;
+    end = Math.max(1, oldest - 1);
   }
+  return all.slice(-maxBars);
 }
 
 export async function fetchOlderDerivHistory(symbol: string, interval: string, end: number, count = DERIV_PAGE_SIZE) {
