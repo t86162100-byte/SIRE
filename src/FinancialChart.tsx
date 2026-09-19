@@ -159,6 +159,19 @@ async function loadAllAvailableHistory(
       await new Promise<void>(resolve => window.setTimeout(resolve, HISTORY_PAGE_DELAY_MS));
     }
 
+    // The archive is the source of truth, not just a hidden cache. Once the
+    // provider walk finishes, put the complete chronological archive into the
+    // active series so the chart can actually display/pan across every candle.
+    const currentWidget = widgetRef.current;
+    if (currentWidget && currentWidget.symbol() === symbol) {
+      const full = archive.slice().sort((a, b) => a.time - b.time);
+      currentWidget.series.setData(full);
+      candlesRef.current = full;
+      updateMarketQuote(full);
+      currentWidget.chart.setAutoScale?.(true);
+      currentWidget.chart.resetScale?.();
+    }
+
     return archive;
   })();
 
@@ -643,10 +656,9 @@ export default function FinancialChart({ symbol, isActive = false, liveTick, req
     };
     widget.chart.setHistoryLoader(requestOlderIfNeeded);
 
-    // The active rendering window is bounded for mobile performance, but the
-    // archive can be much larger. When a user walks forward after paging deep
-    // into history, restore a newer window from that archive so the bounded
-    // renderer never becomes a one-way tunnel into the past.
+    // The full archive is rendered by the chart. Do not swap back to a
+    // bounded 200k-bar window: doing so would hide valid candles even though
+    // they are already present in the provider archive.
     const offHistoryPan = widget.chart.on('pan', () => {
       if (historyWindowSwapRef.current || replayRef.current) return;
       const active = candlesRef.current;
@@ -681,14 +693,13 @@ export default function FinancialChart({ symbol, isActive = false, liveTick, req
       }
       const targetIndex = low;
       const span = Math.max(1, Number(range.to) - Number(range.from));
-      const windowSize = Math.min(CHART_HISTORY_MAX_BARS, archived.length);
-      const lead = Math.min(windowSize - 1, Math.floor(windowSize * 0.75));
-      const start = Math.max(0, Math.min(targetIndex - lead, archived.length - windowSize));
+      const windowSize = archived.length;
+      const start = 0;
       const next = archived.slice(start, start + windowSize);
       if (!next.length) return;
 
-      const mappedTo = Math.max(0, Math.min(next.length - 1, targetIndex - start));
-      const mappedFrom = Math.max(0, Math.min(mappedTo, mappedTo - span));
+      const mappedTo = Math.max(0, Math.min(next.length - 1, targetIndex));
+      const mappedFrom = Math.max(0, mappedTo - span);
       historyWindowSwapRef.current = true;
       try {
         widget.series.setData(next);
