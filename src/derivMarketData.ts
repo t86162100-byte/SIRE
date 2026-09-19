@@ -441,7 +441,11 @@ export function createDerivDataFeed(
       return () => {
         stopped = true;
         unsubscribe?.();
-        client.close();
+        // Do not close the shared client here. OpenAlgo can tear down and
+        // recreate a bar subscription during symbol/timeframe changes. Closing
+        // the client makes the next subscription permanently fail with
+        // "Deriv market-data client is closed". The feed owns the client and
+        // closes it only when the whole feed is destroyed.
       };
     },
     close() { client.close(); },
