@@ -520,7 +520,7 @@ export default function FinancialChart({ symbol, isActive = false, liveTick, req
         };
       },
     };
-    const feed = withBarCache(sourceFeed, { ttlMs: 60_000, max: 32, maxBars: Number.POSITIVE_INFINITY });
+    const feed = withBarCache(sourceFeed, { ttlMs: 60_000, max: 32, maxBars: Number.MAX_SAFE_INTEGER });
     let widget: Widget;
     try {
       widget = createWidget(host, {
