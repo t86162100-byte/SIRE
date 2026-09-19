@@ -313,6 +313,7 @@ export default function FinancialChart({ symbol, isActive = false, liveTick, req
   const [marketQuote, setMarketQuote] = useState<{ price: number; percent: number } | null>(null);
   const widgetRef = useRef<Widget | null>(null);
   const candlesRef = useRef<Candle[]>([]);
+  const historyPagingRef = useRef(false);
   const subscriberRef = useRef<((bar: Candle) => void) | null>(null);
   const resyncRef = useRef<(() => void) | null>(null);
   const lastLiveEpochRef = useRef<number | null>(null);
@@ -573,6 +574,8 @@ export default function FinancialChart({ symbol, isActive = false, liveTick, req
     setRendererKind(widget.chart.rendererKind);
     const offRenderer = widget.chart.on('renderer:fallback', () => setRendererKind('canvas2d'));
     widgetRef.current = widget;
+    // Native OpenAlgo left-edge paging: fetch older Deriv candles when the user scrolls back.
+    widget.chart.setHistoryLoader(() => { void loadOlderHistoryPage(); });
 
     const updateSelectedDrawingOverlay = (drawing: any) => {
       if (!drawing) {
@@ -1096,9 +1099,7 @@ export default function FinancialChart({ symbol, isActive = false, liveTick, req
       widget.series.setData(bars);
       updateMarketQuote(bars);
       const oldestReturned = older.reduce((min, bar) => Math.min(min, bar.time), Infinity);
-      const boundaryHit = pages.some(page => page.length < FAST_HISTORY_PAGE_SIZE);
       if (goal !== undefined && oldestReturned <= goal) break;
-      if (boundaryHit) break;
 
       // Yield to rendering/input between batches so deep history never
       // monopolizes the main thread on mobile.
@@ -1106,6 +1107,64 @@ export default function FinancialChart({ symbol, isActive = false, liveTick, req
     }
 
     return bars;
+  };
+
+  const loadOlderHistoryPage = async () => {
+    const widget = widgetRef.current;
+    if (!widget || historyPagingRef.current || replayRef.current) return;
+
+    historyPagingRef.current = true;
+    try {
+      let bars = candlesRef.current.slice().sort((a, b) => a.time - b.time);
+      const anchor = bars[0]?.time;
+      if (!Number.isFinite(anchor)) return;
+
+      const interval = widget.interval();
+      const seconds = intervalSeconds(interval);
+      const pageSpan = FAST_HISTORY_PAGE_SIZE * seconds;
+      const requests = Array.from({ length: FAST_HISTORY_PAGES_PER_BATCH }, (_, index) => ({
+        symbol: symbolRef.current,
+        interval,
+        to: Math.floor(anchor - 1 - index * pageSpan),
+        noCache: false,
+      }));
+
+      const pages: Candle[][] = [];
+      for (let offset = 0; offset < requests.length; offset += FAST_HISTORY_CONCURRENCY) {
+        const batch = requests.slice(offset, offset + FAST_HISTORY_CONCURRENCY);
+        const results = await Promise.all(batch.map(req =>
+          requestBars(req, requestHistoryRef.current).catch(() => [] as Candle[])
+        ));
+        pages.push(...results);
+      }
+
+      const older = pages.flat()
+        .filter(bar => bar.time < anchor)
+        .sort((a, b) => a.time - b.time);
+
+      if (!older.length) return;
+
+      // OpenAlgo's native history-paging path preserves the user's viewport
+      // while shifting the logical indices. Do not replace the whole series
+      // here: setData would make the left edge feel sticky/jumpy on mobile.
+      const prependData = (widget.series as any).prependData;
+      if (typeof prependData !== 'function') {
+        widget.series.setData([...older, ...bars]);
+      } else {
+        prependData.call(widget.series, older);
+      }
+
+      const merged = new Map<number, Candle>();
+      for (const bar of [...bars, ...older]) merged.set(bar.time, bar);
+      bars = [...merged.values()].sort((a, b) => a.time - b.time);
+      candlesRef.current = bars;
+      putCachedHistory(symbolRef.current, interval, bars);
+      updateMarketQuote(bars);
+      window.setTimeout(refreshTpoProfile, 0);
+    } finally {
+      historyPagingRef.current = false;
+      widgetRef.current?.chart.historyLoadComplete?.();
+    }
   };
 
   const openReplaySetup = async () => {
