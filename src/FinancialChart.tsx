@@ -918,54 +918,6 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
         >
           <span className="sire-bottom-multichart-icon" aria-hidden="true"><span /><span /><span /></span>
         </button>
-        <button
-          type="button"
-          className="sire-bottom-more-button"
-          aria-label="Open chart menu"
-          aria-expanded={moreMenuOpen}
-          aria-haspopup="menu"
-          title="More chart options"
-          onClick={() => setMoreMenuOpen(open => !open)}
-        >
-          <MoreHorizontal size={23} strokeWidth={2} aria-hidden="true" />
-        </button>
-        {moreMenuOpen && (
-          <div className="sire-bottom-more-menu" role="menu" aria-label="Chart options">
-            <div className="sire-bottom-more-menu__section">
-              <div className="sire-bottom-more-menu__title">Chart type</div>
-              <div className="sire-bottom-more-menu__chart-types">
-                {CHART_TYPES.map(chartType => (
-                  <button
-                    key={chartType.id}
-                    type="button"
-                    role="menuitemradio"
-                    aria-checked={widgetRef.current?.chartType?.() === chartType.id}
-                    className={widgetRef.current?.chartType?.() === chartType.id ? 'active' : ''}
-                    onClick={() => selectChartType(chartType.id)}
-                  >
-                    {chartType.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-            <div className="sire-bottom-more-menu__section sire-bottom-more-menu__actions">
-              <button type="button" role="menuitem" onClick={toggleTpo}>
-                {tpoEnabled ? 'Hide Market Profile' : 'Market Profile'}
-              </button>
-              <button type="button" role="menuitem" onClick={captureChartPng}>Capture PNG</button>
-              <button type="button" role="menuitem" onClick={exportChartSvgFromMenu}>Export SVG</button>
-            </div>
-          </div>
-        )}
-                <button
-          type="button"
-          className="sire-bottom-obj-button"
-          aria-label="Open objects"
-          title="Objects"
-          onClick={() => widgetRef.current?.openObjects()}
-        >
-          <span aria-hidden="true">OBJ</span>
-        </button>
         {timeframeOpen && (
           <div className="sire-bottom-timeframe-menu">
             {CHART_INTERVALS.map(interval => (
