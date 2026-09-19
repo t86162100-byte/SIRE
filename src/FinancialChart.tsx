@@ -173,6 +173,8 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
   const [replayEndInput, setReplayEndInput] = useState('');
   const [replayRangeError, setReplayRangeError] = useState<string | null>(null);
   const [replayDraftSpeed, setReplayDraftSpeed] = useState(1);
+  const [replayStartMin, setReplayStartMin] = useState('');
+  const [replayNow, setReplayNow] = useState('');
   const replaySpeedRef = useRef(1);
   const [rendererKind, setRendererKind] = useState<'canvas2d' | 'webgl2'>('canvas2d');
   const [tpoEnabled, setTpoEnabled] = useState(false);
@@ -331,8 +333,23 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
   };
   const replaySeek = (index: number) => replayRef.current?.seek(index);
   const setReplaySpeed = (speed: number) => { replaySpeedRef.current = speed; setReplayDraftSpeed(speed); if (replayRef.current?.state().playing) replayRef.current.play({ speed }); };
+  const formatReplayInputTime = (epoch: number) => {
+    const date = new Date(epoch * 1000);
+    const pad = (value: number) => String(value).padStart(2, '0');
+    return date.getFullYear() + '-' + pad(date.getMonth() + 1) + '-' + pad(date.getDate()) + 'T' + pad(date.getHours()) + ':' + pad(date.getMinutes());
+  };
+  const refreshReplayBounds = () => {
+    const oldest = oldestLoadedTimeRef.current;
+    const now = Math.floor(Date.now() / 1000);
+    if (oldest && Number.isFinite(oldest)) setReplayStartMin(formatReplayInputTime(oldest));
+    setReplayNow(formatReplayInputTime(now));
+    const currentStart = replayStartInput ? new Date(replayStartInput).getTime() / 1000 : oldest ?? now;
+    const cappedStart = Math.max(oldest ?? 0, Math.min(now, currentStart));
+    setReplayStartInput(formatReplayInputTime(cappedStart));
+  };
   const startReplayFromInputs = async (fromBeginning: boolean, toLatest: boolean) => {
     setReplayRangeError(null);
+    refreshReplayBounds();
     const widget = widgetRef.current;
     if (!widget) { setReplayRangeError('Chart is still loading.'); return; }
     replayRef.current?.stop();
@@ -358,13 +375,15 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
       const ms = new Date(value).getTime();
       return Number.isFinite(ms) ? Math.floor(ms / 1000) : null;
     };
-    const startTime = fromBeginning ? null : parseReplayTime(replayStartInput);
-    const endTime = toLatest ? null : parseReplayTime(replayEndInput);
-    if (!fromBeginning && replayStartInput && startTime === null) { setReplayRangeError('Invalid replay start date/time.'); return; }
-    if (!toLatest && replayEndInput && endTime === null) { setReplayRangeError('Invalid replay end date/time.'); return; }
-    if (startTime !== null && endTime !== null && startTime > endTime) { setReplayRangeError('Replay start must be before replay end.'); return; }
+    const leftEdge = oldestLoadedTimeRef.current ?? allBars[0]?.time ?? Math.floor(Date.now() / 1000);
+    const now = Math.floor(Date.now() / 1000);
+    const requestedStart = fromBeginning ? leftEdge : parseReplayTime(replayStartInput);
+    if (!fromBeginning && replayStartInput && requestedStart === null) { setReplayRangeError('Invalid replay start date/time.'); return; }
+    const startTime = Math.max(leftEdge, Math.min(now, requestedStart ?? leftEdge));
+    const endTime = now;
+    if (startTime >= endTime) { setReplayRangeError('Replay start must be before the current time.'); return; }
 
-    const bars = allBars.filter(bar => (startTime === null || bar.time >= startTime) && (endTime === null || bar.time <= endTime));
+    const bars = allBars.filter(bar => bar.time >= startTime && bar.time <= endTime);
     if (bars.length < 2) { setReplayRangeError('Not enough chart history in the selected replay range.'); return; }
 
     widget.dataController?.setPaused(true);
@@ -661,14 +680,14 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
       {replaySetupOpen && !replayActive && (
         <div className="sire-replay-setup" role="dialog" aria-label="Set replay range">
           <div className="sire-replay-setup-row">
-            <input aria-label="Replay start date and time" type="datetime-local" value={replayStartInput} onChange={event => setReplayStartInput(event.target.value)} title="Start" />
-            <span aria-hidden="true">↔</span>
-            <input aria-label="Replay stop date and time" type="datetime-local" value={replayEndInput} onChange={event => setReplayEndInput(event.target.value)} title="Stop" />
+            <input aria-label="Replay start date and time" type="datetime-local" min={replayStartMin || undefined} max={replayNow || undefined} value={replayStartInput} onChange={event => { const value = event.target.value; setReplayStartInput(replayStartMin && value < replayStartMin ? replayStartMin : replayNow && value > replayNow ? replayNow : value); }} title="Start (capped at the left edge)" />
+            <span aria-hidden="true">→</span>
+            <input aria-label="Replay finish time (current time)" type="datetime-local" value={replayNow} readOnly disabled title="Finish is always the current time" />
           </div>
           <div className="sire-replay-quick-row">
             <button type="button" onClick={() => startReplayFromInputs(true, true)} aria-label="Replay from beginning to latest" title="Beginning to latest">⏮▶</button>
             <button type="button" onClick={() => startReplayFromInputs(false, true)} aria-label="Replay selected start to latest" title="Start to latest">▶⏭</button>
-            <button type="button" onClick={() => startReplayFromInputs(false, false)} aria-label="Replay selected range" title="Start to stop">↔▶</button>
+            <button type="button" onClick={() => startReplayFromInputs(false, true)} aria-label="Replay from selected start to current time" title="Start to current time">▶⏱</button>
             <button type="button" onClick={() => setReplaySetupOpen(false)} aria-label="Close replay setup" title="Close">×</button>
           </div>
           {replayRangeError && <div className="sire-replay-error">{replayRangeError}</div>}
