@@ -198,7 +198,6 @@ export class DerivMarketData {
   async getSyntheticIndices(): Promise<DerivInstrument[]> {
     const response = await this.request({
       active_symbols: 'brief',
-      product_type: 'basic',
     });
     const records = Array.isArray(response.active_symbols)
       ? response.active_symbols.filter((item: unknown): item is Record<string, unknown> => Boolean(item && typeof item === 'object'))
