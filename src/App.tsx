@@ -22,7 +22,9 @@ export default function App() {
   const [multiChartOpen, setMultiChartOpen] = useState(false);
   const [multiChartInstrument, setMultiChartInstrument] = useState('');
   const [multiChartPosition, setMultiChartPosition] = useState<'up' | 'down' | 'left' | 'right'>('right');
-  const [chartSymbols, setChartSymbols] = useState<string[]>([]);
+  // Keep the chart independent from the instrument catalogue request.
+  // Deriv can load a known synthetic symbol even if active_symbols is slow/unavailable.
+  const [chartSymbols, setChartSymbols] = useState<string[]>(['R_100']);
   const linkGroupRef = useRef<LinkGroup | null>(null);
 
   useEffect(() => { selectedRef.current = selected; }, [selected]);
