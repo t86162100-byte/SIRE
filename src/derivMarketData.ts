@@ -47,6 +47,15 @@ export const DERIV_INTERVAL_SECONDS: Record<string, number> = {
 type Pending = { resolve: (value: any) => void; reject: (reason?: unknown) => void; timer: number };
 type TickHandler = (tick: { symbol: string; price: number; epoch: number }) => void;
 
+export type DerivFeedDiagnostic = {
+  level: 'info' | 'warning' | 'error';
+  code: string;
+  message: string;
+  detail?: string;
+};
+
+type DiagnosticHandler = (event: DerivFeedDiagnostic) => void;
+
 let requestId = 0;
 
 function nextRequestId() {
@@ -353,11 +362,28 @@ export function tickToBar(previous: DerivBar | null, epoch: number, price: numbe
   return { ...previous, high: Math.max(previous.high, price), low: Math.min(previous.low, price), close: price };
 }
 
-export function createDerivDataFeed(onQuote?: (quote: { symbol: string; price: number; epoch: number }) => void) {
+export function createDerivDataFeed(
+  onQuote?: (quote: { symbol: string; price: number; epoch: number }) => void,
+  onDiagnostic?: DiagnosticHandler,
+) {
   const client = new DerivMarketDataClient();
   return {
     async getBars({ symbol, interval }: { symbol: string; interval: string }) {
-      return fetchAllDerivHistory(symbol, interval, DERIV_INITIAL_BARS);
+      onDiagnostic?.({ level: 'info', code: 'HISTORY_REQUEST_STARTED', message: `Loading ${interval} historical candles for ${symbol}.` });
+      try {
+        const bars = await fetchAllDerivHistory(symbol, interval, DERIV_INITIAL_BARS);
+        if (!bars.length) {
+          const error = new Error(`Deriv returned no historical candles for ${symbol} ${interval}.`);
+          onDiagnostic?.({ level: 'error', code: 'HISTORY_EMPTY', message: error.message, detail: 'The request completed, but no usable OHLC candles were returned.' });
+          throw error;
+        }
+        onDiagnostic?.({ level: 'info', code: 'HISTORY_LOADED', message: `Loaded ${bars.length} historical candles for ${symbol} ${interval}.` });
+        return bars;
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        onDiagnostic?.({ level: 'error', code: 'HISTORY_LOAD_FAILED', message: `Historical candles failed for ${symbol} ${interval}: ${message}`, detail: 'The chart cannot build reliable history until this request succeeds.' });
+        throw error;
+      }
     },
     subscribeBars(
       { symbol, interval }: { symbol: string; interval: string },
@@ -379,7 +405,11 @@ export function createDerivDataFeed(onQuote?: (quote: { symbol: string; price: n
             onBar({ ...next });
           });
         } catch (error) {
-          if (!stopped) console.error('[DERIV TICKS]', symbol, error);
+          if (!stopped) {
+            const message = error instanceof Error ? error.message : String(error);
+            onDiagnostic?.({ level: 'error', code: 'LIVE_TICK_SUBSCRIPTION_FAILED', message: `Live price subscription failed for ${symbol}: ${message}`, detail: 'Historical candles may still be available, but live price updates are not healthy.' });
+            console.error('[DERIV TICKS]', symbol, error);
+          }
         }
       };
       void start();
