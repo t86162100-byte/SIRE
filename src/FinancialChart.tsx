@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
-import { createWidget, registerInterval, type Widget } from 'openalgo-charts/widget';
+import { registerInterval } from 'openalgo-charts';
+import { createWidget, type Widget } from 'openalgo-charts/widget';
 import { derivMarketData } from './derivMarketData';
 import './financialChart.css';
 
