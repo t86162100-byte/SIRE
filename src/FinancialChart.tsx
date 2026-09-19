@@ -95,7 +95,7 @@ export default function FinancialChart({
       // is no second UI/data lifecycle involved in rendering the candles.
       // Use the documented base-engine construction path exactly: the host
       // supplies the dimensions and OpenAlgo owns the canvas inside it.
-      chart = createChart(host, { timezone: 'UTC' });
+      chart = createChart(host, { timezone: 'UTC', theme: 'dark', renderer: 'auto' });
       series = chart.addSeries('candlestick');
       chartRef.current = chart;
       seriesRef.current = series;
