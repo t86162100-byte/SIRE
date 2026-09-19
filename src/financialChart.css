@@ -161,3 +161,10 @@
 .sire-chart-diagnostics__event.is-info b{color:#8db5ff}
 .sire-chart-diagnostics__empty{padding:12px 4px;color:#8993a4;font-size:9px}
 @media(max-width:640px){.sire-chart-diagnostics-button{top:6px;right:6px}.sire-chart-diagnostics{top:38px;right:6px;width:calc(100% - 12px);max-height:65vh}}
+
+.sire-chart-diagnostics__head-actions{display:flex;align-items:center;gap:5px}
+.sire-chart-diagnostics__head-actions>button{display:flex;align-items:center;justify-content:center}
+.sire-chart-diagnostics__copy-all,.sire-chart-diagnostics__copy{border:1px solid rgba(255,255,255,.10)!important;border-radius:5px!important;background:rgba(255,255,255,.045)!important;color:#cfd5df!important;padding:4px 6px!important;font:700 8px/1 ui-monospace,SFMono-Regular,Menlo,monospace!important;cursor:pointer!important}
+.sire-chart-diagnostics__copy-all:hover,.sire-chart-diagnostics__copy:hover,.sire-chart-diagnostics__copy-all:focus-visible,.sire-chart-diagnostics__copy:focus-visible{background:rgba(255,255,255,.10)!important;color:#fff!important;outline:none}
+.sire-chart-diagnostics__copy-all:disabled{opacity:.4;cursor:not-allowed!important}
+.sire-chart-diagnostics__event>div{align-items:center}
