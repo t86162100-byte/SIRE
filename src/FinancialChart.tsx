@@ -3,7 +3,6 @@ import { ChevronLeft, ChevronRight, Eye, History, Lock, Minus, MoreHorizontal, P
 import { registerInterval } from 'openalgo-charts';
 import 'openalgo-charts/indicators';
 import 'openalgo-charts/draw';
-import { computeMarketProfile, MarketProfile } from 'openalgo-charts/profile';
 import 'openalgo-charts/trade';
 import 'openalgo-charts/transform';
 import 'openalgo-charts/webgl';
@@ -11,7 +10,16 @@ import { createWidget, type Widget } from 'openalgo-charts/widget';
 import './financialChart.css';
 
 type Instrument = { symbol: string; name: string; pipSize?: number };
-type Props = { symbol: string; isActive?: boolean; instruments: Instrument[]; onSelectInstrument: (instrument: Instrument) => void; onWidgetReady?: (widget: Widget) => void; onWidgetDestroyed?: (widget: Widget) => void; onInstrumentTap?: () => void };
+type Props = {
+  symbol: string;
+  isActive?: boolean;
+  instruments: Instrument[];
+  onSelectInstrument: (instrument: Instrument) => void;
+  onWidgetReady?: (widget: Widget) => void;
+  onWidgetDestroyed?: (widget: Widget) => void;
+  onInstrumentTap?: () => void;
+};
+
 const INTERVAL_SECONDS: Record<string, number> = {
   '1m': 60, '2m': 120, '3m': 180, '5m': 300, '10m': 600, '15m': 900, '20m': 1200,
   '30m': 1800, '45m': 2700, '1h': 3600, '2h': 7200, '3h': 10800, '4h': 14400,
@@ -23,27 +31,17 @@ for (const [code, seconds] of Object.entries(INTERVAL_SECONDS)) {
     registerInterval({ code, bucketing: { mode: 'interval', seconds } });
   }
 }
-
 const CHART_TYPES = [
-  { id: 'candlestick', label: 'Candles' },
-  { id: 'hollow-candle', label: 'Hollow Candles' },
-  { id: 'volume-candle', label: 'Volume Candles' },
-  { id: 'bar', label: 'Bars (OHLC)' },
-  { id: 'high-low', label: 'High-Low' },
-  { id: 'line', label: 'Line' },
-  { id: 'line-markers', label: 'Line + Markers' },
-  { id: 'step', label: 'Step Line' },
-  { id: 'area', label: 'Area' },
-  { id: 'hlc-area', label: 'HLC Area' },
-  { id: 'baseline', label: 'Baseline' },
-  { id: 'columns', label: 'Columns' },
+  { id: 'candlestick', label: 'Candles' }, { id: 'hollow-candle', label: 'Hollow Candles' },
+  { id: 'volume-candle', label: 'Volume Candles' }, { id: 'bar', label: 'Bars (OHLC)' },
+  { id: 'high-low', label: 'High-Low' }, { id: 'line', label: 'Line' },
+  { id: 'line-markers', label: 'Line + Markers' }, { id: 'step', label: 'Step Line' },
+  { id: 'area', label: 'Area' }, { id: 'hlc-area', label: 'HLC Area' },
+  { id: 'baseline', label: 'Baseline' }, { id: 'columns', label: 'Columns' },
   { id: 'histogram', label: 'Histogram' },
 ] as const;
-
 const REPLAY_SPEEDS = [0.5, 1, 2, 5, 10] as const;
 const replaySpeedLabel = (speed: number) => `${speed}×`;
-const formatReplayInput = (_epoch: number) => '';
-const parseReplayInput = (_value: string) => NaN;
 
 export default function FinancialChart({ symbol, isActive = false, instruments, onSelectInstrument, onWidgetReady, onWidgetDestroyed, onInstrumentTap }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -59,23 +57,46 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
   const [replayRangeError, setReplayRangeError] = useState<string | null>(null);
   const [replayDraftSpeed, setReplayDraftSpeed] = useState(1);
   const replaySpeedRef = useRef(1);
+  const [rendererKind, setRendererKind] = useState<'canvas2d' | 'webgl2'>('canvas2d');
+  const [tpoEnabled, setTpoEnabled] = useState(false);
+  const [moreMenuOpen, setMoreMenuOpen] = useState(false);
+  const [selectedDrawing, setSelectedDrawing] = useState<{ id: string; sourceId: string; name: string; visible: boolean; locked: boolean } | null>(null);
+  const [selectedDrawingPosition, setSelectedDrawingPosition] = useState<{ left: number; top: number } | null>(null);
+  const [selectedIndicator, setSelectedIndicator] = useState<{ id: string; name: string; paneIndex: number } | null>(null);
+  const [selectedIndicatorPosition, setSelectedIndicatorPosition] = useState<{ left: number; top: number } | null>(null);
+  const selectedIndicatorRef = useRef<{ id: string; name: string; paneIndex: number } | null>(null);
+  const [swipeInstrumentIndex, setSwipeInstrumentIndex] = useState(() => Math.max(0, instruments.findIndex(item => item.symbol === symbol)));
+  const swipeStartYRef = useRef<number | null>(null);
+  const swipeAccumulatedRef = useRef(0);
+  const swipeAnimatingRef = useRef(false);
+  const holdTimerRef = useRef<number | null>(null);
+  const holdTriggeredRef = useRef(false);
+  const timeframeHoldTimerRef = useRef<number | null>(null);
+  const timeframeHoldTriggeredRef = useRef(false);
+  const timeframeSwipeStartYRef = useRef(0);
+  const timeframeSwipeAccumulatedRef = useRef(0);
+  const timeframeSwipeAnimatingRef = useRef(false);
+  const [timeframeOpen, setTimeframeOpen] = useState(false);
+  const [activeTimeframe, setActiveTimeframe] = useState('1m');
+  const [swipeAnimation, setSwipeAnimation] = useState<'up' | 'down' | null>(null);
   const widgetRef = useRef<Widget | null>(null);
   const instrumentsRef = useRef(instruments);
   const onSelectInstrumentRef = useRef(onSelectInstrument);
   const symbolRef = useRef(symbol);
-  const tpoEnabledRef = useRef(false);
-  const tpoProfileRef = useRef<MarketProfile | null>(null);
-  const tpoUnregisterRef = useRef<(() => void) | null>(null);
+  instrumentsRef.current = instruments;
+  onSelectInstrumentRef.current = onSelectInstrument;
+  symbolRef.current = symbol;
+
+  const marketInstrument = instruments.find(item => item.symbol === symbol);
+  const marketInstrumentName = marketInstrument?.name || symbol;
+  const marketQuote = null;
+  const formatMarketPrice = (_price: number) => '—';
 
   useEffect(() => {
     const nextIndex = instruments.findIndex(item => item.symbol === symbol);
     if (nextIndex >= 0) setSwipeInstrumentIndex(nextIndex);
   }, [instruments, symbol]);
-  const marketInstrument = instruments.find(item => item.symbol === symbol);
-  const marketInstrumentName = marketInstrument?.name || symbol;
-  const marketPriceDecimals = 2;
-  const marketQuote = null;
-  const formatMarketPrice = (_price: number) => '—';
+
   const compactInstrumentName = (name: string) => {
     const first = name.trim().split(/\s+/)[0] || symbol;
     return `${first.replace(/[^a-zA-Z]/g, '').toUpperCase().slice(0, 5)}_`;
@@ -97,10 +118,14 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
     window.setTimeout(() => setSwipeAnimation(null), 320);
   };
   const clearTimeframeHold = () => {
-    if (timeframeHoldTimerRef.current !== null) {
-      window.clearTimeout(timeframeHoldTimerRef.current);
-      timeframeHoldTimerRef.current = null;
-    }
+    if (timeframeHoldTimerRef.current !== null) { window.clearTimeout(timeframeHoldTimerRef.current); timeframeHoldTimerRef.current = null; }
+  };
+  const selectTimeframe = (interval: string) => {
+    const widget = widgetRef.current;
+    if (!widget) return;
+    setActiveTimeframe(interval);
+    setTimeframeOpen(false);
+    widget.setInterval(interval);
   };
   const handleTimeframePointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
     if (event.pointerType === 'mouse' && event.button !== 0) return;
@@ -110,16 +135,13 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
     timeframeSwipeAccumulatedRef.current = 0;
     timeframeHoldTriggeredRef.current = false;
     clearTimeframeHold();
-    timeframeHoldTimerRef.current = window.setTimeout(() => {
-      timeframeHoldTriggeredRef.current = true;
-      setTimeframeOpen(true);    }, 600);
+    timeframeHoldTimerRef.current = window.setTimeout(() => { timeframeHoldTriggeredRef.current = true; setTimeframeOpen(true); }, 600);
   };
   const handleTimeframePointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
     if (timeframeHoldTriggeredRef.current) return;
     const delta = event.clientY - timeframeSwipeStartYRef.current;
     if (Math.abs(delta) >= 8) clearTimeframeHold();
     if (Math.abs(delta) < 45 || timeframeSwipeAnimatingRef.current) return;
-
     const direction: 1 | -1 = delta < 0 ? 1 : -1;
     const currentIndex = DERIV_INTERVALS.indexOf(activeTimeframe);
     const nextIndex = Math.max(0, Math.min(DERIV_INTERVALS.length - 1, currentIndex + direction));
@@ -136,24 +158,10 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
     timeframeHoldTriggeredRef.current = false;
     timeframeSwipeStartYRef.current = 0;
     timeframeSwipeAccumulatedRef.current = 0;
-    if (event.currentTarget.hasPointerCapture?.(event.pointerId)) {
-      event.currentTarget.releasePointerCapture?.(event.pointerId);
-    }
+    if (event.currentTarget.hasPointerCapture?.(event.pointerId)) event.currentTarget.releasePointerCapture?.(event.pointerId);
   };
-  const selectTimeframe = (interval: string) => {
-    if (replayRef.current) stopReplay();
-    const widget = widgetRef.current;
-    if (!widget) return;
-    setActiveTimeframe(interval);
-    setTimeframeOpen(false);
-    widget.setInterval(interval);
-  };
-
   const clearInstrumentHold = () => {
-    if (holdTimerRef.current !== null) {
-      window.clearTimeout(holdTimerRef.current);
-      holdTimerRef.current = null;
-    }
+    if (holdTimerRef.current !== null) { window.clearTimeout(holdTimerRef.current); holdTimerRef.current = null; }
   };
   const handleInstrumentPointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
     if (event.pointerType === 'mouse' && event.button !== 0) return;
@@ -164,10 +172,7 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
     holdTriggeredRef.current = false;
     clearInstrumentHold();
     holdTimerRef.current = window.setTimeout(() => {
-      if (swipeStartYRef.current !== null) {
-        holdTriggeredRef.current = true;
-        onInstrumentTap?.();
-      }
+      if (swipeStartYRef.current !== null) { holdTriggeredRef.current = true; onInstrumentTap?.(); }
     }, 600);
   };
   const handleInstrumentPointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
@@ -176,8 +181,7 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
     const delta = event.clientY - start;
     if (Math.abs(delta) >= 18 && !holdTriggeredRef.current) clearInstrumentHold();
     if (Math.abs(delta) < 55 || swipeAnimatingRef.current || holdTriggeredRef.current) return;
-    const direction: 1 | -1 = delta < 0 ? 1 : -1;
-    triggerSwipeStep(direction);
+    triggerSwipeStep(delta < 0 ? 1 : -1);
     swipeAnimatingRef.current = true;
     swipeStartYRef.current = event.clientY;
     swipeAccumulatedRef.current = 0;
@@ -188,18 +192,160 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
     swipeStartYRef.current = null;
     swipeAccumulatedRef.current = 0;
     holdTriggeredRef.current = false;
-    if (event.currentTarget.hasPointerCapture?.(event.pointerId)) {
-      event.currentTarget.releasePointerCapture?.(event.pointerId);
-    }
+    if (event.currentTarget.hasPointerCapture?.(event.pointerId)) event.currentTarget.releasePointerCapture?.(event.pointerId);
   };
+
+  const stopReplay = () => { setReplayActive(false); setReplayState(null); setReplaySetupOpen(false); };
+  const toggleReplay = () => setReplaySetupOpen(open => !open);
+  const replayStep = () => {};
+  const replayStepBack = () => {};
+  const replayJumpStart = () => {};
+  const replayJumpEnd = () => {};
+  const replaySeek = (_index: number) => {};
+  const setReplaySpeed = (speed: number) => { replaySpeedRef.current = speed; setReplayDraftSpeed(speed); };
+  const startReplayFromInputs = (_fromBeginning: boolean, _toLatest: boolean) => setReplayRangeError('No chart data source is connected.');
+
+  const selectChartType = (chartType: string) => {
+    const widget = widgetRef.current;
+    if (!widget) return;
+    try { widget.setChartType(chartType); } catch { return; }
+    setMoreMenuOpen(false);
+  };
+  const captureChartPng = () => {
+    const widget = widgetRef.current;
+    if (!widget) return;
+    widget.chart.downloadScreenshot(`sire-${symbol}-${widget.interval() || 'chart'}.png`);
+    setMoreMenuOpen(false);
+  };
+  const exportChartSvg = () => {
+    const widget = widgetRef.current;
+    if (!widget) return;
+    const svg = widget.chart.exportSVG({ background: true });
+    const blob = new Blob([svg], { type: 'image/svg+xml;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = `sire-${widget.symbol()}-${widget.interval()}.svg`;
+    anchor.click();
+    URL.revokeObjectURL(url);
+  };
+  const exportChartSvgFromMenu = () => { exportChartSvg(); setMoreMenuOpen(false); };
+  const addCompare = async (_compareSymbol: string) => {};
+  const removeCompare = (_compareSymbol: string) => setComparisons(current => current.filter(item => item !== _compareSymbol));
+  const toggleTpo = () => setTpoEnabled(value => !value);
 
   useEffect(() => {
     if (!drawRackOpen) return;
-    const onEscape = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setDrawRackOpen(false);
-    };
+    const onEscape = (event: KeyboardEvent) => { if (event.key === 'Escape') setDrawRackOpen(false); };
     window.addEventListener('keydown', onEscape);
     return () => window.removeEventListener('keydown', onEscape);
+  }, [drawRackOpen]);
+
+  useEffect(() => {
+    if (!containerRef.current) return;
+    const host = containerRef.current;
+    const sourceFeed = {
+      async getBars() { return []; },
+      subscribeBars() { return () => {}; },
+    };
+    let widget: Widget;
+    try {
+      widget = createWidget(host, {
+        feed: sourceFeed,
+        symbol,
+        exchange: 'Deriv Synthetic Indices',
+        interval: '1m',
+        intervals: DERIV_INTERVALS,
+        chartType: 'candlestick',
+        theme: 'dark',
+        renderer: 'canvas2d',
+        navigation: { mousePan: 'both', defaultVisibleBars: 10 },
+        animZoom: true,
+        animAutoscale: true,
+        branding: false,
+        rail: true,
+        topbar: false,
+        statusline: true,
+        indicators: true,
+        mobile: 'never',
+        timezone: 'Africa/Lagos',
+        axisChrome: { sessionClock: true, barCountdown: true },
+        symbolSearch: async (query: string) => instrumentsRef.current
+          .filter(item => `${item.name} ${item.symbol}`.toLowerCase().includes(query.trim().toLowerCase()))
+          .slice(0, 50)
+          .map(item => ({ symbol: item.symbol, name: item.name })),
+      });
+      const pitchBlackTheme = { ...widget.chart.theme(), background: '#000000' };
+      widget.setTheme(pitchBlackTheme);
+      widget.chart.applyOptions({ canvas: { background: '#000000' } });
+      widget.chart.setAutoScale?.(true);
+      widget.chart.resetScale?.();
+      widget.chart.applyOptions({ crosshair: { mode: 'normal' } });
+      setRendererKind(widget.chart.rendererKind);
+      const offRenderer = widget.chart.on('renderer:fallback', () => setRendererKind('canvas2d'));
+      widgetRef.current = widget;
+      setActiveTimeframe(widget.interval());
+      const offInterval = widget.on('interval', (event: { interval: string }) => setActiveTimeframe(event.interval));
+      const offSymbol = widget.on('symbol', (event: { symbol: string }) => {
+        const instrument = instrumentsRef.current.find(item => item.symbol === event.symbol);
+        if (instrument && instrument.symbol !== symbolRef.current) onSelectInstrumentRef.current(instrument);
+      });
+      onWidgetReady?.(widget);
+      return () => {
+        offSymbol?.();
+        offInterval?.();
+        offRenderer?.();
+        onWidgetDestroyed?.(widget);
+        widget.destroy();
+        widgetRef.current = null;
+      };
+    } catch (error) {
+      host.textContent = `OpenAlgo widget failed to initialize: ${error instanceof Error ? error.message : String(error)}`;
+      host.style.padding = '24px';
+      host.style.boxSizing = 'border-box';
+      host.style.color = '#ff8080';
+      host.style.background = '#080808';
+      host.style.fontFamily = 'monospace';
+      host.style.fontSize = '14px';
+      throw error;
+    }
+  }, []);
+
+  useEffect(() => {
+    const widget = widgetRef.current;
+    if (widget && widget.symbol() !== symbol) widget.setSymbol(symbol, 'Deriv Synthetic Indices');
+  }, [symbol]);
+
+  useEffect(() => {
+    const host = containerRef.current;
+    if (!host) return;
+    const positionRail = () => {
+      const rail = host.querySelector<HTMLElement>('.oac-rail');
+      if (!rail) return;
+      rail.classList.toggle('sire-oac-rail--closed', !drawRackOpen);
+      rail.setAttribute('aria-hidden', String(!drawRackOpen));
+      if (!drawRackOpen) { rail.style.removeProperty('--sire-rail-top'); return; }
+      const quote = host.querySelector<HTMLElement>('.sire-market-quote');
+      const hostRect = host.getBoundingClientRect();
+      const quoteRect = quote?.getBoundingClientRect();
+      const quoteBottom = quoteRect ? quoteRect.bottom - hostRect.top : 0;
+      const widget = widgetRef.current;
+      const mainPaneIndicators = widget?.objects.list?.().filter((item: any) => item?.kind === 'indicator' && Number(item?.paneIndex) === 0 && item?.visible !== false) ?? [];
+      const indicatorLegendBottom = mainPaneIndicators.length ? 6 + mainPaneIndicators.length * 24 + 4 : 0;
+      const top = Math.ceil(Math.max(quoteBottom + 8, indicatorLegendBottom));
+      rail.style.setProperty('--sire-rail-top', `${Math.max(0, top)}px`);
+    };
+    positionRail();
+    const observer = new MutationObserver(() => window.requestAnimationFrame(positionRail));
+    observer.observe(host, { childList: true, subtree: true });
+    const resizeObserver = new ResizeObserver(positionRail);
+    resizeObserver.observe(host);
+    const onResize = () => positionRail();
+    window.addEventListener('resize', onResize);
+    return () => { observer.disconnect(); resizeObserver.disconnect(); window.removeEventListener('resize', onResize); host.querySelector<HTMLElement>('.oac-rail')?.style.removeProperty('--sire-rail-top'); };
+  }, [drawRackOpen, symbol, instruments]);
+
+  return () => window.removeEventListener('keydown', onEscape);
   }, [drawRackOpen]);
 
   useEffect(() => {
