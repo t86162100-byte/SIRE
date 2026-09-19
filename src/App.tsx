@@ -127,16 +127,13 @@ export default function App() {
               setChartSymbols(current => current.map((value, slot) => slot === index ? item.symbol : value));
               if (index === 0) setSelected(current => current?.symbol === item.symbol ? current : instruments.find(candidate => candidate.symbol === item.symbol) || current);
             }}
-            onWidgetReady={widget => {
+            onWidgetReady={chart => {
               if (!linked) return;
               const group = linkGroupRef.current || createLinkGroup({ crosshair: true, viewport: true, symbol: true });
               linkGroupRef.current = group;
-              group.add(widget.chart, {
-                symbol: chartSymbol,
-                onSymbol: next => setChartSymbols(current => current.map((value, slot) => slot === index ? next : value)),
-              });
+              group.add(chart);
             }}
-            onWidgetDestroyed={widget => linkGroupRef.current?.remove(widget.chart)}
+            onWidgetDestroyed={chart => linkGroupRef.current?.remove(chart)}
           />}</div>)}
         </div>
         {multiChartOpen && <div className="sire-multichart-overlay" onContextMenu={event => event.preventDefault()}>
