@@ -327,6 +327,7 @@ export default function FinancialChart({ symbol, isActive = false, liveTick, req
   const widgetRef = useRef<Widget | null>(null);
   const candlesRef = useRef<Candle[]>([]);
   const historyPagingRef = useRef(false);
+  const historyWindowSwapRef = useRef(false);
   const subscriberRef = useRef<((bar: Candle) => void) | null>(null);
   const resyncRef = useRef<(() => void) | null>(null);
   const lastLiveEpochRef = useRef<number | null>(null);
@@ -592,6 +593,53 @@ export default function FinancialChart({ symbol, isActive = false, liveTick, req
     // Native OpenAlgo left-edge paging: fetch older Deriv candles when the user scrolls back.
     widget.chart.setHistoryLoader(() => { void loadOlderHistoryPage(); });
 
+    // The active rendering window is bounded for mobile performance, but the
+    // archive can be much larger. When a user walks forward after paging deep
+    // into history, restore a newer window from that archive so the bounded
+    // renderer never becomes a one-way tunnel into the past.
+    const offHistoryPan = widget.chart.on('pan', () => {
+      if (historyWindowSwapRef.current || historyPagingRef.current || replayRef.current) return;
+      const active = candlesRef.current;
+      if (active.length < 2) return;
+      const range = widget.chart.getVisibleLogicalRange?.();
+      if (!range || Number(range.to) < active.length - 18) return;
+
+      const interval = widget.interval();
+      const archived = getCachedHistory(symbolRef.current, interval);
+      if (archived.length <= active.length) return;
+      const activeLast = active[active.length - 1]?.time;
+      const archiveLast = archived[archived.length - 1]?.time;
+      if (!Number.isFinite(activeLast) || !Number.isFinite(archiveLast) || archiveLast <= activeLast) return;
+
+      const targetTime = active[Math.max(0, Math.min(active.length - 1, Math.floor(Number(range.to))))]?.time ?? activeLast;
+      let low = 0;
+      let high = archived.length - 1;
+      while (low < high) {
+        const mid = Math.floor((low + high) / 2);
+        if (archived[mid].time < targetTime) low = mid + 1;
+        else high = mid;
+      }
+      const targetIndex = low;
+      const span = Math.max(1, Number(range.to) - Number(range.from));
+      const windowSize = Math.min(CHART_HISTORY_MAX_BARS, archived.length);
+      const lead = Math.min(windowSize - 1, Math.floor(windowSize * 0.75));
+      const start = Math.max(0, Math.min(targetIndex - lead, archived.length - windowSize));
+      const next = archived.slice(start, start + windowSize);
+      if (!next.length) return;
+
+      const mappedTo = Math.max(0, Math.min(next.length - 1, targetIndex - start));
+      const mappedFrom = Math.max(0, Math.min(mappedTo, mappedTo - span));
+      historyWindowSwapRef.current = true;
+      try {
+        widget.series.setData(next);
+        candlesRef.current = next;
+        widget.chart.setVisibleLogicalRange?.({ from: mappedFrom, to: mappedTo });
+        updateMarketQuote(next);
+      } finally {
+        window.requestAnimationFrame(() => { historyWindowSwapRef.current = false; });
+      }
+    });
+
     const updateSelectedDrawingOverlay = (drawing: any) => {
       if (!drawing) {
         setSelectedDrawingPosition(null);
@@ -820,6 +868,7 @@ export default function FinancialChart({ symbol, isActive = false, liveTick, req
       offSymbol?.();
       offInterval?.();
       offData?.();
+      offHistoryPan?.();
       offRenderer?.();
       offDrawingObjects?.();
       offIndicatorObjects?.();
