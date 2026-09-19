@@ -204,21 +204,19 @@ export class DerivMarketData {
     const pageSize = Math.min(Math.max(Math.floor(count), 1), 5000);
     let pageEnd: number | 'latest' = end ?? 'latest';
     const lowerBound = Number.isFinite(start) ? Math.floor(Number(start)) : undefined;
-    const maxPages = lowerBound !== undefined && pageEnd !== 'latest'
-      ? Math.min(200, Math.max(1, Math.ceil(Math.max(0, pageEnd - lowerBound) / Math.max(granularity, 1) / pageSize)))
-      : 1;
-
-    for (let page = 0; page < maxPages; page += 1) {
-      // One-shot ticks_history requests work on both the current and legacy
-      // public market-data schemas. When a range is supplied, page backwards
-      // inside that range so OpenAlgo can ask for older history without making
-      // every initial chart load download the entire instrument history.
+    // No calendar-age cutoff and no fixed maximum page count. When a
+    // caller supplies an explicit start, continue until that exact start is
+    // reached or Deriv returns fewer than a full page (the provider boundary).
+    // Open-ended chart requests remain a single 5,000-bar page; FinancialChart
+    // performs its own left-edge paging using the actual oldest returned bar.
+    for (;;) {
       const request: Record<string, unknown> = {
         ticks_history: symbol,
         end: pageEnd,
         count: pageSize,
         style: 'candles',
         granularity,
+        subscribe: 0,
       };
       if (lowerBound !== undefined) request.start = lowerBound;
       const response = await this.request(request);
@@ -231,11 +229,16 @@ export class DerivMarketData {
         : [];
       if (!candles.length) break;
       allCandles.push(...candles);
-      if (candles.length < pageSize || lowerBound === undefined) break;
+
+      if (lowerBound === undefined || candles.length < pageSize) break;
+
       const epochs = candles.map(c => Number(c.epoch)).filter(Number.isFinite);
       if (!epochs.length) break;
-      const nextEnd = Math.floor(Math.min(...epochs)) - 1;
-      if (nextEnd < lowerBound || (pageEnd !== 'latest' && nextEnd >= pageEnd)) break;
+
+      const oldest = Math.floor(Math.min(...epochs));
+      const nextEnd = oldest - 1;
+      if (nextEnd < lowerBound) break;
+      if (pageEnd !== 'latest' && nextEnd >= pageEnd) break;
       pageEnd = nextEnd;
     }
 
