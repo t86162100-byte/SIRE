@@ -596,14 +596,12 @@ export default function FinancialChart({ symbol, isActive = false, liveTick, req
       const interval = widget.interval();
       const key = historyCacheKey(symbolRef.current, interval);
       if (historyPagingRef.current || replayRef.current || historyExhaustedKeyRef.current === key) return;
+      const before = candlesRef.current[0]?.time;
       void loadOlderHistoryPage().then(() => {
-        // If the current oldest bar did not move after a page request, mark
-        // this symbol/timeframe exhausted so repeated edge pans do not hammer
-        // Deriv at the true historical boundary.
-        const oldest = candlesRef.current[0]?.time;
-        if (!Number.isFinite(oldest)) return;
-        const after = getCachedHistory(symbolRef.current, interval)[0]?.time;
-        if (Number.isFinite(after) && after === oldest) {
+        // If the oldest bar did not move after a page request, Deriv has
+        // reached the actual historical boundary for this symbol/timeframe.
+        const after = candlesRef.current[0]?.time;
+        if (Number.isFinite(before) && Number.isFinite(after) && after >= before) {
           historyExhaustedKeyRef.current = key;
         }
       });
