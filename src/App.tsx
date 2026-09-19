@@ -4,22 +4,12 @@ import { createLinkGroup, type LinkGroup } from 'openalgo-charts';
 import ResearchLab from './ResearchLab';
 import FinancialChart from './FinancialChart';
 import { fetchDerivInstruments, type DerivInstrument } from './derivMarketData';
+import { SireErrorScreen } from './SireErrorBoundary';
 import './nativeTerminal.css';
 
 type Instrument = DerivInstrument;
 
 export default function App() {
-  const FALLBACK_INSTRUMENT: Instrument = {
-    symbol: '1HZ100V',
-    name: 'Volatility 100 (1s) Index',
-    market: 'synthetic_index',
-    submarket: 'volatility',
-    subgroup: 'volatility',
-    symbolType: 'synthetic_index',
-    category: 'synthetic',
-    pipSize: 0.01,
-    exchangeOpen: 1,
-  };
   const [instruments, setInstruments] = useState<Instrument[]>([]);
   const [selected, setSelected] = useState<Instrument | null>(null);
   const [derivLoading, setDerivLoading] = useState(true);
@@ -42,7 +32,7 @@ export default function App() {
     fetchDerivInstruments().then(items => {
       if (cancelled) return;
       if (!items.length) throw new Error('Deriv returned an empty active-symbol catalogue.');
-      const next = items.length ? items : [FALLBACK_INSTRUMENT];
+      const next = items;
       setDerivError('');
       setDerivLoading(false);
       setInstruments(next);
@@ -114,6 +104,27 @@ export default function App() {
     setSearch('');
     setInstrumentSearchOpen(true);
   };
+
+  if (derivLoading) {
+    return <SireErrorScreen
+      source="SIRE startup"
+      message="Waiting for Deriv market data and the active instrument catalogue. The interface is blocked until startup data is available."
+    />;
+  }
+
+  if (derivError) {
+    return <SireErrorScreen
+      source="Deriv market-data startup"
+      message={derivError}
+    />;
+  }
+
+  if (!instruments.length || !selected) {
+    return <SireErrorScreen
+      source="SIRE startup validation"
+      message="Deriv startup completed without a usable instrument catalogue or selected instrument."
+    />;
+  }
 
   const chartItems = chartSymbols.slice(0, chartLayout);
   const openMultiChartManager = () => {
