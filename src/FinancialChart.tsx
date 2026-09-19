@@ -41,140 +41,9 @@ const REPLAY_SPEEDS = [0.5, 1, 2, 5, 10] as const;
 const replaySpeedLabel = (speed: number) => `${speed}×`;
 
 
-export type DerivInstrument = { symbol: string; name: string; market: string; submarket: string; subgroup: string; symbolType: string; pipSize?: number; exchangeOpen?: number };
-export type DerivBar = { time: number; open: number; high: number; low: number; close: number; volume: number };
-const DERIV_WS_URL = 'wss://ws.binaryws.com/websockets/v3';
-const DERIV_REQUEST_TIMEOUT = 20000;
-const DERIV_PAGE_SIZE = 5000;
-// Load a safe first page, then keep paging older candles on demand until Deriv
-// reports that there is no more history. This avoids a mobile renderer overload
-// without imposing a permanent historical-data limit.
-const DERIV_INITIAL_BARS = 500;
-const DERIV_INTERVAL_SECONDS: Record<string, number> = Object.fromEntries(Object.entries(INTERVAL_SECONDS));
-let derivRequestId = 0;
-const nextDerivRequestId = () => ++derivRequestId;
-const derivSleep = (ms: number) => new Promise(resolve => window.setTimeout(resolve, ms));
+import { createDerivDataFeed, DERIV_INTERVAL_SECONDS, DERIV_PAGE_SIZE, fetchAllDerivHistory, fetchOlderDerivHistory, tickToBar, type DerivBar, type DerivInstrument } from './derivMarketData';
 
-function openDerivSocket(): Promise<WebSocket> {
-  return new Promise((resolve, reject) => {
-    const socket = new WebSocket(DERIV_WS_URL);
-    const timer = window.setTimeout(() => { socket.close(); reject(new Error('Deriv market-data connection timed out.')); }, DERIV_REQUEST_TIMEOUT);
-    socket.onopen = () => { window.clearTimeout(timer); resolve(socket); };
-    socket.onerror = () => { window.clearTimeout(timer); reject(new Error('Deriv market-data connection failed.')); };
-  });
-}
-
-function derivRequest(socket: WebSocket, payload: Record<string, unknown>): Promise<any> {
-  const req_id = nextDerivRequestId();
-  return new Promise((resolve, reject) => {
-    const timer = window.setTimeout(() => { cleanup(); reject(new Error('Deriv market-data request timed out.')); }, DERIV_REQUEST_TIMEOUT);
-    const cleanup = () => { window.clearTimeout(timer); socket.removeEventListener('message', onMessage); socket.removeEventListener('error', onError); socket.removeEventListener('close', onClose); };
-    const onMessage = (event: MessageEvent) => { let data: any; try { data = JSON.parse(String(event.data)); } catch { return; } if (data.req_id !== req_id) return; cleanup(); if (data.error) reject(new Error(data.error.message || 'Deriv market-data request failed.')); else resolve(data); };
-    const onError = () => { cleanup(); reject(new Error('Deriv market-data socket error.')); };
-    const onClose = () => { cleanup(); reject(new Error('Deriv market-data socket closed.')); };
-    socket.addEventListener('message', onMessage); socket.addEventListener('error', onError); socket.addEventListener('close', onClose); socket.send(JSON.stringify({ ...payload, req_id }));
-  });
-}
-
-function syntheticInstrument(item: any): DerivInstrument | null {
-  const market = String(item.market || '').toLowerCase();
-  const type = String(item.underlying_symbol_type || '').toLowerCase();
-  const submarket = String(item.submarket || '').toLowerCase();
-  const subgroup = String(item.subgroup || '').toLowerCase();
-  const symbol = String(item.underlying_symbol || item.symbol || '').trim();
-  if (!symbol) return null;
-  // Deriv's current active_symbols response normally includes market/type metadata.
-  // Keep a symbol-prefix fallback as well because some compatibility responses omit
-  // those fields; otherwise the entire synthetic instrument list can disappear.
-  const synthetic = market.includes('synthetic') || type.includes('synthetic') || submarket.includes('synthetic') || subgroup.includes('synthetic') || /^(1HZ|R_|RDBULL|RDBEAR|JD|stp)/i.test(symbol);
-  if (!synthetic) return null;
-  const pip = Number(item.pip_size ?? item.pip);
-  return { symbol, name: String(item.underlying_symbol_name || item.display_name || symbol), market: String(item.market || 'synthetic_index'), submarket: String(item.submarket || 'synthetic'), subgroup: String(item.subgroup || ''), symbolType: String(item.underlying_symbol_type || item.symbol_type || 'synthetic_index'), pipSize: Number.isFinite(pip) ? pip : undefined, exchangeOpen: Number.isFinite(Number(item.exchange_is_open)) ? Number(item.exchange_is_open) : undefined };
-}
-
-export async function fetchSyntheticInstruments(): Promise<DerivInstrument[]> {
-  const socket = await openDerivSocket();
-  try { const data = await derivRequest(socket, { active_symbols: 'brief' }); return (Array.isArray(data.active_symbols) ? data.active_symbols.map(syntheticInstrument).filter(Boolean) as DerivInstrument[] : []).sort((a, b) => a.name.localeCompare(b.name)); }
-  finally { socket.close(); }
-}
-
-function derivBar(candle: any): DerivBar | null {
-  const time = Number(candle?.epoch), open = Number(candle?.open), high = Number(candle?.high), low = Number(candle?.low), close = Number(candle?.close);
-  return [time, open, high, low, close].every(Number.isFinite) ? { time, open, high, low, close, volume: 0 } : null;
-}
-
-export async function fetchAllDerivHistory(symbol: string, interval: string, maxBars = DERIV_INITIAL_BARS): Promise<DerivBar[]> {
-  const seconds = DERIV_INTERVAL_SECONDS[interval]; if (!seconds) throw new Error(`Unsupported Deriv interval: ${interval}`);
-  const socket = await openDerivSocket();
-  try {
-    const all: DerivBar[] = []; let end: number | 'latest' = 'latest'; let previousOldest = Infinity;
-    while (all.length < maxBars) {
-      const count = Math.min(DERIV_PAGE_SIZE, maxBars - all.length);
-      const data = await derivRequest(socket, { ticks_history: symbol, end, count, style: 'candles', granularity: seconds, adjust_start_time: 1 });
-      const page = (Array.isArray(data.candles) ? data.candles.map(derivBar).filter(Boolean) as DerivBar[] : []).sort((a, b) => a.time - b.time);
-      if (!page.length) break;
-      const seen = new Set(all.map(bar => bar.time)); for (const bar of page) if (!seen.has(bar.time)) all.push(bar); all.sort((a, b) => a.time - b.time);
-      const oldest = page[0].time;
-      if (page.length < count || oldest <= 0 || oldest >= previousOldest) break;
-      previousOldest = oldest; end = Math.max(1, oldest - 1); await derivSleep(75);
-    }
-    return all.slice(-maxBars);
-  } finally { socket.close(); }
-}
-
-async function fetchChartHistory(symbol: string, interval: string): Promise<DerivBar[]> {
-  return fetchAllDerivHistory(symbol, interval, DERIV_INITIAL_BARS);
-}
-
-async function fetchDerivQuote(symbol: string): Promise<number | null> {
-  const socket = await openDerivSocket();
-  try {
-    const data = await derivRequest(socket, { ticks: symbol, subscribe: 0 });
-    const quote = Number(data?.tick?.quote);
-    return Number.isFinite(quote) ? quote : null;
-  } finally {
-    socket.close();
-  }
-}
-
-async function fetchOlderDerivHistory(symbol: string, interval: string, end: number, count = DERIV_PAGE_SIZE): Promise<DerivBar[]> {
-  const seconds = DERIV_INTERVAL_SECONDS[interval];
-  if (!seconds) throw new Error(`Unsupported Deriv interval: ${interval}`);
-  const socket = await openDerivSocket();
-  try {
-    const data = await derivRequest(socket, {
-      ticks_history: symbol,
-      end: Math.max(1, Math.floor(end)),
-      count,
-      style: 'candles',
-      granularity: seconds,
-      adjust_start_time: 1,
-    });
-    return (Array.isArray(data.candles) ? data.candles.map(derivBar).filter(Boolean) as DerivBar[] : [])
-      .sort((a, b) => a.time - b.time);
-  } finally {
-    socket.close();
-  }
-}
-
-function tickToBar(previous: DerivBar | null, epoch: number, price: number, seconds: number): DerivBar {
-  const time = Math.floor(epoch / seconds) * seconds;
-  if (!previous || time > previous.time) return { time, open: price, high: price, low: price, close: price, volume: 0 };
-  if (time < previous.time) return previous;
-  return { ...previous, high: Math.max(previous.high, price), low: Math.min(previous.low, price), close: price };
-}
-
-export function createDerivDataFeed(onQuote?: (quote: { symbol: string; price: number }) => void) {
-  return {
-    async getBars({ symbol, interval }: { symbol: string; interval: string }) { return fetchChartHistory(symbol, interval); },
-    subscribeBars({ symbol, interval }: { symbol: string; interval: string }, onBar: (bar: DerivBar) => void, options?: { seedFrom?: DerivBar }) {
-      const seconds = DERIV_INTERVAL_SECONDS[interval]; let stopped = false; let socket: WebSocket | null = null; let reconnect: number | null = null; let current = options?.seedFrom ? { ...options.seedFrom } : null;
-      const connect = () => { if (stopped) return; socket = new WebSocket(DERIV_WS_URL); socket.onopen = () => { if (!stopped && socket) socket.send(JSON.stringify({ ticks: symbol, subscribe: 1, req_id: nextDerivRequestId() })); }; socket.onmessage = event => { let data: any; try { data = JSON.parse(String(event.data)); } catch { return; } if (data.error) { console.error('[DERIV TICKS]', symbol, data.error.message || data.error.code || data.error); return; } if (data.msg_type !== 'tick') return;
-        if (data.tick?.symbol && data.tick.symbol !== symbol) return; const epoch = Number(data.tick.epoch), price = Number(data.tick.quote); if (!Number.isFinite(epoch) || !Number.isFinite(price)) return; const next = tickToBar(current, epoch, price, seconds); onQuote?.({ symbol, price }); if (!current || next.time !== current.time || next.close !== current.close || next.high !== current.high || next.low !== current.low) { current = next; onBar({ ...next }); } }; socket.onclose = () => { socket = null; if (!stopped) reconnect = window.setTimeout(connect, 1000); }; socket.onerror = () => {}; };
-      connect(); return () => { stopped = true; if (reconnect !== null) window.clearTimeout(reconnect);  socket?.close(); socket = null; };
-    },
-  };
-}
+export { type DerivInstrument, type DerivBar } from './derivMarketData';
 
 export default function FinancialChart({ symbol, isActive = false, instruments, onSelectInstrument, onWidgetReady, onWidgetDestroyed, onInstrumentTap }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -444,7 +313,7 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
       dataFeedRef.current = feed;
       widget = createWidget(host, {
         symbol,
-        exchange: 'SYNTHETIC',
+        exchange: 'DERIV',
         feed,
         loading: { retainedBars: 10000 },
         interval: '1m',
@@ -579,6 +448,8 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
         replayRef.current?.stop(); replayRef.current = null; widget.dataController?.setPaused(false);
         offSymbol?.(); offInterval?.(); offRenderer?.(); offData?.();
         offIndicatorObjects?.(); offDrawingObjects?.(); offDrawingSelect?.();
+        dataFeedRef.current?.close?.();
+        dataFeedRef.current = null;
         onWidgetDestroyed?.(widget); widget.destroy(); widgetRef.current = null;
       };
     } catch (error) {
@@ -589,92 +460,14 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
     }
   }, []);
 
-  // Keep the live Deriv tick stream independent from the chart feed. This makes the
-  // displayed quote and current candle update even if the widget's internal live-feed
-  // lifecycle changes during symbol/interval reloads.
   useEffect(() => {
     const widget = widgetRef.current;
     if (!widget || !symbol) return;
-    let stopped = false;
-    let socket: WebSocket | null = null;
-    let reconnect: number | null = null;
-    const seconds = DERIV_INTERVAL_SECONDS[activeTimeframe] || 60;
-    let current: DerivBar | null = null;
-    const seedBars = ((widget.primarySeries()?.getData?.() || []) as DerivBar[]).filter(Boolean);
-    if (seedBars.length) current = { ...seedBars[seedBars.length - 1] };
-
-    const connect = () => {
-      if (stopped) return;
-      socket = new WebSocket(DERIV_WS_URL);
-      socket.onopen = () => {
-        if (!stopped && socket?.readyState === WebSocket.OPEN) {
-          socket.send(JSON.stringify({ ticks: symbol, subscribe: 1, req_id: nextDerivRequestId() }));
-        }
-      };
-      socket.onclose = () => {
-        socket = null;
-        if (!stopped) reconnect = window.setTimeout(connect, 1000);
-      };
-      socket.onmessage = event => {
-        let data: any;
-        try { data = JSON.parse(String(event.data)); } catch { return; }
-        if (data.error) {
-          console.error('[DERIV LIVE]', symbol, data.error.message || data.error.code || data.error);
-          return;
-        }
-        if (data.msg_type !== 'tick' || data.tick?.symbol !== symbol) return;
-        const epoch = Number(data.tick.epoch);
-        const price = Number(data.tick.quote);
-        if (!Number.isFinite(epoch) || !Number.isFinite(price)) return;
-        lastLiveQuoteRef.current = { symbol, price, epoch };
-        const next = tickToBar(current, epoch, price, seconds);
-        current = next;
-        const series = widgetRef.current?.primarySeries();
-        if (series) {
-          const update = (series as any).update;
-          if (typeof update === 'function') {
-            update.call(series, next);
-          } else {
-            const bars = ((series as any).getData?.() || []) as DerivBar[];
-            const replaced = bars.length && bars[bars.length - 1].time === next.time
-              ? [...bars.slice(0, -1), next]
-              : [...bars, next];
-            (series as any).setData?.(replaced);
-          }
-        }
-        const bars = ((widgetRef.current?.primarySeries()?.getData?.() || []) as DerivBar[]);
-        const previousClosed = bars.length > 1 ? bars[bars.length - 2] : null;
-        const percent = previousClosed?.close ? ((price - previousClosed.close) / previousClosed.close) * 100 : 0;
-        setMarketQuote({ price, percent });
-      };
-      socket.onerror = () => {};
-    };
-    connect();
-    return () => {
-      stopped = true;
-      if (reconnect !== null) window.clearTimeout(reconnect);
-      if (socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ forget_all: 'ticks' }));
-      socket?.close();
-      socket = null;
-    };
-  }, [symbol, activeTimeframe]);
-
-  useEffect(() => {
-    const widget = widgetRef.current;
-    if (!widget) return;
     setMarketQuote(null);
     historyLoadingRef.current = false;
     historyExhaustedRef.current = false;
     oldestLoadedTimeRef.current = null;
-    if (widget.symbol() !== symbol) widget.setSymbol(symbol, 'SYNTHETIC');
-    let cancelled = false;
-    void fetchDerivQuote(symbol).then(price => {
-      if (cancelled || !Number.isFinite(price ?? NaN)) return;
-      setMarketQuote(current => ({ price: price as number, percent: current?.percent || 0 }));
-    }).catch(error => {
-      if (!cancelled) console.error('Failed to fetch Deriv quote', symbol, error);
-    });
-    return () => { cancelled = true; };
+    if (widget.symbol() !== symbol) widget.setSymbol(symbol, 'DERIV');
   }, [symbol]);
 
   useEffect(() => {
