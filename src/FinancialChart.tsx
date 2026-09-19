@@ -430,11 +430,19 @@ export default function FinancialChart({ symbol, isActive = false, liveTick, req
     const host = containerRef.current;
     const sourceFeed = {
       async getBars(req: BarsRequest) {
+        // OpenAlgo may supply a one-year bootstrap `from` range to a feed.
+        // That range is a viewport hint, not the historical boundary we want
+        // for Deriv Synthetic Indices. Passing it to Deriv makes the provider
+        // stop exactly at that date, so SIRE never gets a chance to page
+        // farther back. Seed from the requested `to`/latest point only;
+        // OpenAlgo's left-edge history loader then walks backward from the
+        // actual oldest candle until Deriv has no more data.
+        const bootstrapReq: BarsRequest = { ...req, from: undefined };
         const cached = getChartSeedHistory(req.symbol, req.interval);
         if (cached.length) {
           candlesRef.current = cached;
           updateMarketQuote(cached);
-          void requestBars({ ...req, noCache: false }, requestHistoryRef.current)
+          void requestBars({ ...bootstrapReq, noCache: false }, requestHistoryRef.current)
             .then(fresh => {
           if (!fresh.length) return;
           const current = getCachedHistory(req.symbol, req.interval);
@@ -447,7 +455,7 @@ export default function FinancialChart({ symbol, isActive = false, liveTick, req
             .catch(() => undefined);
           return cached;
         }
-        const bars = await requestBars(req, requestHistoryRef.current);
+        const bars = await requestBars(bootstrapReq, requestHistoryRef.current);
         putCachedHistory(req.symbol, req.interval, bars);
         candlesRef.current = bars;
         updateMarketQuote(bars);
