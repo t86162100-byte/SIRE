@@ -60,93 +60,10 @@ function parseDiagnosticLocation(stack?: string): DiagnosticLocation | undefined
   return undefined;
 }
 
-type SourceMapSegment = { generatedColumn: number; source?: number; originalLine?: number; originalColumn?: number; name?: number };
-
-function decodeBase64Vlq(value: string) {
-  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
-  let result = 0;
-  let shift = 0;
-  for (const char of value) {
-    const digit = chars.indexOf(char);
-    if (digit < 0) throw new Error('Invalid source-map VLQ digit.');
-    const continuation = digit & 32;
-    const payload = digit & 31;
-    result += payload * 2 ** shift;
-    shift += 5;
-    if (!continuation) {
-      const negative = result & 1;
-      return negative ? -(result >> 1) : result >> 1;
-    }
-  }
-  throw new Error('Incomplete source-map VLQ segment.');
-}
-
-function decodeSourceMapLine(encoded: string, previous: { source: number; originalLine: number; originalColumn: number; name: number }) {
-  const segments: SourceMapSegment[] = [];
-  let generatedColumn = 0;
-  let source = previous.source;
-  let originalLine = previous.originalLine;
-  let originalColumn = previous.originalColumn;
-  let name = previous.name;
-  for (const rawSegment of encoded.split(',')) {
-    if (!rawSegment) continue;
-    const values: number[] = [];
-    let token = '';
-    for (const char of rawSegment) {
-      token += char;
-      try { values.push(decodeBase64Vlq(token)); token = ''; } catch {}
-    }
-    if (token || values.length < 1) continue;
-    generatedColumn += values[0];
-    if (values.length >= 4) {
-      source += values[1];
-      originalLine += values[2];
-      originalColumn += values[3];
-      if (values.length >= 5) name += values[4];
-      segments.push({ generatedColumn, source, originalLine, originalColumn, name });
-    }
-  }
-  previous.source = source;
-  previous.originalLine = originalLine;
-  previous.originalColumn = originalColumn;
-  previous.name = name;
-  return segments;
-}
-
-async function resolveSourceMappedLocation(location?: DiagnosticLocation): Promise<DiagnosticLocation | undefined> {
-  if (!location || typeof window === 'undefined') return location;
-  if (!/\/assets\/[^/]+\.js$/i.test(location.file)) return location;
-  try {
-    const bundleUrl = new URL(location.file, window.location.href);
-    const mapUrl = new URL(bundleUrl.href + '.map');
-    const response = await fetch(mapUrl.href, { credentials: 'same-origin', cache: 'force-cache' });
-    if (!response.ok) return location;
-    const map = await response.json();
-    if (map?.version !== 3 || typeof map.mappings !== 'string' || !Array.isArray(map.sources)) return location;
-    const generatedLineIndex = Math.max(0, location.line - 1);
-    const mappingLines = map.mappings.split(';');
-    if (generatedLineIndex >= mappingLines.length) return location;
-    const state = { source: 0, originalLine: 0, originalColumn: 0, name: 0 };
-    let segments: SourceMapSegment[] = [];
-    for (let index = 0; index <= generatedLineIndex; index++) segments = decodeSourceMapLine(mappingLines[index] || '', state);
-    const targetColumn = Math.max(0, location.column - 1);
-    const segment = [...segments].reverse().find(item => item.generatedColumn <= targetColumn && item.source !== undefined && item.originalLine !== undefined && item.originalColumn !== undefined);
-    if (!segment || segment.source === undefined || segment.originalLine === undefined || segment.originalColumn === undefined) return location;
-    const rawSource = String(map.sources[segment.source] || '');
-    const sourceRoot = String(map.sourceRoot || '');
-    const sourceUrl = new URL(rawSource, new URL(sourceRoot || './', mapUrl.href));
-    const sourcePath = new URL(sourceUrl.href).pathname;
-    const marker = sourcePath.indexOf('/src/');
-    return {
-      file: marker >= 0 ? sourcePath.slice(marker + 1) : sourcePath,
-      line: segment.originalLine + 1,
-      column: segment.originalColumn + 1,
-      functionName: location.functionName,
-    };
-  } catch {
-    return location;
-  }
-}
+type SourceMapSegment = { generatedColumn:number; source?:number; originalLine?:number; originalColumn?:number; name?:number };
+function decodeBase64Vlq(value:string){const chars='ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';let result=0,shift=0;for(const char of value){const digit=chars.indexOf(char);if(digit<0)throw new Error('Invalid source-map VLQ digit.');result+=(digit&31)*2**shift;shift+=5;if(!(digit&32))return(result&1)?-(result>>1):result>>1;}throw new Error('Incomplete source-map VLQ segment.');}
+function decodeSourceMapLine(encoded:string,previous:{source:number;originalLine:number;originalColumn:number;name:number}){const segments:SourceMapSegment[]=[];let generatedColumn=0,source=previous.source,originalLine=previous.originalLine,originalColumn=previous.originalColumn,name=previous.name;for(const raw of encoded.split(',')){if(!raw)continue;const values:number[]=[];let token='';for(const char of raw){token+=char;try{values.push(decodeBase64Vlq(token));token='';}catch{}}if(token||!values.length)continue;generatedColumn+=values[0];if(values.length>=4){source+=values[1];originalLine+=values[2];originalColumn+=values[3];if(values.length>=5)name+=values[4];segments.push({generatedColumn,source,originalLine,originalColumn,name});}}previous.source=source;previous.originalLine=originalLine;previous.originalColumn=originalColumn;previous.name=name;return segments;}
+async function resolveSourceMappedLocation(location?:DiagnosticLocation):Promise<DiagnosticLocation|undefined>{if(!location||typeof window==='undefined'||!/\/assets\/[^/]+\.js$/i.test(location.file))return location;try{const bundleUrl=new URL(location.file,window.location.href);const mapUrl=new URL(bundleUrl.href+'.map');const response=await fetch(mapUrl.href,{credentials:'same-origin',cache:'force-cache'});if(!response.ok)return location;const map=await response.json();if(map?.version!==3||typeof map.mappings!=='string'||!Array.isArray(map.sources))return location;const lineIndex=Math.max(0,location.line-1);const lines=map.mappings.split(';');if(lineIndex>=lines.length)return location;const state={source:0,originalLine:0,originalColumn:0,name:0};let segments:SourceMapSegment[]=[];for(let i=0;i<=lineIndex;i++)segments=decodeSourceMapLine(lines[i]||'',state);const target=Math.max(0,location.column-1);const segment=[...segments].reverse().find(item=>item.generatedColumn<=target&&item.source!==undefined&&item.originalLine!==undefined&&item.originalColumn!==undefined);if(!segment||segment.source===undefined||segment.originalLine===undefined||segment.originalColumn===undefined)return location;const sourceUrl=new URL(String(map.sources[segment.source]||''),new URL(String(map.sourceRoot||'./'),mapUrl.href));const sourcePath=new URL(sourceUrl.href).pathname;const sourceMarker=sourcePath.indexOf('/src/');return{file:sourceMarker>=0?sourcePath.slice(sourceMarker+1):sourcePath,line:segment.originalLine+1,column:segment.originalColumn+1,functionName:location.functionName};}catch{return location;}}
 
 function diagnosticErrorDetails(error: unknown, operation?: string) {
   const stack = error instanceof Error ? error.stack : undefined;
@@ -235,7 +152,8 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
   const [replayEndInput, setReplayEndInput] = useState('');
   const [replayRangeError, setReplayRangeError] = useState<string | null>(null);
   const [replayDraftSpeed, setReplayDraftSpeed] = useState(1);
-  const [replayStartMin, setReplayStartMin] = useState('');  const [replayNow, setReplayNow] = useState('');
+  const [replayStartMin, setReplayStartMin] = useState('');
+  const [replayNow, setReplayNow] = useState('');
   const replaySpeedRef = useRef(1);
   const [rendererKind, setRendererKind] = useState<'canvas2d' | 'webgl2'>('canvas2d');
   const [tpoEnabled, setTpoEnabled] = useState(false);
@@ -282,6 +200,8 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
   const marketInstrument = instruments.find(item => item.symbol === symbol);
   const marketInstrumentName = marketInstrument?.name || symbol;
   const reportDiagnostic = (event: DerivFeedDiagnostic & { stack?: string; location?: DiagnosticLocation; operation?: string }) => {
+    const now = Date.now();
+    const item: ChartDiagnostic = { ...event, id: ++diagnosticIdRef.current, timestamp: now };
     const add = (resolved: ChartDiagnostic) => {
       setDiagnostics(current => {
         const last = current[current.length - 1];
@@ -290,8 +210,6 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
       });
       if (resolved.level === 'error') setDiagnosticsOpen(true);
     };
-    const now = Date.now();
-    const item: ChartDiagnostic = { ...event, id: ++diagnosticIdRef.current, timestamp: now };
     if (item.location?.file && /\/assets\/[^/]+\.js$/i.test(item.location.file)) {
       void resolveSourceMappedLocation(item.location).then(location => add({ ...item, location }));
     } else {
@@ -400,7 +318,8 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
   const toggleReplay = () => {
     const replay = replayRef.current;
     if (replay) {
-      const state = replay.state();      if (state.playing) replay.pause();
+      const state = replay.state();
+      if (state.playing) replay.pause();
       else replay.play({ speed: replaySpeedRef.current });
       setReplayState(replay.state());
       return;
@@ -549,7 +468,8 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
       widget.chart.setAutoScale?.(true);
       widget.chart.resetScale?.();
       widget.chart.applyOptions({ crosshair: { mode: 'normal' } });
-      setRendererKind(widget.chart.rendererKind);      const offRenderer = widget.chart.on('renderer:fallback', () => { setRendererKind('canvas2d'); reportDiagnostic({ level: 'warning', code: 'CHART_RENDERER_FALLBACK', message: 'Chart renderer fell back to Canvas 2D.', detail: 'The requested renderer was unavailable, so the chart switched rendering backends.' }); });
+      setRendererKind(widget.chart.rendererKind);
+      const offRenderer = widget.chart.on('renderer:fallback', () => { setRendererKind('canvas2d'); reportDiagnostic({ level: 'warning', code: 'CHART_RENDERER_FALLBACK', message: 'Chart renderer fell back to Canvas 2D.', detail: 'The requested renderer was unavailable, so the chart switched rendering backends.' }); });
       widgetRef.current = widget;
       setActiveTimeframe(widget.interval());
       const offInterval = widget.on('interval', (event: { interval: string }) => {
@@ -698,7 +618,8 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
 
   useEffect(() => {
     const host = containerRef.current;
-    if (!host) return;    const onWindowError = (event: ErrorEvent) => {
+    if (!host) return;
+    const onWindowError = (event: ErrorEvent) => {
       const error = event.error instanceof Error ? event.error : new Error(event.message || 'A frontend error occurred while the chart was running.');
       reportDiagnostic({ level: 'error', code: 'CHART_FRONTEND_ERROR', message: event.message || error.message, detail: 'SIRE captured the browser exception directly.', ...diagnosticErrorDetails(error, 'window.error') });
     };
@@ -847,7 +768,8 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
             aria-label="Open objects"
             title="Objects"
             onClick={() => widgetRef.current?.openObjects()}
-          >            <span aria-hidden="true">OBJ</span>
+          >
+            <span aria-hidden="true">OBJ</span>
           </button>
           <button
             type="button"
@@ -997,3 +919,69 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
           <span className="sire-bottom-multichart-icon" aria-hidden="true"><span /><span /><span /></span>
         </button>
         <button
+          type="button"
+          className="sire-bottom-more-button"
+          aria-label="Open chart menu"
+          aria-expanded={moreMenuOpen}
+          aria-haspopup="menu"
+          title="More chart options"
+          onClick={() => setMoreMenuOpen(open => !open)}
+        >
+          <MoreHorizontal size={23} strokeWidth={2} aria-hidden="true" />
+        </button>
+        {moreMenuOpen && (
+          <div className="sire-bottom-more-menu" role="menu" aria-label="Chart options">
+            <div className="sire-bottom-more-menu__section">
+              <div className="sire-bottom-more-menu__title">Chart type</div>
+              <div className="sire-bottom-more-menu__chart-types">
+                {CHART_TYPES.map(chartType => (
+                  <button
+                    key={chartType.id}
+                    type="button"
+                    role="menuitemradio"
+                    aria-checked={widgetRef.current?.chartType?.() === chartType.id}
+                    className={widgetRef.current?.chartType?.() === chartType.id ? 'active' : ''}
+                    onClick={() => selectChartType(chartType.id)}
+                  >
+                    {chartType.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="sire-bottom-more-menu__section sire-bottom-more-menu__actions">
+              <button type="button" role="menuitem" onClick={toggleTpo}>
+                {tpoEnabled ? 'Hide Market Profile' : 'Market Profile'}
+              </button>
+              <button type="button" role="menuitem" onClick={captureChartPng}>Capture PNG</button>
+              <button type="button" role="menuitem" onClick={exportChartSvgFromMenu}>Export SVG</button>
+            </div>
+          </div>
+        )}
+                <button
+          type="button"
+          className="sire-bottom-obj-button"
+          aria-label="Open objects"
+          title="Objects"
+          onClick={() => widgetRef.current?.openObjects()}
+        >
+          <span aria-hidden="true">OBJ</span>
+        </button>
+        {timeframeOpen && (
+          <div className="sire-bottom-timeframe-menu">
+            {CHART_INTERVALS.map(interval => (
+              <button
+                key={interval}
+                type="button"
+                className={interval === activeTimeframe ? 'active' : ''}
+                onClick={() => selectTimeframe(interval)}
+              >
+                {interval}
+              </button>
+            ))}
+          </div>
+        )}
+        </div>
+      </div>
+    </div>
+  );
+}
