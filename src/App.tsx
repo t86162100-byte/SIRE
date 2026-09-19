@@ -3,7 +3,7 @@ import { Search } from 'lucide-react';
 import { createLinkGroup, type LinkGroup } from 'openalgo-charts';
 import ResearchLab from './ResearchLab';
 import FinancialChart from './FinancialChart';
-import { derivMarketData, type DerivInstrument } from './derivMarketData';
+import { derivMarketData, type DerivInstrument, type DerivTick, type DerivResponse } from './derivMarketData';
 import './nativeTerminal.css';
 
 export default function App() {
@@ -14,6 +14,7 @@ export default function App() {
   const [instrumentSearchMode, setInstrumentSearchMode] = useState<'main' | 'multi'>('main');
   const [status, setStatus] = useState('Connecting to Deriv…');
   const [lastError, setLastError] = useState('');
+  const [latestBySymbol, setLatestBySymbol] = useState<Record<string, DerivTick>>({});
   const [researchLabOpen, setResearchLabOpen] = useState(false);
   const selectedRef = useRef<DerivInstrument | null>(null);
   const [chartLayout, setChartLayout] = useState<1 | 2>(1);
@@ -48,6 +49,32 @@ export default function App() {
     const openMultiChart = () => setMultiChartOpen(true);
     window.addEventListener('sire:open-multichart', openMultiChart);
     return () => window.removeEventListener('sire:open-multichart', openMultiChart);
+  }, []);
+
+  useEffect(() => {
+    if (!chartSymbols.length) return;
+    let mounted = true;
+    const removeTick = derivMarketData.onTick(tick => {
+      if (!mounted || !chartSymbols.includes(tick.symbol)) return;
+      setLatestBySymbol(current => ({ ...current, [tick.symbol]: tick }));
+      if (tick.symbol === chartSymbols[0]) {
+        setStatus(`LIVE · ${instruments.find(item => item.symbol === tick.symbol)?.name || tick.symbol}`);
+      }
+    });
+    const subscribeAll = async () => {
+      try {
+        await derivMarketData.request({ forget_all: 'ticks' });
+        for (const chartSymbol of [...new Set(chartSymbols)]) await derivMarketData.subscribe(chartSymbol);
+      } catch (error) {
+        if (mounted) setLastError(error instanceof Error ? error.message : String(error));
+      }
+    };
+    void subscribeAll();
+    return () => { mounted = false; removeTick(); };
+  }, [chartSymbols.join('|'), instruments]);
+
+  const requestHistory = useCallback(async (request: Record<string, unknown>): Promise<DerivResponse> => {
+    return derivMarketData.request(request);
   }, []);
 
   useEffect(() => {
@@ -123,19 +150,24 @@ export default function App() {
           {chartItems.map((chartSymbol, index) => <div className={`sire-chart-cell${activeChartIndex === index ? ' sire-chart-cell--active' : ''}`} key={index} onPointerDown={() => setActiveChartIndex(index)}>{chartSymbol && <FinancialChart
             symbol={chartSymbol}
             isActive={activeChartIndex === index}
+            liveTick={latestBySymbol[chartSymbol] || null}
+            requestHistory={requestHistory}
             instruments={instruments.map(item => ({ symbol: item.symbol, name: item.name, pipSize: item.pipSize }))}
             onInstrumentTap={() => openInstrumentPicker('main')}
             onSelectInstrument={item => {
               setChartSymbols(current => current.map((value, slot) => slot === index ? item.symbol : value));
               if (index === 0) setSelected(current => current?.symbol === item.symbol ? current : instruments.find(candidate => candidate.symbol === item.symbol) || current);
             }}
-            onWidgetReady={chart => {
+            onWidgetReady={widget => {
               if (!linked) return;
               const group = linkGroupRef.current || createLinkGroup({ crosshair: true, viewport: true, symbol: true });
               linkGroupRef.current = group;
-              group.add(chart);
+              group.add(widget.chart, {
+                symbol: chartSymbol,
+                onSymbol: next => setChartSymbols(current => current.map((value, slot) => slot === index ? next : value)),
+              });
             }}
-            onWidgetDestroyed={chart => linkGroupRef.current?.remove(chart)}
+            onWidgetDestroyed={widget => linkGroupRef.current?.remove(widget.chart)}
           />}</div>)}
         </div>
         {multiChartOpen && <div className="sire-multichart-overlay" onContextMenu={event => event.preventDefault()}>
