@@ -335,11 +335,10 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
         // Keep the live bar count/axis chrome on the same hot path as the price.
         // The chart engine coalesces update() calls into the next render frame, so
         // both the forming candle and its price metadata move together.
-        const chartNow = widgetRef.current?.chart;
-        chartNow?.requestRender?.();
         const previousClosed = bars.length > 1 ? bars[bars.length - 2] : null;
         const percent = previousClosed?.close ? ((quote.price - previousClosed.close) / previousClosed.close) * 100 : 0;
         setMarketQuote({ price: quote.price, percent });
+        reportDiagnostic({ level: 'info', code: 'LIVE_FRAME_APPLIED', message: 'Live price and forming candle update applied to the chart series.', detail: 'The price pane and its bar timing/countdown should advance from this same live update frame.' });
       }, reportDiagnostic);
       dataFeedRef.current = feed;
       widget = createWidget(host, {
