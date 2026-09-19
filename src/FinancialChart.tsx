@@ -115,7 +115,6 @@ async function loadAllAvailableHistory(
       symbol,
       interval,
       to: undefined,
-      noCache: true,
     }, requestHistory);
     let archive = getCachedHistory(symbol, interval);
     if (latestPage.length) {
@@ -255,7 +254,6 @@ async function requestBars(req: BarsRequest, requestHistory: HistoryRequester): 
     granularity: seconds,
   };
   if (Number.isFinite(req.from)) request.start = Math.floor(Number(req.from));
-  if (req.noCache) request.noCache = true;
 
   let result: HistoryResponse;
   try {
