@@ -5,7 +5,7 @@ import ResearchLab from './ResearchLab';
 import FinancialChart from './FinancialChart';
 import './nativeTerminal.css';
 
-type DerivInstrument = {
+type Instrument = {
   symbol: string;
   name: string;
   market: string;
@@ -34,8 +34,7 @@ const LOCAL_SYNTHETIC_INSTRUMENTS: DerivInstrument[] = [
 }));
 
 export default function App() {
-  const instruments = LOCAL_SYNTHETIC_INSTRUMENTS;
-  const [selected, setSelected] = useState<DerivInstrument | null>(instruments[0] || null);
+  const [selected, setSelected] = useState<Instrument | null>(null);
   const [search, setSearch] = useState('');
   const [instrumentSearchOpen, setInstrumentSearchOpen] = useState(false);
   const [instrumentSearchMode, setInstrumentSearchMode] = useState<'main' | 'multi'>('main');
@@ -46,7 +45,7 @@ export default function App() {
   const [multiChartOpen, setMultiChartOpen] = useState(false);
   const [multiChartInstrument, setMultiChartInstrument] = useState('');
   const [multiChartPosition, setMultiChartPosition] = useState<'up' | 'down' | 'left' | 'right'>('right');
-  const [chartSymbols, setChartSymbols] = useState<string[]>(['R_100']);
+  const [chartSymbols, setChartSymbols] = useState<string[]>([]);
   const linkGroupRef = useRef<LinkGroup | null>(null);
 
   useEffect(() => {
@@ -90,7 +89,7 @@ export default function App() {
       : instruments;
   }, [instruments, search]);
 
-  const selectInstrument = (item: DerivInstrument) => {
+  const selectInstrument = (item: Instrument) => {
     setSelected(item);
     setSearch('');
     setChartSymbols(current => current.length
@@ -134,7 +133,7 @@ export default function App() {
   };
   return <main className={`native-terminal-shell${researchLabOpen ? ' sire-research-open' : ''}`}>
     <div className="native-terminal-body">
-      <aside className="native-symbol-sidebar"><div className="sidebar-search"><Search size={15} /><input value={search} onChange={event => setSearch(event.target.value)} placeholder="Search" /></div><div className="sidebar-meta"><span>DERIV SYNTHETIC</span><b>{instruments.length}</b></div><div className="native-symbol-list">{filtered.slice(0, 150).map(item => <button key={item.symbol} className={selected?.symbol === item.symbol ? 'active' : ''} onClick={() => selectInstrument(item)}><span><b>{item.name}</b><small>{item.symbol}</small></span><i>{item.exchangeOpen === 0 ? 'OFF' : 'LIVE'}</i></button>)}</div></aside>
+      <aside className="native-symbol-sidebar"><div className="sidebar-search"><Search size={15} /><input value={search} onChange={event => setSearch(event.target.value)} placeholder="Search" /></div><div className="sidebar-meta"><span>INSTRUMENTS</span><b>{instruments.length}</b></div><div className="native-symbol-list">{filtered.slice(0, 150).map(item => <button key={item.symbol} className={selected?.symbol === item.symbol ? 'active' : ''} onClick={() => selectInstrument(item)}><span><b>{item.name}</b><small>{item.symbol}</small></span><i>{item.exchangeOpen === 0 ? 'OFF' : 'LIVE'}</i></button>)}</div></aside>
       <section className="native-chart-panel">
         <div className={`sire-chart-grid sire-chart-grid--${chartLayout}${chartLayout === 2 ? ` sire-chart-grid--${multiChartPosition}` : ''}`} onContextMenu={event => event.preventDefault()}>
           {chartItems.map((chartSymbol, index) => <div className={`sire-chart-cell${activeChartIndex === index ? ' sire-chart-cell--active' : ''}`} key={index} onPointerDown={() => setActiveChartIndex(index)}>{chartSymbol && <FinancialChart
