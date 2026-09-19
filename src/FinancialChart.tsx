@@ -8,6 +8,7 @@ import 'openalgo-charts/transform';
 import 'openalgo-charts/webgl';
 import { createWidget, type Widget } from 'openalgo-charts/widget';
 import './financialChart.css';
+import { createDerivDataFeed } from './derivDataFeed';
 
 type Instrument = { symbol: string; name: string; pipSize?: number };
 type Props = {
@@ -77,6 +78,7 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
   const [activeTimeframe, setActiveTimeframe] = useState('1m');
   const [swipeAnimation, setSwipeAnimation] = useState<'up' | 'down' | null>(null);
   const widgetRef = useRef<Widget | null>(null);
+  const dataFeedRef = useRef<ReturnType<typeof createDerivDataFeed> | null>(null);
   const instrumentsRef = useRef(instruments);
   const onSelectInstrumentRef = useRef(onSelectInstrument);
   const symbolRef = useRef(symbol);
@@ -213,15 +215,20 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
     const host = containerRef.current;
     let widget: Widget;
     try {
+      const feed = dataFeedRef.current || createDerivDataFeed();
+      dataFeedRef.current = feed;
       widget = createWidget(host, {
         symbol,
-        exchange: '',
+        exchange: 'SYNTHETIC',
+        feed,
+        loading: { retainedBars: Number.MAX_SAFE_INTEGER },
         interval: '1m',
         intervals: CHART_INTERVALS,
         chartType: 'candlestick',
         theme: 'dark',
         renderer: 'canvas2d',
         navigation: { mousePan: 'both', defaultVisibleBars: 10 },
+        lookbackBars: Number.MAX_SAFE_INTEGER,
         animZoom: true,
         animAutoscale: true,
         branding: false,
@@ -305,7 +312,7 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
 
   useEffect(() => {
     const widget = widgetRef.current;
-    if (widget && widget.symbol() !== symbol) widget.setSymbol(symbol, '');
+    if (widget && widget.symbol() !== symbol) widget.setSymbol(symbol, 'SYNTHETIC');
   }, [symbol]);
 
   useEffect(() => {
