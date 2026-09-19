@@ -27,7 +27,7 @@ type Pending = {
   timer: number;
 };
 
-const DERIV_WS = 'wss://ws.binaryws.com/websockets/v3';
+const DERIV_WS = 'wss://api.derivws.com/trading/v1/options/ws/public';
 
 function readText(data: unknown): Promise<string> {
   if (typeof data === 'string') return Promise.resolve(data);
