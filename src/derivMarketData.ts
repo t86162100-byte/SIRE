@@ -414,7 +414,13 @@ async function fetchDerivHistoryPage(symbol: string, seconds: number, end: numbe
         cache: 'no-store',
         body: JSON.stringify(payload),
       });
-      const data = await response.json().catch(() => ({}));
+      const rawBody = await response.text();
+      let data: any = {};
+      try {
+        data = rawBody ? JSON.parse(rawBody) : {};
+      } catch {
+        throw new Error(`SIRE Deriv history endpoint returned invalid JSON (HTTP ${response.status}).`);
+      }
       if (!response.ok || data?.error) {
         throw new Error(data?.error || `SIRE Deriv history endpoint returned HTTP ${response.status}.`);
       }
