@@ -44,15 +44,56 @@ type ChartDiagnostic = DerivFeedDiagnostic & { id: number; timestamp: number };
 
 function diagnosticLabel(level: ChartDiagnostic['level']) { return level === 'error' ? 'ERROR' : level === 'warning' ? 'WARNING' : 'OK'; }
 
+function diagnosticText(event: ChartDiagnostic) {
+  const when = new Date(event.timestamp).toISOString();
+  return `[${when}] ${diagnosticLabel(event.level)} · ${event.code}\n${event.message}${event.detail ? `\nDetail: ${event.detail}` : ''}`;
+}
+
+async function copyDiagnosticText(value: string) {
+  try {
+    await navigator.clipboard.writeText(value);
+    return true;
+  } catch {
+    const area = document.createElement('textarea');
+    area.value = value;
+    area.style.position = 'fixed';
+    area.style.opacity = '0';
+    document.body.appendChild(area);
+    area.focus();
+    area.select();
+    const copied = document.execCommand('copy');
+    area.remove();
+    return copied;
+  }
+}
+
 function ChartDiagnosticsPanel({ open, events, symbol, interval, quoteAgeMs, bars, renderer, width, height, onClose, onRetry }: { open: boolean; events: ChartDiagnostic[]; symbol: string; interval: string; quoteAgeMs: number | null; bars: number; renderer: string; width: number; height: number; onClose: () => void; onRetry: () => void }) {
+  const [copiedId, setCopiedId] = useState<number | 'all' | null>(null);
   if (!open) return null;
   const activeError = [...events].reverse().find(event => event.level === 'error');
   const liveText = quoteAgeMs === null ? 'No live tick received yet' : Math.round(quoteAgeMs / 1000) + 's since last live tick';
+  const allText = events.map(diagnosticText).join('\n\n');
+  const copy = async (id: number | 'all', value: string) => {
+    const ok = await copyDiagnosticText(value);
+    if (ok) {
+      setCopiedId(id);
+      window.setTimeout(() => setCopiedId(current => current === id ? null : current), 1400);
+    }
+  };
   return <div className="sire-chart-diagnostics" role="dialog" aria-label="Chart diagnostics">
-    <div className="sire-chart-diagnostics__head"><div><strong>Chart diagnostics</strong><small>{symbol} · {interval} · {activeError ? 'issue detected' : 'monitoring'}</small></div><button type="button" onClick={onClose} aria-label="Close chart diagnostics">×</button></div>
+    <div className="sire-chart-diagnostics__head">
+      <div><strong>Chart diagnostics</strong><small>{symbol} · {interval} · {events.length} log entr{events.length === 1 ? 'y' : 'ies'}</small></div>
+      <div className="sire-chart-diagnostics__head-actions">
+        <button type="button" className="sire-chart-diagnostics__copy-all" onClick={() => void copy('all', allText)} disabled={!events.length}>{copiedId === 'all' ? 'Copied' : 'Copy all'}</button>
+        <button type="button" onClick={onClose} aria-label="Close chart diagnostics">×</button>
+      </div>
+    </div>
     <div className="sire-chart-diagnostics__metrics"><span>History <b>{bars}</b></span><span>Live <b>{liveText}</b></span><span>Renderer <b>{renderer}</b></span><span>Canvas <b>{width}×{height}</b></span></div>
     {activeError && <div className="sire-chart-diagnostics__active"><b>{diagnosticLabel(activeError.level)} · {activeError.code}</b><span>{activeError.message}</span>{activeError.detail && <small>Why: {activeError.detail}</small>}<button type="button" onClick={onRetry}>Retry chart data</button></div>}
-    <div className="sire-chart-diagnostics__list">{events.length ? events.slice(-10).reverse().map(event => <div key={event.id} className={'sire-chart-diagnostics__event is-' + event.level}><div><b>{diagnosticLabel(event.level)} · {event.code}</b><time>{new Date(event.timestamp).toLocaleTimeString()}</time></div><span>{event.message}</span>{event.detail && <small>{event.detail}</small>}</div>) : <div className="sire-chart-diagnostics__empty">No chart faults detected. Monitoring history, live ticks, candle updates, renderer health, chart size and frontend errors.</div>}</div>
+    <div className="sire-chart-diagnostics__list">{events.length ? events.map(event => <div key={event.id} className={'sire-chart-diagnostics__event is-' + event.level}>
+      <div><b>{diagnosticLabel(event.level)} · {event.code}</b><time>{new Date(event.timestamp).toLocaleTimeString()}</time><button type="button" className="sire-chart-diagnostics__copy" onClick={() => void copy(event.id, diagnosticText(event))}>{copiedId === event.id ? 'Copied' : 'Copy'}</button></div>
+      <span>{event.message}</span>{event.detail && <small>{event.detail}</small>}
+    </div>) : <div className="sire-chart-diagnostics__empty">No chart faults detected. Monitoring history, live ticks, candle updates, renderer health, chart size and frontend errors.</div>}</div>
   </div>;
 }
 
@@ -121,7 +162,7 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
   timeframeRef.current = activeTimeframe;
   const marketInstrument = instruments.find(item => item.symbol === symbol);
   const marketInstrumentName = marketInstrument?.name || symbol;
-  const reportDiagnostic = (event: DerivFeedDiagnostic) => { const now = Date.now(); const item: ChartDiagnostic = { ...event, id: ++diagnosticIdRef.current, timestamp: now }; setDiagnostics(current => { const last = current[current.length - 1]; if (last && last.code === item.code && last.message === item.message && now - last.timestamp < 5000) return current; return [...current, item].slice(-30); }); if (event.level === 'error') setDiagnosticsOpen(true); };
+  const reportDiagnostic = (event: DerivFeedDiagnostic) => { const now = Date.now(); const item: ChartDiagnostic = { ...event, id: ++diagnosticIdRef.current, timestamp: now }; setDiagnostics(current => { const last = current[current.length - 1]; if (last && last.code === item.code && last.message === item.message && now - last.timestamp < 5000) return current; return [...current, item]; }); if (event.level === 'error') setDiagnosticsOpen(true); };
 
   const formatMarketPrice = (price: number) => {
     if (!Number.isFinite(price)) return '—';
