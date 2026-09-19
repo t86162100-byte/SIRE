@@ -283,7 +283,7 @@ export default function FinancialChart({
   return (
     <div
       ref={hostRef}
-      className="financial-chart-host"
+      className="sire-financial-chart financial-chart-host"
       onDoubleClick={onInstrumentTap}
       onContextMenu={event => event.preventDefault()}
       data-sire-market-data="deriv-direct"
