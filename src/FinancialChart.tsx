@@ -8,7 +8,6 @@ type Props = { symbol: string; liveTick: Tick | null };
 type DerivCandle = { epoch: number; open: number; high: number; low: number; close: number };
 const DERIV_PUBLIC_WS = 'wss://ws.binaryws.com/websockets/v3';
 const HISTORY_PAGE_SIZE = 5000;
-const MAX_HISTORY_CANDLES = 100000;
 
 function bucket(epoch: number, seconds: number) { return Math.floor(epoch / seconds) * seconds; }
 
@@ -84,7 +83,10 @@ async function loadAllHistory(symbol: string): Promise<DerivCandle[]> {
   let end: number | 'latest' = 'latest';
 
   try {
-    while (result.size < MAX_HISTORY_CANDLES) {
+    // Walk backwards one provider page at a time until Deriv returns the
+    // beginning of the instrument's available candle history. There is
+    // intentionally no client-side candle-count cutoff.
+    while (true) {
       const response = await requestOnce(ws, {
         ticks_history: symbol,
         start: 0,
@@ -94,18 +96,36 @@ async function loadAllHistory(symbol: string): Promise<DerivCandle[]> {
         granularity: 60,
         subscribe: 0,
       });
+
       const raw = Array.isArray(response.candles) ? response.candles : [];
       const page = raw.map((item: unknown) => {
         const value = item as Record<string, unknown>;
-        return { epoch: Number(value.epoch), open: Number(value.open), high: Number(value.high), low: Number(value.low), close: Number(value.close) };
+        return {
+          epoch: Number(value.epoch),
+          open: Number(value.open),
+          high: Number(value.high),
+          low: Number(value.low),
+          close: Number(value.close),
+        };
       }).filter(c => [c.epoch, c.open, c.high, c.low, c.close].every(Number.isFinite));
 
       if (!page.length) break;
+
       for (const candle of page) result.set(candle.epoch, candle);
 
       const oldest = Math.min(...page.map(c => c.epoch));
-      if (page.length < HISTORY_PAGE_SIZE || !Number.isFinite(oldest) || oldest <= 0 || end === oldest) break;
+      if (!Number.isFinite(oldest) || oldest <= 0) break;
+
+      // If the provider returns a page that did not move the boundary,
+      // stop rather than repeatedly requesting the same candles.
+      if (end !== 'latest' && oldest >= end) break;
+
+      // Deriv's candle timestamps are minute-aligned for this 1-minute base
+      // history. Moving one minute before the oldest candle prevents overlap.
       end = oldest - 60;
+
+      // A short page means there is no earlier page to request.
+      if (page.length < HISTORY_PAGE_SIZE) break;
     }
   } finally {
     ws.close();
@@ -130,6 +150,7 @@ export default function FinancialChart({ symbol, liveTick }: Props) {
     setHistoryError('');
     baseHistoryRef.current = [];
     setHistory([]);
+
     void loadAllHistory(symbol).then(data => {
       if (cancelled) return;
       baseHistoryRef.current = data;
@@ -140,6 +161,7 @@ export default function FinancialChart({ symbol, liveTick }: Props) {
       setHistoryLoading(false);
       setHistoryError(error instanceof Error ? error.message : 'Historical candles could not be loaded');
     });
+
     return () => { cancelled = true; };
   }, [symbol]);
 
@@ -161,7 +183,13 @@ export default function FinancialChart({ symbol, liveTick }: Props) {
       timeScale: { borderColor: 'rgba(110,123,138,0.15)', timeVisible: true, secondsVisible: false, rightOffset: 6 },
       localization: { priceFormatter: price => price.toLocaleString(undefined, { maximumFractionDigits: 8 }) },
     });
-    const candlesSeries = chart.addSeries(CandlestickSeries, { upColor: '#22c55e', downColor: '#ef4444', borderVisible: false, wickUpColor: '#22c55e', wickDownColor: '#ef4444' });
+    const candlesSeries = chart.addSeries(CandlestickSeries, {
+      upColor: '#22c55e',
+      downColor: '#ef4444',
+      borderVisible: false,
+      wickUpColor: '#22c55e',
+      wickDownColor: '#ef4444',
+    });
     chartRef.current = chart;
     candleRef.current = candlesSeries;
     return () => { chart.remove(); chartRef.current = null; candleRef.current = null; };
@@ -175,11 +203,21 @@ export default function FinancialChart({ symbol, liveTick }: Props) {
   return (
     <div className="financial-chart-card">
       <div className="financial-chart-toolbar">
-        <div className="chart-title"><span>PRICE</span><b>{symbol}</b><small>Deriv open-source WebSocket · Historical candles</small></div>
-        <div className="chart-timeframes">{[[60, '1m'], [300, '5m'], [900, '15m']].map(([seconds, label]) => <button key={seconds} className={timeframe === seconds ? 'active' : ''} onClick={() => setTimeframe(seconds as number)}>{label}</button>)}</div>
+        <div className="chart-title">
+          <span>PRICE</span>
+          <b>{symbol}</b>
+          <small>Deriv open-source WebSocket · Full available historical candles</small>
+        </div>
+        <div className="chart-timeframes">
+          {[[60, '1m'], [300, '5m'], [900, '15m']].map(([seconds, label]) => (
+            <button key={seconds} className={timeframe === seconds ? 'active' : ''} onClick={() => setTimeframe(seconds as number)}>
+              {label}
+            </button>
+          ))}
+        </div>
       </div>
       <div ref={containerRef} className="financial-chart-canvas" />
-      {historyLoading && <div className="chart-status">Loading historical candles from Deriv…</div>}
+      {historyLoading && <div className="chart-status">Loading all available historical candles from Deriv…</div>}
       {historyError && <div className="chart-status">{historyError}</div>}
       {!historyLoading && !historyError && !candles.length && <div className="chart-loading">Waiting for market candles…</div>}
     </div>
