@@ -29,7 +29,16 @@ export default function App() {
 
   useEffect(() => {
     let cancelled = false;
-    fetchDerivInstruments().then(items => {
+    const startup = async () => {
+      const healthResponse = await fetch('/api/sire/deriv/health', { cache: 'no-store' });
+      let health: any = null;
+      try { health = await healthResponse.json(); } catch {}
+      if (!healthResponse.ok || !health?.ok) {
+        throw new Error(`Deriv startup health check failed at ${health?.stage || 'unknown stage'}: ${health?.error || `HTTP ${healthResponse.status}`}`);
+      }
+      return fetchDerivInstruments();
+    };
+    startup().then(items => {
       if (cancelled) return;
       if (!items.length) throw new Error('Deriv returned an empty active-symbol catalogue.');
       const next = items;
