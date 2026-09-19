@@ -535,13 +535,15 @@ export default function FinancialChart({ symbol, isActive = false, liveTick, req
       const key = historyCacheKey(symbolRef.current, interval);
       if (historyPagingRef.current || replayRef.current || historyExhaustedKeyRef.current === key) return;
       const before = candlesRef.current[0]?.time;
-      void loadOlderHistoryPage().then(() => {
-        // If the oldest bar did not move after a page request, Deriv has
-        // reached the actual historical boundary for this symbol/timeframe.
+      void loadOlderHistoryPage().then(moved => {
+        // Only mark the provider boundary after a successful request that
+        // returned no older bars. Network/API errors must remain retryable.
         const after = candlesRef.current[0]?.time;
-        if (Number.isFinite(before) && Number.isFinite(after) && after >= before) {
+        if (!moved && Number.isFinite(before) && Number.isFinite(after) && after >= before) {
           historyExhaustedKeyRef.current = key;
         }
+      }).catch(error => {
+        console.warn('[SIRE] Deriv history paging failed; keeping the left-edge loader retryable.', error);
       });
     };
     widget.chart.setHistoryLoader(requestOlderIfNeeded);
@@ -1117,12 +1119,15 @@ export default function FinancialChart({ symbol, isActive = false, liveTick, req
       // represented by 5,000 returned bars (custom intervals may be rebuilt
       // from a finer fallback interval).
       for (let page = 0; page < FAST_HISTORY_PAGES_PER_BATCH; page += 1) {
+        // Do not convert provider/API failures into an empty page. An empty
+        // successful response is the exhaustion signal; an exception must
+        // propagate so the next left-edge gesture can retry.
         const result = await requestBars({
           symbol: symbolRef.current,
           interval,
           to: pageEnd,
           noCache: false,
-        }, requestHistoryRef.current).catch(() => [] as Candle[]);
+        }, requestHistoryRef.current);
 
         const olderPage = result
           .filter(bar => bar.time < anchor && bar.time <= pageEnd)
@@ -1165,13 +1170,13 @@ export default function FinancialChart({ symbol, isActive = false, liveTick, req
 
   const loadOlderHistoryPage = async () => {
     const widget = widgetRef.current;
-    if (!widget || historyPagingRef.current || replayRef.current) return;
+    if (!widget || historyPagingRef.current || replayRef.current) return false;
 
     historyPagingRef.current = true;
     try {
       let bars = candlesRef.current.slice().sort((a, b) => a.time - b.time);
       const anchor = bars[0]?.time;
-      if (!Number.isFinite(anchor)) return;
+      if (!Number.isFinite(anchor)) return false;
 
       const interval = widget.interval();
       let pageEnd = Math.floor(anchor - 1);
@@ -1201,7 +1206,7 @@ export default function FinancialChart({ symbol, isActive = false, liveTick, req
 
       const older = pages.flat().sort((a, b) => a.time - b.time);
 
-      if (!older.length) return;
+      if (!older.length) return false;
 
       // OpenAlgo's native history-paging path preserves the user's viewport
       // while shifting the logical indices. Do not replace the whole series
@@ -1237,6 +1242,7 @@ export default function FinancialChart({ symbol, isActive = false, liveTick, req
       candlesRef.current = bars;
       updateMarketQuote(bars);
       window.setTimeout(refreshTpoProfile, 0);
+      return true;
     } finally {
       historyPagingRef.current = false;
       widgetRef.current?.chart.historyLoadComplete?.();
