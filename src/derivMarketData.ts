@@ -502,7 +502,12 @@ export async function fetchAllDerivHistory(symbol: string, interval: string, max
     for (const bar of page) if (!seen.has(bar.time)) all.push(bar);
     all.sort((a, b) => a.time - b.time);
     const oldest = page[0].time;
-    if (page.length < count || oldest <= 0 || oldest >= previousOldest) break;
+    // Deriv can legitimately return a short page for a timeframe (notably D1)
+    // even when older candles still exist. Do not treat a short page as the
+    // end of history: keep paging backwards until the requested startup
+    // window is filled, the API returns no candles, or the oldest timestamp
+    // stops moving.
+    if (oldest <= 0 || oldest >= previousOldest) break;
     previousOldest = oldest;
     end = Math.max(1, oldest - 1);
   }
@@ -546,8 +551,15 @@ export function createDerivDataFeed(
           onDiagnostic?.({ level: 'error', code: 'HISTORY_EMPTY', message: error.message, detail: 'The request completed, but no usable OHLC candles were returned.' });
           throw error;
         }
-        onDiagnostic?.({ level: 'info', code: 'HISTORY_INITIAL_WINDOW', message: `Loaded ${bars.length} startup candles for ${symbol} ${interval}.`, detail: `SIRE requests an initial window of ${DERIV_INITIAL_BARS} candles. This is not a Deriv history ceiling; older candles are fetched progressively as the chart moves toward the left edge.` });
-        onDiagnostic?.({ level: 'info', code: 'HISTORY_LOADED', message: `Loaded ${bars.length} historical candles for ${symbol} ${interval}.`, detail: `Initial window: ${DERIV_INITIAL_BARS}. Progressive older-history loading is available.` });
+        onDiagnostic?.({
+          level: bars.length >= DERIV_INITIAL_BARS ? 'info' : 'warning',
+          code: 'HISTORY_INITIAL_WINDOW',
+          message: `Loaded ${bars.length} startup candles for ${symbol} ${interval}.`,
+          detail: bars.length >= DERIV_INITIAL_BARS
+            ? `Requested ${DERIV_INITIAL_BARS}; the startup window is full. Older candles are fetched progressively as the chart moves toward the left edge.`
+            : `Requested ${DERIV_INITIAL_BARS}; only ${bars.length} usable candles were available after paging backward. The loader will not manufacture candles.`,
+        });
+        onDiagnostic?.({ level: 'info', code: 'HISTORY_LOADED', message: `Loaded ${bars.length} historical candles for ${symbol} ${interval}.`, detail: `Initial target: ${DERIV_INITIAL_BARS}. Progressive older-history loading is available.` });
         return bars;
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
