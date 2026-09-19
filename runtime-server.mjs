@@ -50,6 +50,43 @@ async function handleDirectGptRequest(parsed) {
 
 if (process.env.SIRE_AGENT_WORKER_ENABLED === 'true') startAgentWorker().catch(error => console.error('[SIRE agent worker]', error));
 
+async function requestDerivPublic(payload, timeoutMs = 12000) {
+  return await new Promise((resolve, reject) => {
+    const ws = new WebSocket('wss://api.derivws.com/trading/v1/options/ws/public');
+    const reqId = Number(payload.req_id || Math.floor(Math.random() * 900000) + 100000);
+    let settled = false;
+    const finish = (error, result) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      try { ws.close(); } catch {}
+      if (error) reject(error); else resolve(result);
+    };
+    const timer = setTimeout(() => finish(new Error('Deriv public market-data request timed out after 12 seconds.')), timeoutMs);
+    ws.on('open', () => {
+      try { ws.send(JSON.stringify({ ...payload, req_id: reqId })); }
+      catch (error) { finish(error instanceof Error ? error : new Error(String(error))); }
+    });
+    ws.on('message', data => {
+      try {
+        const parsed = JSON.parse(String(data));
+        if (Number(parsed?.req_id) !== reqId) return;
+        if (parsed?.error) {
+          finish(new Error(parsed.error.message || parsed.error.code || 'Deriv market-data request failed.'));
+          return;
+        }
+        finish(null, parsed);
+      } catch (error) {
+        finish(error instanceof Error ? error : new Error(String(error)));
+      }
+    });
+    ws.on('error', error => finish(new Error(`Deriv public WebSocket error: ${error instanceof Error ? error.message : String(error)}`)));
+    ws.on('close', (code, reason) => {
+      if (!settled) finish(new Error(`Deriv public WebSocket closed before the request completed (code ${code})${reason ? `: ${String(reason)}` : ''}.`));
+    });
+  });
+}
+
 async function checkDerivPublicMarketData() {
   return await new Promise((resolve) => {
     const ws = new WebSocket('wss://api.derivws.com/trading/v1/options/ws/public');
@@ -102,6 +139,24 @@ const server = http.createServer(async (req,res) => {
     const pathname = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`).pathname;
     if (req.method === 'POST' && pathname === '/api/sire/autonomous') { const parsed = body ? JSON.parse(body) : {}; if (!String(parsed.task || '').trim()) return res.writeHead(400,{ 'Access-Control-Allow-Origin':'*','Content-Type':'application/json; charset=utf-8' }).end(JSON.stringify({ error:'task is required' })); try { const response = await runAgent(String(parsed.task)); return res.writeHead(200,{ 'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8' }).end(JSON.stringify(response)); } catch (cause) { const message = cause instanceof Error ? cause.message : String(cause); console.error('[AUTONOMOUS AGENT]', message); return res.writeHead(502,{ 'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8' }).end(JSON.stringify({ error:message })); } }
     if (req.method === 'GET' && pathname === '/api/sire/autonomous/health') return res.writeHead(200,{ 'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8' }).end(JSON.stringify({ ok:true, service:'sire-autonomous-runtime', gateway:'127.0.0.1:10001', continuousWorker:true, webSearch:true, webSearchProvider:'SearXNG', webSearchFree:true }));
+    if (req.method === 'POST' && pathname === '/api/sire/deriv/history') {
+      let parsed = {};
+      try { parsed = body ? JSON.parse(body) : {}; } catch { return res.writeHead(400,{ 'Access-Control-Allow-Origin':'*','Content-Type':'application/json; charset=utf-8' }).end(JSON.stringify({ error:'Invalid JSON request.' })); }
+      const symbol = String(parsed.symbol || '').trim();
+      const count = Math.max(1, Math.min(1000, Number(parsed.count) || 500));
+      const granularity = Math.max(1, Math.floor(Number(parsed.granularity) || 60));
+      const end = parsed.end === undefined ? 'latest' : parsed.end;
+      if (!symbol) return res.writeHead(400,{ 'Access-Control-Allow-Origin':'*','Content-Type':'application/json; charset=utf-8' }).end(JSON.stringify({ error:'symbol is required' }));
+      try {
+        const result = await requestDerivPublic({ ticks_history:symbol, end, count, style:'candles', granularity, adjust_start_time:1, subscribe:0 });
+        console.log('[DERIV HISTORY]', symbol, granularity, count, end);
+        return res.writeHead(200,{ 'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8' }).end(JSON.stringify(result));
+      } catch (cause) {
+        const message = cause instanceof Error ? cause.message : String(cause);
+        console.error('[DERIV HISTORY] FAIL', symbol, message);
+        return res.writeHead(502,{ 'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8' }).end(JSON.stringify({ error:message, symbol, granularity, count, end }));
+      }
+    }
     if (req.method === 'GET' && pathname === '/api/sire/deriv/health') { const result = await checkDerivPublicMarketData(); console.log('[DERIV HEALTH]', JSON.stringify(result)); return res.writeHead(result.ok ? 200 : 502,{ 'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8' }).end(JSON.stringify(result)); }
     if (req.method === 'POST' && pathname === '/api/sire/agent/chat') { const parsed = body ? JSON.parse(body) : {}; const response = await handleGeminiRequest(parsed); return res.writeHead(response.status,{ 'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8' }).end(JSON.stringify(response.body ?? {})); }
     if (req.method === 'POST' && pathname === '/api/sire/agent/council') { const parsed = body ? JSON.parse(body) : {}; if (!String(parsed.query || '').trim()) return res.writeHead(400,{ 'Access-Control-Allow-Origin':'*','Content-Type':'application/json; charset=utf-8' }).end(JSON.stringify({ error:'query is required' })); try { const response = await handleTeamRequest(parsed); return res.writeHead(200,{ 'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8' }).end(JSON.stringify(response)); } catch (cause) { const message = cause instanceof Error ? cause.message : String(cause); console.error('[AI TEAM]', message); return res.writeHead(502,{ 'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8' }).end(JSON.stringify({ error:message, teamMode:'shared-workspace-team' })); } }
