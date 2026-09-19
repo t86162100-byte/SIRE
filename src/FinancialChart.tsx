@@ -450,6 +450,7 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
       const syncQuoteFromSeries = () => {
         const bars = (widget.primarySeries()?.getData?.() || []) as DerivBar[];
         const last = bars[bars.length - 1];
+        if (bars.length && oldestLoadedTimeRef.current === null) oldestLoadedTimeRef.current = bars[0].time;
         if (!last || !Number.isFinite(last.close)) return;
         const previous = bars.length > 1 ? bars[bars.length - 2] : null;
         const percent = previous?.close ? ((last.close - previous.close) / previous.close) * 100 : 0;
