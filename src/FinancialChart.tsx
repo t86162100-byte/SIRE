@@ -42,6 +42,22 @@ const replaySpeedLabel = (speed: number) => `${speed}×`;
 
 type ChartDiagnostic = DerivFeedDiagnostic & { id: number; timestamp: number };
 
+function analyzeChartHealth(events: ChartDiagnostic[], snapshot: { bars: number; tickAgeMs: number | null; width: number; height: number; hasCanvas: boolean; hasPrimarySeries: boolean }) {
+  const latest = [...events].reverse();
+  const find = (code: string) => latest.find(event => event.code === code);
+  const runtime = find('CHART_FRONTEND_ERROR') || find('CHART_UNHANDLED_REJECTION');
+  if (runtime) return { state: 'ISSUE', subsystem: 'Browser/runtime', cause: runtime.message, evidence: 'SIRE captured the browser exception directly.', next: 'Use the copied error/stack entry to locate the exact failing component or source line.' };
+  if (find('CHART_ZERO_SIZE')) return { state: 'ISSUE', subsystem: 'Layout/DOM', cause: 'The chart container has no usable dimensions.', evidence: snapshot.width + '×' + snapshot.height + 'px was measured.', next: 'Fix the parent layout or visibility before debugging market data.' };
+  if (!snapshot.hasCanvas) return { state: 'ISSUE', subsystem: 'Chart renderer', cause: 'No chart canvas is mounted.', evidence: 'The chart host contains no canvas element.', next: 'Inspect widget creation, renderer initialization and teardown.' };
+  if (!snapshot.hasPrimarySeries) return { state: 'ISSUE', subsystem: 'OpenAlgo chart API', cause: 'The primary price series is unavailable through widget.chart.', evidence: 'SIRE could not obtain widget.chart.primarySeries().', next: 'Inspect the installed OpenAlgo Charts API/version and object shape.' };
+  if (snapshot.bars === 0 || find('HISTORY_EMPTY') || find('HISTORY_LOAD_FAILED')) { const event = find('HISTORY_LOAD_FAILED') || find('HISTORY_EMPTY'); return { state: 'ISSUE', subsystem: 'Deriv history', cause: event?.message || 'No historical candles are available.', evidence: event?.detail || 'The primary series contains zero usable OHLC bars.', next: 'Check the SIRE history endpoint, Deriv response and symbol/granularity validation.' }; }
+  if (find('LIVE_TICK_SUBSCRIPTION_FAILED')) { const event = find('LIVE_TICK_SUBSCRIPTION_FAILED')!; return { state: 'ISSUE', subsystem: 'Deriv live transport', cause: event.message, evidence: event.detail || 'The live subscription did not complete.', next: 'Check the /deriv/ws proxy, Deriv public WebSocket and subscription response.' }; }
+  if (find('LIVE_TICK_STALE') || (snapshot.tickAgeMs !== null && snapshot.tickAgeMs > 10000)) return { state: 'ISSUE', subsystem: 'Deriv live transport', cause: 'The live tick stream is stale.', evidence: snapshot.tickAgeMs === null ? 'No live tick timestamp exists.' : Math.round(snapshot.tickAgeMs / 1000) + 's since the last tick.', next: 'Check the browser→SIRE WebSocket→Deriv path and reconnect state.' };
+  if (find('LIVE_RENDER_LAG')) { const event = find('LIVE_RENDER_LAG')!; return { state: 'ISSUE', subsystem: 'Live chart update', cause: 'Fresh Deriv ticks are arriving but the primary series is not reflecting the latest price.', evidence: event.detail || 'The fresh quote and chart close differ.', next: 'Inspect tick-to-bar conversion and the series.update path.' }; }
+  if (snapshot.bars > 0 && snapshot.hasPrimarySeries && snapshot.hasCanvas && (snapshot.tickAgeMs === null || snapshot.tickAgeMs < 10000)) return { state: 'HEALTHY', subsystem: 'End-to-end chart', cause: 'No active chart fault is detected.', evidence: snapshot.bars + ' candles loaded; series and canvas are present; live data is not stale.', next: 'Continue monitoring. New faults will be appended to the persistent log.' };
+  return { state: 'CHECKING', subsystem: 'Chart health monitor', cause: 'SIRE is still checking the chart.', evidence: 'Layout, renderer, history, live transport and price updates are being checked.', next: 'Keep diagnostics open while the checks run.' };
+}
+
 function diagnosticLabel(level: ChartDiagnostic['level']) { return level === 'error' ? 'ERROR' : level === 'warning' ? 'WARNING' : 'OK'; }
 
 function diagnosticText(event: ChartDiagnostic) {
@@ -67,37 +83,22 @@ async function copyDiagnosticText(value: string) {
   }
 }
 
-function ChartDiagnosticsPanel({ open, events, symbol, interval, quoteAgeMs, bars, renderer, width, height, onClose, onRetry }: { open: boolean; events: ChartDiagnostic[]; symbol: string; interval: string; quoteAgeMs: number | null; bars: number; renderer: string; width: number; height: number; onClose: () => void; onRetry: () => void }) {
+function ChartDiagnosticsPanel({ open, events, symbol, interval, quoteAgeMs, bars, renderer, width, height, hasCanvas, hasPrimarySeries, onClose, onRetry }: { open: boolean; events: ChartDiagnostic[]; symbol: string; interval: string; quoteAgeMs: number | null; bars: number; renderer: string; width: number; height: number; hasCanvas: boolean; hasPrimarySeries: boolean; onClose: () => void; onRetry: () => void }) {
   const [copiedId, setCopiedId] = useState<number | 'all' | null>(null);
   if (!open) return null;
   const activeError = [...events].reverse().find(event => event.level === 'error');
   const liveText = quoteAgeMs === null ? 'No live tick received yet' : Math.round(quoteAgeMs / 1000) + 's since last live tick';
+  const diagnosis = analyzeChartHealth(events, { bars, tickAgeMs: quoteAgeMs, width, height, hasCanvas, hasPrimarySeries });
   const allText = events.map(diagnosticText).join('\n\n');
-  const copy = async (id: number | 'all', value: string) => {
-    const ok = await copyDiagnosticText(value);
-    if (ok) {
-      setCopiedId(id);
-      window.setTimeout(() => setCopiedId(current => current === id ? null : current), 1400);
-    }
-  };
+  const copy = async (id: number | 'all', value: string) => { if (await copyDiagnosticText(value)) { setCopiedId(id); window.setTimeout(() => setCopiedId(current => current === id ? null : current), 1400); } };
   return <div className="sire-chart-diagnostics" role="dialog" aria-label="Chart diagnostics">
-    <div className="sire-chart-diagnostics__head">
-      <div><strong>Chart diagnostics</strong><small>{symbol} · {interval} · {events.length} log entr{events.length === 1 ? 'y' : 'ies'}</small></div>
-      <div className="sire-chart-diagnostics__head-actions">
-        <button type="button" className="sire-chart-diagnostics__copy-all" onClick={() => void copy('all', allText)} disabled={!events.length}>{copiedId === 'all' ? 'Copied' : 'Copy all'}</button>
-        <button type="button" onClick={onClose} aria-label="Close chart diagnostics">×</button>
-      </div>
-    </div>
-    <div className="sire-chart-diagnostics__metrics"><span>History <b>{bars}</b></span><span>Live <b>{liveText}</b></span><span>Renderer <b>{renderer}</b></span><span>Canvas <b>{width}×{height}</b></span></div>
+    <div className="sire-chart-diagnostics__head"><div><strong>Chart diagnostics</strong><small>{symbol} · {interval} · {events.length} log entries · continuous monitoring</small></div><div className="sire-chart-diagnostics__head-actions"><button type="button" className="sire-chart-diagnostics__copy-all" onClick={() => void copy('all', allText)} disabled={!events.length}>{copiedId === 'all' ? 'Copied' : 'Copy all'}</button><button type="button" onClick={onClose} aria-label="Close chart diagnostics">×</button></div></div>
+    <div className={'sire-chart-diagnostics__diagnosis is-' + diagnosis.state.toLowerCase()}><div><b>{diagnosis.state === 'HEALTHY' ? 'Chart is healthy' : diagnosis.state === 'ISSUE' ? 'Issue identified' : 'Checking chart'}</b><span>{diagnosis.subsystem}</span></div><strong>What is happening: </strong>{diagnosis.cause}<small><b>Evidence:</b> {diagnosis.evidence}</small><small><b>Next check:</b> {diagnosis.next}</small></div>
+    <div className="sire-chart-diagnostics__metrics"><span>History <b>{bars}</b></span><span>Live <b>{liveText}</b></span><span>Renderer <b>{renderer}</b></span><span>Canvas <b>{width}×{height}</b></span><span>Series <b>{hasPrimarySeries ? 'OK' : 'Missing'}</b></span></div>
     {activeError && <div className="sire-chart-diagnostics__active"><b>{diagnosticLabel(activeError.level)} · {activeError.code}</b><span>{activeError.message}</span>{activeError.detail && <small>Why: {activeError.detail}</small>}<button type="button" onClick={onRetry}>Retry chart data</button></div>}
-    <div className="sire-chart-diagnostics__list">{events.length ? events.map(event => <div key={event.id} className={'sire-chart-diagnostics__event is-' + event.level}>
-      <div><b>{diagnosticLabel(event.level)} · {event.code}</b><time>{new Date(event.timestamp).toLocaleTimeString()}</time><button type="button" className="sire-chart-diagnostics__copy" onClick={() => void copy(event.id, diagnosticText(event))}>{copiedId === event.id ? 'Copied' : 'Copy'}</button></div>
-      <span>{event.message}</span>{event.detail && <small>{event.detail}</small>}
-    </div>) : <div className="sire-chart-diagnostics__empty">No chart faults detected. Monitoring history, live ticks, candle updates, renderer health, chart size and frontend errors.</div>}</div>
+    <div className="sire-chart-diagnostics__list">{events.length ? events.map(event => <div key={event.id} className={'sire-chart-diagnostics__event is-' + event.level}><div><b>{diagnosticLabel(event.level)} · {event.code}</b><time>{new Date(event.timestamp).toLocaleTimeString()}</time><button type="button" className="sire-chart-diagnostics__copy" onClick={() => void copy(event.id, diagnosticText(event))}>{copiedId === event.id ? 'Copied' : 'Copy'}</button></div><span>{event.message}</span>{event.detail && <small>{event.detail}</small>}</div>) : <div className="sire-chart-diagnostics__empty">No chart faults detected. Monitoring all chart layers continuously.</div>}</div>
   </div>;
 }
-
-
 import { createDerivDataFeed, DERIV_INTERVAL_SECONDS, DERIV_PAGE_SIZE, fetchAllDerivHistory, fetchOlderDerivHistory, tickToBar, type DerivBar, type DerivInstrument, type DerivFeedDiagnostic } from './derivMarketData';
 
 export { type DerivInstrument, type DerivBar } from './derivMarketData';
@@ -427,7 +428,7 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
         setMarketQuote(null);
         lastTickAtRef.current = null;
         lastLiveQuoteRef.current = null;
-        setDiagnostics([]);
+        reportDiagnostic({ level: 'info', code: 'CHART_CONTEXT_CHANGED', message: 'Chart context changed to ' + symbol + '; preserving the existing diagnostic history.', detail: 'The issue log continues across instrument changes and timeframes.' });
       });
       const offSymbol = widget.on('symbol', (event: { symbol: string }) => {
         const instrument = instrumentsRef.current.find(item => item.symbol === event.symbol);
@@ -599,7 +600,7 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
   return (
     <div ref={containerRef} className={`sire-financial-chart${drawRackOpen ? ' sire-draw-rack-open' : ''}${isActive ? ' sire-toolbar-owner' : ''}`}>
       <button type="button" className={'sire-chart-diagnostics-button' + (diagnostics.some(event => event.level === 'error') ? ' has-error' : '')} onClick={() => setDiagnosticsOpen(open => !open)} aria-label="Open chart diagnostics" title="Chart diagnostics"><Wrench size={14} />{diagnostics.some(event => event.level === 'error') ? 'ISSUE' : 'OK'}</button>
-      <ChartDiagnosticsPanel open={diagnosticsOpen} events={diagnostics} symbol={symbol} interval={activeTimeframe} quoteAgeMs={lastTickAtRef.current === null ? null : Date.now() - lastTickAtRef.current} bars={((widgetRef.current?.chart.primarySeries()?.getData?.() || []) as DerivBar[]).length} renderer={rendererKind} width={Math.round(containerRef.current?.getBoundingClientRect().width || 0)} height={Math.round(containerRef.current?.getBoundingClientRect().height || 0)} onClose={() => setDiagnosticsOpen(false)} onRetry={() => { setDiagnostics([]); lastTickAtRef.current = null; lastLiveQuoteRef.current = null; setMarketQuote(null); void widgetRef.current?.reload?.(); }} />
+      <ChartDiagnosticsPanel open={diagnosticsOpen} events={diagnostics} symbol={symbol} interval={activeTimeframe} quoteAgeMs={lastTickAtRef.current === null ? null : Date.now() - lastTickAtRef.current} bars={((widgetRef.current?.chart?.primarySeries()?.getData?.() || []) as DerivBar[]).length} renderer={rendererKind} width={Math.round(containerRef.current?.getBoundingClientRect().width || 0)} height={Math.round(containerRef.current?.getBoundingClientRect().height || 0)} hasCanvas={!!containerRef.current?.querySelector('canvas')} hasPrimarySeries={!!widgetRef.current?.chart?.primarySeries?.()} onClose={() => setDiagnosticsOpen(false)} onRetry={() => { setDiagnostics([]); lastTickAtRef.current = null; lastLiveQuoteRef.current = null; setMarketQuote(null); void widgetRef.current?.reload?.(); }} />
       <div className="sire-market-quote" aria-label={`Selected ${marketInstrumentName}`}>
         <strong className="sire-market-quote__name">{marketInstrumentName}</strong>
         <div className="sire-market-quote__value-row">
