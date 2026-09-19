@@ -85,6 +85,65 @@ function getChartSeedHistory(symbol: string, interval: string): Candle[] {
     : cached;
 }
 
+const HISTORY_PAGE_DELAY_MS = 300;
+const fullHistoryLoads = new Map<string, Promise<Candle[]>>();
+
+async function loadAllAvailableHistory(
+  symbol: string,
+  interval: string,
+  requestHistory: HistoryRequester,
+): Promise<Candle[]> {
+  const key = historyCacheKey(symbol, interval);
+  const existing = fullHistoryLoads.get(key);
+  if (existing) return existing;
+
+  const task = (async () => {
+    let archive = getCachedHistory(symbol, interval);
+    let pageEnd: number | 'latest' = archive.length ? Math.floor(archive[0].time - 1) : 'latest';
+    let lastOldest = Number.POSITIVE_INFINITY;
+
+    for (;;) {
+      const page = await requestBars({
+        symbol,
+        interval,
+        to: pageEnd === 'latest' ? undefined : pageEnd,
+        noCache: true,
+      }, requestHistory);
+
+      const older = page
+        .filter(bar => pageEnd === 'latest' || bar.time <= pageEnd)
+        .sort((a, b) => a.time - b.time);
+
+      if (!older.length) break;
+
+      const merged = new Map<number, Candle>();
+      for (const bar of [...archive, ...older]) merged.set(bar.time, bar);
+      archive = [...merged.values()].sort((a, b) => a.time - b.time);
+      putCachedHistory(symbol, interval, archive);
+
+      const oldest = archive[0]?.time;
+      if (!Number.isFinite(oldest) || oldest >= lastOldest) break;
+      lastOldest = oldest;
+
+      // Deriv's public WebSocket budget is shared across market-data calls.
+      // Pace exhaustive backfill so a long 1m history does not hammer the
+      // endpoint or trigger a rate-limit response.
+      if (older.length < FAST_HISTORY_PAGE_SIZE) break;
+      pageEnd = Math.floor(oldest - 1);
+      await new Promise<void>(resolve => window.setTimeout(resolve, HISTORY_PAGE_DELAY_MS));
+    }
+
+    return archive;
+  })();
+
+  fullHistoryLoads.set(key, task);
+  try {
+    return await task;
+  } finally {
+    fullHistoryLoads.delete(key);
+  }
+}
+
 const formatReplayInput = (epoch: number) => new Date(epoch * 1000 + 60 * 60 * 1000).toISOString().slice(0, 16);
 const parseReplayInput = (value: string) => {
   if (!value) return NaN;
@@ -438,25 +497,21 @@ export default function FinancialChart({ symbol, isActive = false, liveTick, req
         // OpenAlgo's left-edge history loader then walks backward from the
         // actual oldest candle until Deriv has no more data.
         const bootstrapReq: BarsRequest = { ...req, from: undefined };
-        const cached = getChartSeedHistory(req.symbol, req.interval);
-        if (cached.length) {
-          candlesRef.current = cached;
-          updateMarketQuote(cached);
-          void requestBars({ ...bootstrapReq, noCache: false }, requestHistoryRef.current)
-            .then(fresh => {
-          if (!fresh.length) return;
-          const current = getCachedHistory(req.symbol, req.interval);
-          const merged = new Map<number, Candle>();
-          for (const bar of [...current, ...fresh]) merged.set(bar.time, bar);
-          const next = [...merged.values()].sort((a, b) => a.time - b.time);
-          putCachedHistory(req.symbol, req.interval, next);
-          candlesRef.current = next;
-        })
-            .catch(() => undefined);
-          return cached;
-        }
-        const bars = await requestBars(bootstrapReq, requestHistoryRef.current);
-        putCachedHistory(req.symbol, req.interval, bars);
+        // Fully acquire this symbol/timeframe from Deriv's newest candle
+        // back to its actual historical boundary before handing the feed to
+        // OpenAlgo. This is intentionally provider-bounded: each instrument
+        // stops only when Deriv returns fewer than a full page/no older data.
+        // OpenAlgo still receives only the bounded render window for mobile,
+        // while the complete archive remains available for leftward scrolling.
+        const allHistory = await loadAllAvailableHistory(
+          req.symbol,
+          req.interval,
+          requestHistoryRef.current,
+        );
+        const bars = allHistory.length > CHART_HISTORY_MAX_BARS
+          ? allHistory.slice(-CHART_HISTORY_MAX_BARS)
+          : allHistory;
+        if (!bars.length) throw new Error(`No Deriv history returned for ${req.symbol} ${req.interval}`);
         candlesRef.current = bars;
         updateMarketQuote(bars);
         resyncRef.current = null;
