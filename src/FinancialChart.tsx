@@ -48,7 +48,7 @@ const DERIV_REQUEST_TIMEOUT = 20000;
 const DERIV_PAGE_SIZE = 5000;
 // Keep the live chart bounded. Loading the entire available synthetic history into
 // a mobile canvas can cause the renderer to become blank after the first bars appear.
-const DERIV_CHART_BARS = 5000;
+const DERIV_INITIAL_BARS = 5000;
 const DERIV_INTERVAL_SECONDS: Record<string, number> = Object.fromEntries(Object.entries(INTERVAL_SECONDS));
 let derivRequestId = 0;
 const nextDerivRequestId = () => ++derivRequestId;
@@ -98,7 +98,7 @@ function derivBar(candle: any): DerivBar | null {
   return [time, open, high, low, close].every(Number.isFinite) ? { time, open, high, low, close, volume: 0 } : null;
 }
 
-export async function fetchAllDerivHistory(symbol: string, interval: string, maxBars = DERIV_CHART_BARS): Promise<DerivBar[]> {
+export async function fetchAllDerivHistory(symbol: string, interval: string, maxBars = DERIV_INITIAL_BARS): Promise<DerivBar[]> {
   const seconds = DERIV_INTERVAL_SECONDS[interval]; if (!seconds) throw new Error(`Unsupported Deriv interval: ${interval}`);
   const socket = await openDerivSocket();
   try {
@@ -118,7 +118,27 @@ export async function fetchAllDerivHistory(symbol: string, interval: string, max
 }
 
 async function fetchChartHistory(symbol: string, interval: string): Promise<DerivBar[]> {
-  return fetchAllDerivHistory(symbol, interval, DERIV_CHART_BARS);
+  return fetchAllDerivHistory(symbol, interval, DERIV_INITIAL_BARS);
+}
+
+async function fetchOlderDerivHistory(symbol: string, interval: string, end: number, count = DERIV_PAGE_SIZE): Promise<DerivBar[]> {
+  const seconds = DERIV_INTERVAL_SECONDS[interval];
+  if (!seconds) throw new Error(`Unsupported Deriv interval: ${interval}`);
+  const socket = await openDerivSocket();
+  try {
+    const data = await derivRequest(socket, {
+      ticks_history: symbol,
+      end: Math.max(1, Math.floor(end)),
+      count,
+      style: 'candles',
+      granularity: seconds,
+      adjust_start_time: 1,
+    });
+    return (Array.isArray(data.candles) ? data.candles.map(derivBar).filter(Boolean) as DerivBar[] : [])
+      .sort((a, b) => a.time - b.time);
+  } finally {
+    socket.close();
+  }
 }
 
 function tickToBar(previous: DerivBar | null, epoch: number, price: number, seconds: number): DerivBar {
@@ -182,9 +202,14 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
   const instrumentsRef = useRef(instruments);
   const onSelectInstrumentRef = useRef(onSelectInstrument);
   const symbolRef = useRef(symbol);
+  const timeframeRef = useRef(activeTimeframe);
+  const historyLoadingRef = useRef(false);
+  const historyExhaustedRef = useRef(false);
+  const oldestLoadedTimeRef = useRef<number | null>(null);
   instrumentsRef.current = instruments;
   onSelectInstrumentRef.current = onSelectInstrument;
   symbolRef.current = symbol;
+  timeframeRef.current = activeTimeframe;
   const marketInstrument = instruments.find(item => item.symbol === symbol);
   const marketInstrumentName = marketInstrument?.name || symbol;
   const formatMarketPrice = (price: number) => {
@@ -384,14 +409,14 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
         symbol,
         exchange: 'SYNTHETIC',
         feed,
-        loading: { retainedBars: DERIV_CHART_BARS },
+        loading: { retainedBars: Number.MAX_SAFE_INTEGER },
         interval: '1m',
         intervals: CHART_INTERVALS,
         chartType: 'candlestick',
         theme: 'dark',
         renderer: 'canvas2d',
         navigation: { mousePan: 'both', defaultVisibleBars: 10 },
-        lookbackBars: DERIV_CHART_BARS,
+        lookbackBars: Number.MAX_SAFE_INTEGER,
         animZoom: true,
         animAutoscale: true,
         branding: false,
@@ -431,6 +456,39 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
         setMarketQuote({ price: last.close, percent });
       };
       const offData = widget.on('data', syncQuoteFromSeries);
+
+      // Load history progressively as the user pans toward the oldest loaded bar.
+      // The chart keeps everything already loaded, while older pages are fetched
+      // only when they are actually needed.
+      widget.chart.setHistoryLoader?.(() => {
+        if (historyLoadingRef.current || historyExhaustedRef.current) return;
+        const currentSymbol = symbolRef.current;
+        const currentInterval = timeframeRef.current;
+        const oldest = oldestLoadedTimeRef.current;
+        if (!currentSymbol || !oldest) return;
+
+        historyLoadingRef.current = true;
+        void (async () => {
+          try {
+            const older = await fetchOlderDerivHistory(currentSymbol, currentInterval, oldest - 1, DERIV_PAGE_SIZE);
+            if (widgetRef.current !== widget || symbolRef.current !== currentSymbol || timeframeRef.current !== currentInterval) return;
+            if (!older.length) {
+              historyExhaustedRef.current = true;
+              return;
+            }
+            const series = widget.primarySeries();
+            if (!series) return;
+            series.prependData?.(older);
+            oldestLoadedTimeRef.current = older[0].time;
+            if (older.length < DERIV_PAGE_SIZE) historyExhaustedRef.current = true;
+          } catch (error) {
+            console.error('Failed to load older chart history', error);
+          } finally {
+            historyLoadingRef.current = false;
+            widget.chart.historyLoadComplete?.();
+          }
+        })();
+      });
       const updateDrawingOverlay = (drawing: any) => {
         if (!drawing) { setSelectedDrawingPosition(null); return; }
         const rect = host.getBoundingClientRect();
@@ -492,13 +550,17 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
       setMarketQuote(null);
       try {
         widget.setSymbol(symbol, 'SYNTHETIC');
-        // Explicitly seed the new symbol after switching. This keeps the chart
-        // visible even when the widget's internal symbol reload is asynchronous.
+        historyLoadingRef.current = false;
+        historyExhaustedRef.current = false;
+        oldestLoadedTimeRef.current = null;
+        // Seed the selected instrument with a manageable first page. Older
+        // candles are loaded on demand when the user pans left.
         const bars = await fetchChartHistory(symbol, activeTimeframe);
         if (cancelled || widgetRef.current !== widget) return;
         const series = widget.primarySeries();
         if (series && bars.length) {
           series.setData(bars);
+          oldestLoadedTimeRef.current = bars[0].time;
           const last = bars[bars.length - 1];
           const previous = bars.length > 1 ? bars[bars.length - 2] : null;
           const percent = previous?.close ? ((last.close - previous.close) / previous.close) * 100 : 0;
