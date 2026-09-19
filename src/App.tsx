@@ -3,10 +3,8 @@ import { Search } from 'lucide-react';
 import { createLinkGroup, type LinkGroup } from 'openalgo-charts';
 import ResearchLab from './ResearchLab';
 import FinancialChart from './FinancialChart';
-import { derivMarketData, type DerivInstrument, type DerivTick, type DerivResponse } from './derivMarketData';
+import { derivMarketData, type DerivInstrument } from './derivMarketData';
 import './nativeTerminal.css';
-
-type Tick = DerivTick;
 
 export default function App() {
   const [instruments, setInstruments] = useState<DerivInstrument[]>([]);
@@ -16,7 +14,6 @@ export default function App() {
   const [instrumentSearchMode, setInstrumentSearchMode] = useState<'main' | 'multi'>('main');
   const [status, setStatus] = useState('Connecting to Deriv…');
   const [lastError, setLastError] = useState('');
-  const [latestBySymbol, setLatestBySymbol] = useState<Record<string, Tick>>({});
   const [researchLabOpen, setResearchLabOpen] = useState(false);
   const selectedRef = useRef<DerivInstrument | null>(null);
   const [chartLayout, setChartLayout] = useState<1 | 2>(1);
@@ -65,40 +62,6 @@ export default function App() {
     return () => { mounted = false; removeStatus(); };
   }, []);
 
-  useEffect(() => {
-    if (!chartSymbols.length) return;
-    let mounted = true;
-    setLastError('');
-    const removeTick = derivMarketData.onTick(tick => {
-      if (!mounted || !chartSymbols.includes(tick.symbol)) return;
-      setLatestBySymbol(current => ({ ...current, [tick.symbol]: tick }));
-      if (tick.symbol === chartSymbols[0]) setStatus(`LIVE · ${instruments.find(item => item.symbol === tick.symbol)?.name || tick.symbol}`);
-    });
-    const subscribeAll = async () => {
-      try {
-        await derivMarketData.request({ forget_all: 'ticks' });
-        for (const chartSymbol of [...new Set(chartSymbols)]) await derivMarketData.subscribe(chartSymbol);
-      } catch (error) {
-        if (mounted) setLastError(error instanceof Error ? error.message : String(error));
-      }
-    };
-    void subscribeAll();
-    return () => { mounted = false; removeTick(); };
-  }, [chartSymbols.join('|'), instruments]);
-
-  const requestHistory = useCallback(async (request: Record<string, unknown>): Promise<DerivResponse> => {
-    if (typeof request.ticks_history === 'string') {
-      const start = Number.isFinite(Number(request.start)) ? Number(request.start) : undefined;
-      const rawEnd = request.end;
-      const end = rawEnd === 'latest' || rawEnd === undefined ? 'latest' : Number.isFinite(Number(rawEnd)) ? Number(rawEnd) : 'latest';
-      const count = Number.isFinite(Number(request.count)) ? Number(request.count) : 5000;
-      return derivMarketData.history(String(request.ticks_history), Number(request.granularity || 60), start, end, count);
-    }
-    return derivMarketData.request(request);
-  }, []);
-  const filtered = useMemo(() => { const q = search.trim().toLowerCase(); return q ? instruments.filter(item => `${item.name} ${item.symbol}`.toLowerCase().includes(q)) : instruments; }, [instruments, search]);
-  const selectInstrument = (item: DerivInstrument) => { setSelected(item); setSearch(''); setChartSymbols(current => current.length ? current.map((value, index) => index === 0 ? item.symbol : value) : [item.symbol]); };
-  const openInstrumentPicker = (mode: 'main' | 'multi') => { setInstrumentSearchMode(mode); setSearch(''); setInstrumentSearchOpen(true); };
 
   const chartItems = chartSymbols.slice(0, chartLayout);
   const openMultiChartManager = () => {
@@ -137,8 +100,6 @@ export default function App() {
           {chartItems.map((chartSymbol, index) => <div className={`sire-chart-cell${activeChartIndex === index ? ' sire-chart-cell--active' : ''}`} key={index} onPointerDown={() => setActiveChartIndex(index)}>{chartSymbol && <FinancialChart
             symbol={chartSymbol}
             isActive={activeChartIndex === index}
-            liveTick={latestBySymbol[chartSymbol] || null}
-            requestHistory={requestHistory}
             instruments={instruments.map(item => ({ symbol: item.symbol, name: item.name, pipSize: item.pipSize }))}
             onInstrumentTap={() => openInstrumentPicker('main')}
             onSelectInstrument={item => {
