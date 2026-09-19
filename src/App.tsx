@@ -2,8 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Search } from 'lucide-react';
 import { createLinkGroup, type LinkGroup } from 'openalgo-charts';
 import ResearchLab from './ResearchLab';
-import FinancialChart from './FinancialChart';
-import { fetchSyntheticInstruments, type DerivInstrument } from './derivDataFeed';
+import FinancialChart, { fetchSyntheticInstruments, type DerivInstrument } from './FinancialChart';
 import './nativeTerminal.css';
 
 type Instrument = DerivInstrument;
