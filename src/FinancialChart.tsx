@@ -8,7 +8,6 @@ import 'openalgo-charts/transform';
 import 'openalgo-charts/webgl';
 import { createWidget, type Widget } from 'openalgo-charts/widget';
 import './financialChart.css';
-import { createDerivDataFeed } from './derivDataFeed';
 
 type Instrument = { symbol: string; name: string; pipSize?: number };
 type Props = {
@@ -40,6 +39,95 @@ const CHART_TYPES = [
 ] as const;
 const REPLAY_SPEEDS = [0.5, 1, 2, 5, 10] as const;
 const replaySpeedLabel = (speed: number) => `${speed}×`;
+
+
+export type DerivInstrument = { symbol: string; name: string; market: string; submarket: string; subgroup: string; symbolType: string; pipSize?: number; exchangeOpen?: number };
+export type DerivBar = { time: number; open: number; high: number; low: number; close: number; volume: number };
+const DERIV_WS_URL = 'wss://api.derivws.com/trading/v1/options/ws/public';
+const DERIV_REQUEST_TIMEOUT = 20000;
+const DERIV_PAGE_SIZE = 5000;
+const DERIV_INTERVAL_SECONDS: Record<string, number> = Object.fromEntries(Object.entries(INTERVAL_SECONDS));
+let derivRequestId = 0;
+const nextDerivRequestId = () => ++derivRequestId;
+const derivSleep = (ms: number) => new Promise(resolve => window.setTimeout(resolve, ms));
+
+function openDerivSocket(): Promise<WebSocket> {
+  return new Promise((resolve, reject) => {
+    const socket = new WebSocket(DERIV_WS_URL);
+    const timer = window.setTimeout(() => { socket.close(); reject(new Error('Deriv market-data connection timed out.')); }, DERIV_REQUEST_TIMEOUT);
+    socket.onopen = () => { window.clearTimeout(timer); resolve(socket); };
+    socket.onerror = () => { window.clearTimeout(timer); reject(new Error('Deriv market-data connection failed.')); };
+  });
+}
+
+function derivRequest(socket: WebSocket, payload: Record<string, unknown>): Promise<any> {
+  const req_id = nextDerivRequestId();
+  return new Promise((resolve, reject) => {
+    const timer = window.setTimeout(() => { cleanup(); reject(new Error('Deriv market-data request timed out.')); }, DERIV_REQUEST_TIMEOUT);
+    const cleanup = () => { window.clearTimeout(timer); socket.removeEventListener('message', onMessage); socket.removeEventListener('error', onError); socket.removeEventListener('close', onClose); };
+    const onMessage = (event: MessageEvent) => { let data: any; try { data = JSON.parse(String(event.data)); } catch { return; } if (data.req_id !== req_id) return; cleanup(); if (data.error) reject(new Error(data.error.message || 'Deriv market-data request failed.')); else resolve(data); };
+    const onError = () => { cleanup(); reject(new Error('Deriv market-data socket error.')); };
+    const onClose = () => { cleanup(); reject(new Error('Deriv market-data socket closed.')); };
+    socket.addEventListener('message', onMessage); socket.addEventListener('error', onError); socket.addEventListener('close', onClose); socket.send(JSON.stringify({ ...payload, req_id }));
+  });
+}
+
+function syntheticInstrument(item: any): DerivInstrument | null {
+  const market = String(item.market || '').toLowerCase();
+  const type = String(item.underlying_symbol_type || '').toLowerCase();
+  const submarket = String(item.submarket || '').toLowerCase();
+  const subgroup = String(item.subgroup || '').toLowerCase();
+  if (!(market.includes('synthetic') || type.includes('synthetic') || submarket.includes('synthetic') || subgroup.includes('synthetic'))) return null;
+  const symbol = String(item.underlying_symbol || '').trim();
+  if (!symbol) return null;
+  const pip = Number(item.pip_size);
+  return { symbol, name: String(item.underlying_symbol_name || symbol), market: String(item.market || ''), submarket: String(item.submarket || ''), subgroup: String(item.subgroup || ''), symbolType: String(item.underlying_symbol_type || ''), pipSize: Number.isFinite(pip) ? pip : undefined, exchangeOpen: Number.isFinite(Number(item.exchange_is_open)) ? Number(item.exchange_is_open) : undefined };
+}
+
+export async function fetchSyntheticInstruments(): Promise<DerivInstrument[]> {
+  const socket = await openDerivSocket();
+  try { const data = await derivRequest(socket, { active_symbols: 'brief' }); return (Array.isArray(data.active_symbols) ? data.active_symbols.map(syntheticInstrument).filter(Boolean) as DerivInstrument[] : []).sort((a, b) => a.name.localeCompare(b.name)); }
+  finally { socket.close(); }
+}
+
+function derivBar(candle: any): DerivBar | null {
+  const time = Number(candle?.epoch), open = Number(candle?.open), high = Number(candle?.high), low = Number(candle?.low), close = Number(candle?.close);
+  return [time, open, high, low, close].every(Number.isFinite) ? { time, open, high, low, close, volume: 0 } : null;
+}
+
+export async function fetchAllDerivHistory(symbol: string, interval: string): Promise<DerivBar[]> {
+  const seconds = DERIV_INTERVAL_SECONDS[interval]; if (!seconds) throw new Error(`Unsupported Deriv interval: ${interval}`);
+  const socket = await openDerivSocket();
+  try {
+    const all: DerivBar[] = []; let end: number | 'latest' = 'latest'; let previousOldest = Infinity;
+    while (true) {
+      const data = await derivRequest(socket, { ticks_history: symbol, end, count: DERIV_PAGE_SIZE, style: 'candles', granularity: seconds, adjust_start_time: 1, subscribe: 0 });
+      const page = (Array.isArray(data.candles) ? data.candles.map(derivBar).filter(Boolean) as DerivBar[] : []).sort((a, b) => a.time - b.time);
+      if (!page.length) break;
+      const seen = new Set(all.map(bar => bar.time)); for (const bar of page) if (!seen.has(bar.time)) all.push(bar); all.sort((a, b) => a.time - b.time);
+      const oldest = page[0].time; if (page.length < DERIV_PAGE_SIZE || oldest <= 0 || oldest >= previousOldest) break; previousOldest = oldest; end = Math.max(1, oldest - 1); await derivSleep(75);
+    }
+    return all;
+  } finally { socket.close(); }
+}
+
+function tickToBar(previous: DerivBar | null, epoch: number, price: number, seconds: number): DerivBar {
+  const time = Math.floor(epoch / seconds) * seconds;
+  if (!previous || time > previous.time) return { time, open: price, high: price, low: price, close: price, volume: 0 };
+  if (time < previous.time) return previous;
+  return { ...previous, high: Math.max(previous.high, price), low: Math.min(previous.low, price), close: price };
+}
+
+export function createDerivDataFeed() {
+  return {
+    async getBars({ symbol, interval }: { symbol: string; interval: string }) { return fetchAllDerivHistory(symbol, interval); },
+    subscribeBars({ symbol, interval }: { symbol: string; interval: string }, onBar: (bar: DerivBar) => void, options?: { seedFrom?: DerivBar }) {
+      const seconds = DERIV_INTERVAL_SECONDS[interval]; let stopped = false; let socket: WebSocket | null = null; let reconnect: number | null = null; let current = options?.seedFrom ? { ...options.seedFrom } : null;
+      const connect = () => { if (stopped) return; socket = new WebSocket(DERIV_WS_URL); socket.onopen = () => { if (!stopped && socket) socket.send(JSON.stringify({ ticks: symbol, subscribe: 1, req_id: nextDerivRequestId() })); }; socket.onmessage = event => { let data: any; try { data = JSON.parse(String(event.data)); } catch { return; } if (data.msg_type !== 'tick' || data.tick?.symbol !== symbol) return; const epoch = Number(data.tick.epoch), price = Number(data.tick.quote); if (!Number.isFinite(epoch) || !Number.isFinite(price)) return; const next = tickToBar(current, epoch, price, seconds); if (!current || next.time !== current.time || next.close !== current.close || next.high !== current.high || next.low !== current.low) { current = next; onBar({ ...next }); } }; socket.onclose = () => { socket = null; if (!stopped) reconnect = window.setTimeout(connect, 1000); }; socket.onerror = () => {}; };
+      connect(); return () => { stopped = true; if (reconnect !== null) window.clearTimeout(reconnect); if (socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ forget_all: 'ticks' })); socket?.close(); socket = null; };
+    },
+  };
+}
 
 export default function FinancialChart({ symbol, isActive = false, instruments, onSelectInstrument, onWidgetReady, onWidgetDestroyed, onInstrumentTap }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
