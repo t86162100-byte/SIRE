@@ -230,7 +230,7 @@ export class DerivMarketData {
       if (!candles.length) break;
       allCandles.push(...candles);
 
-      if (lowerBound === undefined || candles.length < pageSize) break;
+      // An apparently short page is not proof that the provider's historical archive is exhausted.\n      // Continue walking backward until Deriv returns no candles; this is required for\n      // instruments whose history contains gaps or whose server-side paging returns\n      // fewer than the requested page size at an intermediate boundary.\n      if (lowerBound === undefined) break;
 
       const epochs = candles.map(c => Number(c.epoch)).filter(Number.isFinite);
       if (!epochs.length) break;
