@@ -48,7 +48,9 @@ const CHART_TYPES = [
 const REPLAY_SPEEDS = [0.5, 1, 2, 5, 10] as const;
 const replaySpeedLabel = (speed: number) => `${speed}×`;
 const FAST_HISTORY_PAGE_SIZE = 5000;
-const FAST_HISTORY_PAGES_PER_BATCH = 8;
+const FAST_HISTORY_PAGES_PER_BATCH = 2;
+const CHART_HISTORY_MAX_BARS = 20_000;
+const CHART_HISTORY_SEED_BARS = 5_000;
 const FAST_HISTORY_CONCURRENCY = 4;
 const HISTORY_CACHE_TTL_MS = 15 * 60_000;
 const HISTORY_CACHE_MAX_SYMBOLS = 24;
@@ -72,6 +74,13 @@ function putCachedHistory(symbol: string, interval: string, bars: Candle[]) {
     historyCache.delete(oldest);
   }
 }
+function getChartSeedHistory(symbol: string, interval: string): Candle[] {
+  const cached = getCachedHistory(symbol, interval);
+  return cached.length > CHART_HISTORY_SEED_BARS
+    ? cached.slice(-CHART_HISTORY_SEED_BARS)
+    : cached;
+}
+
 const formatReplayInput = (epoch: number) => new Date(epoch * 1000 + 60 * 60 * 1000).toISOString().slice(0, 16);
 const parseReplayInput = (value: string) => {
   if (!value) return NaN;
@@ -485,7 +494,7 @@ export default function FinancialChart({ symbol, isActive = false, liveTick, req
     const host = containerRef.current;
     const sourceFeed = {
       async getBars(req: BarsRequest) {
-        const cached = getCachedHistory(req.symbol, req.interval);
+        const cached = getChartSeedHistory(req.symbol, req.interval);
         if (cached.length) {
           candlesRef.current = cached;
           updateMarketQuote(cached);
@@ -924,8 +933,12 @@ export default function FinancialChart({ symbol, isActive = false, liveTick, req
     if (last?.time === time) candlesRef.current[candlesRef.current.length - 1] = bar;
     else {
       candlesRef.current.push(bar);
-      const retainedLimit = widget.dataController ? 500000 : 1500;
-      if (candlesRef.current.length > retainedLimit) candlesRef.current.splice(0, candlesRef.current.length - retainedLimit);
+      // The full historical archive lives in historyCache. The live chart
+      // keeps a bounded rendering window so mobile Canvas2D never has to paint
+      // an unbounded series after repeated left-edge paging.
+      if (candlesRef.current.length > CHART_HISTORY_MAX_BARS) {
+        candlesRef.current.splice(0, candlesRef.current.length - CHART_HISTORY_MAX_BARS);
+      }
     }
     subscriberRef.current?.(bar);
   }, [liveTick, symbol]);
@@ -1146,18 +1159,35 @@ export default function FinancialChart({ symbol, isActive = false, liveTick, req
       // OpenAlgo's native history-paging path preserves the user's viewport
       // while shifting the logical indices. Do not replace the whole series
       // here: setData would make the left edge feel sticky/jumpy on mobile.
-      const prependData = (widget.series as any).prependData;
-      if (typeof prependData !== 'function') {
-        widget.series.setData([...older, ...bars]);
-      } else {
-        prependData.call(widget.series, older);
-      }
+      // Merge into the application archive first. The archive may contain
+      // millions of bars; only the bounded rendering window is given to
+      // OpenAlgo, which prevents the mobile series canvas from going blank.
+      const cachedAll = getCachedHistory(symbolRef.current, interval);
+      const archived = new Map<number, Candle>();
+      for (const bar of [...cachedAll, ...older]) archived.set(bar.time, bar);
+      const allHistory = [...archived.values()].sort((a, b) => a.time - b.time);
+      putCachedHistory(symbolRef.current, interval, allHistory);
 
-      const merged = new Map<number, Candle>();
-      for (const bar of [...bars, ...older]) merged.set(bar.time, bar);
-      bars = [...merged.values()].sort((a, b) => a.time - b.time);
+      const visibleBefore = widget.chart.getVisibleLogicalRange?.();
+      const prependData = (widget.series as any).prependData;
+      const combined = [...older, ...bars];
+      if (combined.length <= CHART_HISTORY_MAX_BARS && typeof prependData === 'function') {
+        prependData.call(widget.series, older);
+        bars = combined;
+      } else {
+        // Keep the oldest side because the user is at the left edge. Drop only
+        // the newest bars from the live rendering window; they remain in the
+        // application archive and can be restored later.
+        bars = combined.slice(0, CHART_HISTORY_MAX_BARS);
+        widget.series.setData(bars);
+        const range = visibleBefore ?? { from: 0, to: Math.min(119, bars.length - 1) };
+        const maxTo = Math.max(0, bars.length - 1);
+        widget.chart.setVisibleLogicalRange?.({
+          from: Math.max(0, Math.min(Number(range.from), maxTo)),
+          to: Math.max(0, Math.min(Number(range.to), maxTo)),
+        });
+      }
       candlesRef.current = bars;
-      putCachedHistory(symbolRef.current, interval, bars);
       updateMarketQuote(bars);
       window.setTimeout(refreshTpoProfile, 0);
     } finally {
