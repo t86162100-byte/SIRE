@@ -27,98 +27,85 @@ type Pending = {
   timer: number;
 };
 
-// Deriv's documented legacy market-data WebSocket accepts the public test app
-// id and exposes ticks_history directly. Keep it first for historical paging;
-// the newer Options public endpoint remains the fallback for current market data.
-const ENDPOINTS = [
-  'wss://ws.derivws.com/websockets/v3?app_id=1089',
-  'wss://api.derivws.com/trading/v1/options/ws/public',
-  'wss://ws.binaryws.com/websockets/v3?app_id=1089',
-];
+const DERIV_WS = 'wss://ws.derivws.com/websockets/v3?app_id=1089';
 
-function messageText(data: unknown): Promise<string> {
+function readText(data: unknown): Promise<string> {
   if (typeof data === 'string') return Promise.resolve(data);
   if (data instanceof ArrayBuffer) return Promise.resolve(new TextDecoder().decode(data));
   if (typeof Blob !== 'undefined' && data instanceof Blob) return data.text();
-  return Promise.reject(new Error('Unsupported Deriv WebSocket message format'));
+  return Promise.reject(new Error('Unsupported Deriv WebSocket message'));
 }
 
-function value(item: Record<string, unknown>, ...keys: string[]): string {
+function textValue(item: Record<string, unknown>, ...keys: string[]): string {
   for (const key of keys) {
-    const v = item[key];
-    if (v !== undefined && v !== null && String(v).trim()) return String(v).trim();
+    const value = item[key];
+    if (value !== undefined && value !== null && String(value).trim()) return String(value).trim();
   }
   return '';
 }
 
 function isSynthetic(item: Record<string, unknown>): boolean {
-  const symbol = value(item, 'underlying_symbol', 'symbol');
-  const market = value(item, 'market').toLowerCase();
-  const submarket = value(item, 'submarket').toLowerCase();
-  const subgroup = value(item, 'subgroup').toLowerCase();
-  const type = value(item, 'underlying_symbol_type', 'symbol_type').toLowerCase();
-  const name = value(item, 'underlying_symbol_name', 'display_name').toLowerCase();
-  const text = `${symbol} ${name} ${market} ${submarket} ${subgroup} ${type}`.toLowerCase();
-  return market === 'synthetic_index' || market === 'synthetic indices' || submarket.includes('synthetic') || subgroup.includes('synthetic') || type.includes('synthetic') || /synthetic index|volatility|boom|crash|jump|step|drift|range break|daily reset|bull market|bear market|random index/.test(text) || /^(r_|1hz|boom|crash|step|jump|drift|range_break|bull|bear)/i.test(symbol);
+  const symbol = textValue(item, 'underlying_symbol', 'symbol');
+  const market = textValue(item, 'market').toLowerCase();
+  const submarket = textValue(item, 'submarket').toLowerCase();
+  const subgroup = textValue(item, 'subgroup').toLowerCase();
+  const type = textValue(item, 'underlying_symbol_type', 'symbol_type').toLowerCase();
+  const name = textValue(item, 'underlying_symbol_name', 'display_name').toLowerCase();
+  const text = `${symbol} ${name} ${market} ${submarket} ${subgroup} ${type}`;
+  return market.includes('synthetic') ||
+    submarket.includes('synthetic') ||
+    subgroup.includes('synthetic') ||
+    type.includes('synthetic') ||
+    /volatility|boom|crash|jump|step|drift|range break|daily reset|bull market|bear market|random index/.test(text) ||
+    /^(r_|1hz|boom|crash|step|jump|drift|range_break|bull|bear)/i.test(symbol);
 }
 
-function normalize(item: Record<string, unknown>): DerivInstrument | null {
-  const symbol = value(item, 'underlying_symbol', 'symbol');
+function normalizeInstrument(item: Record<string, unknown>): DerivInstrument | null {
+  const symbol = textValue(item, 'underlying_symbol', 'symbol');
   if (!symbol) return null;
   const pip = Number(item.pip_size ?? item.pip);
   return {
     symbol,
-    name: value(item, 'underlying_symbol_name', 'display_name') || symbol,
-    market: value(item, 'market'),
-    submarket: value(item, 'submarket'),
-    subgroup: value(item, 'subgroup'),
-    symbolType: value(item, 'underlying_symbol_type', 'symbol_type'),
+    name: textValue(item, 'underlying_symbol_name', 'display_name') || symbol,
+    market: textValue(item, 'market'),
+    submarket: textValue(item, 'submarket'),
+    subgroup: textValue(item, 'subgroup'),
+    symbolType: textValue(item, 'underlying_symbol_type', 'symbol_type'),
     pipSize: Number.isFinite(pip) && pip > 0 ? pip : undefined,
-    exchangeOpen: typeof item.exchange_is_open === 'number' ? item.exchange_is_open : undefined,
+    exchangeOpen: Number.isFinite(Number(item.exchange_is_open)) ? Number(item.exchange_is_open) : undefined,
   };
 }
 
 export class DerivMarketData {
   private socket: WebSocket | null = null;
   private pending = new Map<number, Pending>();
-  private nextReqId = 1;
-  private listeners = new Set<(tick: DerivTick) => void>();
+  private nextRequestId = 1;
+  private tickListeners = new Set<(tick: DerivTick) => void>();
   private statusListeners = new Set<(status: 'connecting' | 'connected' | 'closed' | 'error') => void>();
   private reconnectTimer = 0;
-  private closedByUser = false;
-  private endpointIndex = 0;
+  private closed = false;
 
   async connect(): Promise<void> {
     if (this.socket?.readyState === WebSocket.OPEN) return;
-    this.closedByUser = false;
+    this.closed = false;
     this.emitStatus('connecting');
-    const firstIndex = this.endpointIndex;
-    let lastError: Error | null = null;
-    for (let offset = 0; offset < ENDPOINTS.length; offset += 1) {
-      const index = (firstIndex + offset) % ENDPOINTS.length;
-      try {
-        await this.connectTo(ENDPOINTS[index]);
-        this.endpointIndex = index;
-        return;
-      } catch (error) {
-        lastError = error instanceof Error ? error : new Error(String(error));
-      }
-    }
-    throw lastError || new Error('Unable to connect to Deriv market-data WebSocket');
-  }
-
-  private connectTo(endpoint: string): Promise<void> {
-    return new Promise<void>((resolve, reject) => {
+    await new Promise<void>((resolve, reject) => {
       let socket: WebSocket;
-      try { socket = new WebSocket(endpoint); } catch (error) { reject(error instanceof Error ? error : new Error(String(error))); return; }
+      try {
+        socket = new WebSocket(DERIV_WS);
+      } catch (error) {
+        reject(error instanceof Error ? error : new Error(String(error)));
+        return;
+      }
       this.socket = socket;
       let settled = false;
       const timer = window.setTimeout(() => {
         if (settled) return;
         settled = true;
-        try { socket.close(); } catch { /* ignore */ }
-        reject(new Error(`Deriv WebSocket connection timed out: ${endpoint}`));
+        try { socket.close(); } catch {}
+        reject(new Error('Deriv WebSocket connection timed out'));
       }, 15000);
+
       socket.onopen = () => {
         if (settled) return;
         settled = true;
@@ -126,42 +113,59 @@ export class DerivMarketData {
         this.emitStatus('connected');
         resolve();
       };
+
       socket.onerror = () => {
         this.emitStatus('error');
         if (!settled) {
           settled = true;
           window.clearTimeout(timer);
-          reject(new Error(`Deriv WebSocket connection failed: ${endpoint}`));
+          reject(new Error('Deriv WebSocket connection failed'));
         }
       };
+
       socket.onclose = event => {
         this.emitStatus('closed');
         this.rejectPending(new Error(`Deriv WebSocket closed (${event.code}${event.reason ? `: ${event.reason}` : ''})`));
         if (!settled) {
           settled = true;
           window.clearTimeout(timer);
-          reject(new Error(`Deriv WebSocket closed before connection (${event.code}${event.reason ? `: ${event.reason}` : ''})`));
+          reject(new Error(`Deriv WebSocket closed before connection (${event.code})`));
         }
-        if (!this.closedByUser && this.socket === socket) this.scheduleReconnect();
+        if (!this.closed && this.socket === socket) this.scheduleReconnect();
       };
+
       socket.onmessage = event => {
-        void messageText(event.data).then(text => {
+        void readText(event.data).then(raw => {
           let data: DerivResponse;
-          try { data = JSON.parse(text) as DerivResponse; } catch { return; }
+          try { data = JSON.parse(raw); } catch { return; }
+
           if (data.msg_type === 'tick' && data.tick) {
-            const raw = data.tick as Record<string, unknown>;
-            const tick: DerivTick = { symbol: String(raw.symbol || raw.underlying_symbol || ''), quote: Number(raw.quote), bid: Number.isFinite(Number(raw.bid)) ? Number(raw.bid) : undefined, ask: Number.isFinite(Number(raw.ask)) ? Number(raw.ask) : undefined, epoch: Number(raw.epoch), id: raw.id ? String(raw.id) : undefined, source: 'Deriv' };
-            if (tick.symbol && Number.isFinite(tick.quote) && Number.isFinite(tick.epoch)) this.listeners.forEach(listener => listener(tick));
+            const rawTick = data.tick as Record<string, unknown>;
+            const tick: DerivTick = {
+              symbol: String(rawTick.symbol || ''),
+              quote: Number(rawTick.quote),
+              bid: Number.isFinite(Number(rawTick.bid)) ? Number(rawTick.bid) : undefined,
+              ask: Number.isFinite(Number(rawTick.ask)) ? Number(rawTick.ask) : undefined,
+              epoch: Number(rawTick.epoch),
+              id: rawTick.id ? String(rawTick.id) : undefined,
+              source: 'Deriv',
+            };
+            if (tick.symbol && Number.isFinite(tick.quote) && Number.isFinite(tick.epoch)) {
+              this.tickListeners.forEach(listener => listener(tick));
+            }
           }
-          const reqId = Number(data.req_id);
-          const waiter = this.pending.get(reqId);
-          if (!waiter) return;
-          window.clearTimeout(waiter.timer);
-          this.pending.delete(reqId);
+
+          const requestId = Number(data.req_id);
+          const pending = this.pending.get(requestId);
+          if (!pending) return;
+          window.clearTimeout(pending.timer);
+          this.pending.delete(requestId);
           if (data.error) {
             const error = data.error as Record<string, unknown>;
-            waiter.reject(new Error(String(error.message || 'Deriv API error')));
-          } else waiter.resolve(data);
+            pending.reject(new Error(String(error.message || 'Deriv API error')));
+          } else {
+            pending.resolve(data);
+          }
         }).catch(() => undefined);
       };
     });
@@ -171,107 +175,107 @@ export class DerivMarketData {
     await this.connect();
     const socket = this.socket;
     if (!socket || socket.readyState !== WebSocket.OPEN) throw new Error('Deriv WebSocket is not connected');
-    const reqId = this.nextReqId++;
+
+    const reqId = this.nextRequestId++;
     return new Promise((resolve, reject) => {
-      const timer = window.setTimeout(() => { this.pending.delete(reqId); reject(new Error(`Deriv request timed out (${String(request.active_symbols ? 'active_symbols' : request.ticks_history ? 'ticks_history' : request.ticks ? 'ticks' : 'request')})`)); }, 15000);
+      const timer = window.setTimeout(() => {
+        this.pending.delete(reqId);
+        const operation = request.active_symbols ? 'active_symbols' : request.ticks_history ? 'ticks_history' : request.ticks ? 'ticks' : 'request';
+        reject(new Error(`Deriv ${operation} request timed out`));
+      }, 15000);
+
       this.pending.set(reqId, { resolve, reject, timer });
-      try { socket.send(JSON.stringify({ ...request, req_id: reqId })); }
-      catch (error) { window.clearTimeout(timer); this.pending.delete(reqId); reject(error instanceof Error ? error : new Error(String(error))); }
+      try {
+        socket.send(JSON.stringify({ ...request, req_id: reqId }));
+      } catch (error) {
+        window.clearTimeout(timer);
+        this.pending.delete(reqId);
+        reject(error instanceof Error ? error : new Error(String(error)));
+      }
     });
   }
 
   async getSyntheticIndices(): Promise<DerivInstrument[]> {
-    const requests: Record<string, unknown>[] = [{ active_symbols: 'brief' }, { active_symbols: 'full' }];
-    let lastError: Error | null = null;
-    let records: Record<string, unknown>[] = [];
-    for (const request of requests) {
-      try {
-        const response = await this.request(request);
-        if (response.error) { const error = response.error as Record<string, unknown>; lastError = new Error(`Deriv active_symbols failed: ${String(error.message || 'Unknown API error')}`); continue; }
-        records = Array.isArray(response.active_symbols) ? response.active_symbols.filter((item: unknown): item is Record<string, unknown> => Boolean(item && typeof item === 'object')) : [];
-        if (records.length) break;
-      } catch (error) { lastError = error instanceof Error ? error : new Error(String(error)); }
-    }
-    if (!records.length) throw lastError || new Error('Deriv returned no active symbols.');
-    const instruments = Array.from(new Map(records.filter(isSynthetic).map(normalize).filter((item): item is DerivInstrument => Boolean(item)).map(item => [item.symbol, item])).values());
-    if (!instruments.length) {
-      const sample = records.slice(0, 10).map(item => value(item, 'underlying_symbol', 'symbol')).filter(Boolean).join(', ');
-      throw new Error(`Deriv returned ${records.length} active symbols, but none matched Synthetic Indices. Sample symbols: ${sample || 'none'}`);
-    }
-    return instruments.sort((a, b) => a.name.localeCompare(b.name));
-  }
-
-  subscribe(symbol: string): Promise<DerivResponse> { return this.request({ ticks: symbol, subscribe: 1 }); }
-
-  async history(symbol: string, granularity: number, start?: number, end?: number | 'latest', count = 5000): Promise<DerivResponse> {
-    const allCandles: Record<string, unknown>[] = [];
-    const pageSize = Math.min(Math.max(Math.floor(count), 1), 5000);
-    let pageEnd: number | 'latest' = end ?? 'latest';
-    const lowerBound = Number.isFinite(start) ? Math.floor(Number(start)) : undefined;
-    // No calendar-age cutoff and no fixed maximum page count.
-    // For daily/weekly charts, an open-ended request is fully walked back to
-    // Deriv's actual first available candle. This makes D1/W1 open with the
-    // complete instrument history instead of only the newest 5,000 bars.
-    // Intraday charts remain paged on demand because a full 1m archive can be
-    // millions of candles and should not block chart startup.
-    const loadCompleteDailyWeeklyHistory = lowerBound === undefined && granularity >= 86400;
-    for (;;) {
-      const request: Record<string, unknown> = {
-        ticks_history: symbol,
-        end: pageEnd,
-        count: pageSize,
-        style: 'candles',
-        granularity,
-        // When the requested boundary reaches the provider/license edge,
-        // ask Deriv to adjust the start boundary rather than silently shifting
-        // the requested window forward.
-        adjust_start_time: 1,
-      };
-      if (lowerBound !== undefined) request.start = lowerBound;
-      const response = await this.request(request);
-      if (response.error) {
-        const error = response.error as Record<string, unknown>;
-        throw new Error(`Deriv historical candles failed: ${String(error.message || 'Unknown API error')}`);
-      }
-      const candles = Array.isArray(response.candles)
-        ? response.candles.filter((item: unknown): item is Record<string, unknown> => Boolean(item && typeof item === 'object'))
-        : [];
-      if (!candles.length) break;
-      allCandles.push(...candles);
-
-      // An apparently short page is not proof that the provider's historical archive is exhausted.
-      // Continue walking backward until Deriv returns no candles; this is required for
-      // instruments whose history contains gaps or whose server-side paging returns
-      // fewer than the requested page size at an intermediate boundary.
-      if (lowerBound === undefined && !loadCompleteDailyWeeklyHistory) break;
-
-      const epochs = candles.map(c => Number(c.epoch)).filter(Number.isFinite);
-      if (!epochs.length) break;
-
-      const oldest = Math.floor(Math.min(...epochs));
-      const nextEnd = oldest - 1;
-      if (nextEnd < lowerBound) break;
-      if (pageEnd !== 'latest' && nextEnd >= pageEnd) break;
-      pageEnd = nextEnd;
-    }
-
-    const unique = new Map<number, Record<string, unknown>>();
-    allCandles.forEach(candle => {
-      const epoch = Number(candle.epoch);
-      if (Number.isFinite(epoch) && (lowerBound === undefined || epoch >= lowerBound)) unique.set(epoch, candle);
+    const response = await this.request({
+      active_symbols: 'brief',
+      product_type: 'basic',
     });
-    return {
-      candles: Array.from(unique.values()).sort((a, b) => Number(a.epoch) - Number(b.epoch)),
-      echo_req: { ticks_history: symbol, style: 'candles', granularity, start: lowerBound, end: end ?? 'latest' },
-    };
+    const records = Array.isArray(response.active_symbols)
+      ? response.active_symbols.filter((item: unknown): item is Record<string, unknown> => Boolean(item && typeof item === 'object'))
+      : [];
+    if (!records.length) throw new Error('Deriv returned no active symbols.');
+
+    const instruments = Array.from(
+      new Map(
+        records
+          .filter(isSynthetic)
+          .map(normalizeInstrument)
+          .filter((item): item is DerivInstrument => Boolean(item))
+          .map(item => [item.symbol, item]),
+      ).values(),
+    ).sort((a, b) => a.name.localeCompare(b.name));
+
+    if (!instruments.length) throw new Error('Deriv returned active symbols, but no Synthetic Indices matched.');
+    return instruments;
   }
 
-  onTick(listener: (tick: DerivTick) => void): () => void { this.listeners.add(listener); return () => this.listeners.delete(listener); }
-  onStatus(listener: (status: 'connecting' | 'connected' | 'closed' | 'error') => void): () => void { this.statusListeners.add(listener); return () => this.statusListeners.delete(listener); }
-  close(): void { this.closedByUser = true; window.clearTimeout(this.reconnectTimer); this.rejectPending(new Error('Deriv client closed')); try { this.socket?.close(); } catch { /* ignore */ } this.socket = null; }
-  private emitStatus(status: 'connecting' | 'connected' | 'closed' | 'error') { this.statusListeners.forEach(listener => listener(status)); }
-  private rejectPending(error: Error) { this.pending.forEach(waiter => { window.clearTimeout(waiter.timer); waiter.reject(error); }); this.pending.clear(); }
-  private scheduleReconnect() { window.clearTimeout(this.reconnectTimer); this.reconnectTimer = window.setTimeout(() => { if (!this.closedByUser) void this.connect().catch(() => this.scheduleReconnect()); }, 1500); }
+  subscribe(symbol: string): Promise<DerivResponse> {
+    return this.request({ ticks: symbol, subscribe: 1 });
+  }
+
+  async history(symbol: string, granularity: number, end?: number | 'latest', count = 5000): Promise<DerivResponse> {
+    const response = await this.request({
+      ticks_history: symbol,
+      end: end ?? 'latest',
+      count: Math.min(Math.max(Math.floor(count), 1), 5000),
+      style: 'candles',
+      granularity,
+      adjust_start_time: 1,
+      subscribe: 0,
+    });
+    if (response.error) {
+      const error = response.error as Record<string, unknown>;
+      throw new Error(`Deriv historical candles failed: ${String(error.message || 'Unknown API error')}`);
+    }
+    return response;
+  }
+
+  onTick(listener: (tick: DerivTick) => void): () => void {
+    this.tickListeners.add(listener);
+    return () => this.tickListeners.delete(listener);
+  }
+
+  onStatus(listener: (status: 'connecting' | 'connected' | 'closed' | 'error') => void): () => void {
+    this.statusListeners.add(listener);
+    return () => this.statusListeners.delete(listener);
+  }
+
+  close(): void {
+    this.closed = true;
+    window.clearTimeout(this.reconnectTimer);
+    this.rejectPending(new Error('Deriv client closed'));
+    try { this.socket?.close(); } catch {}
+    this.socket = null;
+  }
+
+  private emitStatus(status: 'connecting' | 'connected' | 'closed' | 'error') {
+    this.statusListeners.forEach(listener => listener(status));
+  }
+
+  private rejectPending(error: Error) {
+    this.pending.forEach(item => {
+      window.clearTimeout(item.timer);
+      item.reject(error);
+    });
+    this.pending.clear();
+  }
+
+  private scheduleReconnect() {
+    window.clearTimeout(this.reconnectTimer);
+    this.reconnectTimer = window.setTimeout(() => {
+      if (!this.closed) void this.connect().catch(() => this.scheduleReconnect());
+    }, 1500);
+  }
 }
 
 export const derivMarketData = new DerivMarketData();
