@@ -74,8 +74,14 @@ server.on('upgrade',(req,socket,head)=>{
       const queued=[];
       let upstreamOpen=false;
       const fail=(message)=>{
-        if(clientSocket.readyState===WebSocket.OPEN) clientSocket.send(JSON.stringify({error:{message}}));
-        if(clientSocket.readyState===WebSocket.OPEN || clientSocket.readyState===WebSocket.CONNECTING) clientSocket.close();
+        const detail = String(message || 'Unknown Deriv upstream error.');
+        console.error('[DERIV PROXY] FAIL', detail);
+        if(clientSocket.readyState===WebSocket.OPEN) {
+          clientSocket.send(JSON.stringify({error:{message:detail}}));
+          clientSocket.close(1011, detail.slice(0, 120));
+        } else if(clientSocket.readyState===WebSocket.CONNECTING) {
+          clientSocket.close();
+        }
       };
       const upstreamTimer=setTimeout(()=>{ if(!upstreamOpen) fail('Deriv upstream connection timed out.'); },15000);
       upstream.on('open',()=>{
@@ -92,12 +98,16 @@ server.on('upgrade',(req,socket,head)=>{
         if(clientSocket.readyState===WebSocket.OPEN) clientSocket.send(data);
       });
       upstream.on('error',error=>{
-        console.error('[DERIV PROXY]',error instanceof Error ? error.message : String(error));
-        fail('Deriv upstream connection failed.');
+        const detail = error instanceof Error ? error.message : String(error);
+        console.error('[DERIV PROXY]', detail);
+        fail(`Deriv upstream WebSocket error: ${detail}`);
       });
-      upstream.on('close',()=>{
+      upstream.on('close',(code,reason)=>{
         clearTimeout(upstreamTimer);
-        if(clientSocket.readyState===WebSocket.OPEN) clientSocket.close();
+        const detail = reason ? String(reason) : '';
+        if(clientSocket.readyState===WebSocket.OPEN) {
+          clientSocket.close(code && code !== 1000 ? 1011 : 1000, detail.slice(0, 120));
+        }
       });
       clientSocket.on('message',data=>{
         if(upstreamOpen && upstream.readyState===WebSocket.OPEN) upstream.send(data);
