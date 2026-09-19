@@ -25,7 +25,7 @@ const INTERVAL_SECONDS: Record<string, number> = {
   '30m': 1800, '45m': 2700, '1h': 3600, '2h': 7200, '3h': 10800, '4h': 14400,
   '6h': 21600, '8h': 28800, '12h': 43200, '1d': 86400, '1w': 604800,
 };
-const DERIV_INTERVALS = Object.keys(INTERVAL_SECONDS);
+const CHART_INTERVALS = Object.keys(INTERVAL_SECONDS);
 for (const [code, seconds] of Object.entries(INTERVAL_SECONDS)) {
   if (!['1m', '5m', '15m', '1h', '1d', '1w'].includes(code)) registerInterval({ code, bucketing: { mode: 'interval', seconds } });
 }
@@ -137,11 +137,11 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
     if (Math.abs(delta) >= 8) clearTimeframeHold();
     if (Math.abs(delta) < 45 || timeframeSwipeAnimatingRef.current) return;
     const direction: 1 | -1 = delta < 0 ? 1 : -1;
-    const currentIndex = DERIV_INTERVALS.indexOf(activeTimeframe);
-    const nextIndex = Math.max(0, Math.min(DERIV_INTERVALS.length - 1, currentIndex + direction));
+    const currentIndex = CHART_INTERVALS.indexOf(activeTimeframe);
+    const nextIndex = Math.max(0, Math.min(CHART_INTERVALS.length - 1, currentIndex + direction));
     if (nextIndex !== currentIndex) {
       timeframeSwipeAnimatingRef.current = true;
-      selectTimeframe(DERIV_INTERVALS[nextIndex]);
+      selectTimeframe(CHART_INTERVALS[nextIndex]);
       window.setTimeout(() => { timeframeSwipeAnimatingRef.current = false; }, 280);
     }
     timeframeSwipeStartYRef.current = event.clientY;
@@ -220,9 +220,9 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
       widget = createWidget(host, {
         feed: sourceFeed,
         symbol,
-        exchange: 'Deriv Synthetic Indices',
+        exchange: '',
         interval: '1m',
-        intervals: DERIV_INTERVALS,
+        intervals: CHART_INTERVALS,
         chartType: 'candlestick',
         theme: 'dark',
         renderer: 'canvas2d',
@@ -310,7 +310,7 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
 
   useEffect(() => {
     const widget = widgetRef.current;
-    if (widget && widget.symbol() !== symbol) widget.setSymbol(symbol, 'Deriv Synthetic Indices');
+    if (widget && widget.symbol() !== symbol) widget.setSymbol(symbol, '');
   }, [symbol]);
 
   useEffect(() => {
@@ -623,7 +623,7 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
         </button>
         {timeframeOpen && (
           <div className="sire-bottom-timeframe-menu">
-            {DERIV_INTERVALS.map(interval => (
+            {CHART_INTERVALS.map(interval => (
               <button
                 key={interval}
                 type="button"
