@@ -50,6 +50,51 @@ async function handleDirectGptRequest(parsed) {
 
 if (process.env.SIRE_AGENT_WORKER_ENABLED === 'true') startAgentWorker().catch(error => console.error('[SIRE agent worker]', error));
 
+async function checkDerivPublicMarketData() {
+  return await new Promise((resolve) => {
+    const ws = new WebSocket('wss://api.derivws.com/trading/v1/options/ws/public');
+    let settled = false;
+    const finish = (result) => {
+      if (settled) return;
+      settled = true;
+      try { ws.close(); } catch {}
+      resolve(result);
+    };
+    const timer = setTimeout(() => finish({ ok:false, stage:'connect', error:'Deriv public WebSocket connection timed out after 12 seconds.' }), 12000);
+    ws.on('open', () => {
+      ws.send(JSON.stringify({ active_symbols:'brief', req_id:900001 }));
+    });
+    ws.on('message', data => {
+      try {
+        const parsed = JSON.parse(String(data));
+        if (parsed?.error) {
+          clearTimeout(timer);
+          finish({ ok:false, stage:'active_symbols', error:parsed.error.message || parsed.error.code || 'Deriv returned an unknown market-data error.', code:parsed.error.code || '' });
+          return;
+        }
+        if (Number(parsed?.req_id) === 900001) {
+          clearTimeout(timer);
+          const count = Array.isArray(parsed?.active_symbols) ? parsed.active_symbols.length : 0;
+          finish(count ? { ok:true, stage:'active_symbols', symbolCount:count } : { ok:false, stage:'active_symbols', error:'Deriv connected, but returned an empty active-symbol catalogue.' });
+        }
+      } catch (error) {
+        clearTimeout(timer);
+        finish({ ok:false, stage:'response', error:error instanceof Error ? error.message : String(error) });
+      }
+    });
+    ws.on('error', error => {
+      clearTimeout(timer);
+      finish({ ok:false, stage:'connect', error:`Deriv public WebSocket error: ${error instanceof Error ? error.message : String(error)}` });
+    });
+    ws.on('close', (code, reason) => {
+      if (!settled) {
+        clearTimeout(timer);
+        finish({ ok:false, stage:'connect', error:`Deriv public WebSocket closed before startup completed (code ${code})${reason ? `: ${String(reason)}` : ''}.` });
+      }
+    });
+  });
+}
+
 const server = http.createServer(async (req,res) => {
   if (req.method === 'OPTIONS') { res.writeHead(204,{ 'Access-Control-Allow-Origin':'*','Access-Control-Allow-Methods':'GET,POST,PUT,DELETE,OPTIONS','Access-Control-Allow-Headers':'Content-Type, Authorization' }); return res.end(); }
   if (await serveStatic(req,res)) return;
@@ -57,6 +102,7 @@ const server = http.createServer(async (req,res) => {
     const pathname = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`).pathname;
     if (req.method === 'POST' && pathname === '/api/sire/autonomous') { const parsed = body ? JSON.parse(body) : {}; if (!String(parsed.task || '').trim()) return res.writeHead(400,{ 'Access-Control-Allow-Origin':'*','Content-Type':'application/json; charset=utf-8' }).end(JSON.stringify({ error:'task is required' })); try { const response = await runAgent(String(parsed.task)); return res.writeHead(200,{ 'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8' }).end(JSON.stringify(response)); } catch (cause) { const message = cause instanceof Error ? cause.message : String(cause); console.error('[AUTONOMOUS AGENT]', message); return res.writeHead(502,{ 'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8' }).end(JSON.stringify({ error:message })); } }
     if (req.method === 'GET' && pathname === '/api/sire/autonomous/health') return res.writeHead(200,{ 'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8' }).end(JSON.stringify({ ok:true, service:'sire-autonomous-runtime', gateway:'127.0.0.1:10001', continuousWorker:true, webSearch:true, webSearchProvider:'SearXNG', webSearchFree:true }));
+    if (req.method === 'GET' && pathname === '/api/sire/deriv/health') { const result = await checkDerivPublicMarketData(); console.log('[DERIV HEALTH]', JSON.stringify(result)); return res.writeHead(result.ok ? 200 : 502,{ 'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8' }).end(JSON.stringify(result)); }
     if (req.method === 'POST' && pathname === '/api/sire/agent/chat') { const parsed = body ? JSON.parse(body) : {}; const response = await handleGeminiRequest(parsed); return res.writeHead(response.status,{ 'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8' }).end(JSON.stringify(response.body ?? {})); }
     if (req.method === 'POST' && pathname === '/api/sire/agent/council') { const parsed = body ? JSON.parse(body) : {}; if (!String(parsed.query || '').trim()) return res.writeHead(400,{ 'Access-Control-Allow-Origin':'*','Content-Type':'application/json; charset=utf-8' }).end(JSON.stringify({ error:'query is required' })); try { const response = await handleTeamRequest(parsed); return res.writeHead(200,{ 'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8' }).end(JSON.stringify(response)); } catch (cause) { const message = cause instanceof Error ? cause.message : String(cause); console.error('[AI TEAM]', message); return res.writeHead(502,{ 'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8' }).end(JSON.stringify({ error:message, teamMode:'shared-workspace-team' })); } }
     if (req.method === 'POST' && pathname === '/api/sire/agent/council/stream') { const parsed = body ? JSON.parse(body) : {}; if (!String(parsed.query || '').trim()) return res.writeHead(400,{ 'Access-Control-Allow-Origin':'*','Content-Type':'application/json; charset=utf-8' }).end(JSON.stringify({ error:'query is required' })); res.writeHead(200,{ 'Access-Control-Allow-Origin':'*','Cache-Control':'no-cache, no-transform','Content-Type':'text/event-stream; charset=utf-8','Connection':'keep-alive','X-Accel-Buffering':'no' }); const send = (type, payload) => { if (!res.writableEnded) res.write(`event: ${type}\ndata: ${JSON.stringify(payload)}\n\n`); }; try { const response = await handleTeamRequest(parsed, event => send('council.stage', event)); send('council.done', response); } catch (cause) { send('council.error', { error: cause instanceof Error ? cause.message : String(cause) }); } return res.end(); }
@@ -69,6 +115,7 @@ const wss = new WebSocketServer({ noServer:true });
 server.on('upgrade',(req,socket,head)=>{
   const url=new URL(req.url||'/',`http://${req.headers.host||'localhost'}`);
   if(url.pathname==='/deriv/ws'){
+    console.log('[DERIV PROXY] Browser market-data client connected');
     wss.handleUpgrade(req,socket,head,clientSocket=>{
       const upstream=new WebSocket('wss://api.derivws.com/trading/v1/options/ws/public');
       const queued=[];
