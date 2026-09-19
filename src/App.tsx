@@ -16,22 +16,7 @@ type Instrument = {
   exchangeOpen?: number;
 };
 
-const LOCAL_SYNTHETIC_INSTRUMENTS: DerivInstrument[] = [
-  ['R_10','Volatility 10 Index'],['R_25','Volatility 25 Index'],['R_50','Volatility 50 Index'],
-  ['R_75','Volatility 75 Index'],['R_100','Volatility 100 Index'],
-  ['1HZ10V','Volatility 10 (1s) Index'],['1HZ25V','Volatility 25 (1s) Index'],['1HZ50V','Volatility 50 (1s) Index'],
-  ['1HZ75V','Volatility 75 (1s) Index'],['1HZ100V','Volatility 100 (1s) Index'],
-  ['RDBULL','Bull Market Index'],['RDBEAR','Bear Market Index'],
-  ['RDBULL1000','Bull Market Index 1000'],['RDBEAR1000','Bear Market Index 1000'],
-  ['JD10','Jump 10 Index'],['JD25','Jump 25 Index'],['JD50','Jump 50 Index'],['JD75','Jump 75 Index'],['JD100','Jump 100 Index'],
-  ['BOOM300','Boom 300 Index'],['BOOM500','Boom 500 Index'],['BOOM1000','Boom 1000 Index'],
-  ['CRASH300','Crash 300 Index'],['CRASH500','Crash 500 Index'],['CRASH1000','Crash 1000 Index'],
-  ['STPRNG','Step Index'],['RDBREAK100','Range Break 100 Index'],['RDBREAK200','Range Break 200 Index'],
-  ['DRIFT_SWITCH','Drift Switch Index'],
-].map(([symbol,name]) => ({
-  symbol, name, market:'Synthetic', submarket:'Synthetic Indices', subgroup:'', symbolType:'synthetic',
-  pipSize:0.01, exchangeOpen:1,
-}));
+const instruments: Instrument[] = [];
 
 export default function App() {
   const [selected, setSelected] = useState<Instrument | null>(null);
