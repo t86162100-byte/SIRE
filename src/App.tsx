@@ -2,7 +2,8 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Search } from 'lucide-react';
 import { createLinkGroup, type LinkGroup } from 'openalgo-charts';
 import ResearchLab from './ResearchLab';
-import FinancialChart, { fetchSyntheticInstruments, type DerivInstrument } from './FinancialChart';
+import FinancialChart from './FinancialChart';
+import { fetchDerivInstruments, type DerivInstrument } from './derivMarketData';
 import './nativeTerminal.css';
 
 type Instrument = DerivInstrument;
@@ -15,6 +16,7 @@ export default function App() {
     submarket: 'volatility',
     subgroup: 'volatility',
     symbolType: 'synthetic_index',
+    category: 'synthetic',
     pipSize: 0.01,
     exchangeOpen: 1,
   };
@@ -35,7 +37,7 @@ export default function App() {
 
   useEffect(() => {
     let cancelled = false;
-    fetchSyntheticInstruments().then(items => {
+    fetchDerivInstruments().then(items => {
       if (cancelled) return;
       const next = items.length ? items : [FALLBACK_INSTRUMENT];
       setInstruments(next);
@@ -43,7 +45,7 @@ export default function App() {
       setChartSymbols(current => current.length ? current : [next[0].symbol]);
     }).catch(error => {
       if (cancelled) return;
-      console.error('[DERIV MARKET DATA] instrument discovery failed; using fallback synthetic index', error);
+      console.error('[DERIV MARKET DATA] active symbol discovery failed; using fallback instrument', error);
       setInstruments(current => current.length ? current : [FALLBACK_INSTRUMENT]);
       setSelected(current => current || FALLBACK_INSTRUMENT);
       setChartSymbols(current => current.length ? current : [FALLBACK_INSTRUMENT.symbol]);
