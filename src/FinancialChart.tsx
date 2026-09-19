@@ -579,7 +579,11 @@ export default function FinancialChart({ symbol, isActive = false, liveTick, req
             }, requestHistoryRef.current);
         if (!bars.length) throw new Error(`No Deriv history returned for ${req.symbol} ${req.interval}`);
         putCachedHistory(req.symbol, req.interval, bars);
-        candlesRef.current = bars;
+        // Debug mode: the chart series itself must contain only the ten-bar
+        // startup window. Keep the full archive separate from OpenAlgo.
+        const startupBars = bars.slice(-10);
+        candlesRef.current = startupBars;
+        bars = startupBars;
         updateMarketQuote(bars);
         // Force a fresh autoscale after the first real bars arrive. This is
         // especially important after a persisted chart state was restored.
@@ -587,6 +591,9 @@ export default function FinancialChart({ symbol, isActive = false, liveTick, req
           const current = widgetRef.current;
           current?.chart.setAutoScale?.(true);
           current?.chart.resetScale?.();
+          if (current && bars.length === 10) {
+            current.chart.setVisibleLogicalRange?.({ from: 0, to: 9 });
+          }
         });
         resyncRef.current = null;
         return bars;
@@ -916,14 +923,14 @@ export default function FinancialChart({ symbol, isActive = false, liveTick, req
     // The archive is refreshed from the newest page first, then the historical
     // cursor moves monotonically backward. Live ticks continue updating the
     // current candles while this archive backfill runs.
-    void loadAllAvailableHistory(symbol, widget.interval(), requestHistoryRef.current, publishBackfillPageToChart).catch(error => {
+    void loadAllAvailableHistory(symbol, widget.interval(), requestHistoryRef.current).catch(error => {
       console.warn('[SIRE] Automatic Deriv history backfill stopped; left-edge paging remains available.', error);
     });
     setActiveTimeframe(widget.interval());
     const offInterval = widget.on('interval', (event: { interval: string }) => {
       historyExhaustedKeyRef.current = null;
       setActiveTimeframe(event.interval);
-      void loadAllAvailableHistory(symbolRef.current, event.interval, requestHistoryRef.current, publishBackfillPageToChart).catch(error => {
+      void loadAllAvailableHistory(symbolRef.current, event.interval, requestHistoryRef.current).catch(error => {
         console.warn('[SIRE] Automatic Deriv interval backfill stopped; left-edge paging remains available.', error);
       });
     });
@@ -1081,7 +1088,7 @@ export default function FinancialChart({ symbol, isActive = false, liveTick, req
     if (widget && widget.symbol() !== symbol) {
       widget.setSymbol(symbol, 'Deriv Synthetic Indices');
     }
-    void loadAllAvailableHistory(symbol, widget?.interval?.() ?? activeTimeframe, requestHistoryRef.current, publishBackfillPageToChart).catch(error => {
+    void loadAllAvailableHistory(symbol, widget?.interval?.() ?? activeTimeframe, requestHistoryRef.current).catch(error => {
       console.warn('[SIRE] Automatic Deriv symbol backfill stopped; left-edge paging remains available.', error);
     });
   }, [symbol]);
