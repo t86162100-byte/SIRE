@@ -877,8 +877,15 @@ export default function FinancialChart({ symbol, isActive = false, liveTick, req
     };
     window.addEventListener('resize', onResize);
     onWidgetReady?.(widget);
-    // History is fetched on demand by OpenAlgo's native left-edge loader.
-    // Do not unboundedly warm millions of bars during chart startup.
+    // Start the provider-bounded backfill automatically for every symbol and
+    // timeframe. It runs in the background in small pages, so the chart opens
+    // quickly while SIRE keeps walking backward until Deriv's true first candle.
+    // The archive is refreshed from the newest page first, then the historical
+    // cursor moves monotonically backward. Live ticks continue updating the
+    // current candles while this archive backfill runs.
+    void loadAllAvailableHistory(symbol, widget.interval(), requestHistoryRef.current).catch(error => {
+      console.warn('[SIRE] Automatic Deriv history backfill stopped; left-edge paging remains available.', error);
+    });
     setActiveTimeframe(widget.interval());
     const offInterval = widget.on('interval', (event: { interval: string }) => {
       historyExhaustedKeyRef.current = null;
