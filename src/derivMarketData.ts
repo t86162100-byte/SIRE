@@ -29,7 +29,10 @@ export type DerivBar = {
   volume: number;
 };
 
-export const DERIV_WS_URL = 'wss://ws.binaryws.com/websockets/v3';
+export const DERIV_DIRECT_WS_URL = 'wss://ws.binaryws.com/websockets/v3';
+export const DERIV_WS_URL = typeof window !== 'undefined'
+  ? `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}/deriv/ws`
+  : DERIV_DIRECT_WS_URL;
 export const DERIV_REQUEST_TIMEOUT = 20000;
 export const DERIV_PAGE_SIZE = 1000;
 export const DERIV_INITIAL_BARS = 500;
@@ -138,7 +141,7 @@ export class DerivMarketDataClient {
   private socket: WebSocket | null = null;
   private opening: Promise<WebSocket> | null = null;
   private pending = new Map<number, Pending>();
-  private subscriptions = new Map<number, { symbol: string; handler: TickHandler }>();
+  private subscriptions = new Map<number, { symbol: string; handler: TickHandler; upstreamId?: string }>();
   private closed = false;
 
   private attach(socket: WebSocket) {
@@ -232,27 +235,17 @@ export class DerivMarketDataClient {
   }
 
   async subscribeTicks(symbol: string, handler: TickHandler) {
-    const socket = await this.ensureSocket();
-    const req_id = nextRequestId();
-    await new Promise<void>((resolve, reject) => {
-      const timer = window.setTimeout(() => {
-        this.pending.delete(req_id);
-        reject(new Error('Deriv tick subscription timed out.'));
-      }, DERIV_REQUEST_TIMEOUT);
-      this.pending.set(req_id, {
-        resolve: () => resolve(),
-        reject,
-        timer,
-      });
-      socket.send(JSON.stringify({ ticks: symbol, subscribe: 1, req_id }));
-    });
-
-    const subscriptionId = nextRequestId();
-    this.subscriptions.set(subscriptionId, { symbol, handler });
+    await this.ensureSocket();
+    const subscriptionToken = nextRequestId();
+    const response = await this.request({ ticks: symbol, subscribe: 1 });
+    const upstreamId = text(response?.subscription?.id);
+    if (!upstreamId) throw new Error('Deriv did not return a tick subscription id.');
+    this.subscriptions.set(subscriptionToken, { symbol, handler, upstreamId });
     return () => {
-      this.subscriptions.delete(subscriptionId);
-      if (this.socket?.readyState === WebSocket.OPEN) {
-        this.socket.send(JSON.stringify({ forget: String(subscriptionId) }));
+      const subscription = this.subscriptions.get(subscriptionToken);
+      this.subscriptions.delete(subscriptionToken);
+      if (subscription?.upstreamId && this.socket?.readyState === WebSocket.OPEN) {
+        this.socket.send(JSON.stringify({ forget: subscription.upstreamId, req_id: nextRequestId() }));
       }
     };
   }
@@ -260,12 +253,11 @@ export class DerivMarketDataClient {
   private async reconnectSubscriptions() {
     if (this.closed || !this.subscriptions.size) return;
     try {
-      const socket = await this.ensureSocket();
-      const symbols = [...new Set([...this.subscriptions.values()].map(item => item.symbol))];
-      for (const symbol of symbols) {
-        if (socket.readyState === WebSocket.OPEN) {
-          socket.send(JSON.stringify({ ticks: symbol, subscribe: 1, req_id: nextRequestId() }));
-        }
+      await this.ensureSocket();
+      for (const [token, subscription] of this.subscriptions) {
+        const response = await this.request({ ticks: subscription.symbol, subscribe: 1 });
+        const upstreamId = text(response?.subscription?.id);
+        if (upstreamId) this.subscriptions.set(token, { ...subscription, upstreamId });
       }
     } catch (error) {
       console.error('[DERIV] reconnect failed', error);
