@@ -397,34 +397,55 @@ async function requestDerivHistorySocket(
 
 async function fetchDerivHistoryPage(symbol: string, seconds: number, end: number | 'latest', count: number) {
   const payload = {
+    symbol,
+    end,
+    count,
+    granularity: seconds,
+  };
+
+  // Progressive history runs through SIRE's server-side Deriv adapter first.
+  // This avoids browser WebSocket/runtime differences on older-history calls
+  // while keeping the live tick stream on the existing direct WebSocket client.
+  if (typeof window !== 'undefined') {
+    try {
+      const response = await window.fetch('/api/sire/deriv/history', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        cache: 'no-store',
+        body: JSON.stringify(payload),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok || data?.error) {
+        throw new Error(data?.error || `SIRE Deriv history endpoint returned HTTP ${response.status}.`);
+      }
+      return data;
+    } catch (serverError) {
+      // Fall back to a direct browser request if the SIRE adapter is unavailable.
+      try {
+        return await requestDerivHistorySocket(DERIV_DIRECT_WS_URL, {
+          ticks_history: symbol,
+          end,
+          count,
+          style: 'candles',
+          granularity: seconds,
+          adjust_start_time: 1,
+        });
+      } catch (directError) {
+        const server = serverError instanceof Error ? serverError.message : String(serverError);
+        const direct = directError instanceof Error ? directError.message : String(directError);
+        throw new Error(`Deriv history failed through SIRE and direct WebSocket. Server: ${server}. Direct: ${direct}.`);
+      }
+    }
+  }
+
+  return await requestDerivHistorySocket(DERIV_DIRECT_WS_URL, {
     ticks_history: symbol,
     end,
     count,
     style: 'candles',
     granularity: seconds,
     adjust_start_time: 1,
-  };
-
-  try {
-    // Historical paging uses a one-shot socket so a failure here cannot be
-    // caused by the live tick subscription lifecycle.
-    return await requestDerivHistorySocket(DERIV_DIRECT_WS_URL, payload);
-  } catch (firstError) {
-    // The current public options endpoint is the primary path. If a progressive
-    // numeric-end request fails, retry it against Deriv's public market-data
-    // WebSocket. This is deliberately limited to history; live ticks remain on
-    // the current endpoint.
-    if (end !== 'latest') {
-      try {
-        return await requestDerivHistorySocket('wss://ws.binaryws.com/websockets/v3', payload);
-      } catch (fallbackError) {
-        const first = firstError instanceof Error ? firstError.message : String(firstError);
-        const fallback = fallbackError instanceof Error ? fallbackError.message : String(fallbackError);
-        throw new Error(`Deriv older-history request failed on both public endpoints. Primary: ${first}. Fallback: ${fallback}.`);
-      }
-    }
-    throw firstError;
-  }
+  });
 }
 
 export async function fetchAllDerivHistory(symbol: string, interval: string, maxBars = DERIV_INITIAL_BARS) {
