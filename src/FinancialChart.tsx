@@ -515,16 +515,13 @@ export default function FinancialChart({ symbol, isActive = false, liveTick, req
     const host = containerRef.current;
     const sourceFeed = {
       async getBars(req: BarsRequest) {
-        // Do not synchronously download an instrument's entire 1m archive on
-        // chart startup. A multi-year 1m history can contain millions of bars
-        // and will exceed the mobile/proxy request timeout. Start from the
-        // newest provider page, then use the native left-edge loader below to
-        // walk all the way back to the instrument's true first candle.
-        //
-        // The important distinction is that the archive is now unbounded by
-        // date/year, while acquisition is incremental. Every older page is
-        // retained in historyCache, so the user can traverse:
-        // first available candle <-> latest candle.
+        // Start the chart from a fast recent page so the first render is
+        // immediate, then warm the complete provider-bounded archive in the
+        // background for EVERY timeframe. A multi-year 1m history can contain
+        // millions of bars, so the full walk must never block chart startup.
+        // The archive is retained separately from the bounded mobile rendering
+        // window, allowing every timeframe to traverse from the true first
+        // available candle to the latest candle.
         const cached = getCachedHistory(req.symbol, req.interval);
         const bars = cached.length
           ? cached.slice(-FAST_HISTORY_PAGE_SIZE)
@@ -538,6 +535,12 @@ export default function FinancialChart({ symbol, isActive = false, liveTick, req
         putCachedHistory(req.symbol, req.interval, bars);
         candlesRef.current = bars;
         updateMarketQuote(bars);
+
+        // Warm the complete history asynchronously for every timeframe. This
+        // does not delay the initial chart render, but it means the full archive
+        // is already available when the user scrolls toward the first candle.
+        void loadAllAvailableHistory(req.symbol, req.interval, requestHistoryRef.current)
+          .catch(error => console.warn('[SIRE] Full history warm-up failed; left-edge paging remains available.', error));
         // Force a fresh autoscale after the first real bars arrive. This is
         // especially important after a persisted chart state was restored.
         window.requestAnimationFrame(() => {
@@ -1271,12 +1274,24 @@ export default function FinancialChart({ symbol, isActive = false, liveTick, req
       if (!Number.isFinite(anchor)) return false;
 
       const interval = widget.interval();
+
+      // If the asynchronous full-history warmer has already reached this
+      // interval's archive, use those older candles immediately instead of
+      // requesting the same pages again from Deriv.
+      const cachedAll = getCachedHistory(symbolRef.current, interval);
+      const cachedOlder = cachedAll.filter(bar => bar.time < anchor);
+      let pages: Candle[][] = [];
+      if (cachedOlder.length) {
+        const take = Math.min(FAST_HISTORY_PAGE_SIZE * FAST_HISTORY_PAGES_PER_BATCH, cachedOlder.length);
+        pages = [cachedOlder.slice(Math.max(0, cachedOlder.length - take))];
+      }
+
       let pageEnd = Math.floor(anchor - 1);
-      const pages: Candle[][] = [];
 
       // Replay backfill also follows the provider's actual oldest returned
-      // candle rather than a calendar-derived page span.
-      for (let page = 0; page < FAST_HISTORY_PAGES_PER_BATCH; page += 1) {
+      // candle rather than a calendar-derived page span. Only hit Deriv when
+      // the background archive does not already contain older candles.
+      if (!cachedOlder.length) for (let page = 0; page < FAST_HISTORY_PAGES_PER_BATCH; page += 1) {
         // A timeout/network error is not historical exhaustion. Let the
         // error propagate so the left-edge loader remains retryable.
         const result = await requestBars({
