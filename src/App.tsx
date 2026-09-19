@@ -63,6 +63,27 @@ export default function App() {
   }, []);
 
 
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return q
+      ? instruments.filter(item => `${item.name} ${item.symbol}`.toLowerCase().includes(q))
+      : instruments;
+  }, [instruments, search]);
+
+  const selectInstrument = (item: DerivInstrument) => {
+    setSelected(item);
+    setSearch('');
+    setChartSymbols(current => current.length
+      ? current.map((value, index) => index === 0 ? item.symbol : value)
+      : [item.symbol]);
+  };
+
+  const openInstrumentPicker = (mode: 'main' | 'multi') => {
+    setInstrumentSearchMode(mode);
+    setSearch('');
+    setInstrumentSearchOpen(true);
+  };
+
   const chartItems = chartSymbols.slice(0, chartLayout);
   const openMultiChartManager = () => {
     setMultiChartInstrument(chartSymbols[1] || instruments[1]?.symbol || instruments[0]?.symbol || '');
