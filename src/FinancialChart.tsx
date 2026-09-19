@@ -211,14 +211,9 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
   useEffect(() => {
     if (!containerRef.current) return;
     const host = containerRef.current;
-    const sourceFeed = {
-      async getBars() { return []; },
-      subscribeBars() { return () => {}; },
-    };
     let widget: Widget;
     try {
       widget = createWidget(host, {
-        feed: sourceFeed,
         symbol,
         exchange: '',
         interval: '1m',
