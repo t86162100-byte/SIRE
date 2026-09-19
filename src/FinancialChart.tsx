@@ -43,7 +43,7 @@ const replaySpeedLabel = (speed: number) => `${speed}×`;
 
 export type DerivInstrument = { symbol: string; name: string; market: string; submarket: string; subgroup: string; symbolType: string; pipSize?: number; exchangeOpen?: number };
 export type DerivBar = { time: number; open: number; high: number; low: number; close: number; volume: number };
-const DERIV_WS_URL = 'wss://api.derivws.com/trading/v1/options/ws/public';
+const DERIV_WS_URL = 'wss://ws.binaryws.com/websockets/v3';
 const DERIV_REQUEST_TIMEOUT = 20000;
 const DERIV_PAGE_SIZE = 5000;
 // Load a safe first page, then keep paging older candles on demand until Deriv
@@ -120,6 +120,17 @@ export async function fetchAllDerivHistory(symbol: string, interval: string, max
 
 async function fetchChartHistory(symbol: string, interval: string): Promise<DerivBar[]> {
   return fetchAllDerivHistory(symbol, interval, DERIV_INITIAL_BARS);
+}
+
+async function fetchDerivQuote(symbol: string): Promise<number | null> {
+  const socket = await openDerivSocket();
+  try {
+    const data = await derivRequest(socket, { ticks: symbol, subscribe: 0 });
+    const quote = Number(data?.tick?.quote);
+    return Number.isFinite(quote) ? quote : null;
+  } finally {
+    socket.close();
+  }
 }
 
 async function fetchOlderDerivHistory(symbol: string, interval: string, end: number, count = DERIV_PAGE_SIZE): Promise<DerivBar[]> {
@@ -429,14 +440,14 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
         symbol,
         exchange: 'SYNTHETIC',
         feed,
-        loading: { retainedBars: Number.MAX_SAFE_INTEGER },
+        loading: { retainedBars: 10000 },
         interval: '1m',
         intervals: CHART_INTERVALS,
         chartType: 'candlestick',
         theme: 'dark',
         renderer: 'canvas2d',
         navigation: { mousePan: 'both', defaultVisibleBars: 10 },
-        lookbackBars: Number.MAX_SAFE_INTEGER,
+        lookbackBars: 5000,
         animZoom: true,
         animAutoscale: true,
         branding: false,
@@ -464,12 +475,10 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
       setActiveTimeframe(widget.interval());
       const offInterval = widget.on('interval', (event: { interval: string }) => {
         setActiveTimeframe(event.interval);
-        // A timeframe change starts a new history chain. The next data event
-        // establishes the oldest candle for that timeframe, and the history
-        // loader can then continue paging all the way back.
         historyLoadingRef.current = false;
         historyExhaustedRef.current = false;
         oldestLoadedTimeRef.current = null;
+        setMarketQuote(null);
       });
       const offSymbol = widget.on('symbol', (event: { symbol: string }) => {
         const instrument = instrumentsRef.current.find(item => item.symbol === event.symbol);
@@ -573,43 +582,22 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
   }, []);
 
   useEffect(() => {
-    let cancelled = false;
     const widget = widgetRef.current;
-    if (!widget || widget.symbol() === symbol) return () => { cancelled = true; };
-
-    const loadSelectedInstrument = async () => {
-      setMarketQuote(null);
-      try {
-        widget.setSymbol(symbol, 'SYNTHETIC');
-        historyLoadingRef.current = false;
-        historyExhaustedRef.current = false;
-        oldestLoadedTimeRef.current = null;
-        // Seed the selected instrument with a manageable first page. Older
-        // candles are loaded on demand when the user pans left.
-        const bars = await fetchChartHistory(symbol, activeTimeframe);
-        if (cancelled || widgetRef.current !== widget) return;
-        const series = widget.primarySeries();
-        if (series && bars.length) {
-          series.setData(bars);
-          oldestLoadedTimeRef.current = bars[0].time;
-          const last = bars[bars.length - 1];
-          const previous = bars.length > 1 ? bars[bars.length - 2] : null;
-          const percent = previous?.close ? ((last.close - previous.close) / previous.close) * 100 : 0;
-          setMarketQuote({ price: last.close, percent });
-          widget.chart.setAutoScale?.(true);
-          widget.chart.resetScale?.();
-        }
-      } catch (error) {
-        if (cancelled || widgetRef.current !== widget) return;
-        console.error('Failed to reload chart for instrument', symbol, error);
-        // Leave the widget alive; the feed can reconnect without taking the
-        // entire chart surface to a blank state.
-      }
-    };
-
-    void loadSelectedInstrument();
+    if (!widget) return;
+    setMarketQuote(null);
+    historyLoadingRef.current = false;
+    historyExhaustedRef.current = false;
+    oldestLoadedTimeRef.current = null;
+    if (widget.symbol() !== symbol) widget.setSymbol(symbol, 'SYNTHETIC');
+    let cancelled = false;
+    void fetchDerivQuote(symbol).then(price => {
+      if (cancelled || !Number.isFinite(price ?? NaN)) return;
+      setMarketQuote(current => ({ price: price as number, percent: current?.percent || 0 }));
+    }).catch(error => {
+      if (!cancelled) console.error('Failed to fetch Deriv quote', symbol, error);
+    });
     return () => { cancelled = true; };
-  }, [symbol, activeTimeframe]);
+  }, [symbol]);
 
   useEffect(() => {
     const host = containerRef.current;
