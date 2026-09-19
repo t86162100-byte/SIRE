@@ -20,8 +20,10 @@ export default function App() {
     pipSize: 0.01,
     exchangeOpen: 1,
   };
-  const [instruments, setInstruments] = useState<Instrument[]>([FALLBACK_INSTRUMENT]);
-  const [selected, setSelected] = useState<Instrument | null>(FALLBACK_INSTRUMENT);
+  const [instruments, setInstruments] = useState<Instrument[]>([]);
+  const [selected, setSelected] = useState<Instrument | null>(null);
+  const [derivLoading, setDerivLoading] = useState(true);
+  const [derivError, setDerivError] = useState('');
   const [search, setSearch] = useState('');
   const [instrumentSearchOpen, setInstrumentSearchOpen] = useState(false);
   const [instrumentSearchMode, setInstrumentSearchMode] = useState<'main' | 'multi'>('main');
@@ -39,16 +41,21 @@ export default function App() {
     let cancelled = false;
     fetchDerivInstruments().then(items => {
       if (cancelled) return;
+      if (!items.length) throw new Error('Deriv returned an empty active-symbol catalogue.');
       const next = items.length ? items : [FALLBACK_INSTRUMENT];
+      setDerivError('');
+      setDerivLoading(false);
       setInstruments(next);
       setSelected(current => current && next.some(item => item.symbol === current.symbol) ? current : next[0]);
       setChartSymbols(current => current.length ? current : [next[0].symbol]);
     }).catch(error => {
       if (cancelled) return;
-      console.error('[DERIV MARKET DATA] active symbol discovery failed; using fallback instrument', error);
-      setInstruments(current => current.length ? current : [FALLBACK_INSTRUMENT]);
-      setSelected(current => current || FALLBACK_INSTRUMENT);
-      setChartSymbols(current => current.length ? current : [FALLBACK_INSTRUMENT.symbol]);
+      console.error('[DERIV MARKET DATA] active symbol discovery failed', error);
+      setDerivLoading(false);
+      setDerivError(error instanceof Error ? error.message : 'Deriv market catalogue failed to load.');
+      setInstruments([]);
+      setSelected(null);
+      setChartSymbols([]);
     });
     return () => { cancelled = true; };
   }, []);
@@ -138,7 +145,7 @@ export default function App() {
   };
   return <main className={`native-terminal-shell${researchLabOpen ? ' sire-research-open' : ''}`}>
     <div className="native-terminal-body">
-      <aside className="native-symbol-sidebar"><div className="sidebar-search"><Search size={15} /><input value={search} onChange={event => setSearch(event.target.value)} placeholder="Search" /></div><div className="sidebar-meta"><span>INSTRUMENTS</span><b>{instruments.length}</b></div><div className="native-symbol-list">{filtered.map(item => <button key={item.symbol} className={selected?.symbol === item.symbol ? 'active' : ''} onClick={() => selectInstrument(item)}><span><b>{item.name}</b><small>{item.symbol}</small></span><i>{item.exchangeOpen === 0 ? 'OFF' : 'LIVE'}</i></button>)}</div></aside>
+      <aside className="native-symbol-sidebar"><div className="sidebar-search"><Search size={15} /><input value={search} onChange={event => setSearch(event.target.value)} placeholder="Search" /></div><div className="sidebar-meta"><span>{derivLoading ? "LOADING DERIV" : derivError ? "DERIV ERROR" : "INSTRUMENTS"}</span><b>{instruments.length}</b></div>{derivError && <div className="sire-deriv-error">{derivError}</div>}<div className="native-symbol-list">{filtered.map(item => <button key={item.symbol} className={selected?.symbol === item.symbol ? 'active' : ''} onClick={() => selectInstrument(item)}><span><b>{item.name}</b><small>{item.symbol}</small></span><i>{item.exchangeOpen === 0 ? 'OFF' : 'LIVE'}</i></button>)}</div></aside>
       <section className="native-chart-panel">
         <div className={`sire-chart-grid sire-chart-grid--${chartLayout}${chartLayout === 2 ? ` sire-chart-grid--${multiChartPosition}` : ''}`} onContextMenu={event => event.preventDefault()}>
           {chartItems.map((chartSymbol, index) => <div className={`sire-chart-cell${activeChartIndex === index ? ' sire-chart-cell--active' : ''}`} key={index} onPointerDown={() => setActiveChartIndex(index)}>{chartSymbol && <FinancialChart
