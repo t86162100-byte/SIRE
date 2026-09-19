@@ -78,6 +78,17 @@ function putCachedHistory(symbol: string, interval: string, bars: Candle[]) {
     historyCache.delete(oldest);
   }
 }
+
+function putCachedHistoryOrdered(symbol: string, interval: string, bars: Candle[]) {
+  if (!bars.length) return;
+  const key = historyCacheKey(symbol, interval);
+  historyCache.set(key, { bars, updatedAt: Date.now() });
+  while (historyCache.size > HISTORY_CACHE_MAX_SYMBOLS) {
+    const oldest = historyCache.keys().next().value;
+    if (!oldest) break;
+    historyCache.delete(oldest);
+  }
+}
 function getChartSeedHistory(symbol: string, interval: string): Candle[] {
   const cached = getCachedHistory(symbol, interval);
   return cached.length > CHART_HISTORY_SEED_BARS
@@ -98,7 +109,22 @@ async function loadAllAvailableHistory(
   if (existing) return existing;
 
   const task = (async () => {
+    // Always refresh the newest page first so a reopened chart starts at
+    // the current Deriv boundary even when an older complete archive exists.
+    const latestPage = await requestBars({
+      symbol,
+      interval,
+      to: undefined,
+      noCache: true,
+    }, requestHistory);
     let archive = getCachedHistory(symbol, interval);
+    if (latestPage.length) {
+      const mergedLatest = new Map<number, Candle>();
+      for (const bar of [...archive, ...latestPage]) mergedLatest.set(bar.time, bar);
+      archive = [...mergedLatest.values()].sort((a, b) => a.time - b.time);
+      putCachedHistoryOrdered(symbol, interval, archive);
+    }
+
     let pageEnd: number | 'latest' = archive.length ? Math.floor(archive[0].time - 1) : 'latest';
     let lastOldest = Number.POSITIVE_INFINITY;
 
@@ -116,19 +142,20 @@ async function loadAllAvailableHistory(
 
       if (!older.length) break;
 
-      const merged = new Map<number, Candle>();
-      for (const bar of [...archive, ...older]) merged.set(bar.time, bar);
-      archive = [...merged.values()].sort((a, b) => a.time - b.time);
-      putCachedHistory(symbol, interval, archive);
+      const currentOldest = archive[0]?.time;
+      const strictlyOlder = older.filter(bar => !Number.isFinite(currentOldest) || bar.time < currentOldest);
+      if (!strictlyOlder.length) break;
+
+      // Every page is older than the previous page, so prepend it without
+      // repeatedly sorting the entire multi-million-bar archive.
+      archive = [...strictlyOlder, ...archive];
+      putCachedHistoryOrdered(symbol, interval, archive);
 
       const oldest = archive[0]?.time;
       if (!Number.isFinite(oldest) || oldest >= lastOldest) break;
       lastOldest = oldest;
 
-      // Deriv's public WebSocket budget is shared across market-data calls.
-      // Pace exhaustive backfill so a long 1m history does not hammer the
-      // endpoint or trigger a rate-limit response.
-      if (older.length < FAST_HISTORY_PAGE_SIZE) break;
+      if (strictlyOlder.length < FAST_HISTORY_PAGE_SIZE) break;
       pageEnd = Math.floor(oldest - 1);
       await new Promise<void>(resolve => window.setTimeout(resolve, HISTORY_PAGE_DELAY_MS));
     }
