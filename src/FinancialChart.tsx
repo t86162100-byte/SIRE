@@ -27,9 +27,7 @@ const INTERVAL_SECONDS: Record<string, number> = {
 };
 const DERIV_INTERVALS = Object.keys(INTERVAL_SECONDS);
 for (const [code, seconds] of Object.entries(INTERVAL_SECONDS)) {
-  if (!['1m', '5m', '15m', '1h', '1d', '1w'].includes(code)) {
-    registerInterval({ code, bucketing: { mode: 'interval', seconds } });
-  }
+  if (!['1m', '5m', '15m', '1h', '1d', '1w'].includes(code)) registerInterval({ code, bucketing: { mode: 'interval', seconds } });
 }
 const CHART_TYPES = [
   { id: 'candlestick', label: 'Candles' }, { id: 'hollow-candle', label: 'Hollow Candles' },
@@ -37,8 +35,7 @@ const CHART_TYPES = [
   { id: 'high-low', label: 'High-Low' }, { id: 'line', label: 'Line' },
   { id: 'line-markers', label: 'Line + Markers' }, { id: 'step', label: 'Step Line' },
   { id: 'area', label: 'Area' }, { id: 'hlc-area', label: 'HLC Area' },
-  { id: 'baseline', label: 'Baseline' }, { id: 'columns', label: 'Columns' },
-  { id: 'histogram', label: 'Histogram' },
+  { id: 'baseline', label: 'Baseline' }, { id: 'columns', label: 'Columns' }, { id: 'histogram', label: 'Histogram' },
 ] as const;
 const REPLAY_SPEEDS = [0.5, 1, 2, 5, 10] as const;
 const replaySpeedLabel = (speed: number) => `${speed}×`;
@@ -86,7 +83,6 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
   instrumentsRef.current = instruments;
   onSelectInstrumentRef.current = onSelectInstrument;
   symbolRef.current = symbol;
-
   const marketInstrument = instruments.find(item => item.symbol === symbol);
   const marketInstrumentName = marketInstrument?.name || symbol;
   const marketQuote = null;
@@ -117,9 +113,7 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
     swipeInstrument(direction);
     window.setTimeout(() => setSwipeAnimation(null), 320);
   };
-  const clearTimeframeHold = () => {
-    if (timeframeHoldTimerRef.current !== null) { window.clearTimeout(timeframeHoldTimerRef.current); timeframeHoldTimerRef.current = null; }
-  };
+  const clearTimeframeHold = () => { if (timeframeHoldTimerRef.current !== null) { window.clearTimeout(timeframeHoldTimerRef.current); timeframeHoldTimerRef.current = null; } };
   const selectTimeframe = (interval: string) => {
     const widget = widgetRef.current;
     if (!widget) return;
@@ -154,44 +148,26 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
     timeframeSwipeAccumulatedRef.current = 0;
   };
   const handleTimeframePointerEnd = (event: React.PointerEvent<HTMLDivElement>) => {
-    clearTimeframeHold();
-    timeframeHoldTriggeredRef.current = false;
-    timeframeSwipeStartYRef.current = 0;
-    timeframeSwipeAccumulatedRef.current = 0;
+    clearTimeframeHold(); timeframeHoldTriggeredRef.current = false; timeframeSwipeStartYRef.current = 0; timeframeSwipeAccumulatedRef.current = 0;
     if (event.currentTarget.hasPointerCapture?.(event.pointerId)) event.currentTarget.releasePointerCapture?.(event.pointerId);
   };
-  const clearInstrumentHold = () => {
-    if (holdTimerRef.current !== null) { window.clearTimeout(holdTimerRef.current); holdTimerRef.current = null; }
-  };
+  const clearInstrumentHold = () => { if (holdTimerRef.current !== null) { window.clearTimeout(holdTimerRef.current); holdTimerRef.current = null; } };
   const handleInstrumentPointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
     if (event.pointerType === 'mouse' && event.button !== 0) return;
-    event.preventDefault();
-    event.currentTarget.setPointerCapture?.(event.pointerId);
-    swipeStartYRef.current = event.clientY;
-    swipeAccumulatedRef.current = 0;
-    holdTriggeredRef.current = false;
-    clearInstrumentHold();
-    holdTimerRef.current = window.setTimeout(() => {
-      if (swipeStartYRef.current !== null) { holdTriggeredRef.current = true; onInstrumentTap?.(); }
-    }, 600);
+    event.preventDefault(); event.currentTarget.setPointerCapture?.(event.pointerId);
+    swipeStartYRef.current = event.clientY; swipeAccumulatedRef.current = 0; holdTriggeredRef.current = false; clearInstrumentHold();
+    holdTimerRef.current = window.setTimeout(() => { if (swipeStartYRef.current !== null) { holdTriggeredRef.current = true; onInstrumentTap?.(); } }, 600);
   };
   const handleInstrumentPointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
-    const start = swipeStartYRef.current;
-    if (start === null) return;
+    const start = swipeStartYRef.current; if (start === null) return;
     const delta = event.clientY - start;
     if (Math.abs(delta) >= 18 && !holdTriggeredRef.current) clearInstrumentHold();
     if (Math.abs(delta) < 55 || swipeAnimatingRef.current || holdTriggeredRef.current) return;
-    triggerSwipeStep(delta < 0 ? 1 : -1);
-    swipeAnimatingRef.current = true;
-    swipeStartYRef.current = event.clientY;
-    swipeAccumulatedRef.current = 0;
+    triggerSwipeStep(delta < 0 ? 1 : -1); swipeAnimatingRef.current = true; swipeStartYRef.current = event.clientY; swipeAccumulatedRef.current = 0;
     window.setTimeout(() => { swipeAnimatingRef.current = false; }, 320);
   };
   const handleInstrumentPointerEnd = (event: React.PointerEvent<HTMLDivElement>) => {
-    clearInstrumentHold();
-    swipeStartYRef.current = null;
-    swipeAccumulatedRef.current = 0;
-    holdTriggeredRef.current = false;
+    clearInstrumentHold(); swipeStartYRef.current = null; swipeAccumulatedRef.current = 0; holdTriggeredRef.current = false;
     if (event.currentTarget.hasPointerCapture?.(event.pointerId)) event.currentTarget.releasePointerCapture?.(event.pointerId);
   };
 
@@ -204,30 +180,21 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
   const replaySeek = (_index: number) => {};
   const setReplaySpeed = (speed: number) => { replaySpeedRef.current = speed; setReplayDraftSpeed(speed); };
   const startReplayFromInputs = (_fromBeginning: boolean, _toLatest: boolean) => setReplayRangeError('No chart data source is connected.');
-
   const selectChartType = (chartType: string) => {
-    const widget = widgetRef.current;
-    if (!widget) return;
+    const widget = widgetRef.current; if (!widget) return;
     try { widget.setChartType(chartType); } catch { return; }
     setMoreMenuOpen(false);
   };
   const captureChartPng = () => {
-    const widget = widgetRef.current;
-    if (!widget) return;
-    widget.chart.downloadScreenshot(`sire-${symbol}-${widget.interval() || 'chart'}.png`);
-    setMoreMenuOpen(false);
+    const widget = widgetRef.current; if (!widget) return;
+    widget.chart.downloadScreenshot(`sire-${symbol}-${widget.interval() || 'chart'}.png`); setMoreMenuOpen(false);
   };
   const exportChartSvg = () => {
-    const widget = widgetRef.current;
-    if (!widget) return;
+    const widget = widgetRef.current; if (!widget) return;
     const svg = widget.chart.exportSVG({ background: true });
     const blob = new Blob([svg], { type: 'image/svg+xml;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const anchor = document.createElement('a');
-    anchor.href = url;
-    anchor.download = `sire-${widget.symbol()}-${widget.interval()}.svg`;
-    anchor.click();
-    URL.revokeObjectURL(url);
+    const url = URL.createObjectURL(blob); const anchor = document.createElement('a'); anchor.href = url;
+    anchor.download = `sire-${widget.symbol()}-${widget.interval()}.svg`; anchor.click(); URL.revokeObjectURL(url);
   };
   const exportChartSvgFromMenu = () => { exportChartSvg(); setMoreMenuOpen(false); };
   const addCompare = async (_compareSymbol: string) => {};
@@ -292,21 +259,13 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
       });
       onWidgetReady?.(widget);
       return () => {
-        offSymbol?.();
-        offInterval?.();
-        offRenderer?.();
-        onWidgetDestroyed?.(widget);
-        widget.destroy();
-        widgetRef.current = null;
+        offSymbol?.(); offInterval?.(); offRenderer?.();
+        onWidgetDestroyed?.(widget); widget.destroy(); widgetRef.current = null;
       };
     } catch (error) {
       host.textContent = `OpenAlgo widget failed to initialize: ${error instanceof Error ? error.message : String(error)}`;
-      host.style.padding = '24px';
-      host.style.boxSizing = 'border-box';
-      host.style.color = '#ff8080';
-      host.style.background = '#080808';
-      host.style.fontFamily = 'monospace';
-      host.style.fontSize = '14px';
+      host.style.padding = '24px'; host.style.boxSizing = 'border-box'; host.style.color = '#ff8080';
+      host.style.background = '#080808'; host.style.fontFamily = 'monospace'; host.style.fontSize = '14px';
       throw error;
     }
   }, []);
@@ -332,8 +291,7 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
       const widget = widgetRef.current;
       const mainPaneIndicators = widget?.objects.list?.().filter((item: any) => item?.kind === 'indicator' && Number(item?.paneIndex) === 0 && item?.visible !== false) ?? [];
       const indicatorLegendBottom = mainPaneIndicators.length ? 6 + mainPaneIndicators.length * 24 + 4 : 0;
-      const top = Math.ceil(Math.max(quoteBottom + 8, indicatorLegendBottom));
-      rail.style.setProperty('--sire-rail-top', `${Math.max(0, top)}px`);
+      rail.style.setProperty('--sire-rail-top', `${Math.max(0, Math.ceil(Math.max(quoteBottom + 8, indicatorLegendBottom)))}px`);
     };
     positionRail();
     const observer = new MutationObserver(() => window.requestAnimationFrame(positionRail));
@@ -344,151 +302,6 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
     window.addEventListener('resize', onResize);
     return () => { observer.disconnect(); resizeObserver.disconnect(); window.removeEventListener('resize', onResize); host.querySelector<HTMLElement>('.oac-rail')?.style.removeProperty('--sire-rail-top'); };
   }, [drawRackOpen, symbol, instruments]);
-
-  return () => window.removeEventListener('keydown', onEscape);
-  }, [drawRackOpen]);
-
-  useEffect(() => {
-    if (!containerRef.current) return;
-    const host = containerRef.current;
-    const sourceFeed = {
-      async getBars() {
-        return [];
-      },
-      subscribeBars() {
-        return () => {
-      offSymbol?.();
-      offInterval?.();
-      offRenderer?.();
-      offDrawingObjects?.();
-      offIndicatorObjects?.();
-      offDrawingSelect?.();
-      window.removeEventListener('resize', onResize);
-      host.removeEventListener('pointerdown', onDrawingInteraction, true);
-      host.removeEventListener('pointerdown', onIndicatorInteraction, true);
-      tpoUnregisterRef.current?.();
-      tpoUnregisterRef.current = null;
-      tpoProfileRef.current = null;
-      onWidgetDestroyed?.(widget);
-      widget.destroy();
-      widgetRef.current = null;
-    };
-    } catch (error) {
-      host.textContent = `OpenAlgo widget failed to initialize: ${error instanceof Error ? error.message : String(error)}`;
-      host.style.padding = '24px';
-      host.style.boxSizing = 'border-box';
-      host.style.color = '#ff8080';
-      host.style.background = '#080808';
-      host.style.fontFamily = 'monospace';
-      host.style.fontSize = '14px';
-      throw error;
-    }
-  }, []);
-
-  useEffect(() => {
-    const host = containerRef.current;
-    if (!host) return;
-    const positionRail = () => {
-      const rail = host.querySelector<HTMLElement>('.oac-rail');
-      if (!rail) return;
-      rail.classList.toggle('sire-oac-rail--closed', !drawRackOpen);
-      rail.setAttribute('aria-hidden', String(!drawRackOpen));
-
-      if (!drawRackOpen) {
-        rail.style.removeProperty('--sire-rail-top');
-        return;
-      }
-
-      const quote = host.querySelector<HTMLElement>('.sire-market-quote');
-      const hostRect = host.getBoundingClientRect();
-      const quoteRect = quote?.getBoundingClientRect();
-      const quoteBottom = quoteRect ? quoteRect.bottom - hostRect.top : 0;
-
-      // OpenAlgo indicator legends are canvas-rendered, so measure their row
-      // count from the chart objects rather than looking for DOM elements.
-      const widget = widgetRef.current;
-      const mainPaneIndicators = widget?.objects.list?.().filter(
-        (item: any) => item?.kind === 'indicator' && Number(item?.paneIndex) === 0 && item?.visible !== false
-      ) ?? [];
-      const indicatorLegendBottom = mainPaneIndicators.length
-        ? 6 + mainPaneIndicators.length * 24 + 4
-        : 0;
-
-      // Keep the drawing rail below the SIRE quote and any main-pane legend
-      // rows, with a small breathing gap so nothing is covered.
-      const top = Math.ceil(Math.max(quoteBottom + 8, indicatorLegendBottom));
-      rail.style.setProperty('--sire-rail-top', `${Math.max(0, top)}px`);
-    };
-
-    positionRail();
-    const observer = new MutationObserver(() => window.requestAnimationFrame(positionRail));
-    observer.observe(host, { childList: true, subtree: true });
-    const resizeObserver = new ResizeObserver(positionRail);
-    resizeObserver.observe(host);
-    const onResize = () => positionRail();
-    window.addEventListener('resize', onResize);
-
-    return () => {
-      observer.disconnect();
-      resizeObserver.disconnect();
-      window.removeEventListener('resize', onResize);
-      const rail = host.querySelector<HTMLElement>('.oac-rail');
-      rail?.style.removeProperty('--sire-rail-top');
-    };
-  }, [drawRackOpen, symbol, marketQuote, instruments]);
-
-  useEffect(() => {
-    const widget = widgetRef.current;
-    if (widget && widget.symbol() !== symbol) widget.setSymbol(symbol, 'Deriv Synthetic Indices');
-  }, [symbol]);
-
-  const stopReplay = () => {
-    setReplayActive(false);
-    setReplayState(null);
-    setReplaySetupOpen(false);
-  };
-  const toggleReplay = () => setReplaySetupOpen(open => !open);
-  const replayStep = () => {};
-  const replayStepBack = () => {};
-  const replayJumpStart = () => {};
-  const replayJumpEnd = () => {};
-  const replaySeek = (_index: number) => {};
-  const setReplaySpeed = (speed: number) => { replaySpeedRef.current = speed; setReplayDraftSpeed(speed); };
-  const startReplayFromInputs = (_fromBeginning: boolean, _toLatest: boolean) => setReplayRangeError('No chart data source is connected.');
-
-  const exportChartSvg = () => { const widget = widgetRef.current; if (!widget) return; const svg = widget.chart.exportSVG({ background: true }); const blob = new Blob([svg], { type: 'image/svg+xml;charset=utf-8' }); const url = URL.createObjectURL(blob); const anchor = document.createElement('a'); anchor.href = url; anchor.download = `sire-${widget.symbol()}-${widget.interval()}.svg`; anchor.click(); URL.revokeObjectURL(url); };
-  const addCompare = async (_compareSymbol: string) => {};
-  const removeCompare = (_compareSymbol: string) => {
-    setComparisons(current => current.filter(item => item !== _compareSymbol));
-  };
-
-  const refreshTpoProfile = () => {};
-  const toggleTpo = () => setTpoEnabled(value => !value);
-
-  const selectChartType = (chartType: string) => {
-    const widget = widgetRef.current;
-    if (!widget) return;
-    try {
-      widget.setChartType(chartType);
-    } catch {
-      return;
-    }
-    setMoreMenuOpen(false);
-  };
-
-  const captureChartPng = () => {
-    const widget = widgetRef.current;
-    if (!widget) return;
-    widget.chart.downloadScreenshot(`sire-${symbol}-${widget.interval() || 'chart'}.png`);
-    setMoreMenuOpen(false);
-  };
-
-  const exportChartSvgFromMenu = () => {
-    exportChartSvg();
-    setMoreMenuOpen(false);
-  };
-
-
 
   return (
     <div ref={containerRef} className={`sire-financial-chart${drawRackOpen ? ' sire-draw-rack-open' : ''}${isActive ? ' sire-toolbar-owner' : ''}`}>
