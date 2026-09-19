@@ -624,7 +624,8 @@ export default function FinancialChart({ symbol, isActive = false, liveTick, req
       // Canvas2D is the stable path for very large retained Deriv histories.
       // Keep GPU rendering out of the history-growth path on mobile.
       renderer: 'canvas2d',
-      persist: `sire-${symbol}`,
+      // Debug: disable OpenAlgo persistence so a previously stored series/range cannot flash
+      // onto the chart before the ten-bar feed response takes control.
       // Start with a recent rendering window. Older pages are fetched only
       // when the user actually pans left; the application archive can retain
       // much more history than the active Canvas2D rendering window.
@@ -917,22 +918,13 @@ export default function FinancialChart({ symbol, isActive = false, liveTick, req
     };
     window.addEventListener('resize', onResize);
     onWidgetReady?.(widget);
-    // Start the provider-bounded backfill automatically for every symbol and
-    // timeframe. It runs in the background in small pages, so the chart opens
-    // quickly while SIRE keeps walking backward until Deriv's true first candle.
-    // The archive is refreshed from the newest page first, then the historical
-    // cursor moves monotonically backward. Live ticks continue updating the
-    // current candles while this archive backfill runs.
-    void loadAllAvailableHistory(symbol, widget.interval(), requestHistoryRef.current).catch(error => {
-      console.warn('[SIRE] Automatic Deriv history backfill stopped; left-edge paging remains available.', error);
-    });
+    // DEBUG: keep automatic deep backfill disabled during the ten-candle test.
+    // This isolates the OpenAlgo startup series from every historical loader.
     setActiveTimeframe(widget.interval());
     const offInterval = widget.on('interval', (event: { interval: string }) => {
       historyExhaustedKeyRef.current = null;
       setActiveTimeframe(event.interval);
-      void loadAllAvailableHistory(symbolRef.current, event.interval, requestHistoryRef.current).catch(error => {
-        console.warn('[SIRE] Automatic Deriv interval backfill stopped; left-edge paging remains available.', error);
-      });
+      // DEBUG: no background interval backfill during the ten-candle test.
     });
     const offSymbol = widget.on('symbol', (event: { symbol: string }) => {
       const instrument = instrumentsRef.current.find(item => item.symbol === event.symbol);
@@ -1088,9 +1080,7 @@ export default function FinancialChart({ symbol, isActive = false, liveTick, req
     if (widget && widget.symbol() !== symbol) {
       widget.setSymbol(symbol, 'Deriv Synthetic Indices');
     }
-    void loadAllAvailableHistory(symbol, widget?.interval?.() ?? activeTimeframe, requestHistoryRef.current).catch(error => {
-      console.warn('[SIRE] Automatic Deriv symbol backfill stopped; left-edge paging remains available.', error);
-    });
+    // DEBUG: no background symbol backfill during the ten-candle test.
   }, [symbol]);
 
   useEffect(() => {
