@@ -347,23 +347,83 @@ export class DerivMarketDataClient {
   }
 }
 
+async function requestDerivHistorySocket(
+  socketUrl: string,
+  payload: Record<string, unknown>,
+) {
+  const req_id = nextRequestId();
+  return await new Promise<any>((resolve, reject) => {
+    const socket = new WebSocket(socketUrl);
+    let settled = false;
+    const finish = (error?: unknown, value?: any) => {
+      if (settled) return;
+      settled = true;
+      window.clearTimeout(timer);
+      try { socket.close(); } catch {}
+      if (error) reject(error);
+      else resolve(value);
+    };
+    const timer = window.setTimeout(() => {
+      finish(new Error(`Deriv history request timed out (${socketUrl}).`));
+    }, DERIV_REQUEST_TIMEOUT);
+    socket.onopen = () => {
+      try {
+        socket.send(JSON.stringify({ ...payload, req_id }));
+      } catch (error) {
+        finish(error);
+      }
+    };
+    socket.onmessage = event => {
+      try {
+        const data = JSON.parse(String(event.data));
+        if (Number(data?.req_id) !== req_id) return;
+        if (data?.error) {
+          finish(new Error(data.error.message || data.error.code || 'Deriv history request failed.'));
+          return;
+        }
+        finish(undefined, data);
+      } catch (error) {
+        finish(error);
+      }
+    };
+    socket.onerror = () => finish(new Error(`Deriv history WebSocket failed (${socketUrl}).`));
+    socket.onclose = event => {
+      if (!settled && event.code !== 1000) {
+        finish(new Error(`Deriv history WebSocket closed unexpectedly (code ${event.code}).`));
+      }
+    };
+  });
+}
+
 async function fetchDerivHistoryPage(symbol: string, seconds: number, end: number | 'latest', count: number) {
-  // Use the same public Deriv WebSocket path in the browser for both live ticks
-  // and historical candles. This avoids routing progressive history through a
-  // server adapter that can fail independently of the working market-data
-  // connection.
-  const client = new DerivMarketDataClient();
+  const payload = {
+    ticks_history: symbol,
+    end,
+    count,
+    style: 'candles',
+    granularity: seconds,
+    adjust_start_time: 1,
+  };
+
   try {
-    return await client.request({
-      ticks_history: symbol,
-      end,
-      count,
-      style: 'candles',
-      granularity: seconds,
-      adjust_start_time: 1,
-    });
-  } finally {
-    client.close();
+    // Historical paging uses a one-shot socket so a failure here cannot be
+    // caused by the live tick subscription lifecycle.
+    return await requestDerivHistorySocket(DERIV_DIRECT_WS_URL, payload);
+  } catch (firstError) {
+    // The current public options endpoint is the primary path. If a progressive
+    // numeric-end request fails, retry it against Deriv's public market-data
+    // WebSocket. This is deliberately limited to history; live ticks remain on
+    // the current endpoint.
+    if (end !== 'latest') {
+      try {
+        return await requestDerivHistorySocket('wss://ws.binaryws.com/websockets/v3', payload);
+      } catch (fallbackError) {
+        const first = firstError instanceof Error ? firstError.message : String(firstError);
+        const fallback = fallbackError instanceof Error ? fallbackError.message : String(fallbackError);
+        throw new Error(`Deriv older-history request failed on both public endpoints. Primary: ${first}. Fallback: ${fallback}.`);
+      }
+    }
+    throw firstError;
   }
 }
 
