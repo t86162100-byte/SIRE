@@ -70,7 +70,7 @@ server.on('upgrade',(req,socket,head)=>{
   const url=new URL(req.url||'/',`http://${req.headers.host||'localhost'}`);
   if(url.pathname==='/deriv/ws'){
     wss.handleUpgrade(req,socket,head,clientSocket=>{
-      const upstream=new WebSocket('wss://ws.binaryws.com/websockets/v3');
+      const upstream=new WebSocket('wss://api.derivws.com/trading/v1/options/ws/public');
       const queued=[];
       let upstreamOpen=false;
       const fail=(message)=>{
@@ -85,6 +85,10 @@ server.on('upgrade',(req,socket,head)=>{
         queued.length=0;
       });
       upstream.on('message',data=>{
+        try {
+          const parsed=JSON.parse(String(data));
+          if(parsed?.error) console.error('[DERIV PROXY] upstream error', JSON.stringify(parsed.error));
+        } catch {}
         if(clientSocket.readyState===WebSocket.OPEN) clientSocket.send(data);
       });
       upstream.on('error',error=>{
