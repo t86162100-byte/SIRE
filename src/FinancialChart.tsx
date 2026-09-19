@@ -332,6 +332,11 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
         const seconds = DERIV_INTERVAL_SECONDS[timeframeRef.current] || 60;
         const next = tickToBar(previous, quote.epoch, quote.price, seconds);
         if (series?.update) series.update(next);
+        // Keep the live bar count/axis chrome on the same hot path as the price.
+        // The chart engine coalesces update() calls into the next render frame, so
+        // both the forming candle and its price metadata move together.
+        const chartNow = widgetRef.current?.chart;
+        chartNow?.requestRender?.();
         const previousClosed = bars.length > 1 ? bars[bars.length - 2] : null;
         const percent = previousClosed?.close ? ((quote.price - previousClosed.close) / previousClosed.close) * 100 : 0;
         setMarketQuote({ price: quote.price, percent });
