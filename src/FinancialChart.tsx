@@ -515,27 +515,27 @@ export default function FinancialChart({ symbol, isActive = false, liveTick, req
     const host = containerRef.current;
     const sourceFeed = {
       async getBars(req: BarsRequest) {
-        // OpenAlgo may supply a one-year bootstrap `from` range to a feed.
-        // That range is a viewport hint, not the historical boundary we want
-        // for Deriv Synthetic Indices. Passing it to Deriv makes the provider
-        // stop exactly at that date, so SIRE never gets a chance to page
-        // farther back. Seed from the requested `to`/latest point only;
-        // OpenAlgo's left-edge history loader then walks backward from the
-        // actual oldest candle until Deriv has no more data.
-        const bootstrapReq: BarsRequest = { ...req, from: undefined };
-        // Fully acquire this symbol/timeframe from Deriv's newest candle
-        // back to its actual historical boundary before handing the feed to
-        // OpenAlgo. This is intentionally provider-bounded: each instrument
-        // stops only when Deriv returns fewer than a full page/no older data.
-        // OpenAlgo still receives only the bounded render window for mobile,
-        // while the complete archive remains available for leftward scrolling.
-        const allHistory = await loadAllAvailableHistory(
-          req.symbol,
-          req.interval,
-          requestHistoryRef.current,
-        );
-        const bars = allHistory;
+        // Do not synchronously download an instrument's entire 1m archive on
+        // chart startup. A multi-year 1m history can contain millions of bars
+        // and will exceed the mobile/proxy request timeout. Start from the
+        // newest provider page, then use the native left-edge loader below to
+        // walk all the way back to the instrument's true first candle.
+        //
+        // The important distinction is that the archive is now unbounded by
+        // date/year, while acquisition is incremental. Every older page is
+        // retained in historyCache, so the user can traverse:
+        // first available candle <-> latest candle.
+        const cached = getCachedHistory(req.symbol, req.interval);
+        const bars = cached.length
+          ? cached.slice(-FAST_HISTORY_PAGE_SIZE)
+          : await requestBars({
+              symbol: req.symbol,
+              interval: req.interval,
+              to: undefined,
+              noCache: true,
+            }, requestHistoryRef.current);
         if (!bars.length) throw new Error(`No Deriv history returned for ${req.symbol} ${req.interval}`);
+        putCachedHistory(req.symbol, req.interval, bars);
         candlesRef.current = bars;
         updateMarketQuote(bars);
         resyncRef.current = null;
@@ -1264,12 +1264,14 @@ export default function FinancialChart({ symbol, isActive = false, liveTick, req
       // Replay backfill also follows the provider's actual oldest returned
       // candle rather than a calendar-derived page span.
       for (let page = 0; page < FAST_HISTORY_PAGES_PER_BATCH; page += 1) {
+        // A timeout/network error is not historical exhaustion. Let the
+        // error propagate so the left-edge loader remains retryable.
         const result = await requestBars({
           symbol: symbolRef.current,
           interval,
           to: pageEnd,
           noCache: false,
-        }, requestHistoryRef.current).catch(() => [] as Candle[]);
+        }, requestHistoryRef.current);
 
         const olderPage = result
           .filter(bar => bar.time < anchor && bar.time <= pageEnd)
