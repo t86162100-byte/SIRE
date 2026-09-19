@@ -520,7 +520,7 @@ export default function FinancialChart({ symbol, isActive = false, liveTick, req
         };
       },
     };
-    const feed = withBarCache(sourceFeed, { ttlMs: 60_000, max: 32, maxBars: Number.MAX_SAFE_INTEGER });
+    const feed = withBarCache(sourceFeed, { ttlMs: 60_000, max: 32 });
     let widget: Widget;
     try {
       widget = createWidget(host, {
@@ -539,7 +539,7 @@ export default function FinancialChart({ symbol, isActive = false, liveTick, req
       lookbackBars: 5000,
       // Page through all available provider history; there is no SIRE bar
       // ceiling. The loader stops only when the feed reports exhaustion.
-      loading: { pageSize: 5000, maxBars: Number.POSITIVE_INFINITY },
+      loading: { pageSize: 5000 },
       navigation: { mousePan: 'both', defaultVisibleBars: 120 },
       animZoom: true,
       animAutoscale: true,
