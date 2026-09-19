@@ -151,6 +151,7 @@ export class DerivMarketDataClient {
   private opening: Promise<WebSocket> | null = null;
   private pending = new Map<number, Pending>();
   private subscriptions = new Map<number, { symbol: string; handler: TickHandler; upstreamId?: string }>();
+  private subscriptionWaiters = new Map<number, { symbol: string; resolve: (id: string) => void; reject: (reason?: unknown) => void; timer: number }>();
   private closed = false;
 
   private attach(socket: WebSocket) {
@@ -174,6 +175,17 @@ export class DerivMarketDataClient {
       const price = Number(data.tick.quote);
       const epoch = Number(data.tick.epoch);
       if (!symbol || !Number.isFinite(price) || !Number.isFinite(epoch)) return;
+      const upstreamId = text(data?.subscription?.id);
+      if (upstreamId) {
+        for (const [token, waiter] of this.subscriptionWaiters) {
+          if (waiter.symbol === symbol) {
+            window.clearTimeout(waiter.timer);
+            this.subscriptionWaiters.delete(token);
+            waiter.resolve(upstreamId);
+            break;
+          }
+        }
+      }
       for (const subscription of this.subscriptions.values()) {
         if (subscription.symbol === symbol) subscription.handler({ symbol, price, epoch });
       }
@@ -261,9 +273,20 @@ export class DerivMarketDataClient {
   async subscribeTicks(symbol: string, handler: TickHandler) {
     await this.ensureSocket();
     const subscriptionToken = nextRequestId();
-    const response = await this.request({ ticks: symbol, subscribe: 1 });
-    const upstreamId = text(response?.subscription?.id);
-    if (!upstreamId) throw new Error('Deriv did not return a tick subscription id.');
+    const upstreamId = await new Promise<string>((resolve, reject) => {
+      const timer = window.setTimeout(() => {
+        this.subscriptionWaiters.delete(subscriptionToken);
+        reject(new Error('Deriv tick subscription timed out waiting for the streaming response.'));
+      }, DERIV_REQUEST_TIMEOUT);
+      this.subscriptionWaiters.set(subscriptionToken, { symbol, resolve, reject, timer });
+      try {
+        this.socket?.send(JSON.stringify({ ticks: symbol, subscribe: 1, req_id: nextRequestId() }));
+      } catch (error) {
+        window.clearTimeout(timer);
+        this.subscriptionWaiters.delete(subscriptionToken);
+        reject(error);
+      }
+    });
     this.subscriptions.set(subscriptionToken, { symbol, handler, upstreamId });
     return () => {
       const subscription = this.subscriptions.get(subscriptionToken);
@@ -295,6 +318,8 @@ export class DerivMarketDataClient {
       pending.reject(new Error('Deriv market-data client closed.'));
     }
     this.pending.clear();
+    for (const waiter of this.subscriptionWaiters.values()) { window.clearTimeout(waiter.timer); waiter.reject(new Error('Deriv market-data client closed.')); }
+    this.subscriptionWaiters.clear();
     this.subscriptions.clear();
     this.socket?.close();
     this.socket = null;
