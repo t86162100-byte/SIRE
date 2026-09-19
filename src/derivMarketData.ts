@@ -216,7 +216,7 @@ export class DerivMarketData {
         count: pageSize,
         style: 'candles',
         granularity,
-        subscribe: 0,
+
       };
       if (lowerBound !== undefined) request.start = lowerBound;
       const response = await this.request(request);
