@@ -15,7 +15,7 @@
   "dependencies": {
     "@appdeploy/client": "file:./compat/appdeploy-client",
     "@appdeploy/sdk": "file:./compat/appdeploy-sdk",
-    "openalgo-charts": "2.3.2",
+    "openalgo-charts": "2.4.0",
     "lucide-react": "^0.469.0",
     "pg": "^8.13.1",
     "puppeteer": "^24.20.0",
