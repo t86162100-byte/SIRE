@@ -8,8 +8,18 @@ import './nativeTerminal.css';
 type Instrument = DerivInstrument;
 
 export default function App() {
-  const [instruments, setInstruments] = useState<Instrument[]>([]);
-  const [selected, setSelected] = useState<Instrument | null>(null);
+  const FALLBACK_INSTRUMENT: Instrument = {
+    symbol: '1HZ100V',
+    name: 'Volatility 100 (1s) Index',
+    market: 'synthetic_index',
+    submarket: 'volatility',
+    subgroup: 'volatility',
+    symbolType: 'synthetic_index',
+    pipSize: 0.01,
+    exchangeOpen: 1,
+  };
+  const [instruments, setInstruments] = useState<Instrument[]>([FALLBACK_INSTRUMENT]);
+  const [selected, setSelected] = useState<Instrument | null>(FALLBACK_INSTRUMENT);
   const [search, setSearch] = useState('');
   const [instrumentSearchOpen, setInstrumentSearchOpen] = useState(false);
   const [instrumentSearchMode, setInstrumentSearchMode] = useState<'main' | 'multi'>('main');
@@ -27,10 +37,17 @@ export default function App() {
     let cancelled = false;
     fetchSyntheticInstruments().then(items => {
       if (cancelled) return;
-      setInstruments(items);
-      setSelected(current => current || items[0] || null);
-      setChartSymbols(current => current.length ? current : items[0] ? [items[0].symbol] : []);
-    }).catch(error => console.error('[DERIV MARKET DATA] instrument discovery failed', error));
+      const next = items.length ? items : [FALLBACK_INSTRUMENT];
+      setInstruments(next);
+      setSelected(current => current && next.some(item => item.symbol === current.symbol) ? current : next[0]);
+      setChartSymbols(current => current.length ? current : [next[0].symbol]);
+    }).catch(error => {
+      if (cancelled) return;
+      console.error('[DERIV MARKET DATA] instrument discovery failed; using fallback synthetic index', error);
+      setInstruments(current => current.length ? current : [FALLBACK_INSTRUMENT]);
+      setSelected(current => current || FALLBACK_INSTRUMENT);
+      setChartSymbols(current => current.length ? current : [FALLBACK_INSTRUMENT.symbol]);
+    });
     return () => { cancelled = true; };
   }, []);
 
