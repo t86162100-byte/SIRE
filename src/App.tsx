@@ -9,6 +9,9 @@ import './nativeTerminal.css';
 
 type Instrument = DerivInstrument;
 
+const chooseInitialDerivInstrument = (items: DerivInstrument[]) =>
+  items.find(item => item.exchangeOpen !== 0 && item.tradingSuspended !== 1) || items[0] || null;
+
 export default function App() {
   const [instruments, setInstruments] = useState<Instrument[]>([]);
   const [selected, setSelected] = useState<Instrument | null>(null);
@@ -48,11 +51,13 @@ export default function App() {
       if (cancelled) return;
       if (!items.length) throw new Error('Deriv returned an empty active-symbol catalogue.');
       const next = items;
+      const initial = chooseInitialDerivInstrument(next);
+      if (!initial) throw new Error('Deriv returned an empty active-symbol catalogue.');
       setDerivError('');
       setDerivLoading(false);
       setInstruments(next);
-      setSelected(current => current && next.some(item => item.symbol === current.symbol) ? current : next[0]);
-      setChartSymbols(current => current.length ? current : [next[0].symbol]);
+      setSelected(current => current && next.some(item => item.symbol === current.symbol) ? current : initial);
+      setChartSymbols(current => current.length ? current : [initial.symbol]);
     }).catch(error => {
       if (cancelled) return;
       console.error('[DERIV MARKET DATA] active symbol discovery failed', error);
@@ -69,7 +74,9 @@ export default function App() {
     if (!instruments.length) return;
     setChartSymbols(current => Array.from(
       { length: chartLayout },
-      (_, index) => current[index] || (index === 0 ? (selected?.symbol || instruments[0].symbol) : instruments[index % instruments.length].symbol),
+      (_, index) => current[index] || (index === 0
+        ? (selected?.symbol || chooseInitialDerivInstrument(instruments)?.symbol || instruments[0].symbol)
+        : instruments[index % instruments.length].symbol),
     ));
   }, [chartLayout, selected?.symbol]);
 
