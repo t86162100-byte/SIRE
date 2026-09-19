@@ -478,10 +478,26 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
             }
             const series = widget.chart.primarySeries();
             if (!series) return;
-            // OpenAlgo's prependData merges/deduplicates older bars while
-            // preserving the currently loaded history and viewport.
-            series.prependData(older);
-            oldestLoadedTimeRef.current = older[0].time;
+            // Do not rely on prependData here. The chart's underlying data API
+            // requires ordered, unique data and a full replacement can reset the
+            // viewport. Merge the pages ourselves, then restore the logical range
+            // shifted by the number of genuinely new bars.
+            const existing = (series.getData?.() || []) as DerivBar[];
+            const visibleRange = widget.chart.timeScale?.().getVisibleLogicalRange?.();
+            const mergedByTime = new Map<number, DerivBar>();
+            for (const bar of existing) mergedByTime.set(bar.time, bar);
+            for (const bar of older) mergedByTime.set(bar.time, bar);
+            const merged = Array.from(mergedByTime.values()).sort((a, b) => a.time - b.time);
+            const existingTimes = new Set(existing.map(bar => bar.time));
+            const insertedCount = older.filter(bar => !existingTimes.has(bar.time)).length;
+            series.setData(merged);
+            if (visibleRange && insertedCount > 0) {
+              widget.chart.timeScale?.().setVisibleLogicalRange?.({
+                from: visibleRange.from + insertedCount,
+                to: visibleRange.to + insertedCount,
+              });
+            }
+            oldestLoadedTimeRef.current = merged[0]?.time ?? older[0].time;
             reportDiagnostic({ level: 'info', code: 'HISTORY_OLDER_LOADED', message: `Loaded ${older.length} older ${currentInterval} candles for ${currentSymbol}.`, detail: `Deriv returned ${older.length} usable candles. New oldest candle: ${new Date(older[0].time * 1000).toISOString()}. Total chart history is now approximately ${(series.getData?.() || []).length} candles.` });
             if (older.length < DERIV_PAGE_SIZE || older[0].time <= 1) {
               historyExhaustedRef.current = true;
