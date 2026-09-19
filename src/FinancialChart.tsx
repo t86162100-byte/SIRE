@@ -143,7 +143,7 @@ async function loadAllAvailableHistory(
       if (!older.length) break;
 
       const currentOldest = archive[0]?.time;
-      const strictlyOlder = older.filter(bar => !Number.isFinite(currentOldest) || bar.time < currentOldest);
+      const strictlyOlder = older.filter(bar => currentOldest === undefined || bar.time < currentOldest);
       if (!strictlyOlder.length) break;
 
       // Every page is older than the previous page, so prepend it without
