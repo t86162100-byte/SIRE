@@ -474,10 +474,39 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
   }, []);
 
   useEffect(() => {
-    setMarketQuote(null);
+    let cancelled = false;
     const widget = widgetRef.current;
-    if (widget && widget.symbol() !== symbol) widget.setSymbol(symbol, 'SYNTHETIC');
-  }, [symbol]);
+    if (!widget || widget.symbol() === symbol) return () => { cancelled = true; };
+
+    const loadSelectedInstrument = async () => {
+      setMarketQuote(null);
+      try {
+        widget.setSymbol(symbol, 'SYNTHETIC');
+        // Explicitly seed the new symbol after switching. This keeps the chart
+        // visible even when the widget's internal symbol reload is asynchronous.
+        const bars = await fetchAllDerivHistory(symbol, activeTimeframe);
+        if (cancelled || widgetRef.current !== widget) return;
+        const series = widget.primarySeries();
+        if (series && bars.length) {
+          series.setData(bars);
+          const last = bars[bars.length - 1];
+          const previous = bars.length > 1 ? bars[bars.length - 2] : null;
+          const percent = previous?.close ? ((last.close - previous.close) / previous.close) * 100 : 0;
+          setMarketQuote({ price: last.close, percent });
+          widget.chart.setAutoScale?.(true);
+          widget.chart.resetScale?.();
+        }
+      } catch (error) {
+        if (cancelled || widgetRef.current !== widget) return;
+        console.error('Failed to reload chart for instrument', symbol, error);
+        // Leave the widget alive; the feed can reconnect without taking the
+        // entire chart surface to a blank state.
+      }
+    };
+
+    void loadSelectedInstrument();
+    return () => { cancelled = true; };
+  }, [symbol, activeTimeframe]);
 
   useEffect(() => {
     const host = containerRef.current;
