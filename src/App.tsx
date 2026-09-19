@@ -8,17 +8,6 @@ import './nativeTerminal.css';
 
 type Instrument = DerivInstrument;
 
-type LegacyInstrumentShape = {
-  symbol: string;
-  name: string;
-  market: string;
-  submarket: string;
-  subgroup: string;
-  symbolType: string;
-  pipSize?: number;
-  exchangeOpen?: number;
-};
-
 export default function App() {
   const [instruments, setInstruments] = useState<Instrument[]>([]);
   const [selected, setSelected] = useState<Instrument | null>(null);
