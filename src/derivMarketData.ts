@@ -241,7 +241,6 @@ export class DerivMarketData {
       style: 'candles',
       granularity,
       adjust_start_time: 1,
-      subscribe: 0,
     });
     if (response.error) {
       const error = response.error as Record<string, unknown>;
