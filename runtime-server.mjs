@@ -2,7 +2,7 @@ import http from 'node:http';
 import { randomUUID } from 'node:crypto';
 import { readFile, stat } from 'node:fs/promises';
 import { extname, join, normalize } from 'node:path';
-import { WebSocketServer } from 'ws';
+import { WebSocket, WebSocketServer } from 'ws';
 
 const { handler } = await import('./backend/index.ts');
 import { handleGeminiRequest } from './backend/gemini-ai.ts';
@@ -68,6 +68,45 @@ const server = http.createServer(async (req,res) => {
 const wss = new WebSocketServer({ noServer:true });
 server.on('upgrade',(req,socket,head)=>{
   const url=new URL(req.url||'/',`http://${req.headers.host||'localhost'}`);
+  if(url.pathname==='/deriv/ws'){
+    wss.handleUpgrade(req,socket,head,clientSocket=>{
+      const upstream=new WebSocket('wss://ws.binaryws.com/websockets/v3');
+      const queued=[];
+      let upstreamOpen=false;
+      const fail=(message)=>{
+        if(clientSocket.readyState===WebSocket.OPEN) clientSocket.send(JSON.stringify({error:{message}}));
+        if(clientSocket.readyState===WebSocket.OPEN || clientSocket.readyState===WebSocket.CONNECTING) clientSocket.close();
+      };
+      const upstreamTimer=setTimeout(()=>{ if(!upstreamOpen) fail('Deriv upstream connection timed out.'); },15000);
+      upstream.on('open',()=>{
+        upstreamOpen=true;
+        clearTimeout(upstreamTimer);
+        for(const data of queued) upstream.send(data);
+        queued.length=0;
+      });
+      upstream.on('message',data=>{
+        if(clientSocket.readyState===WebSocket.OPEN) clientSocket.send(data);
+      });
+      upstream.on('error',error=>{
+        console.error('[DERIV PROXY]',error instanceof Error ? error.message : String(error));
+        fail('Deriv upstream connection failed.');
+      });
+      upstream.on('close',()=>{
+        clearTimeout(upstreamTimer);
+        if(clientSocket.readyState===WebSocket.OPEN) clientSocket.close();
+      });
+      clientSocket.on('message',data=>{
+        if(upstreamOpen && upstream.readyState===WebSocket.OPEN) upstream.send(data);
+        else if(!upstreamOpen) queued.push(data);
+      });
+      clientSocket.on('close',()=>{
+        clearTimeout(upstreamTimer);
+        queued.length=0;
+        if(upstream.readyState===WebSocket.OPEN || upstream.readyState===WebSocket.CONNECTING) upstream.close();
+      });
+    });
+    return;
+  }
   if(url.pathname!=='/ws'){socket.destroy();return;}
   wss.handleUpgrade(req,socket,head,wsSocket=>{
     const connectionId=url.searchParams.get('connection_id')||randomUUID();
