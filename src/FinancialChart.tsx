@@ -47,8 +47,13 @@ const CHART_TYPES = [
 
 const REPLAY_SPEEDS = [0.5, 1, 2, 5, 10] as const;
 const replaySpeedLabel = (speed: number) => `${speed}×`;
+// Six years of 24/7 1-minute candles is ~3.16M bars. Keep the
+// acquisition target above that so every registered timeframe can request a
+// six-year+ analysis window; the chart itself remains independently bounded.
+const ANALYSIS_HISTORY_YEARS = 6;
+const ANALYSIS_HISTORY_REQUEST_BARS = 3_200_000;
 const FAST_HISTORY_PAGE_SIZE = 5000;
-const LEFT_EDGE_HISTORY_REQUEST_BARS = 500_000;
+const LEFT_EDGE_HISTORY_REQUEST_BARS = ANALYSIS_HISTORY_REQUEST_BARS;
 const FAST_HISTORY_PAGES_PER_BATCH = Math.ceil(LEFT_EDGE_HISTORY_REQUEST_BARS / FAST_HISTORY_PAGE_SIZE);
 const CHART_HISTORY_MAX_BARS = 200_000;
 const CHART_HISTORY_SEED_BARS = 5_000;
