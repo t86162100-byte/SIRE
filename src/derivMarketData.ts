@@ -196,6 +196,17 @@ export class DerivMarketDataClient {
         socket.close();
         reject(new Error('Deriv market-data connection timed out.'));
       }, DERIV_REQUEST_TIMEOUT);
+      socket.onmessage = event => {
+        try {
+          const data = JSON.parse(String(event.data));
+          if (data?.error) {
+            window.clearTimeout(timer);
+            const detail = data.error.message || data.error.code || 'Unknown Deriv WebSocket error.';
+            reject(new Error(`Deriv WebSocket error: ${detail}`));
+            socket.close();
+          }
+        } catch {}
+      };
       socket.onopen = () => {
         window.clearTimeout(timer);
         this.socket = socket;
@@ -204,11 +215,15 @@ export class DerivMarketDataClient {
       };
       socket.onerror = () => {
         window.clearTimeout(timer);
-        reject(new Error('Deriv market-data connection failed.'));
+        reject(new Error('Deriv market-data WebSocket connection failed before startup completed. Check the Deriv public market-data endpoint or SIRE /deriv/ws proxy.'));
       };
-      socket.onclose = () => {
+      socket.onclose = event => {
         window.clearTimeout(timer);
-        reject(new Error('Deriv market-data connection closed.'));
+        if (event.code !== 1000 && event.reason) {
+          reject(new Error(`Deriv market-data WebSocket closed (code ${event.code}): ${event.reason}`));
+        } else {
+          reject(new Error(`Deriv market-data WebSocket closed before startup completed (code ${event.code}).`));
+        }
       };
     }).finally(() => { this.opening = null; });
 
