@@ -43,7 +43,7 @@ const replaySpeedLabel = (speed: number) => `${speed}×`;
 
 export type DerivInstrument = { symbol: string; name: string; market: string; submarket: string; subgroup: string; symbolType: string; pipSize?: number; exchangeOpen?: number };
 export type DerivBar = { time: number; open: number; high: number; low: number; close: number; volume: number };
-const DERIV_WS_URL = 'wss://ws.binaryws.com/websockets/v3';
+const DERIV_WS_URL = 'wss://ws.binaryws.com/websockets/v3?app_id=1089';
 const DERIV_REQUEST_TIMEOUT = 20000;
 const DERIV_PAGE_SIZE = 5000;
 // Load a safe first page, then keep paging older candles on demand until Deriv
