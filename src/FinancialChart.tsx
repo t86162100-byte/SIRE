@@ -121,7 +121,7 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
   timeframeRef.current = activeTimeframe;
   const marketInstrument = instruments.find(item => item.symbol === symbol);
   const marketInstrumentName = marketInstrument?.name || symbol;
-  const reportDiagnostic = (event: DerivFeedDiagnostic) => { const item: ChartDiagnostic = { ...event, id: ++diagnosticIdRef.current, timestamp: Date.now() }; setDiagnostics(current => [...current, item].slice(-30)); if (event.level === 'error') setDiagnosticsOpen(true); };
+  const reportDiagnostic = (event: DerivFeedDiagnostic) => { const now = Date.now(); const item: ChartDiagnostic = { ...event, id: ++diagnosticIdRef.current, timestamp: now }; setDiagnostics(current => { const last = current[current.length - 1]; if (last && last.code === item.code && last.message === item.message && now - last.timestamp < 5000) return current; return [...current, item].slice(-30); }); if (event.level === 'error') setDiagnosticsOpen(true); };
 
   const formatMarketPrice = (price: number) => {
     if (!Number.isFinite(price)) return '—';
@@ -380,6 +380,9 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
         historyExhaustedRef.current = false;
         oldestLoadedTimeRef.current = null;
         setMarketQuote(null);
+        lastTickAtRef.current = null;
+        lastLiveQuoteRef.current = null;
+        setDiagnostics([]);
       });
       const offSymbol = widget.on('symbol', (event: { symbol: string }) => {
         const instrument = instrumentsRef.current.find(item => item.symbol === event.symbol);
@@ -511,6 +514,9 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
     const widget = widgetRef.current;
     if (!widget || !symbol) return;
     setMarketQuote(null);
+    lastTickAtRef.current = null;
+    lastLiveQuoteRef.current = null;
+    setDiagnostics([]);
     historyLoadingRef.current = false;
     historyExhaustedRef.current = false;
     oldestLoadedTimeRef.current = null;
