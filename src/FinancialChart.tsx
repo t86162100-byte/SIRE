@@ -328,6 +328,7 @@ export default function FinancialChart({ symbol, isActive = false, liveTick, req
   const candlesRef = useRef<Candle[]>([]);
   const historyPagingRef = useRef(false);
   const historyWindowSwapRef = useRef(false);
+  const historyExhaustedKeyRef = useRef<string | null>(null);
   const subscriberRef = useRef<((bar: Candle) => void) | null>(null);
   const resyncRef = useRef<(() => void) | null>(null);
   const lastLiveEpochRef = useRef<number | null>(null);
@@ -591,18 +592,44 @@ export default function FinancialChart({ symbol, isActive = false, liveTick, req
     const offRenderer = widget.chart.on('renderer:fallback', () => setRendererKind('canvas2d'));
     widgetRef.current = widget;
     // Native OpenAlgo left-edge paging: fetch older Deriv candles when the user scrolls back.
-    widget.chart.setHistoryLoader(() => { void loadOlderHistoryPage(); });
+    const requestOlderIfNeeded = () => {
+      const interval = widget.interval();
+      const key = historyCacheKey(symbolRef.current, interval);
+      if (historyPagingRef.current || replayRef.current || historyExhaustedKeyRef.current === key) return;
+      void loadOlderHistoryPage().then(() => {
+        // If the current oldest bar did not move after a page request, mark
+        // this symbol/timeframe exhausted so repeated edge pans do not hammer
+        // Deriv at the true historical boundary.
+        const oldest = candlesRef.current[0]?.time;
+        if (!Number.isFinite(oldest)) return;
+        const after = getCachedHistory(symbolRef.current, interval)[0]?.time;
+        if (Number.isFinite(after) && after === oldest) {
+          historyExhaustedKeyRef.current = key;
+        }
+      });
+    };
+    widget.chart.setHistoryLoader(requestOlderIfNeeded);
 
     // The active rendering window is bounded for mobile performance, but the
     // archive can be much larger. When a user walks forward after paging deep
     // into history, restore a newer window from that archive so the bounded
     // renderer never becomes a one-way tunnel into the past.
     const offHistoryPan = widget.chart.on('pan', () => {
-      if (historyWindowSwapRef.current || historyPagingRef.current || replayRef.current) return;
+      if (historyWindowSwapRef.current || replayRef.current) return;
       const active = candlesRef.current;
       if (active.length < 2) return;
       const range = widget.chart.getVisibleLogicalRange?.();
-      if (!range || Number(range.to) < active.length - 18) return;
+      if (!range) return;
+
+      // Keep a direct left-edge guard in addition to OpenAlgo's native
+      // setHistoryLoader. This makes deep paging deterministic even when the
+      // chart's managed-data latch has already fired once.
+      if (Number(range.from) <= 8) {
+        requestOlderIfNeeded();
+        return;
+      }
+
+      if (historyPagingRef.current || Number(range.to) < active.length - 18) return;
 
       const interval = widget.interval();
       const archived = getCachedHistory(symbolRef.current, interval);
@@ -813,7 +840,10 @@ export default function FinancialChart({ symbol, isActive = false, liveTick, req
     // History is fetched on demand by OpenAlgo's native left-edge loader.
     // Do not unboundedly warm millions of bars during chart startup.
     setActiveTimeframe(widget.interval());
-    const offInterval = widget.on('interval', (event: { interval: string }) => setActiveTimeframe(event.interval));
+    const offInterval = widget.on('interval', (event: { interval: string }) => {
+      historyExhaustedKeyRef.current = null;
+      setActiveTimeframe(event.interval);
+    });
     const offSymbol = widget.on('symbol', (event: { symbol: string }) => {
       const instrument = instrumentsRef.current.find(item => item.symbol === event.symbol);
       if (instrument && instrument.symbol !== symbolRef.current) onSelectInstrumentRef.current(instrument);
@@ -962,6 +992,7 @@ export default function FinancialChart({ symbol, isActive = false, liveTick, req
 
   useEffect(() => {
     setMarketQuote(null);
+    historyExhaustedKeyRef.current = null;
     if (replayRef.current) stopReplay();
     const widget = widgetRef.current;
     if (widget && widget.symbol() !== symbol) widget.setSymbol(symbol, 'Deriv Synthetic Indices');
