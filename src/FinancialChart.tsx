@@ -43,7 +43,7 @@ const replaySpeedLabel = (speed: number) => `${speed}×`;
 
 export type DerivInstrument = { symbol: string; name: string; market: string; submarket: string; subgroup: string; symbolType: string; pipSize?: number; exchangeOpen?: number };
 export type DerivBar = { time: number; open: number; high: number; low: number; close: number; volume: number };
-const DERIV_WS_URL = 'wss://ws.binaryws.com/websockets/v3?app_id=1089';
+const DERIV_WS_URL = 'wss://ws.binaryws.com/websockets/v3';
 const DERIV_REQUEST_TIMEOUT = 20000;
 const DERIV_PAGE_SIZE = 5000;
 // Load a safe first page, then keep paging older candles on demand until Deriv
@@ -194,6 +194,7 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
   const [rendererKind, setRendererKind] = useState<'canvas2d' | 'webgl2'>('canvas2d');
   const [tpoEnabled, setTpoEnabled] = useState(false);
   const [marketQuote, setMarketQuote] = useState<{ price: number; percent: number } | null>(null);
+  const lastLiveQuoteRef = useRef<{ symbol: string; price: number; epoch: number } | null>(null);
   const [moreMenuOpen, setMoreMenuOpen] = useState(false);
   const [selectedDrawing, setSelectedDrawing] = useState<{ id: string; sourceId: string; name: string; visible: boolean; locked: boolean } | null>(null);
   const [selectedDrawingPosition, setSelectedDrawingPosition] = useState<{ left: number; top: number } | null>(null);
@@ -489,6 +490,8 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
         if (instrument && instrument.symbol !== symbolRef.current) onSelectInstrumentRef.current(instrument);
       });
       const syncQuoteFromSeries = () => {
+        const live = lastLiveQuoteRef.current;
+        if (live && live.symbol === symbolRef.current && Math.floor(Date.now() / 1000) - live.epoch < 10) return;
         const bars = (widget.primarySeries()?.getData?.() || []) as DerivBar[];
         const last = bars[bars.length - 1];
         if (bars.length && oldestLoadedTimeRef.current === null) oldestLoadedTimeRef.current = bars[0].time;
@@ -584,6 +587,73 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
       throw error;
     }
   }, []);
+
+  // Keep the live Deriv tick stream independent from the chart feed. This makes the
+  // displayed quote and current candle update even if the widget's internal live-feed
+  // lifecycle changes during symbol/interval reloads.
+  useEffect(() => {
+    const widget = widgetRef.current;
+    if (!widget || !symbol) return;
+    let stopped = false;
+    let socket: WebSocket | null = null;
+    let reconnect: number | null = null;
+    const seconds = DERIV_INTERVAL_SECONDS[activeTimeframe] || 60;
+    let current: DerivBar | null = null;
+    const seedBars = ((widget.primarySeries()?.getData?.() || []) as DerivBar[]).filter(Boolean);
+    if (seedBars.length) current = { ...seedBars[seedBars.length - 1] };
+
+    const connect = () => {
+      if (stopped) return;
+      socket = new WebSocket(DERIV_WS_URL);
+      socket.onopen = () => {
+        if (!stopped && socket?.readyState === WebSocket.OPEN) {
+          socket.send(JSON.stringify({ ticks: symbol, subscribe: 1, req_id: nextDerivRequestId() }));
+        }
+      };
+      socket.onmessage = event => {
+        let data: any;
+        try { data = JSON.parse(String(event.data)); } catch { return; }
+        if (data.error) {
+          console.error('[DERIV LIVE]', symbol, data.error.message || data.error.code || data.error);
+          return;
+        }
+        if (data.msg_type !== 'tick' || data.tick?.symbol !== symbol) return;
+        const epoch = Number(data.tick.epoch);
+        const price = Number(data.tick.quote);
+        if (!Number.isFinite(epoch) || !Number.isFinite(price)) return;
+        lastLiveQuoteRef.current = { symbol, price, epoch };
+        const next = tickToBar(current, epoch, price, seconds);
+        current = next;
+        const series = widgetRef.current?.primarySeries();
+        if (series) {
+          const updater = (series as any).update;
+          if (typeof updater === 'function') updater.call(series, next);
+          else {
+            const bars = ((series as any).getData?.() || []) as DerivBar[];
+            const replaced = bars.length && bars[bars.length - 1].time === next.time ? [...bars.slice(0, -1), next] : [...bars, next];
+            (series as any).setData?.(replaced);
+          }
+        }
+        const bars = ((widgetRef.current?.primarySeries()?.getData?.() || []) as DerivBar[]);
+        const previousClosed = bars.length > 1 ? bars[bars.length - 2] : null;
+        const percent = previousClosed?.close ? ((price - previousClosed.close) / previousClosed.close) * 100 : 0;
+        setMarketQuote({ price, percent });
+      };
+      socket.onclose = () => {
+        socket = null;
+        if (!stopped) reconnect = window.setTimeout(connect, 1000);
+      };
+      socket.onerror = () => {};
+    };
+    connect();
+    return () => {
+      stopped = true;
+      if (reconnect !== null) window.clearTimeout(reconnect);
+      if (socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ forget_all: 'ticks' }));
+      socket?.close();
+      socket = null;
+    };
+  }, [symbol, activeTimeframe]);
 
   useEffect(() => {
     const widget = widgetRef.current;
