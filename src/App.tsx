@@ -3,9 +3,12 @@ import { Search } from 'lucide-react';
 import { createLinkGroup, type LinkGroup } from 'openalgo-charts';
 import ResearchLab from './ResearchLab';
 import FinancialChart from './FinancialChart';
+import { fetchSyntheticInstruments, type DerivInstrument } from './derivDataFeed';
 import './nativeTerminal.css';
 
-type Instrument = {
+type Instrument = DerivInstrument;
+
+type LegacyInstrumentShape = {
   symbol: string;
   name: string;
   market: string;
@@ -16,9 +19,8 @@ type Instrument = {
   exchangeOpen?: number;
 };
 
-const instruments: Instrument[] = [];
-
 export default function App() {
+  const [instruments, setInstruments] = useState<Instrument[]>([]);
   const [selected, setSelected] = useState<Instrument | null>(null);
   const [search, setSearch] = useState('');
   const [instrumentSearchOpen, setInstrumentSearchOpen] = useState(false);
@@ -32,6 +34,17 @@ export default function App() {
   const [multiChartPosition, setMultiChartPosition] = useState<'up' | 'down' | 'left' | 'right'>('right');
   const [chartSymbols, setChartSymbols] = useState<string[]>([]);
   const linkGroupRef = useRef<LinkGroup | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchSyntheticInstruments().then(items => {
+      if (cancelled) return;
+      setInstruments(items);
+      setSelected(current => current || items[0] || null);
+      setChartSymbols(current => current.length ? current : items[0] ? [items[0].symbol] : []);
+    }).catch(error => console.error('[DERIV MARKET DATA] instrument discovery failed', error));
+    return () => { cancelled = true; };
+  }, []);
 
   useEffect(() => {
     if (!instruments.length) return;
