@@ -532,7 +532,9 @@ export default function FinancialChart({ symbol, isActive = false, liveTick, req
       intervals: DERIV_INTERVALS,
       chartType: 'candlestick',
       theme: 'dark',
-      renderer: 'auto',
+      // Canvas2D is the stable path for very large retained Deriv histories.
+      // Keep GPU rendering out of the history-growth path on mobile.
+      renderer: 'canvas2d',
       persist: `sire-${symbol}`,
       // OpenAlgo's managed loader owns older-history paging. Start with a
       // substantial recent window, then fetch older pages as the user pans
@@ -747,15 +749,8 @@ export default function FinancialChart({ symbol, isActive = false, liveTick, req
     };
     window.addEventListener('resize', onResize);
     onWidgetReady?.(widget);
-    // Paint immediately with the first page, then aggressively warm the
-    // historical window in parallel. Do not make chart readiness depend on
-    // finding the provider's absolute first tick.
-    void backfillHistoryTo().then(bars => {
-      candlesRef.current = bars.slice().sort((a, b) => a.time - b.time);
-      putCachedHistory(symbolRef.current, widget.interval(), candlesRef.current);
-      updateMarketQuote(candlesRef.current);
-      window.setTimeout(refreshTpoProfile, 0);
-    });
+    // History is fetched on demand by OpenAlgo's native left-edge loader.
+    // Do not unboundedly warm millions of bars during chart startup.
     setActiveTimeframe(widget.interval());
     const offInterval = widget.on('interval', (event: { interval: string }) => setActiveTimeframe(event.interval));
     const offSymbol = widget.on('symbol', (event: { symbol: string }) => {
@@ -1055,15 +1050,11 @@ export default function FinancialChart({ symbol, isActive = false, liveTick, req
     if (bars.length < 2) return bars;
 
     const goal = Number.isFinite(targetEpoch) ? Number(targetEpoch) : undefined;
-    // Keep paging until the Deriv history endpoint itself reports that there
-    // is no older data. There is deliberately no application-side bar/page
-    // ceiling: the provider's actual historical boundary is the stopping
-    // condition.
 
-    // Fetch known, non-overlapping historical ranges concurrently. This is
-    // substantially faster than waiting for one loadMore request before
-    // starting the next. The DataLayer's merge-by-time semantics make the
-    // bulk replacement safe and de-duplicate any provider boundary overlap.
+    // Explicit backfills (for replay) may continue until the requested target.
+    // Normal chart startup deliberately does NOT download unbounded history in
+    // the background: repeated full-series replacements can starve mobile
+    // rendering and leave a blank data canvas.
     while (true) {
       const anchor = bars[0]?.time;
       if (!Number.isFinite(anchor)) break;
@@ -1088,21 +1079,29 @@ export default function FinancialChart({ symbol, isActive = false, liveTick, req
         pages.push(...results);
       }
 
-      const older = pages.flat().filter(bar => bar.time < anchor);
+      const older = pages.flat()
+        .filter(bar => bar.time < anchor)
+        .sort((a, b) => a.time - b.time);
       if (!older.length) break;
+
+      // Native OpenAlgo history paging preserves the logical viewport.
+      const prependData = (widget.series as any).prependData;
+      if (typeof prependData === 'function') prependData.call(widget.series, older);
+      else widget.series.setData([...older, ...bars]);
 
       const merged = new Map<number, Candle>();
       for (const bar of [...bars, ...older]) merged.set(bar.time, bar);
       bars = [...merged.values()].sort((a, b) => a.time - b.time);
       candlesRef.current = bars;
-      putCachedHistory(symbolRef.current, widget.interval(), bars);
-      widget.series.setData(bars);
+      putCachedHistory(symbolRef.current, interval, bars);
       updateMarketQuote(bars);
-      const oldestReturned = older.reduce((min, bar) => Math.min(min, bar.time), Infinity);
-      if (goal !== undefined && oldestReturned <= goal) break;
 
-      // Yield to rendering/input between batches so deep history never
-      // monopolizes the main thread on mobile.
+      const oldestReturned = older[0]?.time;
+      if (goal !== undefined && Number.isFinite(oldestReturned) && oldestReturned <= goal) break;
+
+      // Without an explicit target this is a single protective batch.
+      if (goal === undefined) break;
+
       await new Promise<void>(resolve => window.setTimeout(resolve, 0));
     }
 
