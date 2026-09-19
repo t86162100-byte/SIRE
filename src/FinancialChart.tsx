@@ -1,17 +1,14 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { registerInterval } from 'openalgo-charts';
 import { createWidget, type Widget } from 'openalgo-charts/widget';
 import { derivMarketData } from './derivMarketData';
 import './financialChart.css';
 
 type Instrument = { symbol: string; name: string; pipSize?: number };
-type Tick = { symbol: string; quote: number; epoch: number };
 type Candle = { time: number; open: number; high: number; low: number; close: number; volume?: number };
 
 type Props = {
   symbol: string;
-  isActive?: boolean;
-  liveTick?: Tick | null;
   instruments: Instrument[];
   onSelectInstrument: (instrument: Instrument) => void;
   onWidgetReady?: (widget: Widget) => void;
@@ -20,24 +17,10 @@ type Props = {
 };
 
 const INTERVAL_SECONDS: Record<string, number> = {
-  '1m': 60,
-  '2m': 120,
-  '3m': 180,
-  '5m': 300,
-  '10m': 600,
-  '15m': 900,
-  '20m': 1200,
-  '30m': 1800,
-  '45m': 2700,
-  '1h': 3600,
-  '2h': 7200,
-  '3h': 10800,
-  '4h': 14400,
-  '6h': 21600,
-  '8h': 28800,
-  '12h': 43200,
-  '1d': 86400,
-  '1w': 604800,
+  '1m': 60, '2m': 120, '3m': 180, '5m': 300, '10m': 600, '15m': 900,
+  '20m': 1200, '30m': 1800, '45m': 2700, '1h': 3600, '2h': 7200,
+  '3h': 10800, '4h': 14400, '6h': 21600, '8h': 28800, '12h': 43200,
+  '1d': 86400, '1w': 604800,
 };
 
 for (const [code, seconds] of Object.entries(INTERVAL_SECONDS)) {
@@ -60,13 +43,7 @@ function toCandles(response: Record<string, unknown>): Candle[] {
       close: Number(row.close),
       volume: Number.isFinite(Number(row.volume)) ? Number(row.volume) : undefined,
     }))
-    .filter(bar =>
-      Number.isFinite(bar.time) &&
-      Number.isFinite(bar.open) &&
-      Number.isFinite(bar.high) &&
-      Number.isFinite(bar.low) &&
-      Number.isFinite(bar.close),
-    )
+    .filter(bar => [bar.time, bar.open, bar.high, bar.low, bar.close].every(Number.isFinite))
     .sort((a, b) => a.time - b.time);
 }
 
@@ -83,190 +60,156 @@ export default function FinancialChart({
   const symbolRef = useRef(symbol);
   const intervalRef = useRef('1m');
   const oldestRef = useRef<number | null>(null);
-  const latestBarRef = useRef<Candle | null>(null);
-  const loadingHistoryRef = useRef(false);
-  const exhaustedRef = useRef(false);
-  const unsubscribeLiveRef = useRef<(() => void) | null>(null);
+  const liveCandleRef = useRef<Candle | null>(null);
+  const liveUnsubscribeRef = useRef<(() => void) | null>(null);
+  const liveSubscriptionIdRef = useRef<string | null>(null);
+  const destroyedRef = useRef(false);
+  const [error, setError] = useState('');
 
-  useEffect(() => {
-    symbolRef.current = symbol;
-  }, [symbol]);
+  useEffect(() => { symbolRef.current = symbol; }, [symbol]);
 
   useEffect(() => {
     const host = hostRef.current;
     if (!host) return;
 
-    let destroyed = false;
+    destroyedRef.current = false;
+    setError('');
 
-    const loadHistory = async (end?: number): Promise<Candle[]> => {
-      const currentSymbol = symbolRef.current;
-      const interval = intervalRef.current;
-      const response = await derivMarketData.history(currentSymbol, secondsFor(interval), end, 5000);
+    const setBars = (widget: Widget, bars: Candle[]) => {
+      if (destroyedRef.current) return;
+      widget.series.setData(bars);
+      if (bars.length) widget.chart.timeScale.fitContent(160);
+      oldestRef.current = bars[0]?.time ?? null;
+      liveCandleRef.current = bars[bars.length - 1] ?? null;
+    };
+
+    const loadHistory = async (widget: Widget, end?: number): Promise<Candle[]> => {
+      const response = await derivMarketData.history(symbolRef.current, secondsFor(intervalRef.current), end, 5000);
       const bars = toCandles(response);
-
-      if (bars.length) {
-        oldestRef.current = bars[0].time;
-        latestBarRef.current = bars[bars.length - 1];
-        exhaustedRef.current = false;
-      } else if (end !== undefined) {
-        exhaustedRef.current = true;
-      }
-
+      if (!bars.length) throw new Error(`Deriv returned no candles for ${symbolRef.current}.`);
       return bars;
     };
 
-    const feed = {
-      getBars: async (request: { symbol: string; interval: string; from?: number; to?: number }) => {
-        intervalRef.current = request.interval;
-        const end = Number.isFinite(request.to) ? Number(request.to) : undefined;
-        const bars = await loadHistory(end);
-        console.info('[SIRE][Deriv history]', {
-          symbol: request.symbol,
-          interval: request.interval,
-          requestedEnd: end ?? 'latest',
+    let widget: Widget;
+    try {
+      // Deliberately do not pass an OpenAlgo feed here. OpenAlgo can render a
+      // chart directly from widget.series.setData(), which removes the data
+      // controller/cache layer from SIRE and makes Deriv the only data source.
+      widget = createWidget(host, {
+        symbol,
+        interval: '1m',
+        intervals: Object.keys(INTERVAL_SECONDS),
+        chartType: 'candlestick',
+        theme: 'dark',
+        persist: false,
+        mobile: 'auto',
+        topbar: true,
+        statusline: true,
+      });
+      widgetRef.current = widget;
+      onWidgetReady?.(widget);
+    } catch (e) {
+      const message = e instanceof Error ? e.message : String(e);
+      console.error('[SIRE][Chart] OpenAlgo widget failed to mount', e);
+      setError(`Chart failed to open: ${message}`);
+      return () => {};
+    }
+
+    const reload = async () => {
+      try {
+        setError('');
+        const bars = await loadHistory(widget);
+        setBars(widget, bars);
+        console.info('[SIRE][Deriv candles]', {
+          symbol: symbolRef.current,
+          interval: intervalRef.current,
           returned: bars.length,
           oldest: bars[0]?.time ?? null,
           newest: bars[bars.length - 1]?.time ?? null,
         });
-        return bars;
-      },
-
-      subscribeBars: (
-        request: { symbol: string; interval: string },
-        onBar: (bar: Candle) => void,
-      ) => {
-        const interval = secondsFor(request.interval);
-        let last: Candle | null = latestBarRef.current;
-
-        const remove = derivMarketData.onTick(tick => {
-          if (tick.symbol !== request.symbol || !Number.isFinite(tick.quote)) return;
-
-          const bucket = Math.floor(tick.epoch / interval) * interval;
-          if (!last || bucket > last.time) {
-            last = {
-              time: bucket,
-              open: tick.quote,
-              high: tick.quote,
-              low: tick.quote,
-              close: tick.quote,
-            };
-          } else if (bucket === last.time) {
-            last = {
-              ...last,
-              high: Math.max(last.high, tick.quote),
-              low: Math.min(last.low, tick.quote),
-              close: tick.quote,
-            };
-          } else {
-            return;
-          }
-
-          latestBarRef.current = last;
-          onBar(last);
-        });
-
-        void derivMarketData.subscribe(request.symbol).catch(error => {
-          console.warn('[SIRE][Deriv live] subscription failed', error);
-        });
-
-        return () => remove();
-      },
+      } catch (e) {
+        const message = e instanceof Error ? e.message : String(e);
+        console.error('[SIRE][Deriv candles] history failed', e);
+        setError(`Chart data failed: ${message}`);
+      }
     };
 
-    const widget = createWidget(host, {
-      symbol,
-      interval: '1m',
-      intervals: Object.keys(INTERVAL_SECONDS),
-      persist: false,
-      timezone: 'Africa/Lagos',
-      feed,
-      loading: {
-        pageSize: 5000,
-      },
-      topbar: {
-        symbol: true,
-        interval: true,
-        chartType: true,
-        indicators: true,
-        drawings: true,
-        settings: true,
-      },
-    });
-
-    widgetRef.current = widget;
-
-    const loadOlder = () => {
-      if (destroyed || loadingHistoryRef.current || exhaustedRef.current) return;
-      const oldest = oldestRef.current;
-      if (!Number.isFinite(oldest)) return;
-
-      loadingHistoryRef.current = true;
-      void loadHistory(Math.floor((oldest as number) - 1))
-        .then(bars => {
-          if (destroyed || !bars.length) return;
-          const older = bars.filter(bar => bar.time < (oldestRef.current ?? Infinity));
-          if (!older.length) {
-            exhaustedRef.current = true;
-            return;
-          }
-
-          const prepend = (widget.series as any).prependData;
-          if (typeof prepend === 'function') {
-            prepend.call(widget.series, older);
-          } else {
-            const current = widget.series.getData?.() ?? [];
-            widget.series.setData([...older, ...current].sort((a: Candle, b: Candle) => a.time - b.time));
-          }
-
-          oldestRef.current = older[0].time;
-          console.info('[SIRE][Deriv older history]', {
-            symbol: symbolRef.current,
-            interval: intervalRef.current,
-            requestedEnd: oldest - 1,
-            returned: older.length,
-            oldest: older[0].time,
-            newest: older[older.length - 1].time,
-          });
-        })
-        .catch(error => {
-          console.warn('[SIRE][Deriv older history] request failed; retry remains available', error);
-        })
-        .finally(() => {
-          loadingHistoryRef.current = false;
-        });
+    const stopLive = () => {
+      liveUnsubscribeRef.current?.();
+      liveUnsubscribeRef.current = null;
+      const id = liveSubscriptionIdRef.current;
+      liveSubscriptionIdRef.current = null;
+      if (id) void derivMarketData.forget(id).catch(() => undefined);
     };
 
-    widget.chart.setHistoryLoader(loadOlder);
-    onWidgetReady?.(widget);
+    const startLive = async () => {
+      stopLive();
+      const removeTick = derivMarketData.onTick(tick => {
+        if (destroyedRef.current || tick.symbol !== symbolRef.current || !Number.isFinite(tick.quote)) return;
+        const interval = secondsFor(intervalRef.current);
+        const bucket = Math.floor(tick.epoch / interval) * interval;
+        const previous = liveCandleRef.current;
+        const next = !previous || bucket > previous.time
+          ? { time: bucket, open: tick.quote, high: tick.quote, low: tick.quote, close: tick.quote }
+          : bucket === previous.time
+            ? { ...previous, high: Math.max(previous.high, tick.quote), low: Math.min(previous.low, tick.quote), close: tick.quote }
+            : previous;
+        if (next === previous) return;
+        liveCandleRef.current = next;
+        widget.series.update(next);
+      });
+      liveUnsubscribeRef.current = removeTick;
+      try {
+        const response = await derivMarketData.subscribe(symbolRef.current);
+        const id = response.subscription?.id;
+        if (id !== undefined) liveSubscriptionIdRef.current = String(id);
+      } catch (e) {
+        console.warn('[SIRE][Deriv live] subscription failed', e);
+      }
+    };
 
-    const stopInterval = widget.on('interval', (event: { interval: string }) => {
-      intervalRef.current = event.interval;
-      oldestRef.current = null;
-      latestBarRef.current = null;
-      exhaustedRef.current = false;
+    const stopInterval = widget.on('interval', () => {
+      intervalRef.current = widget.interval();
+      liveCandleRef.current = null;
+      void reload();
     });
 
-    const stopSymbol = widget.on('symbol', (event: { symbol: string }) => {
+    const stopSymbol = widget.on('symbol', event => {
       symbolRef.current = event.symbol;
-      oldestRef.current = null;
-      latestBarRef.current = null;
-      exhaustedRef.current = false;
-
       const instrument = instruments.find(item => item.symbol === event.symbol);
       if (instrument) onSelectInstrument(instrument);
+      liveCandleRef.current = null;
+      void reload();
+      void startLive();
     });
 
+    widget.chart.setHistoryLoader(() => {
+      const oldest = oldestRef.current;
+      if (!Number.isFinite(oldest)) return;
+      void loadHistory(widget, Math.floor((oldest as number) - 1))
+        .then(older => {
+          if (destroyedRef.current) return;
+          const current = widget.series.getData();
+          const merged = [...older, ...current].sort((a, b) => a.time - b.time);
+          const unique = Array.from(new Map(merged.map(bar => [bar.time, bar])).values());
+          widget.series.setData(unique);
+          oldestRef.current = unique[0]?.time ?? oldestRef.current;
+        })
+        .catch(e => console.warn('[SIRE][Deriv older candles] failed', e))
+        .finally(() => widget.chart.historyLoadComplete());
+    });
+
+    void reload();
+    void startLive();
+
     return () => {
-      destroyed = true;
-      unsubscribeLiveRef.current?.();
-      unsubscribeLiveRef.current = null;
+      destroyedRef.current = true;
+      stopLive();
       stopInterval?.();
       stopSymbol?.();
       onWidgetDestroyed?.(widget);
       widget.destroy();
       widgetRef.current = null;
-      oldestRef.current = null;
-      latestBarRef.current = null;
     };
   }, []);
 
@@ -274,9 +217,7 @@ export default function FinancialChart({
     symbolRef.current = symbol;
     const widget = widgetRef.current;
     if (!widget || widget.symbol() === symbol) return;
-    oldestRef.current = null;
-    latestBarRef.current = null;
-    exhaustedRef.current = false;
+    liveCandleRef.current = null;
     widget.setSymbol?.(symbol);
   }, [symbol]);
 
@@ -287,6 +228,8 @@ export default function FinancialChart({
       onDoubleClick={onInstrumentTap}
       onContextMenu={event => event.preventDefault()}
       data-sire-market-data="deriv-direct"
-    />
+    >
+      {error && <div className="sire-chart-runtime-error">{error}</div>}
+    </div>
   );
 }
