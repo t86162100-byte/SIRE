@@ -108,7 +108,7 @@ export default function FinancialChart({
         symbolRef.current,
         secondsFor(intervalRef.current),
         end,
-        5000,
+        end === undefined ? 300 : 1000,
       );
       const bars = toCandles(response);
       if (!bars.length) throw new Error(`Deriv returned no candles for ${symbolRef.current}.`);
@@ -207,7 +207,7 @@ export default function FinancialChart({
     void (async () => {
       try {
         setError('');
-        const response = await derivMarketData.history(symbol, secondsFor(intervalRef.current), undefined, 5000);
+        const response = await derivMarketData.history(symbol, secondsFor(intervalRef.current), undefined, 300);
         const bars = toCandles(response);
         if (!bars.length) throw new Error(`Deriv returned no candles for ${symbol}.`);
         const series = seriesRef.current;
