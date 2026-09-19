@@ -40,7 +40,30 @@ const CHART_TYPES = [
 const REPLAY_SPEEDS = [0.5, 1, 2, 5, 10] as const;
 const replaySpeedLabel = (speed: number) => `${speed}×`;
 
-type ChartDiagnostic = DerivFeedDiagnostic & { id: number; timestamp: number };
+type DiagnosticLocation = { file: string; line: number; column: number; functionName?: string };
+type ChartDiagnostic = DerivFeedDiagnostic & { id: number; timestamp: number; stack?: string; location?: DiagnosticLocation; operation?: string };
+
+function parseDiagnosticLocation(stack?: string): DiagnosticLocation | undefined {
+  if (!stack) return undefined;
+  const lines = stack.split('\n').map(line => line.trim()).filter(Boolean);
+  for (const frame of lines) {
+    const v8 = frame.match(/^at\s+(?:(.*?)\s+\()?(.+?):(\d+):(\d+)\)?$/);
+    const firefox = frame.match(/^(.*?)@(.+?):(\d+):(\d+)$/);
+    const match = v8 || firefox;
+    if (!match) continue;
+    const functionName = v8 ? (v8[1] || '').trim() : (firefox ? (firefox[1] || '').trim() : '');
+    const file = v8 ? v8[2] : firefox![2];
+    const line = Number(v8 ? v8[3] : firefox![3]);
+    const column = Number(v8 ? v8[4] : firefox![4]);
+    if (file && Number.isFinite(line) && Number.isFinite(column)) return { file, line, column, functionName: functionName || undefined };
+  }
+  return undefined;
+}
+
+function diagnosticErrorDetails(error: unknown, operation?: string) {
+  const stack = error instanceof Error ? error.stack : undefined;
+  return { stack, location: parseDiagnosticLocation(stack), operation };
+}
 
 function analyzeChartHealth(events: ChartDiagnostic[], snapshot: { bars: number; tickAgeMs: number | null; width: number; height: number; hasCanvas: boolean; hasPrimarySeries: boolean }) {
   const latest = [...events].reverse();
@@ -64,7 +87,10 @@ function diagnosticLabel(level: ChartDiagnostic['level']) { return level === 'er
 
 function diagnosticText(event: ChartDiagnostic) {
   const when = new Date(event.timestamp).toISOString();
-  return `[${when}] ${diagnosticLabel(event.level)} · ${event.code}\n${event.message}${event.detail ? `\nDetail: ${event.detail}` : ''}`;
+  const location = event.location ? `\nLocation: ${event.location.file}:${event.location.line}:${event.location.column}${event.location.functionName ? ` (${event.location.functionName})` : ''}` : '';
+  const operation = event.operation ? `\nOperation: ${event.operation}` : '';
+  const stack = event.stack ? `\nStack:\n${event.stack}` : '';
+  return `[${when}] ${diagnosticLabel(event.level)} · ${event.code}\n${event.message}${event.detail ? `\nDetail: ${event.detail}` : ''}${operation}${location}${stack}`;
 }
 
 async function copyDiagnosticText(value: string) {
@@ -101,7 +127,7 @@ function ChartDiagnosticsPanel({ open, events, symbol, interval, quoteAgeMs, bar
     <div className={'sire-chart-diagnostics__diagnosis is-' + diagnosis.state.toLowerCase()}><div><b>{diagnosis.state === 'HEALTHY' ? 'Chart is healthy' : diagnosis.state === 'ISSUE' ? 'Issue identified' : 'Checking chart'}</b><span>{diagnosis.subsystem}</span></div><strong>What is happening: </strong>{diagnosis.cause}<small><b>Evidence:</b> {diagnosis.evidence}</small><small><b>Next check:</b> {diagnosis.next}</small></div>
     <div className="sire-chart-diagnostics__metrics"><span>History <b>{bars}</b>{historyInitial ? ` / ${DERIV_INITIAL_BARS} initial` : ''}</span><span>Older pages <b>{historyOlder}</b> / {historyRequests}</span><span>Live <b>{liveText}</b></span><span>Renderer <b>{renderer}</b></span><span>Canvas <b>{width}×{height}</b></span><span>Series <b>{hasPrimarySeries ? 'OK' : 'Missing'}</b></span></div>
     {activeError && <div className="sire-chart-diagnostics__active"><b>{diagnosticLabel(activeError.level)} · {activeError.code}</b><span>{activeError.message}</span>{activeError.detail && <small>Why: {activeError.detail}</small>}<button type="button" onClick={onRetry}>Retry chart data</button></div>}
-    <div className="sire-chart-diagnostics__list">{events.length ? events.map(event => <div key={event.id} className={'sire-chart-diagnostics__event is-' + event.level}><div><b>{diagnosticLabel(event.level)} · {event.code}</b><time>{new Date(event.timestamp).toLocaleTimeString()}</time><button type="button" className="sire-chart-diagnostics__copy" onClick={() => void copy(event.id, diagnosticText(event))}>{copiedId === event.id ? 'Copied' : 'Copy'}</button></div><span>{event.message}</span>{event.detail && <small>{event.detail}</small>}</div>) : <div className="sire-chart-diagnostics__empty">No chart faults detected. Monitoring all chart layers continuously.</div>}</div>
+    <div className="sire-chart-diagnostics__list">{events.length ? events.map(event => <div key={event.id} className={'sire-chart-diagnostics__event is-' + event.level}><div><b>{diagnosticLabel(event.level)} · {event.code}</b><time>{new Date(event.timestamp).toLocaleTimeString()}</time><button type="button" className="sire-chart-diagnostics__copy" onClick={() => void copy(event.id, diagnosticText(event))}>{copiedId === event.id ? 'Copied' : 'Copy'}</button></div><span>{event.message}</span>{event.detail && <small>{event.detail}</small>}{event.operation && <small><b>Operation:</b> {event.operation}</small>}{event.location && <small><b>Location:</b> {event.location.file}:{event.location.line}:{event.location.column}{event.location.functionName ? ` · ${event.location.functionName}` : ''}</small>}{event.stack && <details className="sire-chart-diagnostics__stack"><summary>Call stack</summary><pre>{event.stack}</pre></details>}</div>) : <div className="sire-chart-diagnostics__empty">No chart faults detected. Monitoring all chart layers continuously.</div>}</div>
   </div>;
 }
 import { createDerivDataFeed, DERIV_INTERVAL_SECONDS, DERIV_PAGE_SIZE, DERIV_INITIAL_BARS, fetchAllDerivHistory, fetchOlderDerivHistory, tickToBar, type DerivBar, type DerivInstrument, type DerivFeedDiagnostic } from './derivMarketData';
@@ -450,7 +476,7 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
         const percent = previous?.close ? ((last.close - previous.close) / previous.close) * 100 : 0;
         setMarketQuote({ price: last.close, percent });
       };
-      const offData = widget.on('data', (event: any) => { if (event?.error) { const message = event.error instanceof Error ? event.error.message : String(event.error); reportDiagnostic({ level: 'error', code: 'CHART_DATA_ERROR', message: 'Chart data load failed: ' + message, detail: 'The chart data controller reported a history/load failure.' }); } syncQuoteFromSeries(); });
+      const offData = widget.on('data', (event: any) => { if (event?.error) { const error = event.error instanceof Error ? event.error : new Error(String(event.error)); reportDiagnostic({ level: 'error', code: 'CHART_DATA_ERROR', message: 'Chart data load failed: ' + error.message, detail: 'The chart data controller reported a history/load failure.', ...diagnosticErrorDetails(error, 'openalgo widget data event') }); } syncQuoteFromSeries(); }); } syncQuoteFromSeries(); });
 
       // Load history progressively as the user pans toward the oldest loaded bar.
       // The chart keeps everything already loaded, while older pages are fetched
@@ -505,7 +531,7 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
             }
           } catch (error) {
             const message = error instanceof Error ? error.message : String(error);
-            reportDiagnostic({ level: 'error', code: 'HISTORY_OLDER_LOAD_FAILED', message: `Older history failed for ${currentSymbol} ${currentInterval}: ${message}`, detail: `The progressive loader was trying to extend history beyond the initial ${DERIV_INITIAL_BARS}-candle startup window.` });
+            reportDiagnostic({ level: 'error', code: 'HISTORY_OLDER_LOAD_FAILED', message: `Older history failed for ${currentSymbol} ${currentInterval}: ${message}`, detail: `The progressive loader was trying to extend history beyond the initial ${DERIV_INITIAL_BARS}-candle startup window.`, ...diagnosticErrorDetails(error, `fetchOlderDerivHistory(${currentSymbol}, ${currentInterval})`) });
             console.error('Failed to load older chart history', error);
           } finally {
             historyLoadingRef.current = false;
@@ -560,7 +586,9 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
         onWidgetDestroyed?.(widget); widget.destroy(); widgetRef.current = null;
       };
     } catch (error) {
-      host.textContent = `OpenAlgo widget failed to initialize: ${error instanceof Error ? error.message : String(error)}`;
+      const message = error instanceof Error ? error.message : String(error);
+      reportDiagnostic({ level: 'error', code: 'CHART_WIDGET_INIT_FAILED', message: 'OpenAlgo widget failed to initialize: ' + message, detail: 'Widget construction threw before the chart could finish initializing.', ...diagnosticErrorDetails(error, 'createWidget') });
+      host.textContent = `OpenAlgo widget failed to initialize: ${message}`;
       host.style.padding = '24px'; host.style.boxSizing = 'border-box'; host.style.color = '#ff8080';
       host.style.background = '#080808'; host.style.fontFamily = 'monospace'; host.style.fontSize = '14px';
       throw error;
@@ -570,8 +598,14 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
   useEffect(() => {
     const host = containerRef.current;
     if (!host) return;
-    const onWindowError = (event: ErrorEvent) => reportDiagnostic({ level: 'error', code: 'CHART_FRONTEND_ERROR', message: event.message || 'A frontend error occurred while the chart was running.' });
-    const onUnhandled = (event: PromiseRejectionEvent) => reportDiagnostic({ level: 'error', code: 'CHART_UNHANDLED_REJECTION', message: 'An unhandled chart promise failed: ' + String(event.reason || 'Unknown rejection') });
+    const onWindowError = (event: ErrorEvent) => {
+      const error = event.error instanceof Error ? event.error : new Error(event.message || 'A frontend error occurred while the chart was running.');
+      reportDiagnostic({ level: 'error', code: 'CHART_FRONTEND_ERROR', message: event.message || error.message, detail: 'SIRE captured the browser exception directly.', ...diagnosticErrorDetails(error, 'window.error') });
+    };
+    const onUnhandled = (event: PromiseRejectionEvent) => {
+      const error = event.reason instanceof Error ? event.reason : new Error(String(event.reason || 'Unknown rejection'));
+      reportDiagnostic({ level: 'error', code: 'CHART_UNHANDLED_REJECTION', message: 'An unhandled chart promise failed: ' + error.message, detail: 'SIRE captured an unhandled promise rejection.', ...diagnosticErrorDetails(error, 'window.unhandledrejection') });
+    };
     window.addEventListener('error', onWindowError); window.addEventListener('unhandledrejection', onUnhandled);
     const timer = window.setInterval(() => {
       const widget = widgetRef.current; const series = widget?.chart?.primarySeries(); const bars = (series?.getData?.() || []) as DerivBar[]; const rect = host.getBoundingClientRect();
