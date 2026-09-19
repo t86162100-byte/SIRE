@@ -51,7 +51,8 @@ const replaySpeedLabel = (speed: number) => `${speed}×`;
 // request fetches a small page batch, then OpenAlgo can ask again as the user
 // keeps scrolling backward. This lets a 3-year instrument stop at 3 years while
 // a 10-year instrument remains navigable through all 10 years (or more).
-const FAST_HISTORY_PAGE_SIZE = 5000;
+const FAST_HISTORY_PAGE_SIZE = 1000;
+const DERIV_HISTORY_PAGE_SIZE = 1000;
 const FAST_HISTORY_PAGES_PER_BATCH = 4;
 const CHART_HISTORY_MAX_BARS = 200_000;
 const CHART_HISTORY_SEED_BARS = 5_000;
@@ -249,11 +250,22 @@ async function requestBars(req: BarsRequest, requestHistory: HistoryRequester): 
   const request: Record<string, unknown> = {
     ticks_history: req.symbol,
     end: Number.isFinite(req.to) ? Math.floor(Number(req.to)) : 'latest',
-    count: 5000,
+    count: DERIV_HISTORY_PAGE_SIZE,
     style: 'candles',
     granularity: seconds,
   };
   if (Number.isFinite(req.from)) request.start = Math.floor(Number(req.from));
+  // Explicitly bound older requests so Deriv cannot fall back to a recent page
+  // when an historical end timestamp is supplied. Each left-edge request must
+  // move monotonically backward from the current oldest candle.
+  if (Number.isFinite(req.to)) {
+    const end = Math.floor(Number(req.to));
+    const start = Number.isFinite(req.from)
+      ? Math.floor(Number(req.from))
+      : Math.max(0, end - (DERIV_HISTORY_PAGE_SIZE - 1) * seconds);
+    request.start = start;
+    request.end = end;
+  }
 
   let result: HistoryResponse;
   try {
@@ -576,10 +588,10 @@ export default function FinancialChart({ symbol, isActive = false, liveTick, req
       // Start with a recent rendering window. Older pages are fetched only
       // when the user actually pans left; the application archive can retain
       // much more history than the active Canvas2D rendering window.
-      lookbackBars: 5000,
+      lookbackBars: DERIV_HISTORY_PAGE_SIZE,
       // Page through all available provider history; there is no SIRE bar
       // ceiling. The loader stops only when the feed reports exhaustion.
-      loading: { pageSize: 5000 },
+      loading: { pageSize: DERIV_HISTORY_PAGE_SIZE },
       navigation: { mousePan: 'both', defaultVisibleBars: 120 },
       animZoom: true,
       animAutoscale: true,
