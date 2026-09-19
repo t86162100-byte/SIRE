@@ -148,7 +148,7 @@ const server = http.createServer(async (req,res) => {
       const end = parsed.end === undefined ? 'latest' : parsed.end;
       if (!symbol) return res.writeHead(400,{ 'Access-Control-Allow-Origin':'*','Content-Type':'application/json; charset=utf-8' }).end(JSON.stringify({ error:'symbol is required' }));
       try {
-        const result = await requestDerivPublic({ ticks_history:symbol, end, count, style:'candles', granularity, adjust_start_time:1, subscribe:0 });
+        const result = await requestDerivPublic({ ticks_history:symbol, end, count, style:'candles', granularity, adjust_start_time:1 });
         console.log('[DERIV HISTORY]', symbol, granularity, count, end);
         return res.writeHead(200,{ 'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8' }).end(JSON.stringify(result));
       } catch (cause) {
