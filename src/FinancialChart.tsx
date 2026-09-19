@@ -155,8 +155,7 @@ async function loadAllAvailableHistory(
       if (!Number.isFinite(oldest) || oldest >= lastOldest) break;
       lastOldest = oldest;
 
-      if (strictlyOlder.length < FAST_HISTORY_PAGE_SIZE) break;
-      pageEnd = Math.floor(oldest - 1);
+      // Never infer the provider's first candle from a short page. Continue until\n      // Deriv returns an empty page or the oldest timestamp stops moving.\n      // This makes the archive truly provider-bounded instead of silently\n      // stopping at an arbitrary historical boundary.\n      pageEnd = Math.floor(oldest - 1);
       await new Promise<void>(resolve => window.setTimeout(resolve, HISTORY_PAGE_DELAY_MS));
     }
 
@@ -535,9 +534,7 @@ export default function FinancialChart({ symbol, isActive = false, liveTick, req
           req.interval,
           requestHistoryRef.current,
         );
-        const bars = allHistory.length > CHART_HISTORY_MAX_BARS
-          ? allHistory.slice(-CHART_HISTORY_MAX_BARS)
-          : allHistory;
+        const bars = allHistory;
         if (!bars.length) throw new Error(`No Deriv history returned for ${req.symbol} ${req.interval}`);
         candlesRef.current = bars;
         updateMarketQuote(bars);
