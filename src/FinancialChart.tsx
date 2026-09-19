@@ -500,7 +500,7 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
     const onUnhandled = (event: PromiseRejectionEvent) => reportDiagnostic({ level: 'error', code: 'CHART_UNHANDLED_REJECTION', message: 'An unhandled chart promise failed: ' + String(event.reason || 'Unknown rejection') });
     window.addEventListener('error', onWindowError); window.addEventListener('unhandledrejection', onUnhandled);
     const timer = window.setInterval(() => {
-      const widget = widgetRef.current; const series = widget?.primarySeries(); const bars = (series?.getData?.() || []) as DerivBar[]; const rect = host.getBoundingClientRect();
+      const widget = widgetRef.current; const series = widget?.chart?.primarySeries(); const bars = (series?.getData?.() || []) as DerivBar[]; const rect = host.getBoundingClientRect();
       if (rect.width < 2 || rect.height < 2) { reportDiagnostic({ level: 'error', code: 'CHART_ZERO_SIZE', message: 'The chart container has no usable size.', detail: 'Measured ' + Math.round(rect.width) + '×' + Math.round(rect.height) + 'px.' }); return; }
       if (!bars.length) { reportDiagnostic({ level: 'error', code: 'CHART_NO_CANDLES', message: 'No historical candles are currently loaded.', detail: 'The price pane has no primary OHLC data to render.' }); return; }
       const instrument = instrumentsRef.current.find(item => item.symbol === symbolRef.current); const marketClosed = instrument?.exchangeOpen === 0 || instrument?.tradingSuspended === 1; const tickAge = lastTickAtRef.current === null ? null : Date.now() - lastTickAtRef.current;
