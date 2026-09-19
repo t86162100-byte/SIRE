@@ -29,7 +29,7 @@ export type DerivBar = {
   volume: number;
 };
 
-export const DERIV_DIRECT_WS_URL = 'wss://ws.binaryws.com/websockets/v3';
+export const DERIV_DIRECT_WS_URL = 'wss://api.derivws.com/trading/v1/options/ws/public';
 export const DERIV_WS_URL = DERIV_DIRECT_WS_URL;
 export const DERIV_PROXY_WS_URL = typeof window !== 'undefined'
   ? `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}/deriv/ws`
