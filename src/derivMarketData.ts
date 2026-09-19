@@ -361,7 +361,6 @@ async function fetchDerivHistoryPage(symbol: string, seconds: number, end: numbe
       style: 'candles',
       granularity: seconds,
       adjust_start_time: 1,
-      subscribe: 0,
     });
   } finally {
     client.close();
