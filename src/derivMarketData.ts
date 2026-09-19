@@ -78,6 +78,7 @@ function normalizeInstrument(item: Record<string, unknown>): DerivInstrument | n
 
 export class DerivMarketData {
   private socket: WebSocket | null = null;
+  private connecting: Promise<void> | null = null;
   private pending = new Map<number, Pending>();
   private nextRequestId = 1;
   private tickListeners = new Set<(tick: DerivTick) => void>();
@@ -87,9 +88,10 @@ export class DerivMarketData {
 
   async connect(): Promise<void> {
     if (this.socket?.readyState === WebSocket.OPEN) return;
+    if (this.connecting) return this.connecting;
     this.closed = false;
     this.emitStatus('connecting');
-    await new Promise<void>((resolve, reject) => {
+    this.connecting = new Promise<void>((resolve, reject) => {
       let socket: WebSocket;
       try {
         socket = new WebSocket(DERIV_WS);
@@ -169,6 +171,11 @@ export class DerivMarketData {
         }).catch(() => undefined);
       };
     });
+    try {
+      await this.connecting;
+    } finally {
+      this.connecting = null;
+    }
   }
 
   async request(request: Record<string, unknown>): Promise<DerivResponse> {
@@ -230,7 +237,7 @@ export class DerivMarketData {
     const response = await this.request({
       ticks_history: symbol,
       end: end ?? 'latest',
-      count: Math.min(Math.max(Math.floor(count), 1), 5000),
+      count: Math.min(Math.max(Math.floor(count), 1), 1000),
       style: 'candles',
       granularity,
       adjust_start_time: 1,
