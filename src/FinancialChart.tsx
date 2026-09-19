@@ -150,76 +150,6 @@ const REPLAY_SUB_INTERVAL: Record<string, string> = {
 };
 const replaySubInterval = (interval: string) => REPLAY_SUB_INTERVAL[interval] ?? null;
 
-const earliestTickCache = new Map<string, number>();
-
-async function discoverEarliestDerivTick(symbol: string, requestHistory: HistoryRequester): Promise<number | null> {
-  const cached = earliestTickCache.get(symbol);
-  if (cached !== undefined) return cached;
-
-  const probe = async (end: number) => {
-    try {
-      const result = await requestHistory({
-        ticks_history: symbol,
-        end: Math.floor(end),
-        count: 1,
-        style: 'ticks',
-        subscribe: 0,
-        noCache: true,
-      });
-      const ticks = parseTicks(result) ?? [];
-      return ticks[0]?.epoch ?? null;
-    } catch {
-      return null;
-    }
-  };
-
-  const now = Math.floor(Date.now() / 1000);
-  let hi = now;
-  let span = 86400;
-  let lo: number | null = null;
-
-  // Move the upper bound backward exponentially until Deriv has no history
-  // at that point. This discovers the provider's historical boundary without
-  // assuming an age for any Synthetic Index.
-  for (let i = 0; i < 32; i += 1) {
-    const candidate = Math.max(0, now - span);
-    const tick = await probe(candidate);
-    if (tick === null) {
-      lo = candidate;
-      break;
-    }
-    hi = Math.min(hi, tick);
-    span *= 2;
-    if (candidate === 0) break;
-  }
-
-  if (lo === null) {
-    // The public endpoint still returned history all the way to epoch zero.
-    // Treat the earliest returned tick as the boundary.
-    const tick = await probe(0);
-    if (tick === null) return null;
-    earliestTickCache.set(symbol, tick);
-    return tick;
-  }
-
-  // Binary-search the transition between "no history" and "history exists".
-  // The returned tick is then refined with a small forward request so the
-  // exact earliest available tick is used rather than an approximate probe.
-  let left = lo;
-  let right = hi;
-  for (let i = 0; i < 34 && right - left > 1; i += 1) {
-    const mid = Math.floor((left + right) / 2);
-    const tick = await probe(mid);
-    if (tick === null) left = mid;
-    else right = mid;
-  }
-
-  const refined = await probe(right);
-  if (refined === null) return null;
-  earliestTickCache.set(symbol, refined);
-  return refined;
-}
-
 const FALLBACK_BASE_SECONDS: Record<string, number> = {
   '20m': 600,
   '45m': 900,
@@ -1171,27 +1101,34 @@ export default function FinancialChart({ symbol, isActive = false, liveTick, req
       if (goal !== undefined && anchor <= goal) break;
 
       const interval = widget.interval();
-      const seconds = intervalSeconds(interval);
-      const pageSpan = FAST_HISTORY_PAGE_SIZE * seconds;
-      const requests = Array.from({ length: FAST_HISTORY_PAGES_PER_BATCH }, (_, index) => ({
-        symbol: symbolRef.current,
-        interval,
-        to: Math.floor(anchor - 1 - index * pageSpan),
-        noCache: false,
-      }));
-
+      let pageEnd = Math.floor(anchor - 1);
       const pages: Candle[][] = [];
-      for (let offset = 0; offset < requests.length; offset += FAST_HISTORY_CONCURRENCY) {
-        const batch = requests.slice(offset, offset + FAST_HISTORY_CONCURRENCY);
-        const results = await Promise.all(batch.map(req =>
-          requestBars(req, requestHistoryRef.current).catch(() => [] as Candle[])
-        ));
-        pages.push(...results);
+
+      // Page from the actual provider response boundary. Do not calculate a
+      // calendar/date lower bound and do not assume a fixed amount of time is
+      // represented by 5,000 returned bars (custom intervals may be rebuilt
+      // from a finer fallback interval).
+      for (let page = 0; page < FAST_HISTORY_PAGES_PER_BATCH; page += 1) {
+        const result = await requestBars({
+          symbol: symbolRef.current,
+          interval,
+          to: pageEnd,
+          noCache: false,
+        }, requestHistoryRef.current).catch(() => [] as Candle[]);
+
+        const olderPage = result
+          .filter(bar => bar.time < anchor && bar.time <= pageEnd)
+          .sort((a, b) => a.time - b.time);
+
+        if (!olderPage.length) break;
+        pages.push(olderPage);
+
+        const oldest = olderPage[0]?.time;
+        if (!Number.isFinite(oldest) || oldest >= pageEnd) break;
+        pageEnd = Math.floor(oldest - 1);
       }
 
-      const older = pages.flat()
-        .filter(bar => bar.time < anchor)
-        .sort((a, b) => a.time - b.time);
+      const older = pages.flat().sort((a, b) => a.time - b.time);
       if (!older.length) break;
 
       // Native OpenAlgo history paging preserves the logical viewport.
@@ -1229,27 +1166,32 @@ export default function FinancialChart({ symbol, isActive = false, liveTick, req
       if (!Number.isFinite(anchor)) return;
 
       const interval = widget.interval();
-      const seconds = intervalSeconds(interval);
-      const pageSpan = FAST_HISTORY_PAGE_SIZE * seconds;
-      const requests = Array.from({ length: FAST_HISTORY_PAGES_PER_BATCH }, (_, index) => ({
-        symbol: symbolRef.current,
-        interval,
-        to: Math.floor(anchor - 1 - index * pageSpan),
-        noCache: false,
-      }));
-
+      let pageEnd = Math.floor(anchor - 1);
       const pages: Candle[][] = [];
-      for (let offset = 0; offset < requests.length; offset += FAST_HISTORY_CONCURRENCY) {
-        const batch = requests.slice(offset, offset + FAST_HISTORY_CONCURRENCY);
-        const results = await Promise.all(batch.map(req =>
-          requestBars(req, requestHistoryRef.current).catch(() => [] as Candle[])
-        ));
-        pages.push(...results);
+
+      // Replay backfill also follows the provider's actual oldest returned
+      // candle rather than a calendar-derived page span.
+      for (let page = 0; page < FAST_HISTORY_PAGES_PER_BATCH; page += 1) {
+        const result = await requestBars({
+          symbol: symbolRef.current,
+          interval,
+          to: pageEnd,
+          noCache: false,
+        }, requestHistoryRef.current).catch(() => [] as Candle[]);
+
+        const olderPage = result
+          .filter(bar => bar.time < anchor && bar.time <= pageEnd)
+          .sort((a, b) => a.time - b.time);
+
+        if (!olderPage.length) break;
+        pages.push(olderPage);
+
+        const oldest = olderPage[0]?.time;
+        if (!Number.isFinite(oldest) || oldest >= pageEnd) break;
+        pageEnd = Math.floor(oldest - 1);
       }
 
-      const older = pages.flat()
-        .filter(bar => bar.time < anchor)
-        .sort((a, b) => a.time - b.time);
+      const older = pages.flat().sort((a, b) => a.time - b.time);
 
       if (!older.length) return;
 
