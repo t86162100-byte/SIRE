@@ -81,10 +81,9 @@ export default function FinancialChart({
       // Use OpenAlgo's base chart engine directly. This is still the same
       // openalgo-charts library; it removes only the widget chrome so there
       // is no second UI/data lifecycle involved in rendering the candles.
-      chart = createChart(host, {
-        timezone: 'UTC',
-        renderer: 'canvas2d',
-      });
+      // Use the documented base-engine construction path exactly: the host
+      // supplies the dimensions and OpenAlgo owns the canvas inside it.
+      chart = createChart(host, { timezone: 'UTC' });
       series = chart.addSeries('candlestick');
       chartRef.current = chart;
       seriesRef.current = series;
