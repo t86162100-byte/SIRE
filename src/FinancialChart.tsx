@@ -569,7 +569,7 @@ export default function FinancialChart({ symbol, isActive = false, liveTick, req
         // retained in historyCache, so the user can traverse:
         // first available candle <-> latest candle.
         const cached = getCachedHistory(req.symbol, req.interval);
-        const bars = cached.length
+        let bars = cached.length
           ? cached.slice(-FAST_HISTORY_PAGE_SIZE)
           : await requestBars({
               symbol: req.symbol,
