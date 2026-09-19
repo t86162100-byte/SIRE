@@ -49,7 +49,7 @@ const DERIV_PAGE_SIZE = 5000;
 // Load a safe first page, then keep paging older candles on demand until Deriv
 // reports that there is no more history. This avoids a mobile renderer overload
 // without imposing a permanent historical-data limit.
-const DERIV_INITIAL_BARS = DERIV_PAGE_SIZE;
+const DERIV_INITIAL_BARS = 500;
 const DERIV_INTERVAL_SECONDS: Record<string, number> = Object.fromEntries(Object.entries(INTERVAL_SECONDS));
 let derivRequestId = 0;
 const nextDerivRequestId = () => ++derivRequestId;
@@ -631,14 +631,16 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
         current = next;
         const series = widgetRef.current?.primarySeries();
         if (series) {
-          // Do not rely on the chart package's optional `update()` implementation
-          // for the live Deriv stream. Replacing only the last bar makes the live
-          // tick path deterministic across renderer versions and mobile browsers.
-          const bars = ((series as any).getData?.() || []) as DerivBar[];
-          const replaced = bars.length && bars[bars.length - 1].time === next.time
-            ? [...bars.slice(0, -1), next]
-            : [...bars, next];
-          (series as any).setData?.(replaced);
+          const update = (series as any).update;
+          if (typeof update === 'function') {
+            update.call(series, next);
+          } else {
+            const bars = ((series as any).getData?.() || []) as DerivBar[];
+            const replaced = bars.length && bars[bars.length - 1].time === next.time
+              ? [...bars.slice(0, -1), next]
+              : [...bars, next];
+            (series as any).setData?.(replaced);
+          }
         }
         const bars = ((widgetRef.current?.primarySeries()?.getData?.() || []) as DerivBar[]);
         const previousClosed = bars.length > 1 ? bars[bars.length - 2] : null;
