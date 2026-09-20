@@ -588,8 +588,8 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
     // controller at the selected start bar.
     const sessionBars = allBars.filter(bar => bar.time <= endTime);
     const startIndex = sessionBars.findIndex(bar => bar.time >= startTime);
-    if (startIndex < 1 || sessionBars.length <= startIndex) {
-      setReplayRangeError('Not enough loaded history exists before the selected replay start.');
+    if (startIndex < 0 || sessionBars.length <= startIndex || sessionBars.length < 2) {
+      setReplayRangeError('Not enough loaded history exists in the selected replay range.');
       return;
     }
 
@@ -605,9 +605,13 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
         setReplayState(state);
         // Keep the replay playhead in the same visible region as the live
         // chart without changing the user's zoom level.
-        const visible = Math.max(1, Math.round(getChartTimeScale(widget.chart)?.getVisibleLogicalRange?.()?.to - (getChartTimeScale(widget.chart)?.getVisibleLogicalRange?.()?.from ?? 0) + 1 || 10));
+        const scale = getChartTimeScale(widget.chart);
+        const range = scale?.getVisibleLogicalRange?.();
+        const visible = range && Number.isFinite(range.from) && Number.isFinite(range.to)
+          ? Math.max(1, Math.round(range.to - range.from + 1))
+          : 10;
         const from = Math.max(0, state.index - visible + 1);
-        getChartTimeScale(widget.chart)?.setVisibleLogicalRange?.({ from, to: state.index });
+        scale?.setVisibleLogicalRange?.({ from, to: state.index });
       };
       const offStart = widget.chart.on('replay:start', handleState);
       const offFrame = widget.chart.on('replay:frame', handleState);
