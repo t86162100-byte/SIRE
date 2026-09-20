@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { ChevronLeft, ChevronRight, Eye, History, Lock, Minus, MoreHorizontal, Pause, Play, RotateCcw, Settings2, SkipBack, SkipForward, Trash2, Wrench, X } from 'lucide-react';
-import { registerInterval } from 'openalgo-charts';
+import { registerInterval, ReplayController } from 'openalgo-charts';
 import 'openalgo-charts/indicators';
 import 'openalgo-charts/draw';
 import 'openalgo-charts/trade';
@@ -194,165 +194,26 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
   const [activeTimeframe, setActiveTimeframe] = useState('1m');
   const [swipeAnimation, setSwipeAnimation] = useState<'up' | 'down' | null>(null);
   const widgetRef = useRef<Widget | null>(null);
-  type ReplayState = {
-    index: number;
-    total: number;
-    playing: boolean;
-    subIndex: number;
-    subSteps: number;
-    bar: DerivBar | null;
-  };
-  type ReplayRuntime = {
-    state: () => ReplayState;
-    play: (options?: { speed?: number }) => void;
-    pause: () => void;
-    stop: () => void;
-    step: () => void;
-    stepBack: () => void;
-    seek: (index: number) => void;
-  };
-  const replayRef = useRef<ReplayRuntime | null>(null);
+  const replayRef = useRef<ReplayController | null>(null);
   const replayModeRef = useRef(false);
   const replayOriginalBarsRef = useRef<DerivBar[]>([]);
-  const dataFeedRef = useRef<ReturnType<typeof createDerivDataFeed> | null>(null);
-  const instrumentsRef = useRef(instruments);
-  const onSelectInstrumentRef = useRef(onSelectInstrument);
-  const symbolRef = useRef(symbol);
-  const timeframeRef = useRef(activeTimeframe);
-  // Keep the full history loaded, but don't fit hundreds of candles into the
-  // initial mobile viewport. The chart engine can auto-fit after setData(), so
-  // we explicitly establish a readable first viewport once per symbol/timeframe.
-  const initialViewportContextRef = useRef('');
-  instrumentsRef.current = instruments;
-  onSelectInstrumentRef.current = onSelectInstrument;
-  symbolRef.current = symbol;
-  timeframeRef.current = activeTimeframe;
-  const marketInstrument = instruments.find(item => item.symbol === symbol);
-  const marketInstrumentName = marketInstrument?.name || symbol;
-  const reportDiagnostic = (event: DerivFeedDiagnostic & { stack?: string; location?: DiagnosticLocation; operation?: string }) => {
-    const now = Date.now();
-    const item: ChartDiagnostic = { ...event, id: ++diagnosticIdRef.current, timestamp: now };
-    const add = (resolved: ChartDiagnostic) => {
-      setDiagnostics(current => {
-        const last = current[current.length - 1];
-        if (last && last.code === resolved.code && last.message === resolved.message && now - last.timestamp < 5000) return current;
-        return [...current, resolved];
-      });
-      if (resolved.level === 'error') setDiagnosticsOpen(true);
-    };
-    if (item.location?.file && /\/assets\/[^/]+\.js$/i.test(item.location.file)) {
-      void resolveSourceMappedLocation(item.location).then(location => add({ ...item, location }));
-    } else {
-      add(item);
-    }
-  };
 
-  const getChartTimeScale = (chart: any) => {
-    const value = chart?.timeScale;
-    if (typeof value === 'function') return value.call(chart);
-    return value;
-  };
-
-  const formatMarketPrice = (price: number) => {
-    if (!Number.isFinite(price)) return '—';
-    const pipSize = Number(marketInstrument?.pipSize);
-    const decimals = Number.isFinite(pipSize) && pipSize > 0 ? Math.max(0, Math.min(8, Math.ceil(-Math.log10(pipSize)))) : 2;
-    return price.toFixed(decimals);
-  };
-
-  useEffect(() => {
-    const nextIndex = instruments.findIndex(item => item.symbol === symbol);
-    if (nextIndex >= 0) setSwipeInstrumentIndex(nextIndex);
-  }, [instruments, symbol]);
-
-  const compactInstrumentName = (name: string) => {
-    const first = name.trim().split(/\s+/)[0] || symbol;
-    return `${first.replace(/[^a-zA-Z]/g, '').toUpperCase().slice(0, 5)}_`;
-  };
-  const swipeInstrument = (direction: 1 | -1) => {
-    if (!instruments.length) return;
-    const currentIndex = Math.max(0, instruments.findIndex(item => item.symbol === symbol));
-    const nextIndex = Math.max(0, Math.min(instruments.length - 1, currentIndex + direction));
-    const next = instruments[nextIndex];
-    if (next && next.symbol !== symbol) onSelectInstrument(next);
-  };
-  const triggerSwipeStep = (direction: 1 | -1) => {
-    if (!instruments.length) return;
-    const currentIndex = Math.max(0, instruments.findIndex(item => item.symbol === symbol));
-    const nextIndex = Math.max(0, Math.min(instruments.length - 1, currentIndex + direction));
-    if (nextIndex === currentIndex) return;
-    setSwipeAnimation(direction > 0 ? 'up' : 'down');
-    swipeInstrument(direction);
-    window.setTimeout(() => setSwipeAnimation(null), 320);
-  };
-  const clearTimeframeHold = () => { if (timeframeHoldTimerRef.current !== null) { window.clearTimeout(timeframeHoldTimerRef.current); timeframeHoldTimerRef.current = null; } };
-  const selectTimeframe = (interval: string) => {
-    const widget = widgetRef.current;
-    if (!widget) return;
-    setActiveTimeframe(interval);
-    setTimeframeOpen(false);
-    widget.setInterval(interval);
-  };
-  const handleTimeframePointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
-    if (event.pointerType === 'mouse' && event.button !== 0) return;
-    event.preventDefault();
-    event.currentTarget.setPointerCapture?.(event.pointerId);
-    timeframeSwipeStartYRef.current = event.clientY;
-    timeframeSwipeAccumulatedRef.current = 0;
-    timeframeHoldTriggeredRef.current = false;
-    clearTimeframeHold();
-    timeframeHoldTimerRef.current = window.setTimeout(() => { timeframeHoldTriggeredRef.current = true; setTimeframeOpen(true); }, 600);
-  };
-  const handleTimeframePointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
-    if (timeframeHoldTriggeredRef.current) return;
-    const delta = event.clientY - timeframeSwipeStartYRef.current;
-    if (Math.abs(delta) >= 8) clearTimeframeHold();
-    if (Math.abs(delta) < 45 || timeframeSwipeAnimatingRef.current) return;
-    const direction: 1 | -1 = delta < 0 ? 1 : -1;
-    const currentIndex = CHART_INTERVALS.indexOf(activeTimeframe);
-    const nextIndex = Math.max(0, Math.min(CHART_INTERVALS.length - 1, currentIndex + direction));
-    if (nextIndex !== currentIndex) {
-      timeframeSwipeAnimatingRef.current = true;
-      selectTimeframe(CHART_INTERVALS[nextIndex]);
-      window.setTimeout(() => { timeframeSwipeAnimatingRef.current = false; }, 280);
-    }
-    timeframeSwipeStartYRef.current = event.clientY;
-    timeframeSwipeAccumulatedRef.current = 0;
-  };
-  const handleTimeframePointerEnd = (event: React.PointerEvent<HTMLDivElement>) => {
-    clearTimeframeHold(); timeframeHoldTriggeredRef.current = false; timeframeSwipeStartYRef.current = 0; timeframeSwipeAccumulatedRef.current = 0;
-    if (event.currentTarget.hasPointerCapture?.(event.pointerId)) event.currentTarget.releasePointerCapture?.(event.pointerId);
-  };
-  const clearInstrumentHold = () => { if (holdTimerRef.current !== null) { window.clearTimeout(holdTimerRef.current); holdTimerRef.current = null; } };
-  const handleInstrumentPointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
-    if (event.pointerType === 'mouse' && event.button !== 0) return;
-    event.preventDefault(); event.currentTarget.setPointerCapture?.(event.pointerId);
-    swipeStartYRef.current = event.clientY; swipeAccumulatedRef.current = 0; holdTriggeredRef.current = false; clearInstrumentHold();
-    holdTimerRef.current = window.setTimeout(() => { if (swipeStartYRef.current !== null) { holdTriggeredRef.current = true; onInstrumentTap?.(); } }, 600);
-  };
-  const handleInstrumentPointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
-    const start = swipeStartYRef.current; if (start === null) return;
-    const delta = event.clientY - start;
-    if (Math.abs(delta) >= 18 && !holdTriggeredRef.current) clearInstrumentHold();
-    if (Math.abs(delta) < 55 || swipeAnimatingRef.current || holdTriggeredRef.current) return;
-    triggerSwipeStep(delta < 0 ? 1 : -1); swipeAnimatingRef.current = true; swipeStartYRef.current = event.clientY; swipeAccumulatedRef.current = 0;
-    window.setTimeout(() => { swipeAnimatingRef.current = false; }, 320);
-  };
-  const handleInstrumentPointerEnd = (event: React.PointerEvent<HTMLDivElement>) => {
-    clearInstrumentHold(); swipeStartYRef.current = null; swipeAccumulatedRef.current = 0; holdTriggeredRef.current = false;
-    if (event.currentTarget.hasPointerCapture?.(event.pointerId)) event.currentTarget.releasePointerCapture?.(event.pointerId);
+  const syncReplayState = () => {
+    const replay = replayRef.current;
+    if (!replay) return;
+    setReplayState(replay.state());
   };
 
   const stopReplay = () => {
+    const replay = replayRef.current;
     const widget = widgetRef.current;
-    const series = widget?.chart.primarySeries();
-    const originalBars = replayOriginalBarsRef.current;
-    replayRef.current?.stop();
+    if (replay) {
+      const cleanup = (replay as any).__sireCleanup as (() => void) | undefined;
+      cleanup?.();
+      replay.stop();
+    }
     replayRef.current = null;
     replayModeRef.current = false;
-    if (series?.setData && originalBars.length) {
-      series.setData(originalBars.map(bar => ({ ...bar })));
-    }
     replayOriginalBarsRef.current = [];
     widget?.dataController?.setPaused(false);
     setReplayActive(false);
@@ -363,28 +224,43 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
   const toggleReplay = () => {
     const replay = replayRef.current;
     if (replay) {
-      const state = replay.state();
-      if (state.playing) replay.pause();
+      if (replay.state().playing) replay.pause();
       else replay.play({ speed: replaySpeedRef.current });
-      setReplayState(replay.state());
+      syncReplayState();
       return;
     }
     setReplaySetupOpen(open => !open);
   };
 
-  const replayStep = () => replayRef.current?.step();
-  const replayStepBack = () => replayRef.current?.stepBack();
-  const replayJumpStart = () => replayRef.current?.seek(0);
+  const replayStep = () => {
+    replayRef.current?.step();
+    syncReplayState();
+  };
+  const replayStepBack = () => {
+    replayRef.current?.stepBack();
+    syncReplayState();
+  };
+  const replayJumpStart = () => {
+    replayRef.current?.seek(0);
+    syncReplayState();
+  };
   const replayJumpEnd = () => {
     const replay = replayRef.current;
-    if (replay) replay.seek(Math.max(0, replay.state().total - 1));
+    if (replay) {
+      replay.seek(Math.max(0, replay.state().total - 1));
+      syncReplayState();
+    }
   };
-  const replaySeek = (index: number) => replayRef.current?.seek(index);
+  const replaySeek = (index: number) => {
+    replayRef.current?.seek(index);
+    syncReplayState();
+  };
 
   const setReplaySpeed = (speed: number) => {
     replaySpeedRef.current = speed;
     setReplayDraftSpeed(speed);
     if (replayRef.current?.state().playing) replayRef.current.play({ speed });
+    syncReplayState();
   };
 
   const formatReplayInputTime = (epoch: number) => {
@@ -425,10 +301,6 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
     setReplayEndInput(formatReplayInputTime(cappedEnd));
   };
 
-  useEffect(() => {
-    if (replaySetupOpen && !replayActive) refreshReplayBounds();
-  }, [replaySetupOpen, replayActive, symbol, activeTimeframe]);
-
   const startReplayFromInputs = async (fromBeginning: boolean, _toLatest: boolean) => {
     setReplayRangeError(null);
     const widget = widgetRef.current;
@@ -438,8 +310,8 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
     }
 
     const series = widget.chart.primarySeries();
-    if (!series?.getData || typeof series.setData !== 'function') {
-      setReplayRangeError('This chart version does not expose the data controls required for replay.');
+    if (!series?.getData) {
+      setReplayRangeError('Chart history is not available for replay yet.');
       return;
     }
 
@@ -502,84 +374,45 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
       return;
     }
 
-    const originalBars = allBars.map(bar => ({ ...bar }));
-    replayOriginalBarsRef.current = originalBars;
+    // The library ReplayController owns the chart data transition. This is
+    // important: it updates the actual DataLayer, keeps the time axis in sync,
+    // recomputes indicators, and restores the exact pre-replay viewport on stop.
+    replayOriginalBarsRef.current = allBars.map(bar => ({ ...bar }));
     replayModeRef.current = true;
     widget.dataController?.setPaused(true);
 
-    let index = 0;
-    let playing = false;
-    let timer: number | null = null;
-
-    const getState = (): ReplayState => ({
-      index,
-      total: bars.length,
-      playing,
-      subIndex: 0,
-      subSteps: 1,
-      bar: bars[index] ? { ...bars[index] } : null,
+    const replay = new ReplayController(widget.chart, {
+      series,
+      bars,
+      startIndex: 0,
+      barMs: 1000,
+      speed: replaySpeedRef.current,
+      onFrame: state => {
+        setReplayState(state);
+      },
     });
 
-    const render = () => {
-      if (!replayModeRef.current || !series) return;
-      const visible = bars.slice(0, index + 1).map(bar => ({ ...bar }));
-      series.setData(visible);
-      setReplayState(getState());
+    const offPlay = widget.chart.on('replay:play', state => setReplayState(state as any));
+    const offPause = widget.chart.on('replay:pause', state => setReplayState(state as any));
+    const offEnd = widget.chart.on('replay:end', state => setReplayState(state as any));
+    const offStop = widget.chart.on('replay:stop', () => {
+      setReplayState(null);
+    });
+
+    // Keep event unsubscriptions with this controller instance.
+    (replay as any).__sireCleanup = () => {
+      offPlay();
+      offPause();
+      offEnd();
+      offStop();
     };
 
-    const clearTimer = () => {
-      if (timer !== null) {
-        window.clearInterval(timer);
-        timer = null;
-      }
-    };
-
-    const runtime: ReplayRuntime = {
-      state: getState,
-      play: ({ speed = replaySpeedRef.current } = {}) => {
-        clearTimer();
-        playing = true;
-        const intervalMs = Math.max(50, 1000 / Math.max(0.1, speed));
-        timer = window.setInterval(() => {
-          if (index >= bars.length - 1) {
-            playing = false;
-            clearTimer();
-            setReplayState(getState());
-            return;
-          }
-          index += 1;
-          render();
-        }, intervalMs);
-        setReplayState(getState());
-      },
-      pause: () => {
-        playing = false;
-        clearTimer();
-        setReplayState(getState());
-      },
-      stop: () => {
-        playing = false;
-        clearTimer();
-      },
-      step: () => {
-        if (index < bars.length - 1) index += 1;
-        render();
-      },
-      stepBack: () => {
-        if (index > 0) index -= 1;
-        render();
-      },
-      seek: (nextIndex: number) => {
-        index = Math.max(0, Math.min(bars.length - 1, Math.floor(nextIndex)));
-        render();
-      },
-    };
-
-    replayRef.current = runtime;
+    replayRef.current = replay;
     setReplayActive(true);
     setReplaySetupOpen(false);
-    render();
+    setReplayState(replay.state());
   };
+
   const toggleTpo = () => setTpoEnabled(value => !value);
 
   useEffect(() => {
