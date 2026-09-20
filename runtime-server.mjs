@@ -166,7 +166,7 @@ const server = http.createServer(async (req,res) => {
 
       const stored = await getStoredHistory(symbol, interval, end, count);
       const providerBars = Array.isArray(providerResult?.candles) ? providerResult.candles : [];
-      const byEpoch = new Map<number, any>();
+      const byEpoch = new Map();
       for (const candle of [...stored.bars, ...providerBars]) {
         const epoch = Number(candle?.epoch);
         if (Number.isFinite(epoch)) byEpoch.set(epoch, candle);
