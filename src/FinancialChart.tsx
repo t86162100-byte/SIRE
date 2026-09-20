@@ -397,13 +397,37 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
     const seriesBars = (widgetRef.current?.chart.primarySeries()?.getData?.() || []) as DerivBar[];
     const sorted = [...seriesBars].filter(bar => Number.isFinite(bar?.time)).sort((a, b) => a.time - b.time);
     const oldest = sorted[0]?.time;
+    const latestLoaded = sorted[sorted.length - 1]?.time;
     const now = Math.floor(Date.now() / 1000);
-    if (Number.isFinite(oldest)) setReplayStartMin(formatReplayInputTime(oldest as number));
-    setReplayNow(formatReplayInputTime(now));
-    const currentStart = replayStartInput ? new Date(replayStartInput).getTime() / 1000 : (oldest ?? now);
-    const cappedStart = Math.max(oldest ?? 0, Math.min(now, currentStart));
+    const latest = Math.min(now, latestLoaded ?? now);
+
+    if (!Number.isFinite(oldest)) {
+      setReplayRangeError('No historical candles are loaded yet.');
+      return;
+    }
+
+    const minText = formatReplayInputTime(oldest as number);
+    const maxText = formatReplayInputTime(latest as number);
+    setReplayStartMin(minText);
+    setReplayNow(maxText);
+
+    const parse = (value: string) => {
+      const ms = value ? new Date(value).getTime() : NaN;
+      return Number.isFinite(ms) ? Math.floor(ms / 1000) : null;
+    };
+
+    const currentStart = parse(replayStartInput) ?? (oldest as number);
+    const currentEnd = parse(replayEndInput) ?? latest;
+    const cappedStart = Math.max(oldest as number, Math.min(latest, currentStart));
+    const cappedEnd = Math.max(cappedStart, Math.min(latest, currentEnd));
+
     setReplayStartInput(formatReplayInputTime(cappedStart));
+    setReplayEndInput(formatReplayInputTime(cappedEnd));
   };
+
+  useEffect(() => {
+    if (replaySetupOpen && !replayActive) refreshReplayBounds();
+  }, [replaySetupOpen, replayActive, symbol, activeTimeframe]);
 
   const startReplayFromInputs = async (fromBeginning: boolean, _toLatest: boolean) => {
     setReplayRangeError(null);
@@ -457,8 +481,22 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
       return;
     }
 
-    const startTime = Math.max(leftEdge, Math.min(now, requestedStart ?? leftEdge));
-    const bars = allBars.filter(bar => bar.time >= startTime && bar.time <= now);
+    const latestLoadedTime = allBars[allBars.length - 1].time;
+    const latestAllowedTime = Math.min(now, latestLoadedTime);
+    const requestedEnd = parseReplayTime(replayEndInput);
+    if (!fromBeginning && replayEndInput && requestedEnd === null) {
+      setReplayRangeError('Invalid replay end date/time.');
+      return;
+    }
+
+    const startTime = Math.max(leftEdge, Math.min(latestAllowedTime, requestedStart ?? leftEdge));
+    const endTime = Math.max(startTime, Math.min(latestAllowedTime, requestedEnd ?? latestAllowedTime));
+    if (endTime <= startTime) {
+      setReplayRangeError('Replay end must be after the replay start.');
+      return;
+    }
+
+    const bars = allBars.filter(bar => bar.time >= startTime && bar.time <= endTime);
     if (bars.length < 2) {
       setReplayRangeError('Not enough loaded history exists in the selected replay range.');
       return;
@@ -853,9 +891,19 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
       {replaySetupOpen && !replayActive && (
         <div className="sire-replay-setup" role="dialog" aria-label="Set replay range">
           <div className="sire-replay-setup-row">
-            <input aria-label="Replay start date and time" type="datetime-local" min={replayStartMin || undefined} max={replayNow || undefined} value={replayStartInput} onChange={event => { const value = event.target.value; setReplayStartInput(replayStartMin && value < replayStartMin ? replayStartMin : replayNow && value > replayNow ? replayNow : value); }} title="Start (capped at the left edge)" />
+            <input aria-label="Replay start date and time" type="datetime-local" min={replayStartMin || undefined} max={replayEndInput || replayNow || undefined} value={replayStartInput} onChange={event => {
+              const value = event.target.value;
+              const bounded = replayStartMin && value < replayStartMin ? replayStartMin : (replayNow && value > replayNow ? replayNow : value);
+              setReplayStartInput(bounded);
+              if (replayEndInput && bounded > replayEndInput) setReplayEndInput(bounded);
+            }} title="Replay start" />
             <span aria-hidden="true">→</span>
-            <input aria-label="Replay finish time (current time)" type="datetime-local" value={replayNow} readOnly disabled title="Finish is always the current time" />
+            <input aria-label="Replay end date and time" type="datetime-local" min={replayStartInput || replayStartMin || undefined} max={replayNow || undefined} value={replayEndInput} onChange={event => {
+              const value = event.target.value;
+              const bounded = replayNow && value > replayNow ? replayNow : value;
+              setReplayEndInput(bounded);
+              if (replayStartInput && bounded < replayStartInput) setReplayStartInput(bounded);
+            }} title="Replay end" />
           </div>
           <div className="sire-replay-quick-row">
             <button type="button" onClick={() => startReplayFromInputs(true, true)} aria-label="Replay from beginning to latest" title="Beginning to latest">⏮▶</button>
