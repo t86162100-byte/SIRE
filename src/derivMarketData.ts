@@ -36,7 +36,7 @@ export const DERIV_PROXY_WS_URL = typeof window !== 'undefined'
   : DERIV_DIRECT_WS_URL;
 export const DERIV_REQUEST_TIMEOUT = 20000;
 export const DERIV_PAGE_SIZE = 500;
-export const DERIV_INITIAL_BARS = 500; // Startup window only; older candles are loaded progressively.
+export const DERIV_INITIAL_BARS = 10000; // Large startup stress-test window; older candles are still loaded progressively.
 
 export const DERIV_INTERVAL_SECONDS: Record<string, number> = {
   '1m': 60, '2m': 120, '3m': 180, '5m': 300, '10m': 600, '15m': 900,
