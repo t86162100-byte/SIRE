@@ -580,9 +580,16 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
       return;
     }
 
-    const bars = allBars.filter(bar => bar.time >= startTime && bar.time <= endTime);
-    if (bars.length < 2) {
-      setReplayRangeError('Not enough loaded history exists in the selected replay range.');
+    // ReplayController's startIndex is the visible playhead inside the FULL
+    // session. Passing only the selected slice with startIndex=0 would leave
+    // the chart with a one-bar prefix at replay start, and can also leave the
+    // widget's logical viewport anchored outside that prefix. Keep the loaded
+    // history through the selected end as the replay session and point the
+    // controller at the selected start bar.
+    const sessionBars = allBars.filter(bar => bar.time <= endTime);
+    const startIndex = sessionBars.findIndex(bar => bar.time >= startTime);
+    if (startIndex < 1 || sessionBars.length <= startIndex) {
+      setReplayRangeError('Not enough loaded history exists before the selected replay start.');
       return;
     }
 
@@ -594,7 +601,14 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
 
     let replay: ReplayController | null = null;
     try {
-      const handleState = (state: ReplayState) => setReplayState(state);
+      const handleState = (state: ReplayState) => {
+        setReplayState(state);
+        // Keep the replay playhead in the same visible region as the live
+        // chart without changing the user's zoom level.
+        const visible = Math.max(1, Math.round(getChartTimeScale(widget.chart)?.getVisibleLogicalRange?.()?.to - (getChartTimeScale(widget.chart)?.getVisibleLogicalRange?.()?.from ?? 0) + 1 || 10));
+        const from = Math.max(0, state.index - visible + 1);
+        getChartTimeScale(widget.chart)?.setVisibleLogicalRange?.({ from, to: state.index });
+      };
       const offStart = widget.chart.on('replay:start', handleState);
       const offFrame = widget.chart.on('replay:frame', handleState);
       const offPlay = widget.chart.on('replay:play', handleState);
@@ -616,8 +630,8 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
 
       replay = new ReplayController(widget.chart, {
         series,
-        bars,
-        startIndex: 0,
+        bars: sessionBars,
+        startIndex,
         barMs: 1000,
         speed: replaySpeedRef.current,
         onFrame: handleState,
