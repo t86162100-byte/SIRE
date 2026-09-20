@@ -277,4 +277,4 @@ server.on('upgrade',(req,socket,head)=>{
   });
 });
 
-server.listen(PORT,HOST,()=>console.log(`SIRE server listening on ${HOST}:${PORT}`));
+server.listen(PORT,HOST,async()=>{ console.log(`SIRE server listening on ${HOST}:${PORT}`); console.log('[DERIV HISTORY STORE]', JSON.stringify(await historyStoreStatus())); });
