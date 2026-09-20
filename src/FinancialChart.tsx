@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { ChevronLeft, ChevronRight, Eye, History, Lock, Minus, MoreHorizontal, Pause, Play, RotateCcw, Settings2, SkipBack, SkipForward, Trash2, Wrench, X } from 'lucide-react';
-import { registerInterval, ReplayController } from 'openalgo-charts';
+import { registerInterval } from 'openalgo-charts';
 import 'openalgo-charts/indicators';
 import 'openalgo-charts/draw';
 import 'openalgo-charts/trade';
@@ -194,7 +194,26 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
   const [activeTimeframe, setActiveTimeframe] = useState('1m');
   const [swipeAnimation, setSwipeAnimation] = useState<'up' | 'down' | null>(null);
   const widgetRef = useRef<Widget | null>(null);
-  const replayRef = useRef<ReplayController | null>(null);
+  type ReplayState = {
+    index: number;
+    total: number;
+    playing: boolean;
+    subIndex: number;
+    subSteps: number;
+    bar: DerivBar | null;
+  };
+  type ReplayRuntime = {
+    state: () => ReplayState;
+    play: (options?: { speed?: number }) => void;
+    pause: () => void;
+    stop: () => void;
+    step: () => void;
+    stepBack: () => void;
+    seek: (index: number) => void;
+  };
+  const replayRef = useRef<ReplayRuntime | null>(null);
+  const replayModeRef = useRef(false);
+  const replayOriginalBarsRef = useRef<DerivBar[]>([]);
   const dataFeedRef = useRef<ReturnType<typeof createDerivDataFeed> | null>(null);
   const instrumentsRef = useRef(instruments);
   const onSelectInstrumentRef = useRef(onSelectInstrument);
@@ -325,13 +344,22 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
   };
 
   const stopReplay = () => {
+    const widget = widgetRef.current;
+    const series = widget?.chart.primarySeries();
+    const originalBars = replayOriginalBarsRef.current;
     replayRef.current?.stop();
     replayRef.current = null;
-    widgetRef.current?.dataController?.setPaused(false);
+    replayModeRef.current = false;
+    if (series?.setData && originalBars.length) {
+      series.setData(originalBars.map(bar => ({ ...bar })));
+    }
+    replayOriginalBarsRef.current = [];
+    widget?.dataController?.setPaused(false);
     setReplayActive(false);
     setReplayState(null);
     setReplaySetupOpen(false);
   };
+
   const toggleReplay = () => {
     const replay = replayRef.current;
     if (replay) {
@@ -343,6 +371,7 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
     }
     setReplaySetupOpen(open => !open);
   };
+
   const replayStep = () => replayRef.current?.step();
   const replayStepBack = () => replayRef.current?.stepBack();
   const replayJumpStart = () => replayRef.current?.seek(0);
@@ -351,73 +380,167 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
     if (replay) replay.seek(Math.max(0, replay.state().total - 1));
   };
   const replaySeek = (index: number) => replayRef.current?.seek(index);
-  const setReplaySpeed = (speed: number) => { replaySpeedRef.current = speed; setReplayDraftSpeed(speed); if (replayRef.current?.state().playing) replayRef.current.play({ speed }); };
+
+  const setReplaySpeed = (speed: number) => {
+    replaySpeedRef.current = speed;
+    setReplayDraftSpeed(speed);
+    if (replayRef.current?.state().playing) replayRef.current.play({ speed });
+  };
+
   const formatReplayInputTime = (epoch: number) => {
     const date = new Date(epoch * 1000);
     const pad = (value: number) => String(value).padStart(2, '0');
     return date.getFullYear() + '-' + pad(date.getMonth() + 1) + '-' + pad(date.getDate()) + 'T' + pad(date.getHours()) + ':' + pad(date.getMinutes());
   };
+
   const refreshReplayBounds = () => {
-    const oldest = (widgetRef.current?.chart.primarySeries()?.getData?.() as DerivBar[] | undefined)?.[0]?.time;
+    const seriesBars = (widgetRef.current?.chart.primarySeries()?.getData?.() || []) as DerivBar[];
+    const sorted = [...seriesBars].filter(bar => Number.isFinite(bar?.time)).sort((a, b) => a.time - b.time);
+    const oldest = sorted[0]?.time;
     const now = Math.floor(Date.now() / 1000);
-    if (oldest && Number.isFinite(oldest)) setReplayStartMin(formatReplayInputTime(oldest));
+    if (Number.isFinite(oldest)) setReplayStartMin(formatReplayInputTime(oldest as number));
     setReplayNow(formatReplayInputTime(now));
-    const currentStart = replayStartInput ? new Date(replayStartInput).getTime() / 1000 : oldest ?? now;
+    const currentStart = replayStartInput ? new Date(replayStartInput).getTime() / 1000 : (oldest ?? now);
     const cappedStart = Math.max(oldest ?? 0, Math.min(now, currentStart));
     setReplayStartInput(formatReplayInputTime(cappedStart));
   };
-  const startReplayFromInputs = async (fromBeginning: boolean, toLatest: boolean) => {
+
+  const startReplayFromInputs = async (fromBeginning: boolean, _toLatest: boolean) => {
     setReplayRangeError(null);
-    refreshReplayBounds();
     const widget = widgetRef.current;
-    if (!widget) { setReplayRangeError('Chart is still loading.'); return; }
-    replayRef.current?.stop();
-    replayRef.current = null;
+    if (!widget) {
+      setReplayRangeError('Chart is still loading.');
+      return;
+    }
 
     const series = widget.chart.primarySeries();
-    if (!series) { setReplayRangeError('No chart data is loaded yet.'); return; }
+    if (!series?.getData || typeof series.setData !== 'function') {
+      setReplayRangeError('This chart version does not expose the data controls required for replay.');
+      return;
+    }
 
-    let allBars = (series.getData?.() || []) as DerivBar[];
+    replayRef.current?.stop();
+    replayRef.current = null;
+    replayModeRef.current = false;
+
+    let allBars = (series.getData() || []) as DerivBar[];
     if (!allBars.length) {
       try {
         await widget.reload();
-        allBars = (series.getData?.() || []) as DerivBar[];
+        allBars = (series.getData() || []) as DerivBar[];
       } catch (error) {
         setReplayRangeError(error instanceof Error ? error.message : 'Unable to load chart history for replay.');
         return;
       }
     }
-    allBars = [...allBars].sort((a, b) => a.time - b.time);
+
+    allBars = [...allBars]
+      .filter(bar => Number.isFinite(bar?.time) && Number.isFinite(bar?.open) && Number.isFinite(bar?.high) && Number.isFinite(bar?.low) && Number.isFinite(bar?.close))
+      .sort((a, b) => a.time - b.time);
+
+    if (allBars.length < 2) {
+      setReplayRangeError('Not enough chart history is loaded for replay.');
+      return;
+    }
 
     const parseReplayTime = (value: string) => {
       if (!value) return null;
       const ms = new Date(value).getTime();
       return Number.isFinite(ms) ? Math.floor(ms / 1000) : null;
     };
-    const leftEdge = allBars[0]?.time ?? Math.floor(Date.now() / 1000);
+
+    const leftEdge = allBars[0].time;
     const now = Math.floor(Date.now() / 1000);
     const requestedStart = fromBeginning ? leftEdge : parseReplayTime(replayStartInput);
-    if (!fromBeginning && replayStartInput && requestedStart === null) { setReplayRangeError('Invalid replay start date/time.'); return; }
+    if (!fromBeginning && replayStartInput && requestedStart === null) {
+      setReplayRangeError('Invalid replay start date/time.');
+      return;
+    }
+
     const startTime = Math.max(leftEdge, Math.min(now, requestedStart ?? leftEdge));
-    const endTime = now;
-    if (startTime >= endTime) { setReplayRangeError('Replay start must be before the current time.'); return; }
+    const bars = allBars.filter(bar => bar.time >= startTime && bar.time <= now);
+    if (bars.length < 2) {
+      setReplayRangeError('Not enough loaded history exists in the selected replay range.');
+      return;
+    }
 
-    const bars = allBars.filter(bar => bar.time >= startTime && bar.time <= endTime);
-    if (bars.length < 2) { setReplayRangeError('Not enough chart history in the selected replay range.'); return; }
-
+    const originalBars = allBars.map(bar => ({ ...bar }));
+    replayOriginalBarsRef.current = originalBars;
+    replayModeRef.current = true;
     widget.dataController?.setPaused(true);
-    const replay = new ReplayController(widget.chart, {
-      series,
-      bars,
-      startIndex: 0,
-      barMs: 1000,
-      speed: replaySpeedRef.current,
-      onFrame: state => setReplayState(state),
+
+    let index = 0;
+    let playing = false;
+    let timer: number | null = null;
+
+    const getState = (): ReplayState => ({
+      index,
+      total: bars.length,
+      playing,
+      subIndex: 0,
+      subSteps: 1,
+      bar: bars[index] ? { ...bars[index] } : null,
     });
-    replayRef.current = replay;
+
+    const render = () => {
+      if (!replayModeRef.current || !series) return;
+      const visible = bars.slice(0, index + 1).map(bar => ({ ...bar }));
+      series.setData(visible);
+      setReplayState(getState());
+    };
+
+    const clearTimer = () => {
+      if (timer !== null) {
+        window.clearInterval(timer);
+        timer = null;
+      }
+    };
+
+    const runtime: ReplayRuntime = {
+      state: getState,
+      play: ({ speed = replaySpeedRef.current } = {}) => {
+        clearTimer();
+        playing = true;
+        const intervalMs = Math.max(50, 1000 / Math.max(0.1, speed));
+        timer = window.setInterval(() => {
+          if (index >= bars.length - 1) {
+            playing = false;
+            clearTimer();
+            setReplayState(getState());
+            return;
+          }
+          index += 1;
+          render();
+        }, intervalMs);
+        setReplayState(getState());
+      },
+      pause: () => {
+        playing = false;
+        clearTimer();
+        setReplayState(getState());
+      },
+      stop: () => {
+        playing = false;
+        clearTimer();
+      },
+      step: () => {
+        if (index < bars.length - 1) index += 1;
+        render();
+      },
+      stepBack: () => {
+        if (index > 0) index -= 1;
+        render();
+      },
+      seek: (nextIndex: number) => {
+        index = Math.max(0, Math.min(bars.length - 1, Math.floor(nextIndex)));
+        render();
+      },
+    };
+
+    replayRef.current = runtime;
     setReplayActive(true);
     setReplaySetupOpen(false);
-    setReplayState(replay.state());
+    render();
   };
   const toggleTpo = () => setTpoEnabled(value => !value);
 
@@ -437,6 +560,7 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
         if (quote.symbol !== symbolRef.current) return;
         lastTickAtRef.current = Date.now();
         lastLiveQuoteRef.current = quote;
+        if (replayModeRef.current) return;
         const series = widgetRef.current?.chart.primarySeries();
         const bars = (series?.getData?.() || []) as DerivBar[];
         const previous = bars[bars.length - 1] || null;
@@ -939,3 +1063,4 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
     </div>
   );
 }
+
