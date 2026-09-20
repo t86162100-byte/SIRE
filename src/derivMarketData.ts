@@ -35,8 +35,6 @@ export const DERIV_PROXY_WS_URL = typeof window !== 'undefined'
   ? `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}/deriv/ws`
   : DERIV_DIRECT_WS_URL;
 export const DERIV_REQUEST_TIMEOUT = 20000;
-export const DERIV_PAGE_SIZE = 500;
-export const DERIV_INITIAL_BARS = 500; // Fast chart startup; history is warmed progressively after the first page.
 
 export const DERIV_INTERVAL_SECONDS: Record<string, number> = {
   '1m': 60, '2m': 120, '3m': 180, '5m': 300, '10m': 600, '15m': 900,
@@ -484,49 +482,34 @@ async function fetchDerivHistoryPage(symbol: string, seconds: number, end: numbe
   });
 }
 
-export async function fetchAllDerivHistory(symbol: string, interval: string, maxBars = DERIV_INITIAL_BARS) {
+export async function fetchDerivHistoryWindow(
+  symbol: string,
+  interval: string,
+  from?: number,
+  to?: number,
+  countBack?: number,
+) {
   const seconds = DERIV_INTERVAL_SECONDS[interval];
   if (!seconds) throw new Error(`Unsupported Deriv interval: ${interval}`);
-  const all: DerivBar[] = [];
-  let end: number | 'latest' = 'latest';
-  let previousOldest = Infinity;
-  while (all.length < maxBars) {
-    const count = Math.min(DERIV_PAGE_SIZE, maxBars - all.length);
-    const data = await fetchDerivHistoryPage(symbol, seconds, end, count);
-    const page = Array.isArray(data?.candles)
-      ? data.candles.map(derivBar).filter(Boolean) as DerivBar[]
-      : [];
-    page.sort((a, b) => a.time - b.time);
-    if (!page.length) break;
-    const seen = new Set(all.map(bar => bar.time));
-    for (const bar of page) if (!seen.has(bar.time)) all.push(bar);
-    all.sort((a, b) => a.time - b.time);
-    const oldest = page[0].time;
-    // Deriv can legitimately return a short page for a timeframe (notably D1)
-    // even when older candles still exist. Do not treat a short page as the
-    // end of history: keep paging backwards until the requested startup
-    // window is filled, the API returns no candles, or the oldest timestamp
-    // stops moving.
-    if (oldest <= 0 || oldest >= previousOldest) break;
-    previousOldest = oldest;
-    end = Math.max(1, oldest - 1);
-  }
-  return all.slice(-maxBars);
-}
 
-export async function fetchOlderDerivHistory(symbol: string, interval: string, end: number, count = DERIV_PAGE_SIZE, onProgress?: (progress: DerivHistoryProgress) => void) {
-  const seconds = DERIV_INTERVAL_SECONDS[interval];
-  if (!seconds) throw new Error(`Unsupported Deriv interval: ${interval}`);
-  const safeEnd = Math.max(1, Math.floor(end));
-  const data = await fetchDerivHistoryPage(symbol, seconds, safeEnd, count);
-  const raw = Array.isArray(data?.candles) ? data.candles : [];
-  const bars = raw.map(derivBar).filter(Boolean) as DerivBar[];
+  const end = Number.isFinite(to) ? Math.floor(Number(to)) : 'latest' as const;
+  const count = Number.isFinite(countBack) && Number(countBack) > 0
+    ? Math.floor(Number(countBack))
+    : Number.isFinite(from) && Number.isFinite(to)
+      ? Math.max(1, Math.ceil((Number(to) - Number(from)) / seconds) + 1)
+      : 500;
+
+  const data = await fetchDerivHistoryPage(symbol, seconds, end, count);
+  const bars = Array.isArray(data?.candles)
+    ? data.candles.map(derivBar).filter(Boolean) as DerivBar[]
+    : [];
   bars.sort((a, b) => a.time - b.time);
-  onProgress?.({
-    phase: 'older', requested: count, received: raw.length, valid: bars.length,
-    oldestTime: bars[0]?.time ?? null, newestTime: bars[bars.length - 1]?.time ?? null, end: safeEnd,
-  });
-  return bars;
+
+  if (from === undefined && to === undefined) return bars;
+  return bars.filter(bar =>
+    (from === undefined || bar.time >= Number(from)) &&
+    (to === undefined || bar.time <= Number(to)),
+  );
 }
 
 export function tickToBar(previous: DerivBar | null, epoch: number, price: number, seconds: number): DerivBar {
@@ -542,30 +525,35 @@ export function createDerivDataFeed(
 ) {
   const client = new DerivMarketDataClient();
   return {
-    async getBars({ symbol, interval }: { symbol: string; interval: string }) {
-      onDiagnostic?.({ level: 'info', code: 'HISTORY_REQUEST_STARTED', message: `Loading ${interval} historical candles for ${symbol}.` });
+    async getBars({ symbol, interval, from, to, countBack }: { symbol: string; interval: string; from?: number; to?: number; countBack?: number }) {
+      onDiagnostic?.({ level: 'info', code: 'HISTORY_REQUEST_STARTED', message: `OpenAlgo requested ${interval} history for ${symbol}.`, detail: `OpenAlgo supplied the history window ${from ?? 'open'} → ${to ?? 'open'} and requested approximately ${countBack ?? 'window-sized'} bars.` });
       try {
-        const bars = await fetchAllDerivHistory(symbol, interval, DERIV_INITIAL_BARS);
+        const bars = await fetchDerivHistoryWindow(symbol, interval, from, to, countBack);
         if (!bars.length) {
           const error = new Error(`Deriv returned no historical candles for ${symbol} ${interval}.`);
-          onDiagnostic?.({ level: 'error', code: 'HISTORY_EMPTY', message: error.message, detail: 'The request completed, but no usable OHLC candles were returned.' });
+          onDiagnostic?.({ level: 'error', code: 'HISTORY_EMPTY', message: error.message, detail: 'The OpenAlgo history request completed, but Deriv returned no usable OHLC candles for that window.' });
           throw error;
         }
-        onDiagnostic?.({
-          level: bars.length >= DERIV_INITIAL_BARS ? 'info' : 'warning',
-          code: 'HISTORY_INITIAL_WINDOW',
-          message: `Loaded ${bars.length} startup candles for ${symbol} ${interval}.`,
-          detail: bars.length >= DERIV_INITIAL_BARS
-            ? `Requested ${DERIV_INITIAL_BARS}; the startup window is full. Older candles are fetched progressively as the chart moves toward the left edge.`
-            : `Requested ${DERIV_INITIAL_BARS}; only ${bars.length} usable candles were available after paging backward. The loader will not manufacture candles.`,
-        });
-        onDiagnostic?.({ level: 'info', code: 'HISTORY_LOADED', message: `Loaded ${bars.length} historical candles for ${symbol} ${interval}.`, detail: `Initial target: ${DERIV_INITIAL_BARS}. Progressive older-history loading is available.` });
+        onDiagnostic?.({ level: 'info', code: 'HISTORY_LOADED', message: `Loaded ${bars.length} candles for ${symbol} ${interval}.`, detail: 'History windowing and older-page loading are owned by OpenAlgo Charts dataController.' });
         return bars;
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
-        onDiagnostic?.({ level: 'error', code: 'HISTORY_LOAD_FAILED', message: `Historical candles failed for ${symbol} ${interval}: ${message}`, detail: 'The chart cannot build reliable history until this request succeeds.' });
+        onDiagnostic?.({ level: 'error', code: 'HISTORY_LOAD_FAILED', message: `Historical candles failed for ${symbol} ${interval}: ${message}`, detail: 'The OpenAlgo data controller cannot display this history window until the provider request succeeds.' });
         throw error;
       }
+    },
+    async getBarsPage({ symbol, interval, before, countBack }: { symbol: string; interval: string; before: number; countBack: number }) {
+      const seconds = DERIV_INTERVAL_SECONDS[interval];
+      if (!seconds) throw new Error(`Unsupported Deriv interval: ${interval}`);
+      onDiagnostic?.({ level: 'info', code: 'HISTORY_PAGE_REQUESTED', message: `OpenAlgo requested an older ${interval} page for ${symbol}.`, detail: `OpenAlgo supplied the exclusive history cursor ${new Date(before * 1000).toISOString()} and page size ${countBack}.` });
+      const data = await fetchDerivHistoryPage(symbol, seconds, Math.max(1, Math.floor(before) - 1), countBack);
+      const bars = Array.isArray(data?.candles)
+        ? data.candles.map(derivBar).filter(Boolean) as DerivBar[]
+        : [];
+      bars.sort((a, b) => a.time - b.time);
+      const older = bars.filter(bar => bar.time < before);
+      onDiagnostic?.({ level: older.length ? 'info' : 'warning', code: older.length ? 'HISTORY_PAGE_LOADED' : 'HISTORY_PAGE_EMPTY', message: older.length ? `OpenAlgo loaded ${older.length} older candles for ${symbol}.` : `No older candles were returned for ${symbol}.`, detail: 'OpenAlgo dataController owns the paging cursor, retention and viewport anchoring.' });
+      return { bars: older, hasMore: older.length > 0 && older[0].time > 1, nextBefore: older[0]?.time };
     },
     subscribeBars(
       { symbol, interval }: { symbol: string; interval: string },
@@ -598,11 +586,6 @@ export function createDerivDataFeed(
       return () => {
         stopped = true;
         unsubscribe?.();
-        // Do not close the shared client here. OpenAlgo can tear down and
-        // recreate a bar subscription during symbol/timeframe changes. Closing
-        // the client makes the next subscription permanently fail with
-        // "Deriv market-data client is closed". The feed owns the client and
-        // closes it only when the whole feed is destroyed.
       };
     },
     close() { client.close(); },
