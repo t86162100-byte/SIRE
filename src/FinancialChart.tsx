@@ -596,6 +596,18 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
     // OpenAlgo's managed-data guidance requires the data controller to stay
     // paused for the entire replay lifetime. ReplayController then owns the
     // primary series, indicators, time axis and viewport until stop().
+    // Capture the user's existing horizontal zoom BEFORE ReplayController
+    // replaces the series with the replay prefix. Reading the range inside
+    // handleState is too late: at replay start the prefix may contain only a
+    // few bars, which makes the chart expand those bars and look oversized.
+    const replayScale = getChartTimeScale(widget.chart);
+    const replayRangeBeforeStart = replayScale?.getVisibleLogicalRange?.();
+    const replayVisibleBars = replayRangeBeforeStart &&
+      Number.isFinite(replayRangeBeforeStart.from) &&
+      Number.isFinite(replayRangeBeforeStart.to)
+      ? Math.max(2, Math.round(replayRangeBeforeStart.to - replayRangeBeforeStart.from + 1))
+      : 40;
+
     widget.dataController?.setPaused(true);
     replayModeRef.current = true;
 
@@ -603,14 +615,10 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
     try {
       const handleState = (state: ReplayState) => {
         setReplayState(state);
-        // Keep the replay playhead in the same visible region as the live
-        // chart without changing the user's zoom level.
+        // Preserve the same candle density/zoom that the user had before
+        // entering replay, while keeping the current playhead at the right edge.
         const scale = getChartTimeScale(widget.chart);
-        const range = scale?.getVisibleLogicalRange?.();
-        const visible = range && Number.isFinite(range.from) && Number.isFinite(range.to)
-          ? Math.max(1, Math.round(range.to - range.from + 1))
-          : 10;
-        const from = Math.max(0, state.index - visible + 1);
+        const from = Math.max(0, state.index - replayVisibleBars + 1);
         scale?.setVisibleLogicalRange?.({ from, to: state.index });
       };
       const offStart = widget.chart.on('replay:start', handleState);
