@@ -169,7 +169,9 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
   const lastLiveQuoteRef = useRef<{ symbol: string; price: number; epoch: number } | null>(null);
   const [diagnosticsOpen, setDiagnosticsOpen] = useState(false);
   const [diagnostics, setDiagnostics] = useState<ChartDiagnostic[]>([]);
+  const diagnosticsRef = useRef<ChartDiagnostic[]>([]);
   const diagnosticIdRef = useRef(0);
+  diagnosticsRef.current = diagnostics;
   const lastTickAtRef = useRef<number | null>(null);
   const [moreMenuOpen, setMoreMenuOpen] = useState(false);
   const [selectedDrawing, setSelectedDrawing] = useState<{ id: string; sourceId: string; name: string; visible: boolean; locked: boolean } | null>(null);
@@ -651,6 +653,7 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
     setMarketQuote(null);
     lastTickAtRef.current = null;
     lastLiveQuoteRef.current = null;
+    diagnosticsRef.current = [];
     setDiagnostics([]);
     if (widget.symbol() !== symbol) widget.setSymbol(symbol, 'DERIV');
   }, [symbol]);
