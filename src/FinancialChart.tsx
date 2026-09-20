@@ -78,7 +78,16 @@ function analyzeChartHealth(events: ChartDiagnostic[], snapshot: { bars: number;
   if (find('CHART_ZERO_SIZE')) return { state: 'ISSUE', subsystem: 'Layout/DOM', cause: 'The chart container has no usable dimensions.', evidence: snapshot.width + '×' + snapshot.height + 'px was measured.', next: 'Fix the parent layout or visibility before debugging market data.' };
   if (!snapshot.hasCanvas) return { state: 'ISSUE', subsystem: 'Chart renderer', cause: 'No chart canvas is mounted.', evidence: 'The chart host contains no canvas element.', next: 'Inspect widget creation, renderer initialization and teardown.' };
   if (!snapshot.hasPrimarySeries) return { state: 'ISSUE', subsystem: 'OpenAlgo chart API', cause: 'The primary price series is unavailable through widget.chart.', evidence: 'SIRE could not obtain widget.chart.primarySeries().', next: 'Inspect the installed OpenAlgo Charts API/version and object shape.' };
-  if (find('HISTORY_PAGE_EMPTY')) { const event = find('HISTORY_PAGE_EMPTY')!; return { state: 'HEALTHY', subsystem: 'OpenAlgo history controller', cause: 'OpenAlgo requested an older history page and Deriv returned no older candles.', evidence: event.detail || 'The provider did not return another older page for the requested cursor.', next: 'OpenAlgo will stop paging when its provider reports no more history.' }; }
+  if (find('HISTORY_PAGE_EMPTY') && snapshot.bars > 0) {
+    const event = find('HISTORY_PAGE_EMPTY')!;
+    return {
+      state: 'HEALTHY',
+      subsystem: 'OpenAlgo history controller',
+      cause: 'OpenAlgo reached the oldest history available from Deriv for this instrument and timeframe.',
+      evidence: event.detail || 'Deriv returned no older candles for OpenAlgo\'s requested cursor.',
+      next: 'No further history is available from the provider for this timeframe.',
+    };
+  }
   if (find('HISTORY_PAGE_LOADED') && snapshot.bars > 0) { const event = find('HISTORY_PAGE_LOADED')!; return { state: 'HEALTHY', subsystem: 'OpenAlgo history controller', cause: `${snapshot.bars} candles are currently retained by OpenAlgo.`, evidence: event.detail || 'OpenAlgo dataController loaded and merged an older history page.', next: 'Keep panning left; OpenAlgo owns the next-page request, cursor, merge and viewport anchoring.' }; }
   if (snapshot.bars === 0 || find('HISTORY_EMPTY') || find('HISTORY_LOAD_FAILED')) { const event = find('HISTORY_LOAD_FAILED') || find('HISTORY_EMPTY'); return { state: 'ISSUE', subsystem: 'Deriv history', cause: event?.message || 'No historical candles are available.', evidence: event?.detail || 'The primary series contains zero usable OHLC bars.', next: 'Check the SIRE history endpoint, Deriv response and symbol/granularity validation.' }; }
   if (find('LIVE_TICK_SUBSCRIPTION_FAILED')) { const event = find('LIVE_TICK_SUBSCRIPTION_FAILED')!; return { state: 'ISSUE', subsystem: 'Deriv live transport', cause: event.message, evidence: event.detail || 'The live subscription did not complete.', next: 'Check the /deriv/ws proxy, Deriv public WebSocket and subscription response.' }; }
@@ -603,7 +612,28 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
     const timer = window.setInterval(() => {
       const widget = widgetRef.current; const series = widget?.chart?.primarySeries(); const bars = (series?.getData?.() || []) as DerivBar[]; const rect = host.getBoundingClientRect();
       if (rect.width < 2 || rect.height < 2) { reportDiagnostic({ level: 'error', code: 'CHART_ZERO_SIZE', message: 'The chart container has no usable size.', detail: 'Measured ' + Math.round(rect.width) + '×' + Math.round(rect.height) + 'px.' }); return; }
-      if (!bars.length) { reportDiagnostic({ level: 'error', code: 'CHART_NO_CANDLES', message: 'No historical candles are currently loaded.', detail: 'The price pane has no primary OHLC data to render.' }); return; }
+      if (!bars.length) {
+        const recentHistoryRequest = diagnosticsRef.current.some(event =>
+          (event.code === 'HISTORY_REQUEST_STARTED' || event.code === 'HISTORY_PAGE_REQUESTED') &&
+          Date.now() - event.timestamp < 15000
+        );
+        if (recentHistoryRequest) {
+          reportDiagnostic({
+            level: 'info',
+            code: 'CHART_WAITING_FOR_HISTORY',
+            message: 'Waiting for OpenAlgo history data.',
+            detail: 'The OpenAlgo dataController has an active history request; the empty primary series is expected until that request completes.',
+          });
+        } else {
+          reportDiagnostic({
+            level: 'error',
+            code: 'CHART_NO_CANDLES',
+            message: 'No historical candles are currently loaded.',
+            detail: 'The price pane has no primary OHLC data to render and no active OpenAlgo history request is in progress.',
+          });
+        }
+        return;
+      }
       const instrument = instrumentsRef.current.find(item => item.symbol === symbolRef.current); const marketClosed = instrument?.exchangeOpen === 0 || instrument?.tradingSuspended === 1; const tickAge = lastTickAtRef.current === null ? null : Date.now() - lastTickAtRef.current;
       if (!marketClosed && tickAge === null) reportDiagnostic({ level: 'warning', code: 'LIVE_PRICE_NOT_RECEIVED', message: 'No live price has been received yet.', detail: 'History is present, but the Deriv tick stream has not delivered a quote.' });
       if (!marketClosed && tickAge !== null && tickAge > 10000) reportDiagnostic({ level: 'error', code: 'LIVE_TICK_STALE', message: 'Live price updates are stale: ' + Math.round(tickAge / 1000) + 's since the last tick.', detail: 'The live tick stream or the SIRE-to-chart delivery path stopped updating.' });
