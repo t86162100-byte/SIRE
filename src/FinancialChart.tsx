@@ -198,6 +198,183 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
   const replayModeRef = useRef(false);
   const replayOriginalBarsRef = useRef<DerivBar[]>([]);
 
+  const dataFeedRef = useRef<ReturnType<typeof createDerivDataFeed> | null>(null);
+  const instrumentsRef = useRef(instruments);
+  const onSelectInstrumentRef = useRef(onSelectInstrument);
+  const symbolRef = useRef(symbol);
+  const timeframeRef = useRef(activeTimeframe);
+  const initialViewportContextRef = useRef('');
+  instrumentsRef.current = instruments;
+  onSelectInstrumentRef.current = onSelectInstrument;
+  symbolRef.current = symbol;
+  timeframeRef.current = activeTimeframe;
+
+  const marketInstrument = instruments.find(item => item.symbol === symbol);
+  const marketInstrumentName = marketInstrument?.name || symbol;
+
+  const reportDiagnostic = (event: DerivFeedDiagnostic & { stack?: string; location?: DiagnosticLocation; operation?: string }) => {
+    const now = Date.now();
+    const item: ChartDiagnostic = { ...event, id: ++diagnosticIdRef.current, timestamp: now };
+    const add = (resolved: ChartDiagnostic) => {
+      setDiagnostics(current => {
+        const last = current[current.length - 1];
+        if (last && last.code === resolved.code && last.message === resolved.message && now - last.timestamp < 5000) return current;
+        return [...current, resolved];
+      });
+      if (resolved.level === 'error') setDiagnosticsOpen(true);
+    };
+    if (item.location?.file && /\/assets\/[^/]+\.js$/i.test(item.location.file)) {
+      void resolveSourceMappedLocation(item.location).then(location => add({ ...item, location }));
+    } else {
+      add(item);
+    }
+  };
+
+  const getChartTimeScale = (chart: any) => {
+    const value = chart?.timeScale;
+    if (typeof value === 'function') return value.call(chart);
+    return value;
+  };
+
+  const formatMarketPrice = (price: number) => {
+    if (!Number.isFinite(price)) return '—';
+    const pipSize = Number(marketInstrument?.pipSize);
+    const decimals = Number.isFinite(pipSize) && pipSize > 0
+      ? Math.max(0, Math.min(8, Math.ceil(-Math.log10(pipSize))))
+      : 2;
+    return price.toFixed(decimals);
+  };
+
+  useEffect(() => {
+    const nextIndex = instruments.findIndex(item => item.symbol === symbol);
+    if (nextIndex >= 0) setSwipeInstrumentIndex(nextIndex);
+  }, [instruments, symbol]);
+
+  const compactInstrumentName = (name: string) => {
+    const first = name.trim().split(/\s+/)[0] || symbol;
+    return `${first.replace(/[^a-zA-Z]/g, '').toUpperCase().slice(0, 5)}_`;
+  };
+
+  const swipeInstrument = (direction: 1 | -1) => {
+    if (!instruments.length) return;
+    const currentIndex = Math.max(0, instruments.findIndex(item => item.symbol === symbol));
+    const nextIndex = Math.max(0, Math.min(instruments.length - 1, currentIndex + direction));
+    const next = instruments[nextIndex];
+    if (next && next.symbol !== symbol) onSelectInstrument(next);
+  };
+
+  const triggerSwipeStep = (direction: 1 | -1) => {
+    if (!instruments.length) return;
+    const currentIndex = Math.max(0, instruments.findIndex(item => item.symbol === symbol));
+    const nextIndex = Math.max(0, Math.min(instruments.length - 1, currentIndex + direction));
+    if (nextIndex === currentIndex) return;
+    setSwipeAnimation(direction > 0 ? 'up' : 'down');
+    swipeInstrument(direction);
+    window.setTimeout(() => setSwipeAnimation(null), 320);
+  };
+
+  const clearTimeframeHold = () => {
+    if (timeframeHoldTimerRef.current !== null) {
+      window.clearTimeout(timeframeHoldTimerRef.current);
+      timeframeHoldTimerRef.current = null;
+    }
+  };
+
+  const selectTimeframe = (interval: string) => {
+    const widget = widgetRef.current;
+    if (!widget) return;
+    setActiveTimeframe(interval);
+    setTimeframeOpen(false);
+    widget.setInterval(interval);
+  };
+
+  const handleTimeframePointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (event.pointerType === 'mouse' && event.button !== 0) return;
+    event.preventDefault();
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+    timeframeSwipeStartYRef.current = event.clientY;
+    timeframeSwipeAccumulatedRef.current = 0;
+    timeframeHoldTriggeredRef.current = false;
+    clearTimeframeHold();
+    timeframeHoldTimerRef.current = window.setTimeout(() => {
+      timeframeHoldTriggeredRef.current = true;
+      setTimeframeOpen(true);
+    }, 600);
+  };
+
+  const handleTimeframePointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (timeframeHoldTriggeredRef.current) return;
+    const delta = event.clientY - timeframeSwipeStartYRef.current;
+    if (Math.abs(delta) >= 8) clearTimeframeHold();
+    if (Math.abs(delta) < 45 || timeframeSwipeAnimatingRef.current) return;
+    const direction: 1 | -1 = delta < 0 ? 1 : -1;
+    const currentIndex = CHART_INTERVALS.indexOf(activeTimeframe);
+    const nextIndex = Math.max(0, Math.min(CHART_INTERVALS.length - 1, currentIndex + direction));
+    if (nextIndex !== currentIndex) {
+      timeframeSwipeAnimatingRef.current = true;
+      selectTimeframe(CHART_INTERVALS[nextIndex]);
+      window.setTimeout(() => { timeframeSwipeAnimatingRef.current = false; }, 280);
+    }
+    timeframeSwipeStartYRef.current = event.clientY;
+    timeframeSwipeAccumulatedRef.current = 0;
+  };
+
+  const handleTimeframePointerEnd = (event: React.PointerEvent<HTMLDivElement>) => {
+    clearTimeframeHold();
+    timeframeHoldTriggeredRef.current = false;
+    timeframeSwipeStartYRef.current = 0;
+    timeframeSwipeAccumulatedRef.current = 0;
+    if (event.currentTarget.hasPointerCapture?.(event.pointerId)) {
+      event.currentTarget.releasePointerCapture?.(event.pointerId);
+    }
+  };
+
+  const clearInstrumentHold = () => {
+    if (holdTimerRef.current !== null) {
+      window.clearTimeout(holdTimerRef.current);
+      holdTimerRef.current = null;
+    }
+  };
+
+  const handleInstrumentPointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (event.pointerType === 'mouse' && event.button !== 0) return;
+    event.preventDefault();
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+    swipeStartYRef.current = event.clientY;
+    swipeAccumulatedRef.current = 0;
+    holdTriggeredRef.current = false;
+    clearInstrumentHold();
+    holdTimerRef.current = window.setTimeout(() => {
+      if (swipeStartYRef.current !== null) {
+        holdTriggeredRef.current = true;
+        onInstrumentTap?.();
+      }
+    }, 600);
+  };
+
+  const handleInstrumentPointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
+    const start = swipeStartYRef.current;
+    if (start === null) return;
+    const delta = event.clientY - start;
+    if (Math.abs(delta) >= 18 && !holdTriggeredRef.current) clearInstrumentHold();
+    if (Math.abs(delta) < 55 || swipeAnimatingRef.current || holdTriggeredRef.current) return;
+    triggerSwipeStep(delta < 0 ? 1 : -1);
+    swipeAnimatingRef.current = true;
+    swipeStartYRef.current = event.clientY;
+    swipeAccumulatedRef.current = 0;
+    window.setTimeout(() => { swipeAnimatingRef.current = false; }, 320);
+  };
+
+  const handleInstrumentPointerEnd = (event: React.PointerEvent<HTMLDivElement>) => {
+    clearInstrumentHold();
+    swipeStartYRef.current = null;
+    swipeAccumulatedRef.current = 0;
+    holdTriggeredRef.current = false;
+    if (event.currentTarget.hasPointerCapture?.(event.pointerId)) {
+      event.currentTarget.releasePointerCapture?.(event.pointerId);
+    }
+  };
+
   const syncReplayState = () => {
     const replay = replayRef.current;
     if (!replay) return;
@@ -680,8 +857,6 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
     window.addEventListener('resize', onResize);
     return () => { observer.disconnect(); resizeObserver.disconnect(); window.removeEventListener('resize', onResize); host.querySelector<HTMLElement>('.oac-rail')?.style.removeProperty('--sire-rail-top'); };
   }, [drawRackOpen, symbol, instruments]);
-
-  const marketInstrumentName = instruments.find(item => item.symbol === symbol)?.name || symbol;
 
   return (
     <div ref={containerRef} className={`sire-financial-chart${drawRackOpen ? ' sire-draw-rack-open' : ''}${isActive ? ' sire-toolbar-owner' : ''}`}>
