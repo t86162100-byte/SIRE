@@ -221,6 +221,12 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
     }
   };
 
+  const getChartTimeScale = (chart: any) => {
+    const value = chart?.timeScale;
+    if (typeof value === 'function') return value.call(chart);
+    return value;
+  };
+
   const formatMarketPrice = (price: number) => {
     if (!Number.isFinite(price)) return '—';
     const pipSize = Number(marketInstrument?.pipSize);
@@ -531,7 +537,7 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
             if (!currentBars.length) return;
             const to = currentBars.length - 1;
             const from = Math.max(0, to - visibleBars + 1);
-            widget.chart.timeScale?.().setVisibleLogicalRange?.({ from, to });
+            getChartTimeScale(widget.chart)?.setVisibleLogicalRange?.({ from, to });
           });
         }
       });
@@ -567,7 +573,7 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
             // viewport. Merge the pages ourselves, then restore the logical range
             // shifted by the number of genuinely new bars.
             const existing = (series.getData?.() || []) as DerivBar[];
-            const visibleRange = widget.chart.timeScale?.().getVisibleLogicalRange?.();
+            const visibleRange = getChartTimeScale(widget.chart)?.getVisibleLogicalRange?.();
             const mergedByTime = new Map<number, DerivBar>();
             for (const bar of existing) mergedByTime.set(bar.time, bar);
             for (const bar of older) mergedByTime.set(bar.time, bar);
