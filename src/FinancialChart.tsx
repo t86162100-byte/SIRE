@@ -904,6 +904,127 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
     if (widget.symbol() !== symbol) widget.setSymbol(symbol, 'DERIV');
   }, [symbol]);
 
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const runAction = (event: Event) => {
+      const detail = (event as CustomEvent).detail as Record<string, unknown> | undefined;
+      if (!detail) return;
+      if (detail.symbol && String(detail.symbol) !== symbolRef.current) return;
+      const widget = widgetRef.current;
+      if (!widget) return;
+      const action = String(detail.__sireAction || detail.type || '');
+      try {
+        if (action === 'select_instrument') {
+          const next = instrumentsRef.current.find(item => item.symbol === String(detail.symbol || ''));
+          if (next) onSelectInstrumentRef.current(next);
+        } else if (action === 'set_timeframe') {
+          const interval = String(detail.interval || detail.timeframe || '');
+          if (CHART_INTERVALS.includes(interval)) widget.setInterval(interval);
+        } else if (action === 'set_chart_type') {
+          const type = String(detail.chartType || detail.typeId || '');
+          if (type) widget.chart.primarySeries()?.applyOptions?.({ type } as any);
+        } else if (action === 'add_indicator') {
+          const id = String(detail.indicatorId || detail.id || '');
+          if (id) widget.chart.addIndicator(id, (detail.settings || {}) as any, detail.paneIndex === undefined ? undefined : { paneIndex: Number(detail.paneIndex) });
+        } else if (action === 'remove_indicator') {
+          const id = String(detail.instanceId || detail.id || '');
+          if (id) widget.chart.removeIndicator(id);
+        } else if (action === 'add_price_line') {
+          const price = Number(detail.price);
+          if (Number.isFinite(price)) widget.chart.addPriceLine({ price, label: String(detail.label || 'SIRE level') } as any, 0);
+        } else if (action === 'add_drawing') {
+          const tool = String(detail.tool || 'horizontal-line');
+          const points = Array.isArray(detail.points) ? detail.points : [];
+          if (points.length) (widget.objects as any).add({ tool, points, paneIndex: Number(detail.paneIndex || 0), style: detail.style || undefined, text: detail.text || undefined });
+        } else if (action === 'set_visible_range') {
+          const range = detail.range as any;
+          if (range && Number.isFinite(Number(range.from)) && Number.isFinite(Number(range.to))) widget.chart.setVisibleLogicalRange({ from: Number(range.from), to: Number(range.to) });
+        } else if (action === 'fit_chart') {
+          widget.chart.fitContent();
+        } else if (action === 'reset_scale') {
+          widget.chart.resetScale();
+        } else if (action === 'set_timezone') {
+          const timezone = String(detail.timezone || '');
+          if (timezone) widget.chart.setTimezone(timezone);
+        } else if (action === 'set_theme') {
+          if (detail.theme && typeof detail.theme === 'object') widget.chart.setTheme({ ...widget.chart.theme(), ...(detail.theme as any) });
+        } else if (action === 'open_indicator_picker') {
+          widget.openIndicatorPicker();
+        } else if (action === 'open_drawing_tools') {
+          setDrawRackOpen(true);
+        } else if (action === 'open_settings') {
+          (widget as any).openSettings?.();
+        } else if (action === 'take_screenshot') {
+          widget.chart.downloadScreenshot(String(detail.filename || 'sire-chart.png'));
+        } else if (action === 'export_svg') {
+          const svg = widget.chart.exportSVG();
+          const blob = new Blob([svg], { type: 'image/svg+xml' });
+          const url = URL.createObjectURL(blob);
+          const anchor = document.createElement('a');
+          anchor.href = url;
+          anchor.download = String(detail.filename || 'sire-chart.svg');
+          anchor.click();
+          URL.revokeObjectURL(url);
+        } else if (action === 'replay_play') {
+          const replay = replayRef.current;
+          if (replay && !replay.state().playing) replay.play({ speed: replaySpeedRef.current });
+        } else if (action === 'replay_pause') {
+          replayRef.current?.pause();
+        } else if (action === 'replay_step') {
+          replayRef.current?.step();
+        } else if (action === 'replay_stop') {
+          stopReplay();
+        }
+        reportDiagnostic({ level: 'info', code: 'AI_AGENT_CHART_ACTION', message: 'SIRE AI agent applied chart action: ' + action, detail: JSON.stringify(detail).slice(0, 900) });
+      } catch (error) {
+        reportDiagnostic({ level: 'error', code: 'AI_AGENT_CHART_ACTION_FAILED', message: 'SIRE AI agent chart action failed: ' + action, detail: error instanceof Error ? error.message : String(error), ...diagnosticErrorDetails(error, 'AI agent chart action') });
+      }
+    };
+    window.addEventListener('sire:agent-chart-action', runAction);
+    return () => window.removeEventListener('sire:agent-chart-action', runAction);
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const publish = () => {
+      const widget = widgetRef.current;
+      const chart = widget?.chart;
+      const series = chart?.primarySeries?.();
+      const bars = (series?.getData?.() || []) as DerivBar[];
+      const visible = (chart?.timeScale as any)?.getVisibleLogicalRange?.();
+      const drawings = ((widget?.objects as any)?.list?.() || []).slice(-100).map((item: any) => ({
+        id: item.id, kind: item.kind, tool: item.tool, name: item.name, selected: item.selected, visible: item.visible, locked: item.locked,
+        points: Array.isArray(item.points) ? item.points.slice(0, 8) : undefined, paneIndex: item.paneIndex,
+      }));
+      const indicators = (chart?.indicators?.() || []).map((item: any) => ({ id: item.id, name: item.name, paneIndex: item.paneIndex }));
+      const last = bars[bars.length - 1];
+      const context = {
+        symbol: symbolRef.current,
+        name: instrumentsRef.current.find(item => item.symbol === symbolRef.current)?.name || symbolRef.current,
+        timeframe: timeframeRef.current,
+        chartMode: chart?.primarySeriesInfo?.()?.type || 'candlestick',
+        latestPrice: Number.isFinite(last?.close) ? last.close : null,
+        latestBar: last || null,
+        chartBars: bars.length,
+        recentBars: bars.slice(-120),
+        visibleBars: visible ? Math.max(0, Math.ceil(Number(visible.to) - Number(visible.from) + 1)) : null,
+        visibleRange: visible || null,
+        activeIndicators: indicators,
+        drawings,
+        replay: replayRef.current?.state?.() || null,
+        chartState: chart?.getState?.() || null,
+        capabilities: { tiers: ['base', 'indicators', 'draw', 'trade', 'transform', 'webgl', 'widget'], indicators: true, drawings: true, tradingVisualization: true, replay: true, transforms: true, screenshots: true, svgExport: true },
+        publishedAt: Date.now(),
+      };
+      const store = ((window as any).__sireChartContexts ||= {});
+      store[symbolRef.current] = context;
+    };
+    publish();
+    const timer = window.setInterval(publish, 1000);
+    return () => window.clearInterval(timer);
+  }, [symbol]);
+
   useEffect(() => {
     const host = containerRef.current;
     if (!host) return;
