@@ -349,7 +349,6 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
   const refreshReplayBounds = () => {
     const oldest = (widgetRef.current?.chart.primarySeries()?.getData?.() as DerivBar[] | undefined)?.[0]?.time;
     const now = Math.floor(Date.now() / 1000);
-    const oldest = (widgetRef.current?.chart.primarySeries()?.getData?.() as DerivBar[] | undefined)?.[0]?.time;
     if (oldest && Number.isFinite(oldest)) setReplayStartMin(formatReplayInputTime(oldest));
     setReplayNow(formatReplayInputTime(now));
     const currentStart = replayStartInput ? new Date(replayStartInput).getTime() / 1000 : oldest ?? now;
@@ -370,8 +369,8 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
     let allBars = (series.getData?.() || []) as DerivBar[];
     if (!allBars.length) {
       try {
-        allBars = await fetchChartHistory(symbol, activeTimeframe);
-        if (allBars.length) series.setData(allBars);
+        await widget.reload();
+        allBars = (series.getData?.() || []) as DerivBar[];
       } catch (error) {
         setReplayRangeError(error instanceof Error ? error.message : 'Unable to load chart history for replay.');
         return;
