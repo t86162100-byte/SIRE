@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { ChevronLeft, ChevronRight, Eye, History, Lock, Minus, MoreHorizontal, Pause, Play, RotateCcw, Settings2, SkipBack, SkipForward, Trash2, Wrench, X } from 'lucide-react';
-import { registerInterval, ReplayController } from 'openalgo-charts';
+import { registerInterval, ReplayController, type ReplayState } from 'openalgo-charts';
 import 'openalgo-charts/indicators';
 import 'openalgo-charts/draw';
 import 'openalgo-charts/trade';
@@ -154,7 +154,7 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
   const [compareQuery, setCompareQuery] = useState('');
   const [comparisons, setComparisons] = useState<string[]>([]);
   const [replayActive, setReplayActive] = useState(false);
-  const [replayState, setReplayState] = useState<any>(null);
+  const [replayState, setReplayState] = useState<ReplayState | null>(null);
   const [replaySetupOpen, setReplaySetupOpen] = useState(false);
   const [replayStartInput, setReplayStartInput] = useState('');
   const [replayEndInput, setReplayEndInput] = useState('');
@@ -196,7 +196,7 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
   const widgetRef = useRef<Widget | null>(null);
   const replayRef = useRef<ReplayController | null>(null);
   const replayModeRef = useRef(false);
-  const replayOriginalBarsRef = useRef<DerivBar[]>([]);
+  const replayCleanupRef = useRef<(() => void) | null>(null);
 
   const dataFeedRef = useRef<ReturnType<typeof createDerivDataFeed> | null>(null);
   const instrumentsRef = useRef(instruments);
@@ -381,21 +381,29 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
     setReplayState(replay.state());
   };
 
-  const stopReplay = () => {
-    const replay = replayRef.current;
-    const widget = widgetRef.current;
-    if (replay) {
-      const cleanup = (replay as any).__sireCleanup as (() => void) | undefined;
-      cleanup?.();
-      replay.stop();
-    }
+  const clearReplayListeners = () => {
+    replayCleanupRef.current?.();
+    replayCleanupRef.current = null;
+  };
+
+  const resetReplayUi = () => {
     replayRef.current = null;
     replayModeRef.current = false;
-    replayOriginalBarsRef.current = [];
-    widget?.dataController?.setPaused(false);
+    widgetRef.current?.dataController?.setPaused(false);
     setReplayActive(false);
     setReplayState(null);
     setReplaySetupOpen(false);
+  };
+
+  const stopReplay = () => {
+    const replay = replayRef.current;
+    if (replay) {
+      // ReplayController restores the exact pre-replay series and viewport.
+      // Its stop must happen before live delivery is resumed.
+      replay.stop();
+    }
+    clearReplayListeners();
+    resetReplayUi();
   };
 
   const toggleReplay = () => {
@@ -406,6 +414,9 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
       syncReplayState();
       return;
     }
+
+    setReplayRangeError(null);
+    refreshReplayBounds();
     setReplaySetupOpen(open => !open);
   };
 
@@ -413,21 +424,24 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
     replayRef.current?.step();
     syncReplayState();
   };
+
   const replayStepBack = () => {
     replayRef.current?.stepBack();
     syncReplayState();
   };
+
   const replayJumpStart = () => {
     replayRef.current?.seek(0);
     syncReplayState();
   };
+
   const replayJumpEnd = () => {
     const replay = replayRef.current;
-    if (replay) {
-      replay.seek(Math.max(0, replay.state().total - 1));
-      syncReplayState();
-    }
+    if (!replay) return;
+    replay.seek(Math.max(0, replay.state().total - 1));
+    syncReplayState();
   };
+
   const replaySeek = (index: number) => {
     replayRef.current?.seek(index);
     syncReplayState();
@@ -436,7 +450,8 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
   const setReplaySpeed = (speed: number) => {
     replaySpeedRef.current = speed;
     setReplayDraftSpeed(speed);
-    if (replayRef.current?.state().playing) replayRef.current.play({ speed });
+    const replay = replayRef.current;
+    if (replay?.state().playing) replay.play({ speed });
     syncReplayState();
   };
 
@@ -447,16 +462,21 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
   };
 
   const refreshReplayBounds = () => {
-    const seriesBars = (widgetRef.current?.chart.primarySeries()?.getData?.() || []) as DerivBar[];
-    const sorted = [...seriesBars].filter(bar => Number.isFinite(bar?.time)).sort((a, b) => a.time - b.time);
+    const widget = widgetRef.current;
+    const series = widget?.chart.primarySeries();
+    const seriesBars = (series?.getData?.() || []) as DerivBar[];
+    const sorted = [...seriesBars]
+      .filter(bar => Number.isFinite(bar?.time))
+      .sort((a, b) => a.time - b.time);
+
     const oldest = sorted[0]?.time;
     const latestLoaded = sorted[sorted.length - 1]?.time;
     const now = Math.floor(Date.now() / 1000);
     const latest = Math.min(now, latestLoaded ?? now);
 
-    if (!Number.isFinite(oldest)) {
-      setReplayRangeError('No historical candles are loaded yet.');
-      return;
+    if (!Number.isFinite(oldest) || !Number.isFinite(latest) || latest <= (oldest as number)) {
+      setReplayRangeError('No usable historical candles are loaded yet.');
+      return false;
     }
 
     const minText = formatReplayInputTime(oldest as number);
@@ -476,10 +496,12 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
 
     setReplayStartInput(formatReplayInputTime(cappedStart));
     setReplayEndInput(formatReplayInputTime(cappedEnd));
+    return true;
   };
 
   const startReplayFromInputs = async (fromBeginning: boolean, _toLatest: boolean) => {
     setReplayRangeError(null);
+
     const widget = widgetRef.current;
     if (!widget) {
       setReplayRangeError('Chart is still loading.');
@@ -492,9 +514,8 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
       return;
     }
 
-    replayRef.current?.stop();
-    replayRef.current = null;
-    replayModeRef.current = false;
+    // A new replay always replaces the previous controller cleanly.
+    if (replayRef.current) stopReplay();
 
     let allBars = (series.getData() || []) as DerivBar[];
     if (!allBars.length) {
@@ -507,9 +528,21 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
       }
     }
 
-    allBars = [...allBars]
-      .filter(bar => Number.isFinite(bar?.time) && Number.isFinite(bar?.open) && Number.isFinite(bar?.high) && Number.isFinite(bar?.low) && Number.isFinite(bar?.close))
-      .sort((a, b) => a.time - b.time);
+    // ReplayController expects a stable, chronological session. Keep one bar
+    // per timestamp and never mutate the array after handing it to OpenAlgo.
+    const byTime = new Map<number, DerivBar>();
+    for (const bar of allBars) {
+      if (
+        Number.isFinite(bar?.time) &&
+        Number.isFinite(bar?.open) &&
+        Number.isFinite(bar?.high) &&
+        Number.isFinite(bar?.low) &&
+        Number.isFinite(bar?.close)
+      ) {
+        byTime.set(bar.time, { ...bar });
+      }
+    }
+    allBars = [...byTime.values()].sort((a, b) => a.time - b.time);
 
     if (allBars.length < 2) {
       setReplayRangeError('Not enough chart history is loaded for replay.');
@@ -523,23 +556,25 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
     };
 
     const leftEdge = allBars[0].time;
+    const latestLoadedTime = allBars[allBars.length - 1].time;
     const now = Math.floor(Date.now() / 1000);
+    const latestAllowedTime = Math.min(now, latestLoadedTime);
+
     const requestedStart = fromBeginning ? leftEdge : parseReplayTime(replayStartInput);
     if (!fromBeginning && replayStartInput && requestedStart === null) {
       setReplayRangeError('Invalid replay start date/time.');
       return;
     }
 
-    const latestLoadedTime = allBars[allBars.length - 1].time;
-    const latestAllowedTime = Math.min(now, latestLoadedTime);
-    const requestedEnd = parseReplayTime(replayEndInput);
-    if (!fromBeginning && replayEndInput && requestedEnd === null) {
+    const requestedEnd = parseReplayTime(replayEndInput) ?? latestAllowedTime;
+    if (replayEndInput && requestedEnd === null) {
       setReplayRangeError('Invalid replay end date/time.');
       return;
     }
 
     const startTime = Math.max(leftEdge, Math.min(latestAllowedTime, requestedStart ?? leftEdge));
-    const endTime = Math.max(startTime, Math.min(latestAllowedTime, requestedEnd ?? latestAllowedTime));
+    const endTime = Math.max(startTime, Math.min(latestAllowedTime, requestedEnd));
+
     if (endTime <= startTime) {
       setReplayRangeError('Replay end must be after the replay start.');
       return;
@@ -551,44 +586,61 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
       return;
     }
 
-    // The library ReplayController owns the chart data transition. This is
-    // important: it updates the actual DataLayer, keeps the time axis in sync,
-    // recomputes indicators, and restores the exact pre-replay viewport on stop.
-    replayOriginalBarsRef.current = allBars.map(bar => ({ ...bar }));
-    replayModeRef.current = true;
+    // OpenAlgo's managed-data guidance requires the data controller to stay
+    // paused for the entire replay lifetime. ReplayController then owns the
+    // primary series, indicators, time axis and viewport until stop().
     widget.dataController?.setPaused(true);
+    replayModeRef.current = true;
 
-    const replay = new ReplayController(widget.chart, {
-      series,
-      bars,
-      startIndex: 0,
-      barMs: 1000,
-      speed: replaySpeedRef.current,
-      onFrame: state => {
-        setReplayState(state);
-      },
-    });
+    let replay: ReplayController | null = null;
+    try {
+      const handleState = (state: ReplayState) => setReplayState(state);
+      const offStart = widget.chart.on('replay:start', handleState);
+      const offFrame = widget.chart.on('replay:frame', handleState);
+      const offPlay = widget.chart.on('replay:play', handleState);
+      const offPause = widget.chart.on('replay:pause', handleState);
+      const offEnd = widget.chart.on('replay:end', handleState);
+      const offStop = widget.chart.on('replay:stop', () => {
+        clearReplayListeners();
+        resetReplayUi();
+      });
 
-    const offPlay = widget.chart.on('replay:play', state => setReplayState(state as any));
-    const offPause = widget.chart.on('replay:pause', state => setReplayState(state as any));
-    const offEnd = widget.chart.on('replay:end', state => setReplayState(state as any));
-    const offStop = widget.chart.on('replay:stop', () => {
+      replayCleanupRef.current = () => {
+        offStart();
+        offFrame();
+        offPlay();
+        offPause();
+        offEnd();
+        offStop();
+      };
+
+      replay = new ReplayController(widget.chart, {
+        series,
+        bars,
+        startIndex: 0,
+        barMs: 1000,
+        speed: replaySpeedRef.current,
+        onFrame: handleState,
+      });
+
+      replayRef.current = replay;
+      setReplayActive(true);
+      setReplaySetupOpen(false);
+      setReplayState(replay.state());
+    } catch (error) {
+      clearReplayListeners();
+      replayModeRef.current = false;
+      widget.dataController?.setPaused(false);
       setReplayState(null);
-    });
-
-    // Keep event unsubscriptions with this controller instance.
-    (replay as any).__sireCleanup = () => {
-      offPlay();
-      offPause();
-      offEnd();
-      offStop();
-    };
-
-    replayRef.current = replay;
-    setReplayActive(true);
-    setReplaySetupOpen(false);
-    setReplayState(replay.state());
+      setReplayActive(false);
+      setReplayRangeError(error instanceof Error ? error.message : 'OpenAlgo replay could not be started.');
+    }
   };
+
+  useEffect(() => {
+    if (!replaySetupOpen || replayActive) return;
+    refreshReplayBounds();
+  }, [replaySetupOpen, replayActive, symbol, activeTimeframe]);
 
   const toggleTpo = () => setTpoEnabled(value => !value);
 
@@ -661,6 +713,7 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
       widgetRef.current = widget;
       setActiveTimeframe(widget.interval());
       const offInterval = widget.on('interval', (event: { interval: string }) => {
+        if (replayRef.current) stopReplay();
         setActiveTimeframe(event.interval);
         timeframeRef.current = event.interval;
         initialViewportContextRef.current = '';
@@ -670,6 +723,7 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
         reportDiagnostic({ level: 'info', code: 'CHART_CONTEXT_CHANGED', message: 'Chart context changed to ' + symbol + '; preserving the existing diagnostic history.', detail: 'The issue log continues across instrument changes and timeframes.' });
       });
       const offSymbol = widget.on('symbol', (event: { symbol: string }) => {
+        if (replayRef.current) stopReplay();
         const instrument = instrumentsRef.current.find(item => item.symbol === event.symbol);
         if (instrument && instrument.symbol !== symbolRef.current) {
           symbolRef.current = instrument.symbol;
@@ -754,7 +808,11 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
       });
       onWidgetReady?.(widget);
       return () => {
-        replayRef.current?.stop(); replayRef.current = null; widget.dataController?.setPaused(false);
+        replayRef.current?.stop();
+        clearReplayListeners();
+        replayRef.current = null;
+        replayModeRef.current = false;
+        widget.dataController?.setPaused(false);
         offSymbol?.(); offInterval?.(); offRenderer?.(); offData?.();
         offIndicatorObjects?.(); offDrawingObjects?.(); offDrawingSelect?.();
         dataFeedRef.current?.close?.();
@@ -877,7 +935,7 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
           <div className="sire-replay-head">
             <span className="sire-replay-badge"><History size={13} strokeWidth={2.1} aria-hidden="true" /> REPLAY</span>
             <span className="sire-replay-clock">{replayState.bar ? new Date(replayState.bar.time * 1000 + 60 * 60 * 1000).toISOString().slice(0, 16).replace('T', ' ') : ''}</span>
-            <span className="sire-replay-count">{replayState.index + 1}/{replayState.total}{replayState.subSteps > 1 ? ` · ${replayState.subIndex + 1}/${replayState.subSteps}` : ''}</span>
+            <span className="sire-replay-count">{replayState.index + 1}/{replayState.total}</span>
           </div>
           <div className="sire-replay-progress-row">
             <button type="button" onClick={replayJumpStart} aria-label="Jump to replay start" title="Start"><SkipBack size={15} /></button>
