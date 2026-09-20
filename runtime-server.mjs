@@ -148,15 +148,59 @@ const server = http.createServer(async (req,res) => {
       const granularity = Math.max(1, Math.floor(Number(parsed.granularity) || 60));
       const end = parsed.end === undefined ? 'latest' : parsed.end;
       if (!symbol) return res.writeHead(400,{ 'Access-Control-Allow-Origin':'*','Content-Type':'application/json; charset=utf-8' }).end(JSON.stringify({ error:'symbol is required' }));
+
+      const interval = granularity >= 604800 ? '1w'
+        : granularity >= 86400 ? '1d'
+        : granularity % 3600 === 0 ? `${granularity / 3600}h`
+        : `${granularity / 60}m`;
+
+      let providerError = '';
+      let providerResult = null;
       try {
-        const result = await requestDerivPublic({ ticks_history:symbol, end, count, style:'candles', granularity, adjust_start_time:1 });
-        console.log('[DERIV HISTORY]', symbol, granularity, count, end);
-        return res.writeHead(200,{ 'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8' }).end(JSON.stringify(result));
+        providerResult = await requestDerivPublic({ ticks_history:symbol, end, count, style:'candles', granularity, adjust_start_time:1 });
+        const providerBars = Array.isArray(providerResult?.candles) ? providerResult.candles : [];
+        if (providerBars.length) await persistHistoryBars(symbol, interval, providerBars);
       } catch (cause) {
-        const message = cause instanceof Error ? cause.message : String(cause);
-        console.error('[DERIV HISTORY] FAIL', symbol, message);
-        return res.writeHead(502,{ 'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8' }).end(JSON.stringify({ error:message, symbol, granularity, count, end }));
+        providerError = cause instanceof Error ? cause.message : String(cause);
       }
+
+      const stored = await getStoredHistory(symbol, interval, end, count);
+      const providerBars = Array.isArray(providerResult?.candles) ? providerResult.candles : [];
+      const byEpoch = new Map<number, any>();
+      for (const candle of [...stored.bars, ...providerBars]) {
+        const epoch = Number(candle?.epoch);
+        if (Number.isFinite(epoch)) byEpoch.set(epoch, candle);
+      }
+      const candles = [...byEpoch.values()].sort((a, b) => Number(a.epoch) - Number(b.epoch)).slice(-count);
+
+      if (providerResult) {
+        console.log('[DERIV HISTORY]', symbol, granularity, count, end, `stored=${stored.bars.length}`);
+        return res.writeHead(200,{ 'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8' }).end(JSON.stringify({
+          ...providerResult,
+          candles,
+          sireHistoryStore: { enabled: stored.enabled, chunks: stored.chunks, returned: candles.length },
+        }));
+      }
+
+      if (candles.length) {
+        console.log('[DERIV HISTORY] PROVIDER FALLBACK', symbol, granularity, count, end, `stored=${candles.length}`);
+        return res.writeHead(200,{ 'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8' }).end(JSON.stringify({
+          msg_type:'candles',
+          candles,
+          sireHistoryStore: { enabled: stored.enabled, chunks: stored.chunks, returned: candles.length, providerError },
+        }));
+      }
+
+      console.error('[DERIV HISTORY] FAIL', symbol, providerError || 'No candles available from provider or persistent history store.');
+      return res.writeHead(502,{ 'Access-Control-Allow-Origin':'*','Content-Type':'application/json; charset=utf-8' }).end(JSON.stringify({
+        error: providerError || 'No candles available from Deriv or SIRE persistent history store.',
+        symbol, granularity, count, end,
+        sireHistoryStore: { enabled: stored.enabled, chunks: stored.chunks },
+      }));
+    }
+    if (req.method === 'GET' && pathname === '/api/sire/deriv/history/status') {
+      const status = await historyStoreStatus();
+      return res.writeHead(200,{ 'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8' }).end(JSON.stringify(status));
     }
     if (req.method === 'GET' && pathname === '/api/sire/deriv/health') { const result = await checkDerivPublicMarketData(); console.log('[DERIV HEALTH]', JSON.stringify(result)); return res.writeHead(result.ok ? 200 : 502,{ 'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8' }).end(JSON.stringify(result)); }
     if (req.method === 'POST' && pathname === '/api/sire/agent/chat') { const parsed = body ? JSON.parse(body) : {}; const response = await handleGeminiRequest(parsed); return res.writeHead(response.status,{ 'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8' }).end(JSON.stringify(response.body ?? {})); }
