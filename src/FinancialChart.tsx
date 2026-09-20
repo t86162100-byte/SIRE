@@ -78,8 +78,8 @@ function analyzeChartHealth(events: ChartDiagnostic[], snapshot: { bars: number;
   if (find('CHART_ZERO_SIZE')) return { state: 'ISSUE', subsystem: 'Layout/DOM', cause: 'The chart container has no usable dimensions.', evidence: snapshot.width + '×' + snapshot.height + 'px was measured.', next: 'Fix the parent layout or visibility before debugging market data.' };
   if (!snapshot.hasCanvas) return { state: 'ISSUE', subsystem: 'Chart renderer', cause: 'No chart canvas is mounted.', evidence: 'The chart host contains no canvas element.', next: 'Inspect widget creation, renderer initialization and teardown.' };
   if (!snapshot.hasPrimarySeries) return { state: 'ISSUE', subsystem: 'OpenAlgo chart API', cause: 'The primary price series is unavailable through widget.chart.', evidence: 'SIRE could not obtain widget.chart.primarySeries().', next: 'Inspect the installed OpenAlgo Charts API/version and object shape.' };
-  if (find('HISTORY_OLDER_LOAD_FAILED')) { const event = find('HISTORY_OLDER_LOAD_FAILED')!; return { state: 'ISSUE', subsystem: 'Progressive Deriv history', cause: event.message, evidence: event.detail || 'SIRE attempted to load older candles and the request failed.', next: 'Check the historical endpoint and the exact request details in the diagnostic log.' }; }
-  if (find('HISTORY_INITIAL_WINDOW') && snapshot.bars > 0) { const event = find('HISTORY_INITIAL_WINDOW')!; return { state: 'HEALTHY', subsystem: 'Deriv history', cause: `${snapshot.bars} startup candles are loaded; this is the initial window, not a history ceiling.`, evidence: event.detail || `SIRE starts with ${DERIV_INITIAL_BARS} candles and can fetch older pages progressively.`, next: 'Pan/scroll toward the oldest candle. SIRE will request another page and log exactly what Deriv returned.' }; }
+  if (find('HISTORY_PAGE_EMPTY')) { const event = find('HISTORY_PAGE_EMPTY')!; return { state: 'HEALTHY', subsystem: 'OpenAlgo history controller', cause: 'OpenAlgo requested an older history page and Deriv returned no older candles.', evidence: event.detail || 'The provider did not return another older page for the requested cursor.', next: 'OpenAlgo will stop paging when its provider reports no more history.' }; }
+  if (find('HISTORY_PAGE_LOADED') && snapshot.bars > 0) { const event = find('HISTORY_PAGE_LOADED')!; return { state: 'HEALTHY', subsystem: 'OpenAlgo history controller', cause: `${snapshot.bars} candles are currently retained by OpenAlgo.`, evidence: event.detail || 'OpenAlgo dataController loaded and merged an older history page.', next: 'Keep panning left; OpenAlgo owns the next-page request, cursor, merge and viewport anchoring.' }; }
   if (snapshot.bars === 0 || find('HISTORY_EMPTY') || find('HISTORY_LOAD_FAILED')) { const event = find('HISTORY_LOAD_FAILED') || find('HISTORY_EMPTY'); return { state: 'ISSUE', subsystem: 'Deriv history', cause: event?.message || 'No historical candles are available.', evidence: event?.detail || 'The primary series contains zero usable OHLC bars.', next: 'Check the SIRE history endpoint, Deriv response and symbol/granularity validation.' }; }
   if (find('LIVE_TICK_SUBSCRIPTION_FAILED')) { const event = find('LIVE_TICK_SUBSCRIPTION_FAILED')!; return { state: 'ISSUE', subsystem: 'Deriv live transport', cause: event.message, evidence: event.detail || 'The live subscription did not complete.', next: 'Check the /deriv/ws proxy, Deriv public WebSocket and subscription response.' }; }
   if (find('LIVE_TICK_STALE') || (snapshot.tickAgeMs !== null && snapshot.tickAgeMs > 10000)) return { state: 'ISSUE', subsystem: 'Deriv live transport', cause: 'The live tick stream is stale.', evidence: snapshot.tickAgeMs === null ? 'No live tick timestamp exists.' : Math.round(snapshot.tickAgeMs / 1000) + 's since the last tick.', next: 'Check the browser→SIRE WebSocket→Deriv path and reconnect state.' };
@@ -122,20 +122,19 @@ function ChartDiagnosticsPanel({ open, events, symbol, interval, quoteAgeMs, bar
   const activeError = [...events].reverse().find(event => event.level === 'error');
   const liveText = quoteAgeMs === null ? 'No live tick received yet' : Math.round(quoteAgeMs / 1000) + 's since last live tick';
   const diagnosis = analyzeChartHealth(events, { bars, tickAgeMs: quoteAgeMs, width, height, hasCanvas, hasPrimarySeries });
-  const historyInitial = [...events].reverse().find(event => event.code === 'HISTORY_INITIAL_WINDOW');
-  const historyOlder = events.filter(event => event.code === 'HISTORY_OLDER_LOADED').length;
-  const historyRequests = events.filter(event => event.code === 'HISTORY_OLDER_REQUEST_STARTED').length;
+  const historyOlder = events.filter(event => event.code === 'HISTORY_PAGE_LOADED').length;
+  const historyRequests = events.filter(event => event.code === 'HISTORY_PAGE_REQUESTED').length;
   const allText = events.map(diagnosticText).join('\n\n');
   const copy = async (id: number | 'all', value: string) => { if (await copyDiagnosticText(value)) { setCopiedId(id); window.setTimeout(() => setCopiedId(current => current === id ? null : current), 1400); } };
   return <div className="sire-chart-diagnostics" role="dialog" aria-label="Chart diagnostics">
     <div className="sire-chart-diagnostics__head"><div><strong>Chart diagnostics</strong><small>{symbol} · {interval} · {events.length} log entries · continuous monitoring</small></div><div className="sire-chart-diagnostics__head-actions"><button type="button" className="sire-chart-diagnostics__copy-all" onClick={() => void copy('all', allText)} disabled={!events.length}>{copiedId === 'all' ? 'Copied' : 'Copy all'}</button><button type="button" onClick={onClose} aria-label="Close chart diagnostics">×</button></div></div>
     <div className={'sire-chart-diagnostics__diagnosis is-' + diagnosis.state.toLowerCase()}><div><b>{diagnosis.state === 'HEALTHY' ? 'Chart is healthy' : diagnosis.state === 'ISSUE' ? 'Issue identified' : 'Checking chart'}</b><span>{diagnosis.subsystem}</span></div><strong>What is happening: </strong>{diagnosis.cause}<small><b>Evidence:</b> {diagnosis.evidence}</small><small><b>Next check:</b> {diagnosis.next}</small></div>
-    <div className="sire-chart-diagnostics__metrics"><span>History <b>{bars}</b>{historyInitial ? ` / ${DERIV_INITIAL_BARS} initial` : ''}</span><span>Older pages <b>{historyOlder}</b> / {historyRequests}</span><span>Live <b>{liveText}</b></span><span>Renderer <b>{renderer}</b></span><span>Canvas <b>{width}×{height}</b></span><span>Series <b>{hasPrimarySeries ? 'OK' : 'Missing'}</b></span></div>
+    <div className="sire-chart-diagnostics__metrics"><span>History <b>{bars}</b></span><span>Older pages <b>{historyOlder}</b> / {historyRequests}</span><span>Live <b>{liveText}</b></span><span>Renderer <b>{renderer}</b></span><span>Canvas <b>{width}×{height}</b></span><span>Series <b>{hasPrimarySeries ? 'OK' : 'Missing'}</b></span></div>
     {activeError && <div className="sire-chart-diagnostics__active"><b>{diagnosticLabel(activeError.level)} · {activeError.code}</b><span>{activeError.message}</span>{activeError.detail && <small>Why: {activeError.detail}</small>}{activeError.location && <small><b>Location:</b> {activeError.location.file}:{activeError.location.line}:{activeError.location.column}{activeError.location.functionName ? ` · ${activeError.location.functionName}` : ''}</small>}{activeError.operation && <small><b>Operation:</b> {activeError.operation}</small>}<button type="button" onClick={onRetry}>Retry chart data</button></div>}
     <div className="sire-chart-diagnostics__list">{events.length ? events.map(event => <div key={event.id} className={'sire-chart-diagnostics__event is-' + event.level}><div><b>{diagnosticLabel(event.level)} · {event.code}</b><time>{new Date(event.timestamp).toLocaleTimeString()}</time><button type="button" className="sire-chart-diagnostics__copy" onClick={() => void copy(event.id, diagnosticText(event))}>{copiedId === event.id ? 'Copied' : 'Copy'}</button></div><span>{event.message}</span>{event.detail && <small>{event.detail}</small>}{event.operation && <small><b>Operation:</b> {event.operation}</small>}{event.location && <small><b>Location:</b> {event.location.file}:{event.location.line}:{event.location.column}{event.location.functionName ? ` · ${event.location.functionName}` : ''}</small>}{event.stack && <details className="sire-chart-diagnostics__stack"><summary>Call stack</summary><pre>{event.stack}</pre></details>}</div>) : <div className="sire-chart-diagnostics__empty">No chart faults detected. Monitoring all chart layers continuously.</div>}</div>
   </div>;
 }
-import { createDerivDataFeed, DERIV_INTERVAL_SECONDS, DERIV_PAGE_SIZE, DERIV_INITIAL_BARS, fetchAllDerivHistory, fetchOlderDerivHistory, tickToBar, type DerivBar, type DerivInstrument, type DerivFeedDiagnostic } from './derivMarketData';
+import { createDerivDataFeed, DERIV_INTERVAL_SECONDS, tickToBar, type DerivBar, type DerivInstrument, type DerivFeedDiagnostic } from './derivMarketData';
 
 export { type DerivInstrument, type DerivBar } from './derivMarketData';
 
@@ -190,9 +189,6 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
   const onSelectInstrumentRef = useRef(onSelectInstrument);
   const symbolRef = useRef(symbol);
   const timeframeRef = useRef(activeTimeframe);
-  const historyLoadingRef = useRef(false);
-  const historyExhaustedRef = useRef(false);
-  const oldestLoadedTimeRef = useRef<number | null>(null);
   // Keep the full history loaded, but don't fit hundreds of candles into the
   // initial mobile viewport. The chart engine can auto-fit after setData(), so
   // we explicitly establish a readable first viewport once per symbol/timeframe.
@@ -351,8 +347,9 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
     return date.getFullYear() + '-' + pad(date.getMonth() + 1) + '-' + pad(date.getDate()) + 'T' + pad(date.getHours()) + ':' + pad(date.getMinutes());
   };
   const refreshReplayBounds = () => {
-    const oldest = oldestLoadedTimeRef.current;
+    const oldest = (widgetRef.current?.chart.primarySeries()?.getData?.() as DerivBar[] | undefined)?.[0]?.time;
     const now = Math.floor(Date.now() / 1000);
+    const oldest = (widgetRef.current?.chart.primarySeries()?.getData?.() as DerivBar[] | undefined)?.[0]?.time;
     if (oldest && Number.isFinite(oldest)) setReplayStartMin(formatReplayInputTime(oldest));
     setReplayNow(formatReplayInputTime(now));
     const currentStart = replayStartInput ? new Date(replayStartInput).getTime() / 1000 : oldest ?? now;
@@ -387,7 +384,7 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
       const ms = new Date(value).getTime();
       return Number.isFinite(ms) ? Math.floor(ms / 1000) : null;
     };
-    const leftEdge = oldestLoadedTimeRef.current ?? allBars[0]?.time ?? Math.floor(Date.now() / 1000);
+    const leftEdge = oldest ?? allBars[0]?.time ?? Math.floor(Date.now() / 1000);
     const now = Math.floor(Date.now() / 1000);
     const requestedStart = fromBeginning ? leftEdge : parseReplayTime(replayStartInput);
     if (!fromBeginning && replayStartInput && requestedStart === null) { setReplayRangeError('Invalid replay start date/time.'); return; }
@@ -449,14 +446,13 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
         symbol,
         exchange: 'DERIV',
         feed,
-        loading: { retainedBars: 10000 },
         interval: '1m',
         intervals: CHART_INTERVALS,
         chartType: 'candlestick',
         theme: 'dark',
         renderer: 'canvas2d',
         navigation: { mousePan: 'both', defaultVisibleBars: 10 },
-        lookbackBars: 5000,
+        lookbackBars: 500,
         animZoom: true,
         animAutoscale: true,
         branding: false,
@@ -486,9 +482,6 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
         setActiveTimeframe(event.interval);
         timeframeRef.current = event.interval;
         initialViewportContextRef.current = '';
-        historyLoadingRef.current = false;
-        historyExhaustedRef.current = false;
-        oldestLoadedTimeRef.current = null;
         setMarketQuote(null);
         lastTickAtRef.current = null;
         lastLiveQuoteRef.current = null;
@@ -507,7 +500,6 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
         if (live && live.symbol === symbolRef.current && Math.floor(Date.now() / 1000) - live.epoch < 10) return;
         const bars = (widget.chart.primarySeries()?.getData?.() || []) as DerivBar[];
         const last = bars[bars.length - 1];
-        if (bars.length && oldestLoadedTimeRef.current === null) oldestLoadedTimeRef.current = bars[0].time;
         if (!last || !Number.isFinite(last.close)) return;
         const previous = bars.length > 1 ? bars[bars.length - 2] : null;
         const percent = previous?.close ? ((last.close - previous.close) / previous.close) * 100 : 0;
@@ -520,10 +512,8 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
         }
         syncQuoteFromSeries();
 
-        // The 500-bar history is retained for panning/history loading, but the
-        // initial viewport should show a readable number of candles. Without
-        // this, mobile auto-fit can compress 500 D1 candles into thin histogram-
-        // looking vertical strokes.
+        // OpenAlgo owns the loaded history. This only establishes a readable initial viewport;
+        // it does not change the retained history or loading window.
         const series = widget.chart.primarySeries();
         const bars = (series?.getData?.() || []) as DerivBar[];
         const contextKey = `${symbolRef.current}:${timeframeRef.current}`;
@@ -542,68 +532,7 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
         }
       });
 
-      // Load history progressively as the user pans toward the oldest loaded bar.
-      // The chart keeps everything already loaded, while older pages are fetched
-      // only when they are actually needed.
-      widget.chart.setHistoryLoader?.(() => {
-        if (historyLoadingRef.current || historyExhaustedRef.current) return;
-        const currentSymbol = symbolRef.current;
-        const currentInterval = timeframeRef.current;
-        const series = widget.chart.primarySeries();
-        const seriesBars = (series?.getData?.() || []) as DerivBar[];
-        if (oldestLoadedTimeRef.current === null && seriesBars.length) oldestLoadedTimeRef.current = seriesBars[0].time;
-        const oldest = oldestLoadedTimeRef.current;
-        if (!currentSymbol || !oldest) return;
-
-        historyLoadingRef.current = true;
-        reportDiagnostic({ level: 'info', code: 'HISTORY_OLDER_REQUEST_STARTED', message: `Requesting older ${currentInterval} candles for ${currentSymbol}.`, detail: `Current oldest candle: ${new Date(oldest * 1000).toISOString()}. Requesting up to ${DERIV_PAGE_SIZE} older candles from Deriv.` });
-        void (async () => {
-          try {
-            const older = await fetchOlderDerivHistory(currentSymbol, currentInterval, oldest - 1, DERIV_PAGE_SIZE);
-            if (widgetRef.current !== widget || symbolRef.current !== currentSymbol || timeframeRef.current !== currentInterval) return;
-            if (!older.length) {
-              historyExhaustedRef.current = true;
-              reportDiagnostic({ level: 'info', code: 'HISTORY_EXHAUSTED', message: `No older ${currentInterval} candles were returned for ${currentSymbol}.`, detail: `The progressive loader reached the oldest history available from the Deriv endpoint for this request.` });
-              return;
-            }
-            const series = widget.chart.primarySeries();
-            if (!series) return;
-            // Do not rely on prependData here. The chart's underlying data API
-            // requires ordered, unique data and a full replacement can reset the
-            // viewport. Merge the pages ourselves, then restore the logical range
-            // shifted by the number of genuinely new bars.
-            const existing = (series.getData?.() || []) as DerivBar[];
-            const visibleRange = getChartTimeScale(widget.chart)?.getVisibleLogicalRange?.();
-            const mergedByTime = new Map<number, DerivBar>();
-            for (const bar of existing) mergedByTime.set(bar.time, bar);
-            for (const bar of older) mergedByTime.set(bar.time, bar);
-            const merged = Array.from(mergedByTime.values()).sort((a, b) => a.time - b.time);
-            const existingTimes = new Set(existing.map(bar => bar.time));
-            const insertedCount = older.filter(bar => !existingTimes.has(bar.time)).length;
-            series.setData(merged);
-            if (visibleRange && insertedCount > 0) {
-              getChartTimeScale(widget.chart)?.setVisibleLogicalRange?.({
-                from: visibleRange.from + insertedCount,
-                to: visibleRange.to + insertedCount,
-              });
-            }
-            oldestLoadedTimeRef.current = merged[0]?.time ?? older[0].time;
-            reportDiagnostic({ level: 'info', code: 'HISTORY_OLDER_LOADED', message: `Loaded ${older.length} older ${currentInterval} candles for ${currentSymbol}.`, detail: `Deriv returned ${older.length} usable candles. New oldest candle: ${new Date(older[0].time * 1000).toISOString()}. Total chart history is now approximately ${(series.getData?.() || []).length} candles.` });
-            if (older.length < DERIV_PAGE_SIZE || older[0].time <= 1) {
-              historyExhaustedRef.current = true;
-              reportDiagnostic({ level: 'info', code: 'HISTORY_EXHAUSTED', message: `Reached the end of available ${currentInterval} history for ${currentSymbol}.`, detail: `The last page contained ${older.length} candles (requested ${DERIV_PAGE_SIZE}), so no further full page is expected.` });
-            }
-          } catch (error) {
-            const message = error instanceof Error ? error.message : String(error);
-            reportDiagnostic({ level: 'error', code: 'HISTORY_OLDER_LOAD_FAILED', message: `Older history failed for ${currentSymbol} ${currentInterval}: ${message}`, detail: `The progressive loader was trying to extend history beyond the initial ${DERIV_INITIAL_BARS}-candle startup window.`, ...diagnosticErrorDetails(error, `fetchOlderDerivHistory(${currentSymbol}, ${currentInterval})`) });
-            console.error('Failed to load older chart history', error);
-          } finally {
-            historyLoadingRef.current = false;
-            widget.chart.historyLoadComplete?.();
-          }
-        })();
-      });
-      const updateDrawingOverlay = (drawing: any) => {
+      // OpenAlgo Charts dataController owns history paging, retention, merging and viewport anchoring.\n      const updateDrawingOverlay = (drawing: any) => {
         if (!drawing) { setSelectedDrawingPosition(null); return; }
         const rect = host.getBoundingClientRect();
         setSelectedDrawingPosition({ left: Math.max(90, rect.width / 2), top: Math.max(90, rect.height / 2 - 70) });
@@ -693,9 +622,6 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
     lastTickAtRef.current = null;
     lastLiveQuoteRef.current = null;
     setDiagnostics([]);
-    historyLoadingRef.current = false;
-    historyExhaustedRef.current = false;
-    oldestLoadedTimeRef.current = null;
     if (widget.symbol() !== symbol) widget.setSymbol(symbol, 'DERIV');
   }, [symbol]);
 
