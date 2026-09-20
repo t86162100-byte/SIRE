@@ -166,5 +166,6 @@ export async function runOpenAlgoAgent(input: {
     toolTrace,
     skills: skillContext(query).map(x => x.name),
     agentMode: 'openalgo-compatible',
+    error: undefined,
   };
 }
