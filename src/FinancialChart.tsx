@@ -531,7 +531,8 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
         }
       });
 
-      // OpenAlgo Charts dataController owns history paging, retention, merging and viewport anchoring.\n      const updateDrawingOverlay = (drawing: any) => {
+      // OpenAlgo Charts dataController owns history paging, retention, merging and viewport anchoring.
+      const updateDrawingOverlay = (drawing: any) => {
         if (!drawing) { setSelectedDrawingPosition(null); return; }
         const rect = host.getBoundingClientRect();
         setSelectedDrawingPosition({ left: Math.max(90, rect.width / 2), top: Math.max(90, rect.height / 2 - 70) });
