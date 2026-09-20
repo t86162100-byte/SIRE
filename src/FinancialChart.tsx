@@ -394,7 +394,7 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
       const ms = new Date(value).getTime();
       return Number.isFinite(ms) ? Math.floor(ms / 1000) : null;
     };
-    const leftEdge = oldest ?? allBars[0]?.time ?? Math.floor(Date.now() / 1000);
+    const leftEdge = allBars[0]?.time ?? Math.floor(Date.now() / 1000);
     const now = Math.floor(Date.now() / 1000);
     const requestedStart = fromBeginning ? leftEdge : parseReplayTime(replayStartInput);
     if (!fromBeginning && replayStartInput && requestedStart === null) { setReplayRangeError('Invalid replay start date/time.'); return; }
