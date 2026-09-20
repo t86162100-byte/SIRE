@@ -582,7 +582,7 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
             const insertedCount = older.filter(bar => !existingTimes.has(bar.time)).length;
             series.setData(merged);
             if (visibleRange && insertedCount > 0) {
-              widget.chart.timeScale?.().setVisibleLogicalRange?.({
+              getChartTimeScale(widget.chart)?.setVisibleLogicalRange?.({
                 from: visibleRange.from + insertedCount,
                 to: visibleRange.to + insertedCount,
               });
