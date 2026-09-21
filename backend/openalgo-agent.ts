@@ -77,11 +77,34 @@ function skillContext(query: string) {
   return relevant.length ? relevant : OPENALGO_SKILLS;
 }
 
+function resolveRequestedInstrument(query: string, runtimeContext?: RuntimeContext) {
+  const available = Array.isArray(runtimeContext?.availableInstruments) ? runtimeContext.availableInstruments as Array<Record<string, unknown>> : [];
+  if (!available.length) return null;
+  const normalized = query.toLowerCase().replace(/[^a-z0-9]+/g, '');
+  const scored = available.map(item => {
+    const symbol = String(item.symbol || '');
+    const name = String(item.name || '');
+    const ns = symbol.toLowerCase().replace(/[^a-z0-9]+/g, '');
+    const nn = name.toLowerCase().replace(/[^a-z0-9]+/g, '');
+    let score = 0;
+    if (normalized.includes(ns) || ns.includes(normalized)) score += 100;
+    if (normalized.includes(nn) || nn.includes(normalized)) score += 90;
+    const compact = normalized.replace(/^the/, '');
+    if (compact === ns || compact === nn) score += 200;
+    if (/boom1000/.test(normalized) && (/boom1000/.test(ns) || /boom1000/.test(nn))) score += 500;
+    if (/boom500/.test(normalized) && (/boom500/.test(ns) || /boom500/.test(nn))) score += 500;
+    if (/crash1000/.test(normalized) && (/crash1000/.test(ns) || /crash1000/.test(nn))) score += 500;
+    if (/crash500/.test(normalized) && (/crash500/.test(ns) || /crash500/.test(nn))) score += 500;
+    return { item, score };
+  }).filter(item => item.score > 0).sort((a, b) => b.score - a.score);
+  return scored[0]?.item || null;
+}
+
 function systemPrompt() {
   return [
     'You are the SIRE OpenAlgo-compatible AI Agent layer inside a shared AI council.',
     'You have a real OpenAlgo Charts runtime in the browser and SIRE market-data services behind the server.',
-    'Use the supplied chart context as the source of truth for the current chart. Do not invent prices, bars, indicators, drawings, or chart state.',
+    'Use the supplied chart context as the source of truth for the current chart. Do not invent prices, bars, indicators, drawings, or chart state. When the user names an instrument, resolve it against chartContext.availableInstruments and use the exact catalogue symbol; never substitute an unrelated instrument because it seems like an equivalent.',
     'You may request server tools, then use their results. You may also return chart actions for the browser to execute.',
     'Do not expose hidden chain-of-thought. Give concise visible summaries and a direct answer.',
     'Never claim an order was placed. Trading actions are proposals requiring explicit user approval; the browser never auto-submits a live order from an AI response.',
@@ -174,13 +197,29 @@ export async function runOpenAlgoAgent(input: {
     messages.push({ role: 'user', content: `TOOL RESULTS:\n${JSON.stringify(results)}\n\nContinue the agent task. If more tools are needed, request them. Otherwise return the final JSON.` });
   }
 
+  // Deterministically correct instrument targeting before chart actions reach the browser.
+  const requestedInstrument = resolveRequestedInstrument(query, input.runtimeContext);
+  if (requestedInstrument) {
+    const exactSymbol = String(requestedInstrument.symbol || '');
+    if (exactSymbol) {
+      const hasSelection = actions.some(a => String(a.__sireAction || a.type || '') === 'select_instrument' && String(a.symbol || '') === exactSymbol);
+      if (!hasSelection) actions.unshift({ __sireAction: 'select_instrument', type: 'select_instrument', symbol: exactSymbol });
+      for (const action of actions) {
+        const type = String(action.__sireAction || action.type || '');
+        if (type !== 'select_instrument' && ['set_timeframe','set_chart_type','add_indicator','remove_indicator','add_price_line','add_drawing','set_visible_range','fit_chart','reset_scale','set_timezone','set_theme','open_indicator_picker','open_drawing_tools','open_settings','take_screenshot','export_svg','replay_start','replay_play','replay_pause','replay_step','replay_stop'].includes(type)) {
+          action.symbol = exactSymbol;
+        }
+      }
+    }
+  }
+
   // Deterministic chart-intent fallback: if the user explicitly asks for a trend line/current trend,
   // never rely on the model remembering to emit a drawing action. The browser resolves the real
   // first/last visible-bar anchors from the active OpenAlgo chart.
   if (/(trend[- ]?line|draw (the )?current trend|current trend)/i.test(query)) {
     const drawing = actions.find(a => String(a.__sireAction || a.type || '') === 'add_drawing');
     if (!drawing) {
-      actions.push({ __sireAction: 'add_drawing', type: 'add_drawing', tool: 'trend-line', paneIndex: 0 });
+      actions.push({ __sireAction: 'add_drawing', type: 'add_drawing', tool: 'trend-line', paneIndex: 0, resolveFromVisibleRange: true });
     }
     if (/\ball\s+instruments\b/i.test(query)) {
       const target = actions.find(a => String(a.__sireAction || a.type || '') === 'add_drawing');
