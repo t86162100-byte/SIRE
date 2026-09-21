@@ -1427,4 +1427,5 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
         </div>
       </div>
     </div>
+    </div>
   );
