@@ -200,6 +200,23 @@ export async function runOpenAlgoAgent(input: {
   }
 
   // Deterministically correct instrument targeting before chart actions reach the browser.
+  // Normalize common timeframe wording before actions reach the browser.
+  const timeframeAliases: Record<string, string> = {
+    m1: '1m', m2: '2m', m3: '3m', m5: '5m', m10: '10m', m15: '15m', m20: '20m', m30: '30m', m45: '45m',
+    h1: '1h', h2: '2h', h3: '3h', h4: '4h', h6: '6h', h8: '8h', h12: '12h', d1: '1d', w1: '1w',
+  };
+  for (const action of actions) {
+    const type = String(action.__sireAction || action.type || '');
+    if (type === 'set_timeframe') {
+      const raw = String(action.interval || action.timeframe || '').trim().toLowerCase();
+      const normalized = timeframeAliases[raw] || raw;
+      if (normalized) {
+        action.interval = normalized;
+        action.timeframe = normalized;
+      }
+    }
+  }
+
   const requestedInstrument = resolveRequestedInstrument(query, input.runtimeContext);
   if (requestedInstrument) {
     const exactSymbol = String(requestedInstrument.symbol || '');
