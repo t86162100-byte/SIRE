@@ -35,13 +35,10 @@ const persistChatMessage = (chatId: string, message: ChatMessage, title?: string
     const sessions = raw ? JSON.parse(raw) : [];
     const list = Array.isArray(sessions) ? sessions : [];
     const index = list.findIndex((chat: ChatSession) => chat.id === chatId);
-    if (index >= 0) {
-      const chat = list[index] as ChatSession;
-      const messages = [...chat.messages, message].slice(-200);
-      list[index] = { ...chat, title: title && chat.title === 'New chat' ? title : chat.title, messages, updatedAt: Date.now() };
-    } else {
-      list.unshift({ id: chatId, title: title || 'New chat', messages: [message], createdAt: Date.now(), updatedAt: Date.now() });
-    }
+    if (index < 0) return;
+    const chat = list[index] as ChatSession;
+    const messages = [...chat.messages, message].slice(-200);
+    list[index] = { ...chat, title: title && chat.title === 'New chat' ? title : chat.title, messages, updatedAt: Date.now() };
     window.localStorage.setItem('sire-chat-sessions', JSON.stringify(list.filter((chat: ChatSession) => chat.messages.length > 0).slice(0, 100)));
   } catch { /* storage can be unavailable */ }
 };
