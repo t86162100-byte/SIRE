@@ -55,10 +55,24 @@ export default function ResearchLab({ symbol, instruments, onClose, onSelectInst
     try {
       const raw = window.localStorage.getItem('sire-chat-sessions');
       const parsed = raw ? JSON.parse(raw) : [];
-      if (Array.isArray(parsed) && parsed.length) return parsed.filter(item => item && Array.isArray(item.messages)).map(item => ({ ...item, messages: item.messages.slice(-200) }));
+      if (Array.isArray(parsed) && parsed.length) {
+        // Only completed conversations belong in history. An untouched "New chat"
+        // is a temporary draft and must never become a saved history item.
+        return parsed
+          .filter(item => item && Array.isArray(item.messages) && item.messages.length > 0)
+          .map(item => ({ ...item, messages: item.messages.slice(-200) }));
+      }
       const legacy = window.localStorage.getItem('sire-chat-history');
       const legacyMessages = legacy ? JSON.parse(legacy) : [];
-      if (Array.isArray(legacyMessages) && legacyMessages.length) return [{ id: `chat-legacy-${Date.now()}`, title: String(legacyMessages.find((m: any) => m?.role === 'user')?.text || 'Previous chat').slice(0, 48), messages: legacyMessages.slice(-200), createdAt: Date.now(), updatedAt: Date.now() }];
+      if (Array.isArray(legacyMessages) && legacyMessages.length) {
+        return [{
+          id: `chat-legacy-${Date.now()}`,
+          title: String(legacyMessages.find((m: any) => m?.role === 'user')?.text || 'Previous chat').slice(0, 48),
+          messages: legacyMessages.slice(-200),
+          createdAt: Date.now(),
+          updatedAt: Date.now()
+        }];
+      }
     } catch { /* storage can be unavailable in private browsing */ }
     return [];
   });
@@ -75,7 +89,17 @@ export default function ResearchLab({ symbol, instruments, onClose, onSelectInst
     setActiveChatId(created.id);
     try { window.localStorage.removeItem('sire-active-chat-id'); } catch { /* storage can be unavailable */ }
   }, []);
-  useEffect(() => { try { window.localStorage.setItem('sire-chat-sessions', JSON.stringify(chatSessions.slice(0, 100))); } catch { /* storage can be unavailable in private browsing */ } }, [chatSessions]);
+  useEffect(() => {
+    try {
+      // Never persist an untouched draft. It can exist in memory so the user
+      // gets a fresh composer, but history should contain conversations only.
+      const completed = chatSessions.filter(chat => chat.messages.length > 0).slice(0, 100);
+      window.localStorage.setItem('sire-chat-sessions', JSON.stringify(completed));
+      if (activeChatId && !chatSessions.some(chat => chat.id === activeChatId && chat.messages.length > 0)) {
+        window.localStorage.removeItem('sire-active-chat-id');
+      }
+    } catch { /* storage can be unavailable in private browsing */ }
+  }, [chatSessions, activeChatId]);
   useEffect(() => { try { if (activeChatId) window.localStorage.setItem('sire-active-chat-id', activeChatId); else window.localStorage.removeItem('sire-active-chat-id'); } catch { /* storage can be unavailable in private browsing */ } }, [activeChatId]);
   useEffect(() => { runtimeContextRef.current = runtimeContext || null; }, [runtimeContext]); useEffect(() => { setActiveSymbol(symbol); }, [symbol]); useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' }); }, [chatMessages, chatBusy, activity, webSources]);
   const buildRuntimeContext = (): RuntimeContext => ({ ...(runtimeContextRef.current || (typeof window !== 'undefined' ? ((window as any).__sireChartContexts?.[activeSymbol] || { symbol: activeSymbol }) : { symbol: activeSymbol })), availableInstruments: instruments.map(instrument => ({ symbol: instrument.symbol, name: instrument.name })) });
@@ -108,7 +132,7 @@ export default function ResearchLab({ symbol, instruments, onClose, onSelectInst
       <div className="sire-chat-history-head"><div className="sire-chat-history-brand"><div className="sire-chat-history-mark"><Sparkles size={15} /></div><strong>SIRE</strong></div><button type="button" onClick={() => setSidebarOpen(false)} aria-label="Close chat history"><X size={17} /></button></div>
       <button type="button" className="sire-new-chat" onClick={startNewChat}><MessageSquarePlus size={17} /><span>New chat</span></button>
       <div className="sire-chat-history-label">Recent</div>
-      <div className="sire-chat-history-list">{chatSessions.map(chat => <div className={`sire-chat-history-item ${chat.id === activeChatId ? 'active' : ''}`} key={chat.id}><button type="button" className="sire-chat-history-open" onClick={() => openChat(chat.id)}><span className="sire-chat-history-title">{chat.title || 'New chat'}</span><small>{formatChatDate(chat.updatedAt)}</small></button><button type="button" className="sire-chat-history-delete" onClick={() => deleteChat(chat.id)} aria-label={`Delete ${chat.title || 'chat'}`}><Trash2 size={14} /></button></div>)}{chatSessions.length === 0 && <p className="sire-chat-history-empty">Your conversations will appear here.</p>}</div>
+      <div className="sire-chat-history-list">{chatSessions.filter(chat => chat.messages.length > 0).map(chat => <div className={`sire-chat-history-item ${chat.id === activeChatId ? 'active' : ''}`} key={chat.id}><button type="button" className="sire-chat-history-open" onClick={() => openChat(chat.id)}><span className="sire-chat-history-title">{chat.title || 'New chat'}</span><small>{formatChatDate(chat.updatedAt)}</small></button><button type="button" className="sire-chat-history-delete" onClick={() => deleteChat(chat.id)} aria-label={`Delete ${chat.title || 'chat'}`}><Trash2 size={14} /></button></div>)}{chatSessions.every(chat => chat.messages.length === 0) && <p className="sire-chat-history-empty">Your conversations will appear here.</p>}</div>
     </aside>
     <header className="sire-chat-only-header"><button className="sire-chat-history-toggle" type="button" onClick={() => setSidebarOpen(true)} aria-label="Open chat history"><Menu size={19} /></button><div className="sire-chat-only-brand"><div className="sire-chat-only-mark"><Sparkles size={16} /></div><span>SIRE</span><i className={chatBusy ? 'sire-live-dot active' : 'sire-live-dot'} /></div><div className="sire-chat-context"><span>{instruments.find(item => item.symbol === activeSymbol)?.name || activeSymbol}</span></div><div className="sire-chat-header-actions"><button className="sire-chat-header-new" type="button" onClick={startNewChat} disabled={chatBusy}><MessageSquarePlus size={17} /><span>New chat</span></button><button className="sire-chat-only-close" onClick={onClose} aria-label="Close SIRE"><X size={18} /></button></div></header>
     <main className="sire-chat-only-messages"><div className="sire-chat-only-inner">
