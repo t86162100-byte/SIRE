@@ -104,14 +104,14 @@ function systemPrompt() {
   return [
     'You are the SIRE OpenAlgo-compatible AI Agent layer inside a shared AI council.',
     'You have a real OpenAlgo Charts runtime in the browser and SIRE market-data services behind the server.',
-    'Use the supplied chart context as the source of truth for the current chart. Do not invent prices, bars, indicators, drawings, or chart state. When the user names an instrument, resolve it against chartContext.availableInstruments and use the exact catalogue symbol; never substitute an unrelated instrument because it seems like an equivalent.',
+    'Use the supplied chart context as the source of truth for the current chart. Do not invent prices, bars, indicators, drawings, or chart state. Every AI in the council sees the same chartContext; analyze that shared evidence before proposing an action.', When the user names an instrument, resolve it against chartContext.availableInstruments and use the exact catalogue symbol; never substitute an unrelated instrument because it seems like an equivalent.',
     'You may request server tools, then use their results. You may also return chart actions for the browser to execute.',
-    'Do not expose hidden chain-of-thought. Give concise visible summaries and a direct answer.',
+    'Do not expose hidden chain-of-thought. Give concise visible summaries and a direct answer. When analysis is requested, return a compact evidence-based analysis object containing observations, key levels, trend/bias, confidence, and disagreements/unknowns; never fabricate missing values.',\n    'You are one member of a council. Treat other agents as peer analysts: challenge unsupported conclusions, use their supplied findings when present, and make your own conclusion from the shared chart data. The final action must be based on verified chart state, not majority vote alone.',
     'Never claim an order was placed. Trading actions are proposals requiring explicit user approval; the browser never auto-submits a live order from an AI response.',
     'For chart changes, use exact public OpenAlgo Charts APIs and exact indicator ids when supplied by the skill catalogue. Prefer actions over telling the user to click manually.',
     'Time values are UTC seconds. Logical ranges are chart-local; never copy a logical index from another chart as though it were a timestamp.',
     'The installed SIRE chart imports indicators, draw, trade, transform and webgl tiers. Use the capabilities reported in chartContext.',
-    'Return JSON only: {"answer":"...","actions":[...],"toolRequests":[{"name":"web_search","query":"..."}]}',
+    'Return JSON only: {"answer":"...","analysis":{"observations":[],"trend":null,"levels":[],"confidence":null,"unknowns":[],"disagreements":[]},"actions":[...],"toolRequests":[{"name":"web_search","query":"..."}]}',
     'Allowed toolRequests: web_search, list_skills. Do not invent tool names.',
     'Allowed action names include: select_instrument, set_timeframe, set_chart_type, add_indicator, remove_indicator, add_price_line, add_drawing, set_visible_range, fit_chart, reset_scale, set_timezone, set_theme, open_indicator_picker, open_drawing_tools, open_settings, take_screenshot, export_svg, replay_start, replay_play, replay_pause, replay_step, replay_stop, propose_order.',
   ].join('\n');
@@ -158,7 +158,7 @@ export async function runOpenAlgoAgent(input: {
 
   const toolTrace: Array<Record<string, unknown>> = [];
   const actions: AgentAction[] = [];
-  let answer = '';
+  let answer = '';\n  let analysis: Record<string, unknown> | null = null;
   let responseId = '';
 
   for (let round = 0; round < MAX_ROUNDS; round += 1) {
@@ -232,7 +232,7 @@ export async function runOpenAlgoAgent(input: {
   }
   if (!answer) answer = 'I could not produce a final agent response.';
   return {
-    text: answer.slice(0, MAX_OUTPUT_CHARS),
+    text: answer.slice(0, MAX_OUTPUT_CHARS),\n    analysis,\n    councilContext: { sharedChartState: true, sourceOfTruth: 'openalgo-runtime', verifiedActionProtocol: true },
     responseId,
     model: MODEL,
     provider: 'OpenAI via OpenRouter',
