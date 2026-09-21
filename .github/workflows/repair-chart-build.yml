@@ -1,0 +1,37 @@
+name: Repair chart build
+
+on:
+  push:
+    branches: [render-migration]
+
+permissions:
+  contents: write
+
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: render-migration
+      - name: Repair
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p = Path("src/FinancialChart.tsx")
+          s = p.read_text()
+          old = "timeframe: targetInterval || currentInterval, tool"
+          new = "timeframe: targetInterval || String(widgetRef.current?.interval?.() || ''), tool"
+          if old not in s:
+              print("No repair needed")
+              raise SystemExit(0)
+          p.write_text(s.replace(old, new, 1))
+          PY
+      - name: Commit repair if needed
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if git diff --quiet; then exit 0; fi
+          git add src/FinancialChart.tsx
+          git commit -m "fix: resolve chart action build error"
+          git push origin render-migration
