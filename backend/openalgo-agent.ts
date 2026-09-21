@@ -176,7 +176,7 @@ export async function runOpenAlgoAgent(input: {
     if (!drawing) {
       actions.push({ __sireAction: 'add_drawing', type: 'add_drawing', tool: 'trend-line', paneIndex: 0 });
     }
-    if (/\\ball\\s+instruments\\b/i.test(query)) {
+    if (/\ball\s+instruments\b/i.test(query)) {
       const target = actions.find(a => String(a.__sireAction || a.type || '') === 'add_drawing');
       if (target) target.scope = 'all_instruments';
     }
