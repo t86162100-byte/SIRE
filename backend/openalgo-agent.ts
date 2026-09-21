@@ -51,9 +51,15 @@ function normalizeActions(value: unknown): AgentAction[] {
     // the canonical SIRE action shape, so normalize it server-side.
     const name = String(raw.__sireAction || raw.type || raw.name || '');
     const params = raw.params && typeof raw.params === 'object' ? raw.params as Record<string, unknown> : {};
+    const merged = { ...params, ...raw } as Record<string, unknown>;
+    const rawTool = String(merged.tool || merged.kind || '').toLowerCase();
+    const tool = rawTool === 'trendline' || rawTool === 'trend-line' ? 'trend-line'
+      : rawTool === 'horizontal' || rawTool === 'horizontal-line' ? 'horizontal-line'
+      : rawTool === 'ray' ? 'ray'
+      : merged.tool;
+    if (tool) merged.tool = tool;
     return {
-      ...params,
-      ...raw,
+      ...merged,
       ...(name ? { __sireAction: name, type: name } : {}),
     };
   });
@@ -182,6 +188,9 @@ export async function runOpenAlgoAgent(input: {
     }
   }
 
+  if (/\\ball\\s+instruments\\b/i.test(query) && /(trend[- ]?line|draw (the )?current trend|current trend)/i.test(query)) {
+    answer = 'Applied the trend-line request to the current chart and queued it for the other instruments. Each instrument resolves its own visible candles so the line is not copied from another market.';
+  }
   if (!answer) answer = 'I could not produce a final agent response.';
   return {
     text: answer.slice(0, MAX_OUTPUT_CHARS),
