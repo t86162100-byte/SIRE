@@ -40,6 +40,39 @@ const CHART_TYPES = [
 ] as const;
 const REPLAY_SPEEDS = [0.5, 1, 2, 5, 10] as const;
 const replaySpeedLabel = (speed: number) => `${speed}×`;
+function resolveTrendLinePoints(sourceBars: any[], visibleRange: any, tool: string) {
+  if (!Array.isArray(sourceBars) || sourceBars.length < 2) return [];
+  const from = visibleRange && Number.isFinite(Number(visibleRange.from)) ? Math.max(0, Math.floor(Number(visibleRange.from))) : 0;
+  const to = visibleRange && Number.isFinite(Number(visibleRange.to)) ? Math.min(sourceBars.length - 1, Math.ceil(Number(visibleRange.to))) : sourceBars.length - 1;
+  const bars = sourceBars.slice(from, to + 1).filter((bar: any) => Number.isFinite(Number(bar?.close)) && bar?.time !== undefined);
+  if (bars.length < 2) return [];
+  if (tool === 'horizontal-line') {
+    const price = Number(bars[bars.length - 1].close);
+    return [{ time: bars[0].time, price }, { time: bars[bars.length - 1].time, price }];
+  }
+  if (bars.length < 8) return [{ time: bars[0].time, price: Number(bars[0].close) }, { time: bars[bars.length - 1].time, price: Number(bars[bars.length - 1].close) }];
+  const n = bars.length;
+  const meanX = (n - 1) / 2;
+  const meanY = bars.reduce((sum: number, bar: any) => sum + Number(bar.close), 0) / n;
+  let num = 0, den = 0;
+  for (let i = 0; i < n; i += 1) { const y = Number(bars[i].close); num += (i - meanX) * (y - meanY); den += (i - meanX) * (i - meanX); }
+  const slope = den ? num / den : 0;
+  const radius = Math.max(2, Math.min(4, Math.floor(n / 30)));
+  const pivots: Array<{ i: number; price: number }> = [];
+  for (let i = radius; i < n - radius; i += 1) {
+    const price = Number(bars[i].close);
+    const window = bars.slice(i - radius, i + radius + 1).map((bar: any) => Number(bar.close));
+    if (slope >= 0 && price === Math.min(...window)) pivots.push({ i, price });
+    if (slope < 0 && price === Math.max(...window)) pivots.push({ i, price });
+  }
+  if (pivots.length >= 2) { const first = pivots[0]; const last = pivots[pivots.length - 1]; return [{ time: bars[first.i].time, price: first.price }, { time: bars[last.i].time, price: last.price }]; }
+  const split = Math.floor(n * 2 / 3);
+  const left = Math.max(2, Math.floor(n / 3));
+  const firstIndex = slope >= 0 ? bars.slice(0, left).reduce((best: number, bar: any, i: number) => Number(bar.close) < Number(bars[best].close) ? i : best, 0) : bars.slice(0, left).reduce((best: number, bar: any, i: number) => Number(bar.close) > Number(bars[best].close) ? i : best, 0);
+  let lastIndex = split + (slope >= 0 ? bars.slice(split).reduce((best: number, bar: any, i: number) => Number(bar.close) < Number(bars[split + best].close) ? i : best, 0) : bars.slice(split).reduce((best: number, bar: any, i: number) => Number(bar.close) > Number(bars[split + best].close) ? i : best, 0));
+  if (firstIndex === lastIndex) lastIndex = n - 1;
+  return [{ time: bars[firstIndex].time, price: Number(bars[firstIndex].close) }, { time: bars[lastIndex].time, price: Number(bars[lastIndex].close) }];
+}
 
 type DiagnosticLocation = { file: string; line: number; column: number; functionName?: string };
 type ChartDiagnostic = DerivFeedDiagnostic & { id: number; timestamp: number; stack?: string; location?: DiagnosticLocation; operation?: string };
@@ -927,9 +960,8 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
         for (const instrument of instrumentsRef.current) {
           if (instrument.symbol === symbolRef.current) continue;
           const queue = pending[instrument.symbol] ||= [];
-          if (!queue.some(item => String(item.__sireAction || item.type || '') === action && String(item.tool || '') === String(detail.tool || 'trend-line'))) {
-            queue.push({ ...detail, symbol: instrument.symbol, scope: 'single' });
-          }
+          queue.splice(0, queue.length, ...queue.filter(item => String(item.__sireAction || item.type || '') !== action || String(item.tool || '') !== String(detail.tool || 'trend-line')));
+          queue.push({ ...detail, points: undefined, resolveFromVisibleRange: true, symbol: instrument.symbol, scope: 'single' });
         }
       }
       if (requestedSymbol !== symbolRef.current) return;
@@ -961,23 +993,10 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
           // to the last visible bar" intentionally omit pixel/time anchors. Resolve
           // those anchors against the real chart data here so the visual action is
           // deterministic and actually appears on the chart.
-          if (points.length < 2 && (tool === 'trend-line' || tool === 'ray' || tool === 'horizontal-line')) {
+          if ((detail.resolveFromVisibleRange === true || points.length < 2) && (tool === 'trend-line' || tool === 'ray' || tool === 'horizontal-line')) {
             const bars = (widget.series?.getData?.() || []) as any[];
             const range = (widget.chart?.timeScale as any)?.getVisibleLogicalRange?.();
-            if (bars.length >= 2) {
-              const from = range ? Math.max(0, Math.floor(Number(range.from))) : 0;
-              const to = range ? Math.min(bars.length - 1, Math.ceil(Number(range.to))) : bars.length - 1;
-              const first = bars[from];
-              const last = bars[to];
-              if (first && last) {
-                const firstPrice = tool === 'horizontal-line' ? Number(last.close) : Number(first.close);
-                const lastPrice = Number(last.close);
-                points = [
-                  { time: first.time, price: firstPrice },
-                  { time: last.time, price: tool === 'horizontal-line' ? firstPrice : lastPrice },
-                ];
-              }
-            }
+            points = resolveTrendLinePoints(bars, range, tool);
           }
           if (points.length >= 2) {
             const created = widget.draw.add({ tool, points, paneIndex: Number(detail.paneIndex || 0), style: detail.style || undefined, text: detail.text || undefined } as any);
