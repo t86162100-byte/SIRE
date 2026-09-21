@@ -159,7 +159,8 @@ export async function runOpenAlgoAgent(input: {
 
   const toolTrace: Array<Record<string, unknown>> = [];
   const actions: AgentAction[] = [];
-  let answer = '';\n  let analysis: Record<string, unknown> | null = null;
+  let answer = '';
+  let analysis: Record<string, unknown> | null = null;
   let responseId = '';
 
   for (let round = 0; round < MAX_ROUNDS; round += 1) {
