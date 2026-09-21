@@ -5,6 +5,7 @@ import 'openalgo-charts/indicators';
 import 'openalgo-charts/draw';
 import 'openalgo-charts/trade';
 import 'openalgo-charts/transform';
+import 'openalgo-charts/profile';
 import 'openalgo-charts/webgl';
 import { createWidget, type Widget } from 'openalgo-charts/widget';
 import './financialChart.css';
@@ -707,6 +708,7 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
         animAutoscale: true,
         branding: false,
         rail: true,
+        persist: `sire-${symbol}`,
         topbar: false,
         statusline: true,
         indicators: true,
@@ -923,7 +925,7 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
           if (CHART_INTERVALS.includes(interval)) widget.setInterval(interval);
         } else if (action === 'set_chart_type') {
           const type = String(detail.chartType || detail.typeId || '');
-          if (type) widget.chart.primarySeries()?.applyOptions?.({ type } as any);
+          if (type) widget.setChartType(type);
         } else if (action === 'add_indicator') {
           const id = String(detail.indicatorId || detail.id || '');
           if (id) widget.chart.addIndicator(id, (detail.settings || {}) as any, detail.paneIndex === undefined ? undefined : { paneIndex: Number(detail.paneIndex) });
@@ -936,7 +938,7 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
         } else if (action === 'add_drawing') {
           const tool = String(detail.tool || 'horizontal-line');
           const points = Array.isArray(detail.points) ? detail.points : [];
-          if (points.length) (widget.objects as any).add({ tool, points, paneIndex: Number(detail.paneIndex || 0), style: detail.style || undefined, text: detail.text || undefined });
+          if (points.length) widget.draw.add({ tool, points, paneIndex: Number(detail.paneIndex || 0), style: detail.style || undefined, text: detail.text || undefined } as any);
         } else if (action === 'set_visible_range') {
           const range = detail.range as any;
           if (range && Number.isFinite(Number(range.from)) && Number.isFinite(Number(range.to))) widget.chart.setVisibleLogicalRange({ from: Number(range.from), to: Number(range.to) });
@@ -948,7 +950,7 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
           const timezone = String(detail.timezone || '');
           if (timezone) widget.chart.setTimezone(timezone);
         } else if (action === 'set_theme') {
-          if (detail.theme && typeof detail.theme === 'object') widget.chart.setTheme({ ...widget.chart.theme(), ...(detail.theme as any) });
+          if (detail.theme && typeof detail.theme === 'object') widget.setTheme({ ...widget.chart.theme(), ...(detail.theme as any) });
         } else if (action === 'open_indicator_picker') {
           widget.openIndicatorPicker();
         } else if (action === 'open_drawing_tools') {
