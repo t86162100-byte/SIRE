@@ -1390,20 +1390,6 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
         >
           <MoreHorizontal size={22} strokeWidth={2.1} aria-hidden="true" />
         </button>
-        {timeframeOpen && (
-          <div className="sire-bottom-timeframe-menu">
-            {CHART_INTERVALS.map(interval => (
-              <button
-                key={interval}
-                type="button"
-                className={interval === activeTimeframe ? 'active' : ''}
-                onClick={() => selectTimeframe(interval)}
-              >
-                {interval}
-              </button>
-            ))}
-          </div>
-        )}
         {moreMenuOpen && (
           <div className="sire-bottom-more-menu" role="menu" aria-label="More chart options">
             <div className="sire-bottom-more-menu__section">
@@ -1424,8 +1410,23 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
             </div>
           </div>
         )}
+        {timeframeOpen && (
+          <div className="sire-bottom-timeframe-menu">
+            {CHART_INTERVALS.map(interval => (
+              <button
+                key={interval}
+                type="button"
+                className={interval === activeTimeframe ? 'active' : ''}
+                onClick={() => selectTimeframe(interval)}
+              >
+                {interval}
+              </button>
+            ))}
+          </div>
+        )}
         </div>
       </div>
     </div>
-    </div>
   );
+}
+
