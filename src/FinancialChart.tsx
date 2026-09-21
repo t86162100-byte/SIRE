@@ -961,8 +961,15 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
             }
           }
           if (points.length >= 2) {
-            widget.draw.add({ tool, points, paneIndex: Number(detail.paneIndex || 0), style: detail.style || undefined, text: detail.text || undefined } as any);
-            widget.chart.fitContent?.();
+            const created = widget.draw.add({ tool, points, paneIndex: Number(detail.paneIndex || 0), style: detail.style || undefined, text: detail.text || undefined } as any);
+            // Do not autoscale after an AI drawing: the user should keep the exact viewport
+            // they were looking at. Verify the drawing actually entered OpenAlgo's object store.
+            const drawingObjects = widget.objects.list?.().filter((item: any) => item?.kind === 'drawing');
+            if (!drawingObjects?.length) {
+              reportDiagnostic({ level: 'error', code: 'AI_AGENT_DRAWING_NOT_CREATED', message: 'OpenAlgo accepted the drawing request but no drawing object was created.', detail: JSON.stringify({ tool, points, created }).slice(0, 900) });
+            } else {
+              reportDiagnostic({ level: 'info', code: 'AI_AGENT_DRAWING_CREATED', message: 'OpenAlgo created the AI drawing on the active chart.', detail: JSON.stringify({ tool, drawingCount: drawingObjects.length, points }).slice(0, 900) });
+            }
           } else {
             reportDiagnostic({ level: 'error', code: 'AI_AGENT_DRAWING_NO_ANCHORS', message: 'SIRE AI agent could not resolve drawing anchors from the loaded chart data.', detail: tool });
           }
