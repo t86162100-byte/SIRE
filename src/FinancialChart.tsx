@@ -1054,8 +1054,43 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
           };
           const interval = intervalAliases[requestedInterval] || requestedInterval;
           if (CHART_INTERVALS.includes(interval)) {
+            const actionId = String(detail.actionId || `ai-timeframe-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`);
+            const before = String(widget.interval?.() || '');
+            reportDiagnostic({
+              level: 'info',
+              code: 'AI_AGENT_ACTION_STARTED',
+              message: 'SIRE received a timeframe change request and is verifying the visible chart.',
+              detail: JSON.stringify({ actionId, requestedInterval, normalizedInterval: interval, before }).slice(0, 900),
+              operation: actionId,
+            });
             setActiveTimeframe(interval);
             widget.setInterval(interval);
+            const verify = (attempt = 0) => {
+              const liveWidget = widgetRef.current;
+              const actual = String(liveWidget?.interval?.() || '');
+              if (actual === interval) {
+                reportDiagnostic({
+                  level: 'info',
+                  code: 'AI_AGENT_ACTION_VERIFIED',
+                  message: 'SIRE verified the requested timeframe on the visible OpenAlgo chart.',
+                  detail: JSON.stringify({ actionId, symbol: symbolRef.current, timeframe: actual }).slice(0, 900),
+                  operation: actionId,
+                });
+                return;
+              }
+              if (attempt < 20) {
+                window.setTimeout(() => verify(attempt + 1), 100);
+                return;
+              }
+              reportDiagnostic({
+                level: 'error',
+                code: 'AI_AGENT_ACTION_FAILED',
+                message: 'The timeframe request was not reflected by the visible chart.',
+                detail: JSON.stringify({ actionId, symbol: symbolRef.current, requested: interval, actual, before }).slice(0, 900),
+                operation: actionId,
+              });
+            };
+            window.setTimeout(() => verify(), 0);
           } else {
             reportDiagnostic({ level: 'error', code: 'AI_AGENT_ACTION_FAILED', message: 'SIRE rejected an unknown timeframe requested by the AI agent.', detail: JSON.stringify({ requestedInterval, supported: CHART_INTERVALS }), operation: 'set_timeframe' });
           }
@@ -1166,7 +1201,9 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
         } else if (action === 'replay_stop') {
           stopReplay();
         }
-        reportDiagnostic({ level: 'info', code: 'AI_AGENT_CHART_ACTION', message: 'SIRE AI agent applied chart action: ' + action, detail: JSON.stringify(detail).slice(0, 900) });
+        if (action !== 'set_timeframe') {
+          reportDiagnostic({ level: 'info', code: 'AI_AGENT_CHART_ACTION', message: 'SIRE AI agent applied chart action: ' + action, detail: JSON.stringify(detail).slice(0, 900) });
+        }
       } catch (error) {
         reportDiagnostic({ level: 'error', code: 'AI_AGENT_CHART_ACTION_FAILED', message: 'SIRE AI agent chart action failed: ' + action, detail: error instanceof Error ? error.message : String(error), ...diagnosticErrorDetails(error, 'AI agent chart action') });
       }
