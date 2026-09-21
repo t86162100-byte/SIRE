@@ -4,7 +4,7 @@ import { Check, Copy, Globe2, Menu, MessageSquarePlus, Plus, Send, Sparkles, Tra
 import './sire-council.css';
 
 type Instrument = { symbol: string; name: string };
-type RuntimeContext = { symbol: string; name?: string; timeframe?: string; chartMode?: string; latestPrice?: number | null; activeIndicators?: string[]; drawings?: Array<Record<string, unknown>>; chartBars?: number; visibleBars?: number; selectedInspection?: { epoch: number; price: number } | null };
+type RuntimeContext = { symbol: string; name?: string; timeframe?: string; chartMode?: string; latestPrice?: number | null; activeIndicators?: unknown[]; drawings?: Array<Record<string, unknown>>; chartBars?: number; visibleBars?: number; recentBars?: unknown[]; latestBar?: unknown; visibleRange?: unknown; replay?: unknown; chartState?: unknown; capabilities?: Record<string, unknown>; agentContract?: Record<string, unknown>; selectedInspection?: { epoch: number; price: number } | null; availableInstruments?: Array<{symbol:string;name:string}> };
 type Props = { symbol: string; instruments: Instrument[]; onClose: () => void; onSelectInstrument?: (symbol: string) => void; onSetChartView?: (settings: Record<string, unknown>) => void; onAddMarker?: (label: string) => void; runtimeContext?: RuntimeContext };
 type CouncilActivity = { actor: string; phase: string; text: string };
 type WebSource = { title: string; url: string; publishedDate?: string; author?: string; text?: string };
