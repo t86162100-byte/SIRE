@@ -116,7 +116,7 @@
   .sire-market-quote__change{font-size:12px}
 }
 .sire-bottom-glass-bar::-webkit-scrollbar{display:none}
-.sire-bottom-scroll-track{position:relative;width:430px;min-width:430px;height:100%;display:flex;align-items:center}
+.sire-bottom-scroll-track{position:relative;width:400px;min-width:400px;height:100%;display:flex;align-items:center}
 .sire-bottom-obj-button{position:absolute;left:376px;top:14px;width:48px;height:44px;pointer-events:auto;border:0;background:transparent;color:#f3f4f6;border-radius:9px;display:flex;align-items:center;justify-content:center;cursor:pointer;touch-action:manipulation;padding:0;box-sizing:border-box;font-size:10px;font-weight:900;letter-spacing:.2px}
 .sire-bottom-obj-button:before{content:"";position:absolute;left:-1px;top:-14px;height:72px;width:1px;background:rgba(255,255,255,.18);box-shadow:0 0 8px rgba(255,255,255,.05);pointer-events:none}
 .sire-bottom-obj-button:hover,.sire-bottom-obj-button:focus-visible{background:rgba(255,255,255,.08);outline:none}.sire-bottom-obj-button:active{background:rgba(255,255,255,.10)}
