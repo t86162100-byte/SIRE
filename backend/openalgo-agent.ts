@@ -44,7 +44,19 @@ function extractJson(text: string) {
 
 function normalizeActions(value: unknown): AgentAction[] {
   if (!Array.isArray(value)) return [];
-  return value.slice(0, 20).filter(item => item && typeof item === 'object').map(item => ({ ...(item as Record<string, unknown>) }));
+  return value.slice(0, 20).filter(item => item && typeof item === 'object').map(item => {
+    const raw = item as Record<string, unknown>;
+    // OpenAI/OpenRouter agents sometimes emit the natural tool shape
+    // { name: 'add_drawing', params: { ... } }. The browser bridge consumes
+    // the canonical SIRE action shape, so normalize it server-side.
+    const name = String(raw.__sireAction || raw.type || raw.name || '');
+    const params = raw.params && typeof raw.params === 'object' ? raw.params as Record<string, unknown> : {};
+    return {
+      ...params,
+      ...raw,
+      ...(name ? { __sireAction: name, type: name } : {}),
+    };
+  });
 }
 
 function skillContext(query: string) {
@@ -159,8 +171,15 @@ export async function runOpenAlgoAgent(input: {
   // Deterministic chart-intent fallback: if the user explicitly asks for a trend line/current trend,
   // never rely on the model remembering to emit a drawing action. The browser resolves the real
   // first/last visible-bar anchors from the active OpenAlgo chart.
-  if (/(trend[- ]?line|draw (the )?current trend|current trend)/i.test(query) && !actions.some(a => String(a.__sireAction || a.type || '') === 'add_drawing')) {
-    actions.push({ __sireAction: 'add_drawing', type: 'add_drawing', tool: 'trend-line', paneIndex: 0 });
+  if (/(trend[- ]?line|draw (the )?current trend|current trend)/i.test(query)) {
+    const drawing = actions.find(a => String(a.__sireAction || a.type || '') === 'add_drawing');
+    if (!drawing) {
+      actions.push({ __sireAction: 'add_drawing', type: 'add_drawing', tool: 'trend-line', paneIndex: 0 });
+    }
+    if (/\\ball\\s+instruments\\b/i.test(query)) {
+      const target = actions.find(a => String(a.__sireAction || a.type || '') === 'add_drawing');
+      if (target) target.scope = 'all_instruments';
+    }
   }
 
   if (!answer) answer = 'I could not produce a final agent response.';
