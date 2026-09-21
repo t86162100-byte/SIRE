@@ -12,6 +12,40 @@ type ChatMessage = { id: string; role: 'user' | 'sire'; text: string; meta?: str
 type ChatSession = { id: string; title: string; messages: ChatMessage[]; createdAt: number; updatedAt: number };
 type AgentResponse = { text?: string; responseId?: string; actions?: Array<Record<string, unknown>>; agentActions?: Array<Record<string, unknown>>; agentSkills?: string[]; error?: string; webSearched?: boolean; webSources?: WebSource[] };
 
+type PersistedJob = { chatId: string; status: 'processing' | 'complete' | 'error'; updatedAt: number };
+
+const readJobs = (): PersistedJob[] => {
+  try {
+    const raw = window.localStorage.getItem('sire-chat-jobs');
+    const jobs = raw ? JSON.parse(raw) : [];
+    return Array.isArray(jobs) ? jobs : [];
+  } catch { return []; }
+};
+const writeJob = (chatId: string, status: PersistedJob['status']) => {
+  try {
+    const jobs = readJobs().filter(job => job.chatId !== chatId);
+    jobs.unshift({ chatId, status, updatedAt: Date.now() });
+    window.localStorage.setItem('sire-chat-jobs', JSON.stringify(jobs.slice(0, 100)));
+    window.dispatchEvent(new CustomEvent('sire:chat-job', { detail: { chatId, status } }));
+  } catch { /* storage can be unavailable */ }
+};
+const persistChatMessage = (chatId: string, message: ChatMessage, title?: string) => {
+  try {
+    const raw = window.localStorage.getItem('sire-chat-sessions');
+    const sessions = raw ? JSON.parse(raw) : [];
+    const list = Array.isArray(sessions) ? sessions : [];
+    const index = list.findIndex((chat: ChatSession) => chat.id === chatId);
+    if (index >= 0) {
+      const chat = list[index] as ChatSession;
+      const messages = [...chat.messages, message].slice(-200);
+      list[index] = { ...chat, title: title && chat.title === 'New chat' ? title : chat.title, messages, updatedAt: Date.now() };
+    } else {
+      list.unshift({ id: chatId, title: title || 'New chat', messages: [message], createdAt: Date.now(), updatedAt: Date.now() });
+    }
+    window.localStorage.setItem('sire-chat-sessions', JSON.stringify(list.filter((chat: ChatSession) => chat.messages.length > 0).slice(0, 100)));
+  } catch { /* storage can be unavailable */ }
+};
+
 const phaseLabel = (phase: string) => { const value = phase.toLowerCase(); if (value.includes('propos')) return 'proposing'; if (value.includes('research') || value.includes('search')) return 'researching'; if (value.includes('plan')) return 'planning'; if (value.includes('discuss')) return 'discussing'; if (value.includes('respond') || value.includes('revis')) return 'responding'; if (value.includes('check') || value.includes('verif')) return 'checking'; if (value.includes('conclud')) return 'concluding'; if (value.includes('unavailable')) return 'web unavailable'; if (value.includes('fallback')) return 'finishing'; return phase || 'working'; };
 
 function InlineMarkdown({ text }: { text: string }) {
@@ -51,6 +85,7 @@ export default function ResearchLab({ symbol, instruments, onClose, onSelectInst
   const createChat = (title = 'New chat'): ChatSession => ({ id: `chat-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`, title, messages: [], createdAt: Date.now(), updatedAt: Date.now() });
   const chatEndRef = useRef<HTMLDivElement | null>(null); const runtimeContextRef = useRef<RuntimeContext | null>(runtimeContext || null);
   const [activeSymbol, setActiveSymbol] = useState(symbol); const [chatInput, setChatInput] = useState(''); const [chatBusy, setChatBusy] = useState(false);
+  const runningChatIdRef = useRef<string | null>(null);
   const [chatSessions, setChatSessions] = useState<ChatSession[]>(() => {
     try {
       const raw = window.localStorage.getItem('sire-chat-sessions');
@@ -78,6 +113,7 @@ export default function ResearchLab({ symbol, instruments, onClose, onSelectInst
   });
   const [activeChatId, setActiveChatId] = useState<string | null>(() => { try { const raw = window.localStorage.getItem('sire-active-chat-id'); return raw || null; } catch { return null; } });
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [processingChats, setProcessingChats] = useState<string[]>(() => readJobs().filter(job => job.status === 'processing').map(job => job.chatId));
   const [lastPrompt, setLastPrompt] = useState(''); const [lastError, setLastError] = useState(false); const [activity, setActivity] = useState<CouncilActivity[]>([]); const [webSources, setWebSources] = useState<WebSource[]>([]);
   const activeChat = chatSessions.find(chat => chat.id === activeChatId) || null;
   const chatMessages = activeChat?.messages || [];
@@ -101,7 +137,15 @@ export default function ResearchLab({ symbol, instruments, onClose, onSelectInst
     } catch { /* storage can be unavailable in private browsing */ }
   }, [chatSessions, activeChatId]);
   useEffect(() => { try { if (activeChatId) window.localStorage.setItem('sire-active-chat-id', activeChatId); else window.localStorage.removeItem('sire-active-chat-id'); } catch { /* storage can be unavailable in private browsing */ } }, [activeChatId]);
+  useEffect(() => {
+    const syncJobs = () => setProcessingChats(readJobs().filter(job => job.status === 'processing').map(job => job.chatId));
+    window.addEventListener('sire:chat-job', syncJobs);
+    window.addEventListener('storage', syncJobs);
+    syncJobs();
+    return () => { window.removeEventListener('sire:chat-job', syncJobs); window.removeEventListener('storage', syncJobs); };
+  }, []);
   useEffect(() => { runtimeContextRef.current = runtimeContext || null; }, [runtimeContext]); useEffect(() => { setActiveSymbol(symbol); }, [symbol]); useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' }); }, [chatMessages, chatBusy, activity, webSources]);
+
   const buildRuntimeContext = (): RuntimeContext => ({ ...(runtimeContextRef.current || (typeof window !== 'undefined' ? ((window as any).__sireChartContexts?.[activeSymbol] || { symbol: activeSymbol }) : { symbol: activeSymbol })), availableInstruments: instruments.map(instrument => ({ symbol: instrument.symbol, name: instrument.name })) });
   const applyActions = (actions: unknown) => { if (!Array.isArray(actions)) return; let targetSymbol = activeSymbol; actions.forEach(action => { const item = action as Record<string, unknown>; const type = String(item.__sireAction || item.type || ''); if (type === 'select_instrument') { const requested = String(item.symbol || ''); if (requested && instruments.some(instrument => instrument.symbol === requested)) { targetSymbol = requested; setActiveSymbol(requested); onSelectInstrument?.(requested); } } if (type && typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('sire:agent-chart-action', { detail: { ...item, __sireAction: type, symbol: item.symbol || targetSymbol } })); if (type === 'set_chart_view') onSetChartView?.((item.settings || {}) as Record<string, unknown>); else if (type === 'add_chart_marker') onAddMarker?.(String(item.label || 'SIRE marker')); }); };
   const runAgent = async (prompt: string, retrying = false) => {
@@ -113,17 +157,23 @@ export default function ResearchLab({ symbol, instruments, onClose, onSelectInst
       return created.id;
     };
     const chatId = ensureChat();
+    runningChatIdRef.current = chatId;
+    writeJob(chatId, 'processing');
+    persistChatMessage(chatId, { id: `m-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, role: 'user', text: query }, query.slice(0, 48) || 'New chat');
     setChatSessions(previous => previous.map(chat => chat.id === chatId ? { ...chat, title: chat.title === 'New chat' ? query.slice(0, 48) || 'New chat' : chat.title, messages: [...chat.messages, { id: `m-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, role: 'user', text: query }].slice(-200), updatedAt: Date.now() } : chat));
     try { const lowerQuery = query.toLowerCase(); const agentOnlyTest = lowerQuery === '/agent' || lowerQuery.startsWith('/agent '); const directGptTest = lowerQuery.startsWith('/gpt '); const actualQuery = agentOnlyTest ? query.slice(6).trim() : directGptTest ? query.slice(5).trim() : query; if (!actualQuery) throw new Error(agentOnlyTest ? 'Use /agent followed by a message.' : directGptTest ? 'Use /gpt followed by a message.' : 'Message is required.'); const history = [...chatMessages.map(message => ({ role: message.role, text: message.text })), { role: 'user', text: actualQuery }];
-      if (agentOnlyTest) { const response = await api.post('/api/sire/agent/openalgo', { query: actualQuery, symbol: activeSymbol, history, runtimeContext: buildRuntimeContext() }); const raw = response as unknown; const data = ((raw && typeof raw === 'object' && 'data' in raw && (raw as Record<string, unknown>).data !== undefined ? (raw as Record<string, unknown>).data : raw) || {}) as AgentResponse; if (data.error) throw new Error(String(data.error)); setActivity([{ actor: 'OpenAlgo Agent', phase: 'agent-only', text: 'Running the OpenAlgo Agent directly. Gemini and GPT-OSS council turns are bypassed.' }]); applyActions([...(data.actions || []), ...(data.agentActions || [])]); setChatSessions(previous => previous.map(chat => chat.id === chatId ? { ...chat, messages: [...chat.messages, { id: `m-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, role: 'sire', text: String(data.text || '').trim() || 'The OpenAlgo Agent returned no final answer.', meta: 'OpenAlgo Agent only — council bypassed' }].slice(-200), updatedAt: Date.now() } : chat)); return; }
-      if (directGptTest) { const response = await api.post('/api/sire/agent/gpt', { query: actualQuery, symbol: activeSymbol, history, runtimeContext: buildRuntimeContext() }); const raw = response as unknown; const data = ((raw && typeof raw === 'object' && 'data' in raw && (raw as Record<string, unknown>).data !== undefined ? (raw as Record<string, unknown>).data : raw) || {}) as AgentResponse; if (data.error) throw new Error(String(data.error)); applyActions(data.actions); setChatSessions(previous => previous.map(chat => chat.id === chatId ? { ...chat, messages: [...chat.messages, { id: `m-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, role: 'sire', text: String(data.text || '').trim() || 'I’m here. Tell me more.' }].slice(-200), updatedAt: Date.now() } : chat)); return; }
+      if (agentOnlyTest) { const response = await api.post('/api/sire/agent/openalgo', { query: actualQuery, symbol: activeSymbol, history, runtimeContext: buildRuntimeContext() }); const raw = response as unknown; const data = ((raw && typeof raw === 'object' && 'data' in raw && (raw as Record<string, unknown>).data !== undefined ? (raw as Record<string, unknown>).data : raw) || {}) as AgentResponse; if (data.error) throw new Error(String(data.error)); setActivity([{ actor: 'OpenAlgo Agent', phase: 'agent-only', text: 'Running the OpenAlgo Agent directly. Gemini and GPT-OSS council turns are bypassed.' }]); applyActions([...(data.actions || []), ...(data.agentActions || [])]); const reply = { id: `m-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, role: 'sire' as const, text: String(data.text || '').trim() || 'The OpenAlgo Agent returned no final answer.', meta: 'OpenAlgo Agent only — council bypassed' };
+        persistChatMessage(chatId, reply); writeJob(chatId, 'complete'); setProcessingChats(previous => previous.filter(id => id !== chatId)); if (runningChatIdRef.current === chatId) setChatSessions(previous => previous.map(chat => chat.id === chatId ? { ...chat, messages: [...chat.messages, reply].slice(-200), updatedAt: Date.now() } : chat)); return; }
+      if (directGptTest) { const response = await api.post('/api/sire/agent/gpt', { query: actualQuery, symbol: activeSymbol, history, runtimeContext: buildRuntimeContext() }); const raw = response as unknown; const data = ((raw && typeof raw === 'object' && 'data' in raw && (raw as Record<string, unknown>).data !== undefined ? (raw as Record<string, unknown>).data : raw) || {}) as AgentResponse; if (data.error) throw new Error(String(data.error)); applyActions(data.actions); const reply = { id: `m-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, role: 'sire' as const, text: String(data.text || '').trim() || 'I’m here. Tell me more.' };
+        persistChatMessage(chatId, reply); writeJob(chatId, 'complete'); setProcessingChats(previous => previous.filter(id => id !== chatId)); if (runningChatIdRef.current === chatId) setChatSessions(previous => previous.map(chat => chat.id === chatId ? { ...chat, messages: [...chat.messages, reply].slice(-200), updatedAt: Date.now() } : chat)); return; }
       const response = await fetch('/api/sire/agent/council/stream', { method: 'POST', headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream' }, body: JSON.stringify({ query: actualQuery, symbol: activeSymbol, history, runtimeContext: buildRuntimeContext() }) }); if (!response.ok || !response.body) throw new Error(`SIRE council connection failed (${response.status})`);
       const reader = response.body.getReader(); const decoder = new TextDecoder(); let buffer = ''; let finalData: AgentResponse | null = null; const consume = (chunk: string) => { buffer += chunk; const events = buffer.split('\n\n'); buffer = events.pop() || ''; events.forEach(event => { let type = ''; let data = ''; event.split('\n').forEach(line => { if (line.startsWith('event:')) type = line.slice(6).trim(); else if (line.startsWith('data:')) data += line.slice(5).trim(); }); if (!data) return; const payload = JSON.parse(data); if (type === 'council.stage') setActivity(previous => [...previous, payload as CouncilActivity]); if (type === 'council.done') finalData = payload as AgentResponse; if (type === 'council.error') throw new Error(String(payload.error || 'Council failed')); }); };
-      while (true) { const { value, done } = await reader.read(); if (value) consume(decoder.decode(value, { stream: !done })); if (done) break; } if (!finalData) throw new Error('The council ended without a final answer.'); if (finalData.error) throw new Error(String(finalData.error)); if (Array.isArray(finalData.webSources)) setWebSources(finalData.webSources); applyActions([...(finalData.actions || []), ...(finalData.agentActions || [])]); setChatSessions(previous => previous.map(chat => chat.id === chatId ? { ...chat, messages: [...chat.messages, { id: `m-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, role: 'sire', text: String(finalData?.text || '').trim() || 'I’m here. Tell me more.' }].slice(-200), updatedAt: Date.now() } : chat));
-    } catch (error) { const detail = error instanceof Error ? error.message : 'Connection failed'; setLastError(true); setChatSessions(previous => previous.map(chat => chat.id === chatId ? { ...chat, messages: [...chat.messages, { id: `m-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, role: 'sire', text: `I couldn’t complete that message. ${detail}`, meta: 'Retry available' }].slice(-200), updatedAt: Date.now() } : chat)); } finally { setChatBusy(false); if (retrying) setLastError(false); }
+      while (true) { const { value, done } = await reader.read(); if (value) consume(decoder.decode(value, { stream: !done })); if (done) break; } if (!finalData) throw new Error('The council ended without a final answer.'); if (finalData.error) throw new Error(String(finalData.error)); if (Array.isArray(finalData.webSources)) setWebSources(finalData.webSources); applyActions([...(finalData.actions || []), ...(finalData.agentActions || [])]); const reply = { id: `m-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, role: 'sire' as const, text: String(finalData?.text || '').trim() || 'I’m here. Tell me more.' };
+      persistChatMessage(chatId, reply); writeJob(chatId, 'complete'); setProcessingChats(previous => previous.filter(id => id !== chatId)); if (runningChatIdRef.current === chatId) setChatSessions(previous => previous.map(chat => chat.id === chatId ? { ...chat, messages: [...chat.messages, reply].slice(-200), updatedAt: Date.now() } : chat));
+    } catch (error) { const detail = error instanceof Error ? error.message : 'Connection failed'; setLastError(true); const reply = { id: `m-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, role: 'sire' as const, text: `I couldn’t complete that message. ${detail}`, meta: 'Retry available' }; persistChatMessage(chatId, reply); writeJob(chatId, 'error'); setProcessingChats(previous => previous.filter(id => id !== chatId)); if (runningChatIdRef.current === chatId) setChatSessions(previous => previous.map(chat => chat.id === chatId ? { ...chat, messages: [...chat.messages, reply].slice(-200), updatedAt: Date.now() } : chat)); } finally { setChatBusy(false); if (retrying) setLastError(false); }
   };
-  const startNewChat = () => { if (chatBusy) return; const created = createChat(); setChatSessions(previous => [created, ...previous].slice(0, 100)); setActiveChatId(created.id); setChatInput(''); setActivity([]); setWebSources([]); setLastError(false); setLastPrompt(''); setSidebarOpen(false); };
-  const openChat = (id: string) => { if (chatBusy) return; setActiveChatId(id); setActivity([]); setWebSources([]); setLastError(false); setSidebarOpen(false); };
+  const startNewChat = () => { const created = createChat(); setChatSessions(previous => [created, ...previous].slice(0, 100)); setActiveChatId(created.id); setChatInput(''); setActivity([]); setWebSources([]); setLastError(false); setLastPrompt(''); setSidebarOpen(false); };
+  const openChat = (id: string) => { setActiveChatId(id); setActivity([]); setWebSources([]); setLastError(false); setSidebarOpen(false); };
   const deleteChat = (id: string) => { if (chatBusy) return; setChatSessions(previous => previous.filter(chat => chat.id !== id)); if (activeChatId === id) { const replacement = chatSessions.find(chat => chat.id !== id); setActiveChatId(replacement?.id || null); } };
   const formatChatDate = (timestamp: number) => { const date = new Date(timestamp); const today = new Date(); const yesterday = new Date(Date.now() - 86400000); if (date.toDateString() === today.toDateString()) return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }); if (date.toDateString() === yesterday.toDateString()) return 'Yesterday'; return date.toLocaleDateString([], { month: 'short', day: 'numeric' }); };
   const suggestions = ['Explain this market to me', 'Research the latest news', 'Analyze the current chart'];
@@ -132,7 +182,7 @@ export default function ResearchLab({ symbol, instruments, onClose, onSelectInst
       <div className="sire-chat-history-head"><div className="sire-chat-history-brand"><div className="sire-chat-history-mark"><Sparkles size={15} /></div><strong>SIRE</strong></div><button type="button" onClick={() => setSidebarOpen(false)} aria-label="Close chat history"><X size={17} /></button></div>
       <button type="button" className="sire-new-chat" onClick={startNewChat}><MessageSquarePlus size={17} /><span>New chat</span></button>
       <div className="sire-chat-history-label">Recent</div>
-      <div className="sire-chat-history-list">{chatSessions.filter(chat => chat.messages.length > 0).map(chat => <div className={`sire-chat-history-item ${chat.id === activeChatId ? 'active' : ''}`} key={chat.id}><button type="button" className="sire-chat-history-open" onClick={() => openChat(chat.id)}><span className="sire-chat-history-title">{chat.title || 'New chat'}</span><small>{formatChatDate(chat.updatedAt)}</small></button><button type="button" className="sire-chat-history-delete" onClick={() => deleteChat(chat.id)} aria-label={`Delete ${chat.title || 'chat'}`}><Trash2 size={14} /></button></div>)}{chatSessions.every(chat => chat.messages.length === 0) && <p className="sire-chat-history-empty">Your conversations will appear here.</p>}</div>
+      <div className="sire-chat-history-list">{chatSessions.filter(chat => chat.messages.length > 0).map(chat => <div className={`sire-chat-history-item ${chat.id === activeChatId ? 'active' : ''}`} key={chat.id}><button type="button" className="sire-chat-history-open" onClick={() => openChat(chat.id)}><span className="sire-chat-history-title">{chat.title || 'New chat'}</span><small>{processingChats.includes(chat.id) ? '● Responding…' : formatChatDate(chat.updatedAt)}</small></button><button type="button" className="sire-chat-history-delete" onClick={() => deleteChat(chat.id)} aria-label={`Delete ${chat.title || 'chat'}`}><Trash2 size={14} /></button></div>)}{chatSessions.every(chat => chat.messages.length === 0) && <p className="sire-chat-history-empty">Your conversations will appear here.</p>}</div>
     </aside>
     <header className="sire-chat-only-header"><button className="sire-chat-history-toggle" type="button" onClick={() => setSidebarOpen(true)} aria-label="Open chat history"><Menu size={19} /></button><div className="sire-chat-only-brand"><div className="sire-chat-only-mark"><Sparkles size={16} /></div><span>SIRE</span><i className={chatBusy ? 'sire-live-dot active' : 'sire-live-dot'} /></div><div className="sire-chat-context"><span>{instruments.find(item => item.symbol === activeSymbol)?.name || activeSymbol}</span></div><div className="sire-chat-header-actions"><button className="sire-chat-header-new" type="button" onClick={startNewChat} disabled={chatBusy}><MessageSquarePlus size={17} /><span>New chat</span></button><button className="sire-chat-only-close" onClick={onClose} aria-label="Close SIRE"><X size={18} /></button></div></header>
     <main className="sire-chat-only-messages"><div className="sire-chat-only-inner">
