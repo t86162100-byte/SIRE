@@ -1066,7 +1066,7 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
           const resolve = detail.resolveFromVisibleRange === true || tool === 'trend-line' || tool === 'ray' || tool === 'horizontal-line';
 
           const actionId = String(detail.actionId || `ai-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`);
-          reportDiagnostic({ level: 'info', code: 'AI_AGENT_ACTION_STARTED', message: `SIRE started chart action ${action}: ${tool}`, detail: JSON.stringify({ actionId, symbol: symbolRef.current, timeframe: targetInterval || currentInterval, tool }).slice(0, 900), operation: actionId });
+          reportDiagnostic({ level: 'info', code: 'AI_AGENT_ACTION_STARTED', message: `SIRE started chart action ${action}: ${tool}`, detail: JSON.stringify({ actionId, symbol: symbolRef.current, timeframe: targetInterval || String(widgetRef.current?.interval?.() || ''), tool }).slice(0, 900), operation: actionId });
           const createWhenReady = (attempt = 0) => {
             const liveWidget = widgetRef.current;
             if (!liveWidget) {
