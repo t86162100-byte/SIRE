@@ -1193,7 +1193,8 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
         drawings,
         replay: replayRef.current?.state?.() || null,
         chartState: chart?.getState?.() || null,
-        capabilities: { tiers: ['base', 'indicators', 'draw', 'trade', 'transform', 'webgl', 'widget'], indicators: true, drawings: true, tradingVisualization: true, replay: true, transforms: true, screenshots: true, svgExport: true, sharedAiContext: true, verifiedActions: true },\n        agentContract: { version: 2, sourceOfTruth: 'openalgo-runtime', read: ['symbol','timeframe','bars','recentBars','visibleRange','indicators','drawings','replay','chartState'], write: ['instrument','timeframe','chartType','indicator','drawing','priceLine','visibleRange','scale','timezone','theme','replay','screenshot','svg'], rule: 'agents request intent; chart runtime resolves real data and verifies the result' },
+        capabilities: { tiers: ['base', 'indicators', 'draw', 'trade', 'transform', 'webgl', 'widget'], indicators: true, drawings: true, tradingVisualization: true, replay: true, transforms: true, screenshots: true, svgExport: true, sharedAiContext: true, verifiedActions: true },
+        agentContract: { version: 2, sourceOfTruth: 'openalgo-runtime', read: ['symbol','timeframe','bars','recentBars','visibleRange','indicators','drawings','replay','chartState'], write: ['instrument','timeframe','chartType','indicator','drawing','priceLine','visibleRange','scale','timezone','theme','replay','screenshot','svg'], rule: 'agents request intent; chart runtime resolves real data and verifies the result' },
         publishedAt: Date.now(),
       };
       const store = ((window as any).__sireChartContexts ||= {});
