@@ -1065,9 +1065,14 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
           const targetInterval = String(detail.interval || detail.timeframe || '');
           const resolve = detail.resolveFromVisibleRange === true || tool === 'trend-line' || tool === 'ray' || tool === 'horizontal-line';
 
+          const actionId = String(detail.actionId || `ai-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`);
+          reportDiagnostic({ level: 'info', code: 'AI_AGENT_ACTION_STARTED', message: `SIRE started chart action ${action}: ${tool}`, detail: JSON.stringify({ actionId, symbol: symbolRef.current, timeframe: targetInterval || currentInterval, tool }).slice(0, 900), operation: actionId });
           const createWhenReady = (attempt = 0) => {
             const liveWidget = widgetRef.current;
-            if (!liveWidget) return;
+            if (!liveWidget) {
+              reportDiagnostic({ level: 'error', code: 'AI_AGENT_ACTION_FAILED', message: 'Chart action failed because the OpenAlgo widget is unavailable.', detail: JSON.stringify({ actionId, action }), operation: actionId });
+              return;
+            }
             const currentInterval = String(liveWidget.interval?.() || '');
             const bars = (liveWidget.series?.getData?.() || []) as any[];
             const expectedSeconds = targetInterval && INTERVAL_SECONDS[targetInterval] ? INTERVAL_SECONDS[targetInterval] : 0;
@@ -1078,8 +1083,13 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
               spacingOk = diffs.length > 0 && diffs.filter((value: number) => Math.abs(value - expectedSeconds) <= expectedSeconds * 0.12).length >= Math.max(2, Math.floor(diffs.length * 0.6));
             }
             const ready = (!targetInterval || currentInterval === targetInterval) && bars.length >= 2 && spacingOk;
-            if (!ready && attempt < 24) {
+            if (!ready && attempt < 32) {
+              if (attempt === 0 || attempt % 8 === 0) reportDiagnostic({ level: 'info', code: 'AI_AGENT_ACTION_WAITING', message: 'SIRE is waiting for the requested chart state before executing the AI action.', detail: JSON.stringify({ actionId, requestedSymbol, currentSymbol: symbolRef.current, targetInterval, currentInterval, bars: bars.length }).slice(0, 900), operation: actionId });
               window.setTimeout(() => createWhenReady(attempt + 1), 250);
+              return;
+            }
+            if (!ready) {
+              reportDiagnostic({ level: 'error', code: 'AI_AGENT_ACTION_FAILED', message: 'SIRE could not reach the requested chart state before the action timeout.', detail: JSON.stringify({ actionId, requestedSymbol, currentSymbol: symbolRef.current, targetInterval, currentInterval, bars: bars.length }).slice(0, 900), operation: actionId });
               return;
             }
 
@@ -1089,15 +1099,19 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
               points = resolveTrendLinePoints(bars, range, tool);
             }
             if (points.length >= 2) {
+              const before = (liveWidget.objects.list?.() || []).filter((item: any) => item?.kind === 'drawing').length;
               const created = liveWidget.draw.add({ tool, points, paneIndex: Number(detail.paneIndex || 0), style: detail.style || undefined, text: detail.text || undefined } as any);
-              const drawingObjects = liveWidget.objects.list?.().filter((item: any) => item?.kind === 'drawing');
-              if (!drawingObjects?.length) {
-                reportDiagnostic({ level: 'error', code: 'AI_AGENT_DRAWING_NOT_CREATED', message: 'OpenAlgo accepted the drawing request but no drawing object was created.', detail: JSON.stringify({ tool, points, created }).slice(0, 900) });
-              } else {
-                reportDiagnostic({ level: 'info', code: 'AI_AGENT_DRAWING_CREATED', message: 'OpenAlgo created the AI drawing on the active chart.', detail: JSON.stringify({ tool, drawingCount: drawingObjects.length, points }).slice(0, 900) });
-              }
+              window.setTimeout(() => {
+                const afterObjects = (liveWidget.objects.list?.() || []).filter((item: any) => item?.kind === 'drawing');
+                const verified = afterObjects.length > before;
+                if (!verified) {
+                  reportDiagnostic({ level: 'error', code: 'AI_AGENT_ACTION_FAILED', message: 'The drawing action completed but verification found no new drawing object.', detail: JSON.stringify({ actionId, tool, points, created }).slice(0, 900), operation: actionId });
+                } else {
+                  reportDiagnostic({ level: 'info', code: 'AI_AGENT_ACTION_VERIFIED', message: 'SIRE verified the AI chart action on the active OpenAlgo chart.', detail: JSON.stringify({ actionId, symbol: symbolRef.current, timeframe: currentInterval, tool, drawingCount: afterObjects.length, points }).slice(0, 900), operation: actionId });
+                }
+              }, 50);
             } else {
-              reportDiagnostic({ level: 'error', code: 'AI_AGENT_DRAWING_NO_ANCHORS', message: 'SIRE AI agent could not resolve drawing anchors from the loaded chart data.', detail: tool });
+              reportDiagnostic({ level: 'error', code: 'AI_AGENT_ACTION_FAILED', message: 'SIRE could not resolve real drawing anchors from the loaded chart data.', detail: JSON.stringify({ actionId, tool, bars: bars.length, targetInterval: currentInterval }).slice(0, 900), operation: actionId });
             }
           };
 
@@ -1179,7 +1193,7 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
         drawings,
         replay: replayRef.current?.state?.() || null,
         chartState: chart?.getState?.() || null,
-        capabilities: { tiers: ['base', 'indicators', 'draw', 'trade', 'transform', 'webgl', 'widget'], indicators: true, drawings: true, tradingVisualization: true, replay: true, transforms: true, screenshots: true, svgExport: true },
+        capabilities: { tiers: ['base', 'indicators', 'draw', 'trade', 'transform', 'webgl', 'widget'], indicators: true, drawings: true, tradingVisualization: true, replay: true, transforms: true, screenshots: true, svgExport: true, sharedAiContext: true, verifiedActions: true },\n        agentContract: { version: 2, sourceOfTruth: 'openalgo-runtime', read: ['symbol','timeframe','bars','recentBars','visibleRange','indicators','drawings','replay','chartState'], write: ['instrument','timeframe','chartType','indicator','drawing','priceLine','visibleRange','scale','timezone','theme','replay','screenshot','svg'], rule: 'agents request intent; chart runtime resolves real data and verifies the result' },
         publishedAt: Date.now(),
       };
       const store = ((window as any).__sireChartContexts ||= {});
