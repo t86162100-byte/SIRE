@@ -1046,8 +1046,19 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
           const next = instrumentsRef.current.find(item => item.symbol === String(detail.symbol || ''));
           if (next) onSelectInstrumentRef.current(next);
         } else if (action === 'set_timeframe') {
-          const interval = String(detail.interval || detail.timeframe || '');
-          if (CHART_INTERVALS.includes(interval)) widget.setInterval(interval);
+          const requestedInterval = String(detail.interval || detail.timeframe || '').trim().toLowerCase();
+          const intervalAliases: Record<string, string> = {
+            m1: '1m', m2: '2m', m3: '3m', m5: '5m', m10: '10m', m15: '15m', m20: '20m', m30: '30m', m45: '45m',
+            h1: '1h', h2: '2h', h3: '3h', h4: '4h', h6: '6h', h8: '8h', h12: '12h',
+            d1: '1d', w1: '1w',
+          };
+          const interval = intervalAliases[requestedInterval] || requestedInterval;
+          if (CHART_INTERVALS.includes(interval)) {
+            setActiveTimeframe(interval);
+            widget.setInterval(interval);
+          } else {
+            reportDiagnostic({ level: 'error', code: 'AI_AGENT_ACTION_FAILED', message: 'SIRE rejected an unknown timeframe requested by the AI agent.', detail: JSON.stringify({ requestedInterval, supported: CHART_INTERVALS }), operation: 'set_timeframe' });
+          }
         } else if (action === 'set_chart_type') {
           const type = String(detail.chartType || detail.typeId || '');
           if (type) widget.setChartType(type);
