@@ -47,7 +47,7 @@
 .sire-bottom-more-button:before{content:"";position:absolute;left:-1px;top:-14px;height:72px;width:1px;background:rgba(255,255,255,.18);box-shadow:0 0 8px rgba(255,255,255,.05);pointer-events:none}
 .sire-bottom-more-button:hover,.sire-bottom-more-button:focus-visible{background:rgba(255,255,255,.08);outline:none}
 .sire-bottom-more-button:active{background:rgba(255,255,255,.10)}
-.sire-bottom-more-menu{position:fixed;z-index:99999;right:16px;bottom:82px;width:min(330px,calc(100vw - 32px));max-height:min(68vh,520px);overflow:auto;padding:9px;border:1px solid rgba(255,255,255,.13);border-radius:12px;background:rgba(13,15,20,.96);box-shadow:0 16px 42px rgba(0,0,0,.55);backdrop-filter:blur(18px) saturate(135%);-webkit-backdrop-filter:blur(18px);color:#f3f4f6;box-sizing:border-box;pointer-events:auto}
+.sire-bottom-more-menu{position:fixed;z-index:99999;left:50%;top:50%;right:auto;bottom:auto;transform:translate(-50%,-50%);width:min(330px,calc(100vw - 32px));max-height:min(68vh,520px);overflow:auto;padding:9px;border:1px solid rgba(255,255,255,.13);border-radius:12px;background:rgba(13,15,20,.96);box-shadow:0 16px 42px rgba(0,0,0,.55);backdrop-filter:blur(18px) saturate(135%);-webkit-backdrop-filter:blur(18px);color:#f3f4f6;box-sizing:border-box;pointer-events:auto}
 .sire-bottom-more-menu__section{padding:2px 0}
 .sire-bottom-more-menu__section+.sire-bottom-more-menu__section{margin-top:8px;padding-top:8px;border-top:1px solid rgba(255,255,255,.09)}
 .sire-bottom-more-menu__title{padding:4px 7px 7px;color:rgba(243,244,246,.58);font-size:9px;font-weight:800;letter-spacing:.9px;text-transform:uppercase}
@@ -59,7 +59,7 @@
 @media(max-width:640px){
   .sire-bottom-more-button{left:316px;top:11px;width:46px;height:44px}
   .sire-bottom-more-button:before{top:-11px;height:66px}
-  .sire-bottom-more-menu{right:8px;bottom:76px;width:min(310px,calc(100vw - 16px));max-height:65vh}
+  .sire-bottom-more-menu{left:50%;top:50%;right:auto;bottom:auto;transform:translate(-50%,-50%);width:min(310px,calc(100vw - 16px));max-height:65vh}
   .sire-bottom-more-menu__chart-types{grid-template-columns:1fr 1fr}
 }
 
