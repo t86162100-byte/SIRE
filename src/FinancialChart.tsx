@@ -45,34 +45,100 @@ function resolveTrendLinePoints(sourceBars: any[], visibleRange: any, tool: stri
   if (!Array.isArray(sourceBars) || sourceBars.length < 2) return [];
   const from = visibleRange && Number.isFinite(Number(visibleRange.from)) ? Math.max(0, Math.floor(Number(visibleRange.from))) : 0;
   const to = visibleRange && Number.isFinite(Number(visibleRange.to)) ? Math.min(sourceBars.length - 1, Math.ceil(Number(visibleRange.to))) : sourceBars.length - 1;
-  const bars = sourceBars.slice(from, to + 1).filter((bar: any) => Number.isFinite(Number(bar?.close)) && bar?.time !== undefined);
+  const bars = sourceBars.slice(from, to + 1).filter((bar: any) =>
+    Number.isFinite(Number(bar?.high)) && Number.isFinite(Number(bar?.low)) && bar?.time !== undefined
+  );
   if (bars.length < 2) return [];
+
   if (tool === 'horizontal-line') {
-    const price = Number(bars[bars.length - 1].close);
+    const price = Number(bars[bars.length - 1].close ?? bars[bars.length - 1].high);
     return [{ time: bars[0].time, price }, { time: bars[bars.length - 1].time, price }];
   }
-  if (bars.length < 8) return [{ time: bars[0].time, price: Number(bars[0].close) }, { time: bars[bars.length - 1].time, price: Number(bars[bars.length - 1].close) }];
+
+  if (bars.length < 6) {
+    return [
+      { time: bars[0].time, price: Number(bars[0].close ?? bars[0].high) },
+      { time: bars[bars.length - 1].time, price: Number(bars[bars.length - 1].close ?? bars[bars.length - 1].low) },
+    ];
+  }
+
+  // Determine the dominant direction from closes, then anchor the line to actual swing
+  // highs for a downtrend or swing lows for an uptrend. This prevents a model from
+  // inventing time/price coordinates and avoids drawing through the middle of candles.
   const n = bars.length;
   const meanX = (n - 1) / 2;
-  const meanY = bars.reduce((sum: number, bar: any) => sum + Number(bar.close), 0) / n;
+  const meanY = bars.reduce((sum: number, bar: any) => sum + Number(bar.close ?? ((Number(bar.high) + Number(bar.low)) / 2)), 0) / n;
   let num = 0, den = 0;
-  for (let i = 0; i < n; i += 1) { const y = Number(bars[i].close); num += (i - meanX) * (y - meanY); den += (i - meanX) * (i - meanX); }
-  const slope = den ? num / den : 0;
-  const radius = Math.max(2, Math.min(4, Math.floor(n / 30)));
-  const pivots: Array<{ i: number; price: number }> = [];
-  for (let i = radius; i < n - radius; i += 1) {
-    const price = Number(bars[i].close);
-    const window = bars.slice(i - radius, i + radius + 1).map((bar: any) => Number(bar.close));
-    if (slope >= 0 && price === Math.min(...window)) pivots.push({ i, price });
-    if (slope < 0 && price === Math.max(...window)) pivots.push({ i, price });
+  for (let i = 0; i < n; i += 1) {
+    const y = Number(bars[i].close ?? ((Number(bars[i].high) + Number(bars[i].low)) / 2));
+    num += (i - meanX) * (y - meanY);
+    den += (i - meanX) * (i - meanX);
   }
-  if (pivots.length >= 2) { const first = pivots[0]; const last = pivots[pivots.length - 1]; return [{ time: bars[first.i].time, price: first.price }, { time: bars[last.i].time, price: last.price }]; }
-  const split = Math.floor(n * 2 / 3);
-  const left = Math.max(2, Math.floor(n / 3));
-  const firstIndex = slope >= 0 ? bars.slice(0, left).reduce((best: number, bar: any, i: number) => Number(bar.close) < Number(bars[best].close) ? i : best, 0) : bars.slice(0, left).reduce((best: number, bar: any, i: number) => Number(bar.close) > Number(bars[best].close) ? i : best, 0);
-  let lastIndex = split + (slope >= 0 ? bars.slice(split).reduce((best: number, bar: any, i: number) => Number(bar.close) < Number(bars[split + best].close) ? i : best, 0) : bars.slice(split).reduce((best: number, bar: any, i: number) => Number(bar.close) > Number(bars[split + best].close) ? i : best, 0));
-  if (firstIndex === lastIndex) lastIndex = n - 1;
-  return [{ time: bars[firstIndex].time, price: Number(bars[firstIndex].close) }, { time: bars[lastIndex].time, price: Number(bars[lastIndex].close) }];
+  const slope = den ? num / den : 0;
+  const down = slope < 0;
+  const radius = Math.max(2, Math.min(5, Math.floor(n / 40)));
+  const pivots: Array<{ i: number; price: number }> = [];
+
+  for (let i = radius; i < n - radius; i += 1) {
+    const price = down ? Number(bars[i].high) : Number(bars[i].low);
+    const window = bars.slice(i - radius, i + radius + 1).map((bar: any) => down ? Number(bar.high) : Number(bar.low));
+    const extreme = down ? Math.max(...window) : Math.min(...window);
+    if (Math.abs(price - extreme) <= Math.max(1e-9, Math.abs(price) * 1e-10)) pivots.push({ i, price });
+  }
+
+  // Pick the strongest pair of pivots that forms a clean trendline. For a downtrend,
+  // highs should stay at or below the line; for an uptrend, lows should stay at or above it.
+  if (pivots.length >= 2) {
+    let best: { score: number; first: typeof pivots[number]; last: typeof pivots[number] } | null = null;
+    const tolerance = Math.max(1e-8, (Math.max(...bars.map((b: any) => Number(b.high))) - Math.min(...bars.map((b: any) => Number(b.low)))) * 0.015);
+    for (let a = 0; a < pivots.length - 1; a += 1) {
+      for (let b = a + 1; b < pivots.length; b += 1) {
+        const first = pivots[a], last = pivots[b];
+        if (last.i - first.i < Math.max(3, Math.floor(n * 0.08))) continue;
+        const pairSlope = (last.price - first.price) / (last.i - first.i);
+        if (down && pairSlope >= 0) continue;
+        if (!down && pairSlope <= 0) continue;
+        let touches = 0, violations = 0, error = 0;
+        for (const pivot of pivots) {
+          const expected = first.price + pairSlope * (pivot.i - first.i);
+          const distance = pivot.price - expected;
+          if (Math.abs(distance) <= tolerance) touches += 1;
+          if (down ? distance > tolerance : distance < -tolerance) violations += 1;
+          error += Math.min(Math.abs(distance), tolerance * 4);
+        }
+        const spanBonus = (last.i - first.i) / n;
+        const score = touches * 8 + spanBonus * 4 - violations * 12 - error / Math.max(tolerance, 1e-9);
+        if (!best || score > best.score) best = { score, first, last };
+      }
+    }
+    if (best) {
+      return [
+        { time: bars[best.first.i].time, price: best.first.price },
+        { time: bars[best.last.i].time, price: best.last.price },
+      ];
+    }
+
+    const first = pivots[0];
+    const last = pivots[pivots.length - 1];
+    return [
+      { time: bars[first.i].time, price: first.price },
+      { time: bars[last.i].time, price: last.price },
+    ];
+  }
+
+  const split = Math.floor(n / 2);
+  const firstIndex = down
+    ? bars.slice(0, split).reduce((best: number, bar: any, i: number) => Number(bar.high) > Number(bars[best].high) ? i : best, 0)
+    : bars.slice(0, split).reduce((best: number, bar: any, i: number) => Number(bar.low) < Number(bars[best].low) ? i : best, 0);
+  const secondBars = bars.slice(split);
+  const secondLocal = down
+    ? secondBars.reduce((best: number, bar: any, i: number) => Number(bar.high) > Number(secondBars[best].high) ? i : best, 0)
+    : secondBars.reduce((best: number, bar: any, i: number) => Number(bar.low) < Number(secondBars[best].low) ? i : best, 0);
+  const lastIndex = split + secondLocal;
+  return [
+    { time: bars[firstIndex].time, price: down ? Number(bars[firstIndex].high) : Number(bars[firstIndex].low) },
+    { time: bars[lastIndex].time, price: down ? Number(bars[lastIndex].high) : Number(bars[lastIndex].low) },
+  ];
 }
 
 type DiagnosticLocation = { file: string; line: number; column: number; functionName?: string };
@@ -936,9 +1002,11 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
     const pending = pendingStore?.[symbol] as Array<Record<string, unknown>> | undefined;
     if (pending?.length) {
       delete pendingStore[symbol];
-      for (const item of pending) {
-        window.dispatchEvent(new CustomEvent('sire:agent-chart-action', { detail: { ...item, scope: 'single', symbol } }));
-      }
+      window.setTimeout(() => {
+        for (const item of pending) {
+          window.dispatchEvent(new CustomEvent('sire:agent-chart-action', { detail: { ...item, scope: 'single', symbol } }));
+        }
+      }, 0);
     }
     setMarketQuote(null);
     lastTickAtRef.current = null;
@@ -965,7 +1033,12 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
           queue.push({ ...detail, points: undefined, resolveFromVisibleRange: true, symbol: instrument.symbol, scope: 'single' });
         }
       }
-      if (requestedSymbol !== symbolRef.current) return;
+      if (requestedSymbol !== symbolRef.current) {
+        const pendingStore = ((window as any).__sirePendingChartActions ||= {}) as Record<string, Array<Record<string, unknown>>>;
+        const queue = pendingStore[requestedSymbol] ||= [];
+        queue.push({ ...detail, symbol: requestedSymbol });
+        return;
+      }
       const widget = widgetRef.current;
       if (!widget) return;
       try {
@@ -989,29 +1062,46 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
           if (Number.isFinite(price)) widget.chart.addPriceLine({ price, label: String(detail.label || 'SIRE level') } as any, 0);
         } else if (action === 'add_drawing') {
           const tool = String(detail.tool || 'horizontal-line');
-          let points = Array.isArray(detail.points) ? detail.points : [];
-          // Agent requests such as "draw the current trend from the first visible bar
-          // to the last visible bar" intentionally omit pixel/time anchors. Resolve
-          // those anchors against the real chart data here so the visual action is
-          // deterministic and actually appears on the chart.
-          if ((detail.resolveFromVisibleRange === true || points.length < 2) && (tool === 'trend-line' || tool === 'ray' || tool === 'horizontal-line')) {
-            const bars = (widget.series?.getData?.() || []) as any[];
-            const range = (widget.chart?.timeScale as any)?.getVisibleLogicalRange?.();
-            points = resolveTrendLinePoints(bars, range, tool);
-          }
-          if (points.length >= 2) {
-            const created = widget.draw.add({ tool, points, paneIndex: Number(detail.paneIndex || 0), style: detail.style || undefined, text: detail.text || undefined } as any);
-            // Do not autoscale after an AI drawing: the user should keep the exact viewport
-            // they were looking at. Verify the drawing actually entered OpenAlgo's object store.
-            const drawingObjects = widget.objects.list?.().filter((item: any) => item?.kind === 'drawing');
-            if (!drawingObjects?.length) {
-              reportDiagnostic({ level: 'error', code: 'AI_AGENT_DRAWING_NOT_CREATED', message: 'OpenAlgo accepted the drawing request but no drawing object was created.', detail: JSON.stringify({ tool, points, created }).slice(0, 900) });
-            } else {
-              reportDiagnostic({ level: 'info', code: 'AI_AGENT_DRAWING_CREATED', message: 'OpenAlgo created the AI drawing on the active chart.', detail: JSON.stringify({ tool, drawingCount: drawingObjects.length, points }).slice(0, 900) });
+          const targetInterval = String(detail.interval || detail.timeframe || '');
+          const resolve = detail.resolveFromVisibleRange === true || tool === 'trend-line' || tool === 'ray' || tool === 'horizontal-line';
+
+          const createWhenReady = (attempt = 0) => {
+            const liveWidget = widgetRef.current;
+            if (!liveWidget) return;
+            const currentInterval = String(liveWidget.interval?.() || '');
+            const bars = (liveWidget.series?.getData?.() || []) as any[];
+            const expectedSeconds = targetInterval && INTERVAL_SECONDS[targetInterval] ? INTERVAL_SECONDS[targetInterval] : 0;
+            const recent = bars.slice(Math.max(0, bars.length - 24)).filter((bar: any) => Number.isFinite(Number(bar?.time)));
+            let spacingOk = !expectedSeconds;
+            if (expectedSeconds && recent.length >= 4) {
+              const diffs = recent.slice(1).map((bar: any, i: number) => Number(bar.time) - Number(recent[i].time)).filter((value: number) => value > 0);
+              spacingOk = diffs.length > 0 && diffs.filter((value: number) => Math.abs(value - expectedSeconds) <= expectedSeconds * 0.12).length >= Math.max(2, Math.floor(diffs.length * 0.6));
             }
-          } else {
-            reportDiagnostic({ level: 'error', code: 'AI_AGENT_DRAWING_NO_ANCHORS', message: 'SIRE AI agent could not resolve drawing anchors from the loaded chart data.', detail: tool });
-          }
+            const ready = (!targetInterval || currentInterval === targetInterval) && bars.length >= 2 && spacingOk;
+            if (!ready && attempt < 24) {
+              window.setTimeout(() => createWhenReady(attempt + 1), 250);
+              return;
+            }
+
+            let points = resolve ? [] : (Array.isArray(detail.points) ? detail.points : []);
+            if (resolve) {
+              const range = (liveWidget.chart?.timeScale as any)?.getVisibleLogicalRange?.();
+              points = resolveTrendLinePoints(bars, range, tool);
+            }
+            if (points.length >= 2) {
+              const created = liveWidget.draw.add({ tool, points, paneIndex: Number(detail.paneIndex || 0), style: detail.style || undefined, text: detail.text || undefined } as any);
+              const drawingObjects = liveWidget.objects.list?.().filter((item: any) => item?.kind === 'drawing');
+              if (!drawingObjects?.length) {
+                reportDiagnostic({ level: 'error', code: 'AI_AGENT_DRAWING_NOT_CREATED', message: 'OpenAlgo accepted the drawing request but no drawing object was created.', detail: JSON.stringify({ tool, points, created }).slice(0, 900) });
+              } else {
+                reportDiagnostic({ level: 'info', code: 'AI_AGENT_DRAWING_CREATED', message: 'OpenAlgo created the AI drawing on the active chart.', detail: JSON.stringify({ tool, drawingCount: drawingObjects.length, points }).slice(0, 900) });
+              }
+            } else {
+              reportDiagnostic({ level: 'error', code: 'AI_AGENT_DRAWING_NO_ANCHORS', message: 'SIRE AI agent could not resolve drawing anchors from the loaded chart data.', detail: tool });
+            }
+          };
+
+          createWhenReady();
         } else if (action === 'set_visible_range') {
           const range = detail.range as any;
           if (range && Number.isFinite(Number(range.from)) && Number.isFinite(Number(range.to))) widget.chart.setVisibleLogicalRange({ from: Number(range.from), to: Number(range.to) });
