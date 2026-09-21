@@ -235,7 +235,8 @@ export async function runOpenAlgoAgent(input: {
   if (!answer) answer = 'I could not produce a final agent response.';
   return {
     text: answer.slice(0, MAX_OUTPUT_CHARS),
-    analysis,\n    councilContext: { sharedChartState: true, sourceOfTruth: 'openalgo-runtime', verifiedActionProtocol: true },
+    analysis,
+    councilContext: { sharedChartState: true, sourceOfTruth: 'openalgo-runtime', verifiedActionProtocol: true },
     responseId,
     model: MODEL,
     provider: 'OpenAI via OpenRouter',
