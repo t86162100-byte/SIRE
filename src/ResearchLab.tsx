@@ -68,9 +68,13 @@ export default function ResearchLab({ symbol, instruments, onClose, onSelectInst
   const activeChat = chatSessions.find(chat => chat.id === activeChatId) || null;
   const chatMessages = activeChat?.messages || [];
   useEffect(() => {
-    if (!chatSessions.length) return;
-    if (!activeChatId || !chatSessions.some(chat => chat.id === activeChatId)) setActiveChatId(chatSessions[0].id);
-  }, [chatSessions, activeChatId]);
+    // Every time SIRE opens, start on a fresh conversation. Existing chats remain
+    // persisted in the history sidebar and can be reopened explicitly.
+    const created = createChat();
+    setChatSessions(previous => [created, ...previous].slice(0, 100));
+    setActiveChatId(created.id);
+    try { window.localStorage.removeItem('sire-active-chat-id'); } catch { /* storage can be unavailable */ }
+  }, []);
   useEffect(() => { try { window.localStorage.setItem('sire-chat-sessions', JSON.stringify(chatSessions.slice(0, 100))); } catch { /* storage can be unavailable in private browsing */ } }, [chatSessions]);
   useEffect(() => { try { if (activeChatId) window.localStorage.setItem('sire-active-chat-id', activeChatId); else window.localStorage.removeItem('sire-active-chat-id'); } catch { /* storage can be unavailable in private browsing */ } }, [activeChatId]);
   useEffect(() => { runtimeContextRef.current = runtimeContext || null; }, [runtimeContext]); useEffect(() => { setActiveSymbol(symbol); }, [symbol]); useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' }); }, [chatMessages, chatBusy, activity, webSources]);
