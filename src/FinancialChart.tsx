@@ -898,6 +898,14 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
   useEffect(() => {
     const widget = widgetRef.current;
     if (!widget || !symbol) return;
+    const pendingStore = typeof window !== 'undefined' ? (window as any).__sirePendingChartActions : null;
+    const pending = pendingStore?.[symbol] as Array<Record<string, unknown>> | undefined;
+    if (pending?.length) {
+      delete pendingStore[symbol];
+      for (const item of pending) {
+        window.dispatchEvent(new CustomEvent('sire:agent-chart-action', { detail: { ...item, scope: 'single', symbol } }));
+      }
+    }
     setMarketQuote(null);
     lastTickAtRef.current = null;
     lastLiveQuoteRef.current = null;
@@ -912,10 +920,21 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
     const runAction = (event: Event) => {
       const detail = (event as CustomEvent).detail as Record<string, unknown> | undefined;
       if (!detail) return;
-      if (detail.symbol && String(detail.symbol) !== symbolRef.current) return;
+      const action = String(detail.__sireAction || detail.type || '');
+      const requestedSymbol = detail.symbol ? String(detail.symbol) : symbolRef.current;
+      if (detail.scope === 'all_instruments' && action === 'add_drawing') {
+        const pending = ((window as any).__sirePendingChartActions ||= {}) as Record<string, Array<Record<string, unknown>>>;
+        for (const instrument of instrumentsRef.current) {
+          if (instrument.symbol === symbolRef.current) continue;
+          const queue = pending[instrument.symbol] ||= [];
+          if (!queue.some(item => String(item.__sireAction || item.type || '') === action && String(item.tool || '') === String(detail.tool || 'trend-line'))) {
+            queue.push({ ...detail, symbol: instrument.symbol, scope: 'single' });
+          }
+        }
+      }
+      if (requestedSymbol !== symbolRef.current) return;
       const widget = widgetRef.current;
       if (!widget) return;
-      const action = String(detail.__sireAction || detail.type || '');
       try {
         if (action === 'select_instrument') {
           const next = instrumentsRef.current.find(item => item.symbol === String(detail.symbol || ''));
