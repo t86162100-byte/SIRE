@@ -12,3 +12,36 @@
 .sire-chat-only-composer > *:has(textarea),.sire-chat-only-composer > form{background:rgba(18,22,30,.42)!important;border:1px solid rgba(74,156,255,.58)!important;border-radius:22px!important;box-shadow:0 0 0 1px rgba(62,145,255,.10),0 0 22px rgba(38,126,255,.22),inset 0 1px 0 rgba(255,255,255,.10)!important;-webkit-backdrop-filter:blur(20px) saturate(145%);backdrop-filter:blur(20px) saturate(145%)}
 .sire-chat-only-composer > *:has(textarea):focus-within,.sire-chat-only-composer > form:focus-within{border-color:rgba(91,174,255,.82)!important;box-shadow:0 0 0 1px rgba(75,160,255,.16),0 0 30px rgba(38,126,255,.30),inset 0 1px 0 rgba(255,255,255,.12)!important}
 .sire-chat-only-composer textarea{background:transparent!important;border:0!important;box-shadow:none!important;outline:none!important;-webkit-backdrop-filter:none!important;backdrop-filter:none!important}
+
+/* Chat history / conversation switcher */
+.sire-chat-history{position:absolute;inset:0 auto 0 0;width:286px;z-index:30;display:flex;flex-direction:column;background:rgba(10,12,16,.96);border-right:1px solid rgba(255,255,255,.08);box-shadow:18px 0 45px rgba(0,0,0,.22);transform:translateX(-102%);transition:transform .22s ease;backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px)}
+.sire-chat-history.open{transform:translateX(0)}
+.sire-chat-history-head{display:flex;align-items:center;justify-content:space-between;padding:16px 15px 12px;border-bottom:1px solid rgba(255,255,255,.06)}
+.sire-chat-history-brand{display:flex;align-items:center;gap:9px;color:#f3f5f8;font-size:15px}
+.sire-chat-history-mark{width:27px;height:27px;border-radius:9px;display:grid;place-items:center;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.1)}
+.sire-chat-history-head button,.sire-chat-history-delete,.sire-chat-history-toggle,.sire-chat-header-new{appearance:none;border:0;background:transparent;color:#aeb5bf;cursor:pointer}
+.sire-chat-history-head button{width:32px;height:32px;border-radius:9px;display:grid;place-items:center}
+.sire-chat-history-head button:hover,.sire-chat-history-delete:hover,.sire-chat-history-toggle:hover{background:rgba(255,255,255,.07);color:#fff}
+.sire-new-chat{margin:13px 12px 10px;height:42px;border-radius:11px;border:1px solid rgba(255,255,255,.1);background:rgba(255,255,255,.055);color:#f3f5f8;display:flex;align-items:center;justify-content:center;gap:9px;font-size:13px;font-weight:650;cursor:pointer}
+.sire-new-chat:hover{background:rgba(255,255,255,.09)}
+.sire-chat-history-label{padding:7px 15px 8px;color:#777f8a;font-size:11px;text-transform:uppercase;letter-spacing:.09em;font-weight:700}
+.sire-chat-history-list{flex:1;overflow:auto;padding:0 8px 16px}
+.sire-chat-history-item{display:flex;align-items:center;gap:2px;margin:2px 0;border-radius:10px}
+.sire-chat-history-item.active{background:rgba(255,255,255,.075)}
+.sire-chat-history-open{min-width:0;flex:1;text-align:left;border:0;background:transparent;color:#e6eaf0;padding:10px 9px;border-radius:10px;cursor:pointer}
+.sire-chat-history-open:hover{background:rgba(255,255,255,.045)}
+.sire-chat-history-title{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:13px;font-weight:560}
+.sire-chat-history-open small{display:block;margin-top:4px;color:#777f8a;font-size:10px}
+.sire-chat-history-delete{width:30px;height:30px;border-radius:8px;display:grid;place-items:center;opacity:.35;margin-right:4px}
+.sire-chat-history-item:hover .sire-chat-history-delete{opacity:1}
+.sire-chat-history-empty{padding:22px 12px;color:#747b85;font-size:12px;line-height:1.5;text-align:center}
+.sire-chat-history-toggle{width:34px;height:34px;border-radius:10px;display:grid;place-items:center;margin-right:7px;flex:0 0 auto}
+.sire-chat-header-actions{display:flex;align-items:center;gap:5px;margin-left:auto}
+.sire-chat-header-new{display:flex;align-items:center;gap:7px;padding:8px 10px;border-radius:9px;color:#c7ced8;font-size:12px;font-weight:600}
+.sire-chat-header-new:hover{background:rgba(255,255,255,.07);color:#fff}
+.sire-chat-header-new:disabled{opacity:.45;cursor:default}
+@media(max-width:700px){
+  .sire-chat-history{width:min(310px,86vw)}
+  .sire-chat-header-new span{display:none}
+  .sire-chat-header-new{padding:8px}
+}
