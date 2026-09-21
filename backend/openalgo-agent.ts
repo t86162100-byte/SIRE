@@ -184,7 +184,7 @@ export async function runOpenAlgoAgent(input: {
     }
     if (/\ball\s+instruments\b/i.test(query)) {
       const target = actions.find(a => String(a.__sireAction || a.type || '') === 'add_drawing');
-      if (target) target.scope = 'all_instruments';
+      if (target) { target.scope = 'all_instruments'; target.resolveFromVisibleRange = true; }
     }
   }
 
