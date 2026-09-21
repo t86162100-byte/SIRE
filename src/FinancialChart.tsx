@@ -1380,6 +1380,38 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
         >
           <span aria-hidden="true">OBJ</span>
         </button>
+        <button
+          type="button"
+          className="sire-bottom-more-button"
+          aria-label="More chart options"
+          aria-expanded={moreMenuOpen}
+          title="More"
+          onClick={() => setMoreMenuOpen(open => !open)}
+        >
+          <MoreHorizontal size={22} strokeWidth={2.1} aria-hidden="true" />
+        </button>
+        {moreMenuOpen && (
+          <div className="sire-bottom-more-menu" role="menu" aria-label="More chart options">
+            <div className="sire-bottom-more-menu__section">
+              <div className="sire-bottom-more-menu__title">Chart type</div>
+              <div className="sire-bottom-more-menu__chart-types">
+                {CHART_TYPES.map(type => (
+                  <button key={type.id} type="button" onClick={() => { widgetRef.current?.setChartType(type.id); setMoreMenuOpen(false); }}>
+                    {type.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="sire-bottom-more-menu__section">
+              <div className="sire-bottom-more-menu__title">Actions</div>
+              <div className="sire-bottom-more-menu__actions">
+                <button type="button" onClick={() => { widgetRef.current?.openSettings(); setMoreMenuOpen(false); }}>Chart settings</button>
+                <button type="button" onClick={() => { widgetRef.current?.openIndicatorPicker(); setMoreMenuOpen(false); }}>Indicators</button>
+                <button type="button" onClick={() => { setDrawRackOpen(true); setMoreMenuOpen(false); }}>Drawing tools</button>
+              </div>
+            </div>
+          </div>
+        )}
         {timeframeOpen && (
           <div className="sire-bottom-timeframe-menu">
             {CHART_INTERVALS.map(interval => (
