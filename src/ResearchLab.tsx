@@ -49,6 +49,7 @@ function MessageActions({ text }: { text: string }) { const [copied, setCopied] 
 
 export default function ResearchLab({ symbol, instruments, onClose, onSelectInstrument, onSetChartView, onAddMarker, runtimeContext }: Props) {
   const createChat = (title = 'New chat'): ChatSession => ({ id: `chat-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`, title, messages: [], createdAt: Date.now(), updatedAt: Date.now() });
+  const chatEndRef = useRef<HTMLDivElement | null>(null); const runtimeContextRef = useRef<RuntimeContext | null>(runtimeContext || null);
   const [activeSymbol, setActiveSymbol] = useState(symbol); const [chatInput, setChatInput] = useState(''); const [chatBusy, setChatBusy] = useState(false);
   const [chatSessions, setChatSessions] = useState<ChatSession[]>(() => {
     try {
