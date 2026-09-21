@@ -937,8 +937,35 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
           if (Number.isFinite(price)) widget.chart.addPriceLine({ price, label: String(detail.label || 'SIRE level') } as any, 0);
         } else if (action === 'add_drawing') {
           const tool = String(detail.tool || 'horizontal-line');
-          const points = Array.isArray(detail.points) ? detail.points : [];
-          if (points.length) widget.draw.add({ tool, points, paneIndex: Number(detail.paneIndex || 0), style: detail.style || undefined, text: detail.text || undefined } as any);
+          let points = Array.isArray(detail.points) ? detail.points : [];
+          // Agent requests such as "draw the current trend from the first visible bar
+          // to the last visible bar" intentionally omit pixel/time anchors. Resolve
+          // those anchors against the real chart data here so the visual action is
+          // deterministic and actually appears on the chart.
+          if (points.length < 2 && (tool === 'trend-line' || tool === 'ray' || tool === 'horizontal-line')) {
+            const bars = (widget.series?.getData?.() || []) as any[];
+            const range = (widget.chart?.timeScale as any)?.getVisibleLogicalRange?.();
+            if (bars.length >= 2) {
+              const from = range ? Math.max(0, Math.floor(Number(range.from))) : 0;
+              const to = range ? Math.min(bars.length - 1, Math.ceil(Number(range.to))) : bars.length - 1;
+              const first = bars[from];
+              const last = bars[to];
+              if (first && last) {
+                const firstPrice = tool === 'horizontal-line' ? Number(last.close) : Number(first.close);
+                const lastPrice = Number(last.close);
+                points = [
+                  { time: first.time, price: firstPrice },
+                  { time: last.time, price: tool === 'horizontal-line' ? firstPrice : lastPrice },
+                ];
+              }
+            }
+          }
+          if (points.length >= 2) {
+            widget.draw.add({ tool, points, paneIndex: Number(detail.paneIndex || 0), style: detail.style || undefined, text: detail.text || undefined } as any);
+            widget.chart.fitContent?.();
+          } else {
+            reportDiagnostic({ level: 'error', code: 'AI_AGENT_DRAWING_NO_ANCHORS', message: 'SIRE AI agent could not resolve drawing anchors from the loaded chart data.', detail: tool });
+          }
         } else if (action === 'set_visible_range') {
           const range = detail.range as any;
           if (range && Number.isFinite(Number(range.from)) && Number.isFinite(Number(range.to))) widget.chart.setVisibleLogicalRange({ from: Number(range.from), to: Number(range.to) });
