@@ -1371,6 +1371,15 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
         >
           <span className="sire-bottom-multichart-icon" aria-hidden="true"><span /><span /><span /></span>
         </button>
+        <button
+          type="button"
+          className="sire-bottom-obj-button"
+          aria-label="Open objects"
+          title="Objects"
+          onClick={() => widgetRef.current?.openObjects()}
+        >
+          <span aria-hidden="true">OBJ</span>
+        </button>
         {timeframeOpen && (
           <div className="sire-bottom-timeframe-menu">
             {CHART_INTERVALS.map(interval => (
