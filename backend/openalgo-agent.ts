@@ -156,6 +156,13 @@ export async function runOpenAlgoAgent(input: {
     messages.push({ role: 'user', content: `TOOL RESULTS:\n${JSON.stringify(results)}\n\nContinue the agent task. If more tools are needed, request them. Otherwise return the final JSON.` });
   }
 
+  // Deterministic chart-intent fallback: if the user explicitly asks for a trend line/current trend,
+  // never rely on the model remembering to emit a drawing action. The browser resolves the real
+  // first/last visible-bar anchors from the active OpenAlgo chart.
+  if (/(trend[- ]?line|draw (the )?current trend|current trend)/i.test(query) && !actions.some(a => String(a.__sireAction || a.type || '') === 'add_drawing')) {
+    actions.push({ __sireAction: 'add_drawing', type: 'add_drawing', tool: 'trend-line', paneIndex: 0 });
+  }
+
   if (!answer) answer = 'I could not produce a final agent response.';
   return {
     text: answer.slice(0, MAX_OUTPUT_CHARS),
