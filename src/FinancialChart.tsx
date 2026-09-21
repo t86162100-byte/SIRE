@@ -1406,7 +1406,6 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
         )}
         </div>
       </div>
-    </div>
         {moreMenuOpen && (
           <div className="sire-bottom-more-menu" role="menu" aria-label="More chart options">
             <div className="sire-bottom-more-menu__section">
