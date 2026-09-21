@@ -1403,11 +1403,9 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
               </div>
             </div>
             <div className="sire-bottom-more-menu__section">
-              <div className="sire-bottom-more-menu__title">Actions</div>
+              <div className="sire-bottom-more-menu__title">Theme settings</div>
               <div className="sire-bottom-more-menu__actions">
-                <button type="button" onClick={() => { widgetRef.current?.openSettings(); setMoreMenuOpen(false); }}>Chart settings</button>
-                <button type="button" onClick={() => { widgetRef.current?.openIndicatorPicker(); setMoreMenuOpen(false); }}>Indicators</button>
-                <button type="button" onClick={() => { setDrawRackOpen(true); setMoreMenuOpen(false); }}>Drawing tools</button>
+                <button type="button" onClick={() => { widgetRef.current?.openSettings(); setMoreMenuOpen(false); }}>Theme / chart settings</button>
               </div>
             </div>
           </div>
