@@ -1,6 +1,4 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Search, UserRound, LogOut } from 'lucide-react';
-import { type SireUser } from './AuthGate';
 import { createLinkGroup, type LinkGroup } from 'openalgo-charts';
 import ResearchLab from './ResearchLab';
 import FinancialChart from './FinancialChart';
@@ -14,9 +12,6 @@ const chooseInitialDerivInstrument = (items: DerivInstrument[]) =>
   items.find(item => item.exchangeOpen !== 0 && item.tradingSuspended !== 1) || items[0] || null;
 
 export default function App() {
-  const [user, setUser] = useState<SireUser | null>(null);
-  const [authReady, setAuthReady] = useState(false);
-  const [accountOpen, setAccountOpen] = useState(false);
   const [instruments, setInstruments] = useState<Instrument[]>([]);
   const [selected, setSelected] = useState<Instrument | null>(null);
   const [derivLoading, setDerivLoading] = useState(true);
@@ -34,7 +29,6 @@ export default function App() {
   const [chartSymbols, setChartSymbols] = useState<string[]>([]);
   const linkGroupRef = useRef<LinkGroup | null>(null);
 
-  useEffect(() => { fetch('/api/auth/me',{credentials:'same-origin',cache:'no-store'}).then(r=>r.json()).then(data=>setUser(data.user || null)).catch(()=>setUser(null)).finally(()=>setAuthReady(true)); }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -147,7 +141,6 @@ export default function App() {
     />;
   }
 
-  if (!authReady) return <div className="sire-auth-loading">Loading SIRE…</div>;
 
   if (!instruments.length || !selected) {
     return <SireErrorScreen
@@ -184,7 +177,6 @@ export default function App() {
     setSelected(instruments.find(item => item.symbol === chartSymbols[1]) || selected);
     setMultiChartOpen(false);
   };
-  return <main className={`native-terminal-shell${researchLabOpen ? ' sire-research-open' : ''}`}>\n    <div className="sire-account-anchor"><button type="button" className="sire-account-button" onClick={()=>setAccountOpen(v=>!v)} aria-label="Open account"><UserRound size={16}/><span>{user?.name || 'Account'}</span></button>{accountOpen&&<div className="sire-account-menu"><strong>{user?.name || 'Account'}</strong><small>{user?.email || ''}</small><button type="button" onClick={async()=>{await fetch('/api/auth/logout',{method:'POST',credentials:'same-origin'});setUser(null);setAccountOpen(false);}}><LogOut size={15}/>Log out</button></div>}</div>
     <div className="native-terminal-body">
       <aside className="native-symbol-sidebar"><div className="sidebar-search"><Search size={15} /><input value={search} onChange={event => setSearch(event.target.value)} placeholder="Search" /></div><div className="sidebar-meta"><span>{derivLoading ? "LOADING DERIV" : derivError ? "DERIV ERROR" : "INSTRUMENTS"}</span><b>{instruments.length}</b></div>{derivError && <div className="sire-deriv-error">{derivError}</div>}<div className="native-symbol-list">{filtered.map(item => <button key={item.symbol} className={selected?.symbol === item.symbol ? 'active' : ''} onClick={() => selectInstrument(item)}><span><b>{item.name}</b><small>{item.symbol}</small></span><i>{item.exchangeOpen === 0 ? 'OFF' : 'LIVE'}</i></button>)}</div></aside>
       <section className="native-chart-panel">
@@ -236,6 +228,6 @@ export default function App() {
           </div>
         </div>}      </section>
     </div>
-    {researchLabOpen && <ResearchLab user={user} onUser={setUser} symbol={chartSymbols[activeChartIndex] || selected?.symbol || ''} instruments={instruments.map(item => ({ symbol: item.symbol, name: item.name }))} onClose={() => setResearchLabOpen(false)} onSelectInstrument={symbol => { const item = instruments.find(candidate => candidate.symbol === symbol); if (item) selectInstrument(item); }} />}
+    {researchLabOpen && <ResearchLab symbol={chartSymbols[activeChartIndex] || selected?.symbol || ''} instruments={instruments.map(item => ({ symbol: item.symbol, name: item.name }))} onClose={() => setResearchLabOpen(false)} onSelectInstrument={symbol => { const item = instruments.find(candidate => candidate.symbol === symbol); if (item) selectInstrument(item); }} />}
   </main>;
 }
