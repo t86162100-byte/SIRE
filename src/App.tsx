@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Search, UserRound, LogOut } from 'lucide-react';
-import AuthGate, { type SireUser } from './AuthGate';
+import { type SireUser } from './AuthGate';
 import { createLinkGroup, type LinkGroup } from 'openalgo-charts';
 import ResearchLab from './ResearchLab';
 import FinancialChart from './FinancialChart';
