@@ -15,6 +15,8 @@ export default function AuthGate({ user, onUser }: Props) {
   return <div className="sire-auth-overlay"><section className="sire-auth-card">
     <div className="sire-auth-brand"><div className="sire-auth-mark">S</div><div><strong>SIRE</strong><span>Intelligence workspace</span></div></div>
     <div className="sire-auth-heading"><h1>{mode==='login'?'Welcome back':'Create your SIRE account'}</h1><p>{mode==='login'?'Sign in to keep your workspace and conversations synced.':'Create an account to keep your SIRE workspace across devices.'}</p></div>
+    <button className="sire-auth-google" type="button" disabled={busy} onClick={()=>{ window.location.href='/api/auth/google'; }}><span className="sire-google-g">G</span><span>Continue with Google</span></button>
+    <div className="sire-auth-divider"><span>or</span></div>
     <form onSubmit={submit}>
       {mode==='signup'&&<label><span>Name</span><div className="sire-auth-input"><UserRound size={17}/><input value={name} onChange={e=>setName(e.target.value)} placeholder="Your name" autoComplete="name" required/></div></label>}
       <label><span>Email</span><div className="sire-auth-input"><Mail size={17}/><input type="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder="you@example.com" autoComplete="email" required/></div></label>
@@ -22,6 +24,7 @@ export default function AuthGate({ user, onUser }: Props) {
       {error&&<div className="sire-auth-error">{error}</div>}
       <button className="sire-auth-submit" disabled={busy}>{mode==='login'?<LogIn size={17}/>:<UserPlus size={17}/>}<span>{busy?'Please wait…':mode==='login'?'Log in':'Create account'}</span></button>
     </form>
+    <div className="sire-auth-provider-note">Use Google or email/password to access your SIRE account.</div>
     <button className="sire-auth-switch" type="button" onClick={()=>{setMode(mode==='login'?'signup':'login');setError('');}}>{mode==='login'?'New to SIRE? Create an account':'Already have an account? Log in'}</button>
     <small className="sire-auth-note">Your account secures your SIRE workspace and conversation history.</small>
   </section></div>;
