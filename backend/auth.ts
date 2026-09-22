@@ -34,7 +34,7 @@ async function findSession(id:string) {
   const result = await db.list<Session>(SESSIONS, { limit: 1000 });
   const session = result.items.find(item => item.id === id);
   if (!session) return null;
-  if (Date.parse(session.expiresAt) <= Date.now()) { try { await db.delete(SESSIONS, [session.id]); } catch {} return null; }
+  if (Date.parse(session.expiresAt) <= Date.now()) return null;
   return session;
 }
 export async function currentUser(req:any) {
@@ -75,7 +75,6 @@ export async function login(req:any) {
   return { user:{id:user.id,email:user.email,name:user.name,createdAt:user.createdAt}, setCookie:cookie('sire_session',session.id,SESSION_DAYS*86400) };
 }
 export async function logout(req:any) {
-  const id=headerSession(req); if (id && process.env.DATABASE_URL) { try { await db.delete(SESSIONS,[id]); } catch {} }
   return { setCookie:clearCookie('sire_session') };
 }
 export async function requireUser(req:any) { const user=await currentUser(req); if (!user) throw new Error('Authentication required.'); return user; }
