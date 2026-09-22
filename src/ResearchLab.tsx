@@ -2,10 +2,11 @@ import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { api } from '@appdeploy/client';
 import { Check, Copy, Globe2, Menu, MessageSquarePlus, Plus, Send, Sparkles, Trash2, X } from 'lucide-react';
 import './sire-council.css';
+import AuthGate, { type SireUser } from './AuthGate';
 
 type Instrument = { symbol: string; name: string };
 type RuntimeContext = { symbol: string; name?: string; timeframe?: string; chartMode?: string; latestPrice?: number | null; activeIndicators?: unknown[]; drawings?: Array<Record<string, unknown>>; chartBars?: number; visibleBars?: number; recentBars?: unknown[]; latestBar?: unknown; visibleRange?: unknown; replay?: unknown; chartState?: unknown; capabilities?: Record<string, unknown>; agentContract?: Record<string, unknown>; selectedInspection?: { epoch: number; price: number } | null; availableInstruments?: Array<{symbol:string;name:string}> };
-type Props = { symbol: string; instruments: Instrument[]; onClose: () => void; onSelectInstrument?: (symbol: string) => void; onSetChartView?: (settings: Record<string, unknown>) => void; onAddMarker?: (label: string) => void; runtimeContext?: RuntimeContext };
+type Props = { user: SireUser | null; onUser: (user: SireUser | null) => void; symbol: string; instruments: Instrument[]; onClose: () => void; onSelectInstrument?: (symbol: string) => void; onSetChartView?: (settings: Record<string, unknown>) => void; onAddMarker?: (label: string) => void; runtimeContext?: RuntimeContext };
 type CouncilActivity = { actor: string; phase: string; text: string };
 type WebSource = { title: string; url: string; publishedDate?: string; author?: string; text?: string };
 type ChatMessage = { id: string; role: 'user' | 'sire'; text: string; meta?: string };
@@ -78,7 +79,7 @@ function RichMessage({ text }: { text: string }) {
 
 function MessageActions({ text }: { text: string }) { const [copied, setCopied] = useState(false); const copy = async () => { try { await navigator.clipboard.writeText(text); setCopied(true); window.setTimeout(() => setCopied(false), 1400); } catch { /* native long-press selection remains available */ } }; return <div className="sire-message-actions"><button type="button" onClick={() => void copy()} aria-label="Copy response">{copied ? <Check size={14} /> : <Copy size={14} />}<span>{copied ? 'Copied' : 'Copy'}</span></button></div>; }
 
-export default function ResearchLab({ symbol, instruments, onClose, onSelectInstrument, onSetChartView, onAddMarker, runtimeContext }: Props) {
+export default function ResearchLab({ user, onUser, symbol, instruments, onClose, onSelectInstrument, onSetChartView, onAddMarker, runtimeContext }: Props) {
   const createChat = (title = 'New chat'): ChatSession => ({ id: `chat-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`, title, messages: [], createdAt: Date.now(), updatedAt: Date.now() });
   const chatEndRef = useRef<HTMLDivElement | null>(null); const runtimeContextRef = useRef<RuntimeContext | null>(runtimeContext || null);
   const [activeSymbol, setActiveSymbol] = useState(symbol); const [chatInput, setChatInput] = useState('');
@@ -109,6 +110,7 @@ export default function ResearchLab({ symbol, instruments, onClose, onSelectInst
   });
   const [activeChatId, setActiveChatId] = useState<string | null>(() => { try { const raw = window.localStorage.getItem('sire-active-chat-id'); return raw || null; } catch { return null; } });
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [authPromptOpen, setAuthPromptOpen] = useState(false);
   const [processingChats, setProcessingChats] = useState<string[]>(() => readJobs().filter(job => job.status === 'processing').map(job => job.chatId));
   const currentChatBusy = Boolean(activeChatId && processingChats.includes(activeChatId));
   const cancelledJobsRef = useRef<Set<string>>(new Set());
@@ -156,6 +158,7 @@ export default function ResearchLab({ symbol, instruments, onClose, onSelectInst
     setChatSessions(previous => previous.map(chat => chat.id === chatId ? { ...chat, updatedAt: Date.now() } : chat));
   };
   const runAgent = async (prompt: string, retrying = false) => {
+    if (!user) { setAuthPromptOpen(true); return; }
     const query = prompt.trim(); if (!query || (activeChatId && processingChats.includes(activeChatId))) return; setLastPrompt(query); setChatInput(''); setLastError(false); setActivity([]); setWebSources([]); const ensureChat = () => {
       if (activeChat) return activeChat.id;
       const created = createChat(query.slice(0, 48) || 'New chat');
@@ -203,6 +206,8 @@ export default function ResearchLab({ symbol, instruments, onClose, onSelectInst
       {lastError && !currentChatBusy && <button className="sire-chat-only-retry" onClick={() => void runAgent(lastPrompt, true)}>Retry response</button>}
       <div className="sire-chat-end-spacer" aria-hidden="true"><div ref={chatEndRef} /></div>
     </div></main>
-    <footer className="sire-chat-only-composer"><div className="sire-chat-only-input-wrap"><button className="sire-composer-add" type="button" aria-label="Add context"><Plus size={18} /></button><textarea autoFocus={!currentChatBusy} value={chatInput} onChange={event => setChatInput(event.target.value)} onKeyDown={event => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); void runAgent(chatInput); } }} placeholder="Message SIRE" rows={1} disabled={currentChatBusy} aria-label="Message SIRE" /><div className="sire-composer-right"><span className="sire-composer-hint">Enter to send</span><button className="sire-composer-send" onClick={() => void runAgent(chatInput)} disabled={currentChatBusy || !chatInput.trim()} aria-label="Send message"><Send size={17} /></button></div></div><div className="sire-composer-disclaimer">SIRE can make mistakes. Verify important information.</div></footer>
+    {!user && <div className="sire-chat-account-prompt"><div className="sire-chat-account-card"><div className="sire-auth-mark">S</div><h2>Create an account to chat with SIRE</h2><p>You can use the chart without an account. Create a free SIRE account or sign in when you're ready to chat and keep your conversations.</p><button type="button" className="sire-chat-account-button" onClick={() => setAuthPromptOpen(true)}>Create account / Sign in</button></div></div>}
+    {authPromptOpen && !user && <AuthGate user={user} onUser={(next) => { onUser(next); setAuthPromptOpen(false); }} />}
+    <footer className="sire-chat-only-composer"><div className="sire-chat-only-input-wrap"><button className="sire-composer-add" type="button" aria-label="Add context"><Plus size={18} /></button><textarea autoFocus={!currentChatBusy} value={chatInput} onChange={event => setChatInput(event.target.value)} onKeyDown={event => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); void runAgent(chatInput); } }} placeholder={user ? "Message SIRE" : "Create an account to chat"} rows={1} disabled={!user || currentChatBusy} aria-label="Message SIRE" /><div className="sire-composer-right"><span className="sire-composer-hint">{user ? 'Enter to send' : 'Account required'}</span><button className="sire-composer-send" onClick={() => void runAgent(chatInput)} disabled={!user || currentChatBusy || !chatInput.trim()} aria-label="Send message"><Send size={17} /></button></div></div><div className="sire-composer-disclaimer">SIRE can make mistakes. Verify important information.</div></footer>
   </section></div>;
 }
