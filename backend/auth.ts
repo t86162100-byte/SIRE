@@ -77,4 +77,52 @@ export async function login(req:any) {
 export async function logout(req:any) {
   return { setCookie:clearCookie('sire_session') };
 }
+
+function googleConfig() {
+  const clientId = String(process.env.GOOGLE_CLIENT_ID || '').trim();
+  const clientSecret = String(process.env.GOOGLE_CLIENT_SECRET || '').trim();
+  if (!clientId || !clientSecret) throw new Error('Google sign-in is not configured on this SIRE deployment.');
+  return { clientId, clientSecret };
+}
+function baseUrl(req:any) {
+  const proto = String(req.headers?.['x-forwarded-proto'] || 'https').split(',')[0].trim();
+  return `${proto}://${String(req.headers?.host || '')}`;
+}
+function readCookie(req:any, name:string) {
+  const raw = String(req.headers?.cookie || '');
+  const match = raw.split(';').map((v:string)=>v.trim()).find((v:string)=>v.startsWith(`${name}=`));
+  return match ? decodeURIComponent(match.slice(name.length + 1)) : '';
+}
+function googleStateCookie(state:string) {
+  return `sire_google_state=${encodeURIComponent(state)}; Path=/; Max-Age=600; HttpOnly; Secure; SameSite=Lax`;
+}
+export async function googleStart(req:any) {
+  const { clientId } = googleConfig();
+  const state = randomBytes(24).toString('hex');
+  const redirectUri = `${baseUrl(req)}/api/auth/google/callback`;
+  const params = new URLSearchParams({ client_id:clientId, redirect_uri:redirectUri, response_type:'code', scope:'openid email profile', state, prompt:'select_account' });
+  return { url:`https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`, setCookie:googleStateCookie(state) };
+}
+export async function googleCallback(req:any, code:string, state:string) {
+  const { clientId, clientSecret } = googleConfig();
+  const expected = readCookie(req, 'sire_google_state');
+  if (!code || !state || !expected || state !== expected) throw new Error('Google sign-in state validation failed.');
+  const redirectUri = `${baseUrl(req)}/api/auth/google/callback`;
+  const tokenResponse = await fetch('https://oauth2.googleapis.com/token', { method:'POST', headers:{'Content-Type':'application/x-www-form-urlencoded'}, body:new URLSearchParams({code,client_id:clientId,client_secret:clientSecret,redirect_uri:redirectUri,grant_type:'authorization_code'}) });
+  const tokenData:any = await tokenResponse.json();
+  if (!tokenResponse.ok || !tokenData.access_token) throw new Error(tokenData.error_description || 'Google token exchange failed.');
+  const profileResponse = await fetch('https://openidconnect.googleapis.com/v1/userinfo', { headers:{Authorization:`Bearer ${tokenData.access_token}`} });
+  const profile:any = await profileResponse.json();
+  if (!profileResponse.ok || !profile.email || profile.email_verified === false) throw new Error('Google did not return a verified email address.');
+  const email = normalizeEmail(String(profile.email));
+  if (!process.env.DATABASE_URL) throw new Error('Account database is not configured.');
+  let user = await findUserByEmail(email);
+  if (!user) {
+    const now = new Date().toISOString();
+    user = { id:randomBytes(16).toString('hex'), email, name:String(profile.name || profile.given_name || email.split('@')[0]).slice(0,80), salt:'', passwordHash:'', createdAt:now, updatedAt:now };
+    await db.add(USERS,[user]);
+  }
+  const session = await createSession(user.id);
+  return { user:{id:user.id,email:user.email,name:user.name,createdAt:user.createdAt}, setCookie:cookie('sire_session',session.id,SESSION_DAYS*86400) };
+}
 export async function requireUser(req:any) { const user=await currentUser(req); if (!user) throw new Error('Authentication required.'); return user; }
