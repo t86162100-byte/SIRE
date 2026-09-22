@@ -177,6 +177,7 @@ export default function App() {
     setSelected(instruments.find(item => item.symbol === chartSymbols[1]) || selected);
     setMultiChartOpen(false);
   };
+  return <main className={`native-terminal-shell${researchLabOpen ? ' sire-research-open' : ''}`}>
     <div className="native-terminal-body">
       <aside className="native-symbol-sidebar"><div className="sidebar-search"><Search size={15} /><input value={search} onChange={event => setSearch(event.target.value)} placeholder="Search" /></div><div className="sidebar-meta"><span>{derivLoading ? "LOADING DERIV" : derivError ? "DERIV ERROR" : "INSTRUMENTS"}</span><b>{instruments.length}</b></div>{derivError && <div className="sire-deriv-error">{derivError}</div>}<div className="native-symbol-list">{filtered.map(item => <button key={item.symbol} className={selected?.symbol === item.symbol ? 'active' : ''} onClick={() => selectInstrument(item)}><span><b>{item.name}</b><small>{item.symbol}</small></span><i>{item.exchangeOpen === 0 ? 'OFF' : 'LIVE'}</i></button>)}</div></aside>
       <section className="native-chart-panel">
