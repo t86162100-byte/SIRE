@@ -182,6 +182,9 @@ export default function App() {
     setSelected(instruments.find(item => item.symbol === chartSymbols[1]) || selected);
     setMultiChartOpen(false);
   };
+  if (!authReady) return <div className="sire-auth-loading">Loading SIRE…</div>;
+  if (!user) return <AuthGate user={user} onUser={setUser} />;
+
   return <main className={`native-terminal-shell${researchLabOpen ? ' sire-research-open' : ''}`}>\n    <div className="sire-account-anchor"><button type="button" className="sire-account-button" onClick={()=>setAccountOpen(v=>!v)} aria-label="Open account"><UserRound size={16}/><span>{user.name}</span></button>{accountOpen&&<div className="sire-account-menu"><strong>{user.name}</strong><small>{user.email}</small><button type="button" onClick={async()=>{await fetch('/api/auth/logout',{method:'POST',credentials:'same-origin'});setUser(null);setAccountOpen(false);}}><LogOut size={15}/>Log out</button></div>}</div>
     <div className="native-terminal-body">
       <aside className="native-symbol-sidebar"><div className="sidebar-search"><Search size={15} /><input value={search} onChange={event => setSearch(event.target.value)} placeholder="Search" /></div><div className="sidebar-meta"><span>{derivLoading ? "LOADING DERIV" : derivError ? "DERIV ERROR" : "INSTRUMENTS"}</span><b>{instruments.length}</b></div>{derivError && <div className="sire-deriv-error">{derivError}</div>}<div className="native-symbol-list">{filtered.map(item => <button key={item.symbol} className={selected?.symbol === item.symbol ? 'active' : ''} onClick={() => selectInstrument(item)}><span><b>{item.name}</b><small>{item.symbol}</small></span><i>{item.exchangeOpen === 0 ? 'OFF' : 'LIVE'}</i></button>)}</div></aside>
