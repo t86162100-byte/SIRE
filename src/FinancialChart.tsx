@@ -1098,20 +1098,29 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
           if (type) widget.setChartType(type);
         } else if (action === 'add_indicator') {
           // Indicator ids are resolved by OpenAlgo; SIRE does not hard-code a particular indicator.
-          const rawId = String(detail.indicatorId || detail.id || '').trim();
-          const id = rawId.toLowerCase();
+          const rawId = String(detail.indicatorId || detail.id || detail.indicatorName || detail.name || '').trim();
+          const catalog = registeredIndicators() as any[];
+          const normalizeIndicatorText = (value: unknown) => String(value || '').toLowerCase().replace(/[^a-z0-9]+/g, '');
+          const requestedKey = normalizeIndicatorText(rawId);
+          const exact = catalog.find((item: any) => normalizeIndicatorText(item?.id) === requestedKey || normalizeIndicatorText(item?.name || item?.label || item?.title) === requestedKey);
+          const fuzzy = exact || catalog.find((item: any) => {
+            const key = normalizeIndicatorText(item?.id);
+            const name = normalizeIndicatorText(item?.name || item?.label || item?.title);
+            return requestedKey && ((key && (key.includes(requestedKey) || requestedKey.includes(key))) || (name && (name.includes(requestedKey) || requestedKey.includes(name))));
+          });
+          const id = String(fuzzy?.id || rawId).trim().toLowerCase();
           if (!id) {
             reportDiagnostic({ level:'error', code:'AI_AGENT_ACTION_FAILED', message:'The AI requested an indicator without an indicator id.', detail:JSON.stringify(detail).slice(0,900), operation:'add_indicator' });
           } else {
             const actionId = String(detail.actionId || `ai-indicator-${Date.now()}-${Math.random().toString(36).slice(2,8)}`);
             try {
-              reportDiagnostic({ level:'info', code:'AI_AGENT_ACTION_STARTED', message:'SIRE received an indicator request and is applying it to the visible OpenAlgo chart.', detail:JSON.stringify({actionId,requestedId:rawId,normalizedId:id,symbol:symbolRef.current}).slice(0,900), operation:actionId });
+              reportDiagnostic({ level:'info', code:'AI_AGENT_ACTION_STARTED', message:'SIRE received an indicator request and is applying it to the visible OpenAlgo chart.', detail:JSON.stringify({actionId,requestedId:rawId,normalizedId:id,matchedIndicator:fuzzy||null,availableIndicatorIds:catalog.map((item:any)=>item?.id).filter(Boolean),symbol:symbolRef.current}).slice(0,1800), operation:actionId });
               const added = widget.chart.addIndicator(id, (detail.settings || {}) as any, detail.paneIndex === undefined ? undefined : { paneIndex: Number(detail.paneIndex) });
               const verify = (attempt=0) => {
                 const indicators = (widgetRef.current?.chart?.indicators?.() || []) as any[];
                 const found = indicators.some(item => String(item?.id || '').toLowerCase() === id || String(item?.name || '').toLowerCase() === rawId.toLowerCase());
                 if (found) {
-                  reportDiagnostic({ level:'info', code:'AI_AGENT_ACTION_VERIFIED', message:'SIRE verified the requested indicator on the visible OpenAlgo chart.', detail:JSON.stringify({actionId,symbol:symbolRef.current,indicatorId:id,paneIndex:(indicators.find(item=>String(item?.id||'').toLowerCase()===id)||{}).paneIndex}).slice(0,900), operation:actionId });
+                  reportDiagnostic({ level:'info', code:'AI_AGENT_ACTION_VERIFIED', message:'SIRE verified the requested indicator on the visible OpenAlgo chart.', detail:JSON.stringify({actionId,symbol:symbolRef.current,indicatorId:id,matchedIndicator:fuzzy||null,paneIndex:(indicators.find(item=>String(item?.id||'').toLowerCase()===id)||{}).paneIndex}).slice(0,1200), operation:actionId });
                   return;
                 }
                 if (attempt < 20) { window.setTimeout(() => verify(attempt+1),100); return; }
@@ -1263,6 +1272,7 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
         visibleRange: visible || null,
         activeIndicators: indicators,
         availableIndicatorIds: registeredIndicators().map((item: any) => String(item?.id || '').trim()).filter(Boolean),
+        availableIndicators: registeredIndicators().map((item: any) => ({ id: String(item?.id || '').trim(), name: String(item?.name || item?.label || item?.title || '').trim() })).filter((item: any) => item.id),
         chartDiagnostics: diagnosticsRef.current,
         drawings,
         replay: replayRef.current?.state?.() || null,
