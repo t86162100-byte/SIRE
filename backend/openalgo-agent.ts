@@ -65,16 +65,9 @@ function normalizeActions(value: unknown): AgentAction[] {
   });
 }
 
-function skillContext(query: string) {
-  const q = query.toLowerCase();
-  const relevant = OPENALGO_SKILLS.filter(skill =>
-    skill.name.includes('debug') ? /error|broken|wrong|blank|fail|replay|stale|issue|bug/.test(q) :
-    skill.name.includes('indicator') ? /indicator|rsi|macd|ema|sma|supertrend|bollinger|adx|vwap/.test(q) :
-    skill.name.includes('terminal') ? /terminal|trading|order|depth|replay|workspace|drawing|chart/.test(q) :
-    skill.name.includes('plugin') ? /custom|plugin|drawing|primitive|chart type/.test(q) :
-    skill.name.includes('setup') ? /setup|add chart|create chart/.test(q) : true
-  );
-  return relevant.length ? relevant : OPENALGO_SKILLS;
+function skillContext(_query: string) {
+  // Keep capability selection generic; do not hard-code individual indicator names.
+  return OPENALGO_SKILLS;
 }
 
 function resolveRequestedInstrument(query: string, runtimeContext?: RuntimeContext) {
