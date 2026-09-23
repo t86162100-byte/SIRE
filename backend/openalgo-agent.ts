@@ -1,4 +1,4 @@
-import { connectorRequest, discoverConnectors, webSearch } from './agent-tools.ts';
+import { connectorRequest, discoverConnectors, verifyConfiguredConnectors, webSearch } from './agent-tools.ts';
 
 type HistoryItem = { role: string; text?: string; content?: string };
 type RuntimeContext = Record<string, unknown>;
@@ -105,7 +105,7 @@ function systemPrompt() {
     'You are the SIRE OpenAlgo-compatible AI Agent layer inside a shared AI council.',
     'You have a real OpenAlgo Charts runtime in the browser and SIRE market-data services behind the server.',
     'Use the supplied chart context as the source of truth for the current chart. Do not invent prices, bars, indicators, drawings, or chart state. Every AI in the council sees the same chartContext; analyze that shared evidence before proposing an action.', 'When the user names an instrument, resolve it against chartContext.availableInstruments and use the exact catalogue symbol; never substitute an unrelated instrument because it seems like an equivalent.',
-    'You may request server tools, then use their results. You may also return chart actions for the browser to execute.',
+    'You may request server tools, then use their results. You may also return chart actions for the browser to execute. GitHub and Render are authenticated SIRE connectors when their credentials are configured. When the user asks whether you have access, connection, permissions, repositories, or workspaces, verify the connectors and report the verified result instead of saying you lack access.',
     'Do not expose hidden chain-of-thought. Give concise visible summaries and a direct answer. When analysis is requested, return a compact evidence-based analysis object containing observations, key levels, trend/bias, confidence, and disagreements/unknowns; never fabricate missing values.',
     'You are one member of a council. Treat other agents as peer analysts: challenge unsupported conclusions, use their supplied findings when present, and make your own conclusion from the shared chart data. The final action must be based on verified chart state, not majority vote alone.',
     'Never claim an order was placed. Trading actions are proposals requiring explicit user approval; the browser never auto-submits a live order from an AI response.',
@@ -159,6 +159,15 @@ export async function runOpenAlgoAgent(input: {
 
   const toolTrace: Array<Record<string, unknown>> = [];
   const actions: AgentAction[] = [];
+
+  // Access/connection questions require deterministic credential verification.
+  // Do this before model reasoning so the answer reflects the real SIRE environment.
+  if (/(github|render|connector|access|connected|connection|workspace|repository|repo|permission|credential|api key|token)/i.test(query)) {
+    const verification = await verifyConfiguredConnectors();
+    const safe = JSON.stringify(verification);
+    messages.push({ role: 'user', content: `VERIFIED CONNECTOR ACCESS (server-side, no secrets):\n${safe}\nUse this evidence when answering the user's access question. Never expose credentials.` });
+    toolTrace.push({ name: 'verify_configured_connectors', ok: true, result: verification });
+  }
   let answer = '';
   let analysis: Record<string, unknown> | null = null;
   let responseId = '';
