@@ -198,7 +198,13 @@ export async function verifyConfiguredConnectors() {
   if (discoverConnectors().some(x => x.id === 'github')) {
     try {
       const user = await connectorRequest('github', '/user', {}, 'read') as Record<string, unknown>;
-      checks.github = { ok: true, login: user.login, name: user.name || null };
+      const repo = await connectorRequest('github', '/repos/t86162100-byte/SIRE', {}, 'read') as Record<string, unknown>;
+      checks.github = {
+        ok: true,
+        login: user.login,
+        name: user.name || null,
+        repository: { fullName: repo.full_name || 't86162100-byte/SIRE', private: Boolean(repo.private), defaultBranch: repo.default_branch || null },
+      };
     } catch (error) {
       checks.github = { ok: false, error: error instanceof Error ? error.message : String(error) };
     }
