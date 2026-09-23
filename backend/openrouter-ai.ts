@@ -79,6 +79,7 @@ export async function runGptHead(input: {
   onEvent?: CouncilEvent;
   runtimeContext?: Record<string, unknown>;
   tools?: {
+    chartControl?: (actions: any[]) => Promise<string>;
     webSearch?: (query: string) => Promise<string>;
     checkIntegrations?: () => Promise<string>;
     githubRequest?: (input: { method: string; path: string; body?: unknown; permission: string }) => Promise<string>;
@@ -89,6 +90,7 @@ export async function runGptHead(input: {
   const emit = async (actor: string, phase: string, text: string) => { if (input.onEvent) await input.onEvent({ actor, phase, text }); };
 
   const toolDefs: any[] = [];
+  if (input.tools?.chartControl) toolDefs.push({ type: 'function', function: { name: 'chart_control', description: 'Directly operate the active SIRE chart using the authoritative live runtime context. Use for instrument selection, timeframe, chart type, indicators, drawings, replay, chart linking, multi-chart layout and supported chart actions. Do not ask for the current instrument when the context supplies it.', parameters: { type:'object', properties: { actions:{ type:'array', items:{type:'object', additionalProperties:true} } }, required:['actions'], additionalProperties:false } } });
   if (input.tools?.chartControl) toolDefs.push({
     type: 'function',
     function: {
@@ -146,10 +148,12 @@ export async function runGptHead(input: {
         cleanHistory(input.history).map((m) => `[${m.role}] ${m.content}`).join('\n')
     } as ChatMessage] : []),
     { role: 'system', content: 'CURRENT CHART RUNTIME CONTEXT (authoritative live snapshot):\\n' + JSON.stringify(input.runtimeContext || {}, null, 2) },
+    { role: 'system', content: 'CURRENT CHART RUNTIME CONTEXT (authoritative live snapshot):\n' + JSON.stringify(input.runtimeContext || {}, null, 2) },
     { role: 'user', content: query },
   ];
 
   const usedToolCalls = new Set<string>();
+  const chartActions: any[] = [];
   const chartActions: any[] = [];
   const toolCallHistory: Array<{turn:number;name:string}> = [];
   for (let turn = 0; turn < MAX_TOOL_TURNS; turn++) {
