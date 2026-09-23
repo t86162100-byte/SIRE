@@ -117,7 +117,7 @@ async function callModel(messages: any[]) {
   const response = await fetch(API_URL, {
     method: 'POST',
     headers: { 'content-type': 'application/json', authorization: `Bearer ${key()}`, 'HTTP-Referer': 'https://sire-rwv9.onrender.com', 'X-Title': 'SIRE OpenAlgo Agent' },
-    body: JSON.stringify({ model: MODEL, messages, temperature: 0.25, max_tokens: 2500 }),
+    body: JSON.stringify({ model: MODEL, messages, temperature: 0.25, max_tokens: 6000 }),
     signal: AbortSignal.timeout(30000),
   });
   const raw = await response.text();
@@ -126,7 +126,11 @@ async function callModel(messages: any[]) {
   if (!response.ok) throw new Error(data?.error?.message || `OpenRouter HTTP ${response.status}`);
   const content = data?.choices?.[0]?.message?.content;
   const text = Array.isArray(content) ? content.map((p: any) => p?.text || '').join('') : String(content || '');
-  if (!text.trim()) throw new Error('OpenAI GPT agent returned no text');
+  // Some OpenRouter GPT-OSS responses can exhaust their reasoning budget without
+  // placing visible text in message.content. Treat that as an empty model turn so
+  // deterministic chart-intent fallbacks can still execute instead of failing the
+  // entire user request with "GPT head returned no text".
+  if (!text.trim()) return { text: '{"answer":"","analysis":{"observations":[],"trend":null,"levels":[],"confidence":null,"unknowns":["model returned no visible content"],"disagreements":[]},"actions":[],"toolRequests":[]}', id: String(data?.id || '') };
   return { text: text.trim(), id: String(data?.id || '') };
 }
 
@@ -220,6 +224,15 @@ export async function runOpenAlgoAgent(input: {
     toolTrace.push(...results.map(item => ({ name: item.name, ok: item.ok })));
     messages.push({ role: 'assistant', content: result.text });
     messages.push({ role: 'user', content: `TOOL RESULTS:\n${JSON.stringify(results)}\n\nContinue the agent task. If more tools are needed, request them. Otherwise return the final JSON.` });
+  }
+
+  // Deterministic MACD fallback. MACD is a concrete chart mutation, so a transient
+  // empty GPT-OSS response must never prevent the requested indicator from being sent
+  // to the browser chart action bridge.
+  if (/\\b(macd)\\b/i.test(query) && !/\\b(remove|delete|hide)\\b/i.test(query) &&
+      !actions.some(a => String(a.__sireAction || a.type || '') === 'add_indicator')) {
+    actions.push({ __sireAction: 'add_indicator', type: 'add_indicator', indicatorId: 'macd', paneIndex: 1 });
+    answer = 'Requested MACD on the current chart.';
   }
 
   // Generic indicator request: open the picker without selecting or hardcoding a particular indicator.
