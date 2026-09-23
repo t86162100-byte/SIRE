@@ -275,7 +275,7 @@ export async function runOpenAlgoAgent(input: {
   }
   // Explicit indicator requests must produce a real chart action when the model omits one.
   // The browser bridge then applies and verifies the exact OpenAlgo indicator id.
-  if (/(^|\\b)(add|show|plot|put|apply)\\s+(a\\s+)?(14[- ]period\\s+)?rsi\\b/i.test(query)) {
+  if (/(^|\b)(add|show|plot|put|apply)\s+(a\s+)?(14[- ]period\s+)?rsi\b/i.test(query)) {
     const hasRsi = actions.some(a => {
       const type = String(a.__sireAction || a.type || '');
       const id = String(a.indicatorId || a.id || '').toLowerCase();
