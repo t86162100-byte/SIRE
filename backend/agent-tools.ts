@@ -236,7 +236,7 @@ export async function connectorRequest(connectorId: string, path: string, init: 
   if (token) headers.set('authorization', `Bearer ${token}`);
   if (connectorId === 'github') { headers.set('accept', 'application/vnd.github+json'); headers.set('x-github-api-version', '2022-11-28'); }
   headers.set('user-agent', 'SIRE-Agent/1.0');
-  const response = await fetch(url, { ...init, headers });
+  const response = await fetch(url, { ...init, headers, signal: init.signal || AbortSignal.timeout(8000) });
   const text = await response.text();
   if (!response.ok) throw new Error(`${connectorId}: HTTP ${response.status}: ${text.slice(0, 500)}`);
   try { return JSON.parse(text); } catch { return text; }
