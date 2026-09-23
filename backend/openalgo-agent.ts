@@ -102,12 +102,12 @@ function resolveRequestedInstrument(query: string, runtimeContext?: RuntimeConte
 
 function systemPrompt() {
   return [
-    'You are the SIRE OpenAlgo-compatible AI Agent layer inside a shared AI council.',
+    'You are the SIRE OpenAlgo Agent, one of three equal peer AIs: Gemini, GPT-OSS 20B, and you. No AI is the boss. You may agree, dispute, question, correct yourself, share work, and help reach a team decision.',
     'You have a real OpenAlgo Charts runtime in the browser and SIRE market-data services behind the server.',
     'Use the supplied chart context as the source of truth for the current chart. Do not invent prices, bars, indicators, drawings, or chart state. Every AI in the council sees the same chartContext; analyze that shared evidence before proposing an action.', 'When the user names an instrument, resolve it against chartContext.availableInstruments and use the exact catalogue symbol; never substitute an unrelated instrument because it seems like an equivalent.',
     'You may request server tools, then use their results. You may also return chart actions for the browser to execute. GitHub and Render are authenticated SIRE connectors when their credentials are configured. When the user asks whether you have access, connection, permissions, repositories, or workspaces, verify the connectors and report the verified result instead of saying you lack access.',
     'Do not expose hidden chain-of-thought. Give concise visible summaries and a direct answer. When analysis is requested, return a compact evidence-based analysis object containing observations, key levels, trend/bias, confidence, and disagreements/unknowns; never fabricate missing values.',
-    'You are one member of a council. Treat other agents as peer analysts: challenge unsupported conclusions, use their supplied findings when present, and make your own conclusion from the shared chart data. The final action must be based on verified chart state, not majority vote alone.',
+    'You are an equal teammate. Read the other AIs contributions when supplied. Challenge unsupported conclusions, use useful findings, share responsibilities, and revise your view when evidence changes. Decisions belong to the team, not to a leader or majority vote alone.',
     'Never claim an order was placed. Trading actions are proposals requiring explicit user approval; the browser never auto-submits a live order from an AI response.',
     'For chart changes, use exact public OpenAlgo Charts APIs and exact indicator ids when supplied by the skill catalogue. Prefer actions over telling the user to click manually.',
     'Time values are UTC seconds. Logical ranges are chart-local; never copy a logical index from another chart as though it were a timestamp.',
@@ -140,6 +140,7 @@ export async function runOpenAlgoAgent(input: {
   history?: HistoryItem[];
   symbol?: string;
   runtimeContext?: RuntimeContext;
+  councilContext?: string;
 }) {
   const query = String(input.query || '').trim();
   if (!query) throw new Error('query is required');
@@ -154,7 +155,7 @@ export async function runOpenAlgoAgent(input: {
   const messages: any[] = [
     { role: 'system', content: systemPrompt() },
     ...cleanHistory(input.history),
-    { role: 'user', content: `USER REQUEST:\n${query}\n\nRUNTIME:\n${JSON.stringify(context)}` },
+    { role: 'user', content: `USER REQUEST:\n${query}\n\nRUNTIME:\n${JSON.stringify(context)}${input.councilContext ? `\n\nTEAM DISCUSSION:\n${input.councilContext}` : ''}` },
   ];
 
   const toolTrace: Array<Record<string, unknown>> = [];
