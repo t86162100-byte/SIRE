@@ -154,7 +154,6 @@ export async function runGptHead(input: {
 
   const usedToolCalls = new Set<string>();
   const chartActions: any[] = [];
-  const chartActions: any[] = [];
   const toolCallHistory: Array<{turn:number;name:string}> = [];
   for (let turn = 0; turn < MAX_TOOL_TURNS; turn++) {
     await emit('GPT','thinking', turn === 0 ? 'GPT is considering your request and deciding what, if anything, it needs to inspect.' : 'GPT is evaluating the latest tool result and deciding the next step.');
