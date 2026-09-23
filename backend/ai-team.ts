@@ -174,10 +174,12 @@ export async function runAiTeam(input:{query:string;workspaceId?:string;history?
 
  const finalText=synthesis.text||oaFinal.text||pFinal.text||gFinal.text||oaCrit.text||pCrit.text||gCrit.text||oa.text||p.text||g.text;
  const mergedActions=[...(agent.actions||[]),...(oa.actions||[]),...(oaFinal.actions||[])];
- const finalText=oa2.text||f.text||g2.text||oa.text||p.text||g.text; const mergedActions=[...(agent.actions||[]),...(oa.actions||[]),...(oa2.actions||[])]; const saveStarted=Date.now(); await save(s,loaded.id); mark('stateSave',saveStarted);await ev('SIRE','conclusion','The shared workspace has been updated with the team’s responsibilities, decisions, and artifacts.');
+ const mergedSkills=[...new Set([...(agent.skills||[]),...(oa.skills||[]),...(oaFinal.skills||[])])];
+ const mergedToolTrace=[...(agent.toolTrace||[]),...(oa.toolTrace||[]),...(oaFinal.toolTrace||[])];
+ const saveStarted=Date.now(); await save(s,loaded.id); mark('stateSave',saveStarted);await ev('SIRE','conclusion','The shared workspace has been updated with the team’s responsibilities, decisions, and artifacts.');
  const totalMs=Date.now()-runStarted;
  const slowest=Object.entries(timings).sort((a,b)=>b[1]-a[1])[0] || null;
  const diagnostics={totalMs,timings,slowestStage:slowest?.[0]||null,slowestMs:slowest?.[1]||0};
  recordAiRun({startedAt:new Date(runStarted).toISOString(),totalMs,stages:timings,slowestStage:slowest?.[0]||null,slowestMs:slowest?.[1]||0,mode:'peer-team-collaboration',queryType:query.slice(0,80),ok:true});
- return {diagnostics,text:userAnswer(finalText),responseId:oa2.responseId||f.responseId||g2.responseId||g.responseId||'',model:`team:${g.model}+${f.model}+${oa2.model||'openalgo'}`,provider:'SIRE AI Team',teamMode:'peer-team-collaboration',workspaceId:id,responsibilities:s.responsibilities,decisions:s.decisions.slice(-12),openQuestions:s.openQuestions.slice(-12),artifacts:s.artifacts.slice(-8),activity:s.activity.slice(-20),execution:input.execute?{status:'planned'}:{status:'not_requested'},agentActions:agent.actions,agentSkills:agent.skills,agentToolTrace:agent.toolTrace,webSearched:sources.length>0,webSources:sources};});
+ return {diagnostics,text:userAnswer(finalText),responseId:synthesis.responseId||oaFinal.responseId||pFinal.responseId||gFinal.responseId||g.responseId||'',model:`team:${g.model||'gemini'}+${p.model||'gpt-oss-20b'}+${oaFinal.model||'openalgo'}`,provider:'SIRE AI Team',teamMode:'peer-team-collaboration',workspaceId:id,responsibilities:s.responsibilities,decisions:s.decisions.slice(-12),openQuestions:s.openQuestions.slice(-12),artifacts:s.artifacts.slice(-8),activity:s.activity.slice(-20),execution:input.execute?{status:'planned'}:{status:'not_requested'},agentActions:mergedActions,agentSkills:mergedSkills,agentToolTrace:mergedToolTrace,webSearched:sources.length>0,webSources:sources};});
 }
