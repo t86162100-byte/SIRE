@@ -162,6 +162,30 @@ export async function runGptHead(input: {
       return { text: text.slice(0, MAX_OUTPUT_CHARS), responseId: result.responseId, model: MODEL, provider: 'OpenAI gpt-oss via OpenRouter' };
     }
 
+    // After a specialist has completed a chart operation, do not allow the head
+    // to delegate again. One clean synthesis pass is enough; this prevents a
+    // simple chart request from consuming the tool-turn budget.
+    if (openAlgoUsed) {
+      const calls = toolCalls.map((call:any) => String(call?.function?.name || '')).join(', ');
+      messages.push({
+        role: 'assistant',
+        content: message.content ?? '',
+        tool_calls: toolCalls,
+      });
+      messages.push({
+        role: 'tool',
+        tool_call_id: String(toolCalls[0]?.id || 'openalgo-synthesis'),
+        content: JSON.stringify({ status: 'completed', note: 'The chart specialist already handled the request. Produce the final user-facing answer now; do not request another tool.' }),
+      });
+      const finalResult = await callOpenRouter(messages, []);
+      const finalMessage = finalResult.message;
+      const finalText = textFromResponse({ choices: [{ message: finalMessage }] });
+      if (finalText) {
+        return { text: finalText.slice(0, MAX_OUTPUT_CHARS), responseId: finalResult.responseId || result.responseId, model: MODEL, provider: 'OpenAI gpt-oss via OpenRouter' };
+      }
+      return { text: 'I completed the chart operation and verified the request with the chart specialist.', responseId: result.responseId, model: MODEL, provider: 'OpenAI gpt-oss via OpenRouter' };
+    }
+
     messages.push({ role: 'assistant', content: message.content ?? '', tool_calls: toolCalls });
 
     for (const call of toolCalls) {
