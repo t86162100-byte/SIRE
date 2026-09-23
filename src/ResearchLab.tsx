@@ -13,7 +13,8 @@ type ChatSession = { id: string; title: string; messages: ChatMessage[]; created
 type AgentResponse = { text?: string; responseId?: string; actions?: Array<Record<string, unknown>>; agentActions?: Array<Record<string, unknown>>; agentSkills?: string[]; error?: string; webSearched?: boolean; webSources?: WebSource[] };
 
 type PersistedJob = { chatId: string; status: 'processing' | 'complete' | 'error' | 'cancelled'; updatedAt: number };
-type DiagnosticCheck = { id:string; area:string; status:'pass'|'warning'|'fail'; severity:string; title:string; detail:string; latencyMs?:number; evidence?:unknown };\ntype IssueLog = { id:string; timestamp:number; source:string; level:string; message:string; detail?:string; stack?:string; url?:string; line?:number; column?:number; file?:string; component?:string; cause?:string; traceId?:string };
+type DiagnosticCheck = { id:string; area:string; status:'pass'|'warning'|'fail'; severity:string; title:string; detail:string; latencyMs?:number; evidence?:unknown };
+type IssueLog = { id:string; timestamp:number; source:string; level:string; message:string; detail?:string; stack?:string; url?:string; line?:number; column?:number; file?:string; component?:string; cause?:string; traceId?:string };
 type DiagnosticReport = { ok:boolean; durationMs?:number; mainIssue?:{severity:string;id:string;title:string;detail:string}; summary?:{checks:number;failed:number;warnings:number;passed:number}; checks?:DiagnosticCheck[]; aiMonitor?:any; chart?:any; error?:string };
 
 const readJobs = (): PersistedJob[] => {
