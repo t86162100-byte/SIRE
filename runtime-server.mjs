@@ -55,7 +55,23 @@ async function githubRequestForGpt({ method, path, body, permission }) {
   let normalizedPath = String(path || '').trim();
   // GPT sometimes returns the full GitHub API URL even though the tool schema asks
   // for an API path. Normalize that form instead of rejecting a valid repo request.
-  if (normalizedPath.startsWith('https://api.github.com') || normalizedPath.startsWith('http://api.github.com')) { const parsedUrl = new URL(normalizedPath); normalizedPath = parsedUrl.pathname + parsedUrl.search; }
+  if (/^https?:\/\/api\.github\.com/i.test(normalizedPath)) {
+    const parsedUrl = new URL(normalizedPath);
+    normalizedPath = parsedUrl.pathname + parsedUrl.search;
+  } else if (/^https?:\/\/github\.com/i.test(normalizedPath)) {
+    const parsedUrl = new URL(normalizedPath);
+    const parts = parsedUrl.pathname.split('/').filter(Boolean);
+    if (parts.length >= 2 && parts[0] === repo.split('/')[0] && parts[1] === repo.split('/')[1]) {
+      const suffix = parts.slice(2);
+      if (suffix[0] === 'blob' || suffix[0] === 'tree') {
+        const ref = suffix[1] || '';
+        const filePath = suffix.slice(2).join('/');
+        normalizedPath = '/repos/' + repo + '/contents/' + filePath + (ref ? '?ref=' + encodeURIComponent(ref) : '');
+      } else {
+        normalizedPath = '/repos/' + repo + '/' + suffix.join('/');
+      }
+    }
+  }
   normalizedPath = normalizedPath.startsWith('/') ? normalizedPath : '/' + normalizedPath;
   const repoPrefix = '/repos/' + repo;
   const isRepoScoped = normalizedPath === repoPrefix || normalizedPath.startsWith(repoPrefix + '/');
