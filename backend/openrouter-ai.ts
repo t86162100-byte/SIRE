@@ -6,7 +6,7 @@ const MODEL = 'openai/gpt-oss-20b';
 const API_URL = 'https://openrouter.ai/api/v1/chat/completions';
 const REQUEST_TIMEOUT_MS = 45000;
 const MAX_OUTPUT_CHARS = 12000;
-const MAX_TOOL_TURNS = 8;
+const MAX_TOOL_TURNS = 6;
 
 function getApiKey() {
   const key = process.env.OPENROUTER_API_KEY?.trim();
@@ -93,7 +93,7 @@ export async function runGptHead(input: {
     type: 'function',
     function: {
       name: 'ask_openalgo',
-      description: 'Ask the OpenAlgo Agent to inspect or act on chart, market, OpenAlgo, or related technical context. Use only when that specialist context is genuinely needed.',
+      description: 'Ask the OpenAlgo Agent to inspect or ACT ON THE VISIBLE CHART when the user wants something done to the chart (indicators, drawings, timeframe, chart type, replay, settings, scale, screenshots, etc.). This is the chart-action specialist. Do not use GitHub merely because the chart is implemented in code; use GitHub only when the user explicitly asks to inspect or change the repository implementation.',
       parameters: { type: 'object', properties: { task: { type: 'string', description: 'The focused task for the OpenAlgo Agent.' } }, required: ['task'], additionalProperties: false },
     },
   });
@@ -109,7 +109,7 @@ export async function runGptHead(input: {
     type: 'function',
     function: {
       name: 'github_request',
-      description: 'Use SIRE\'s connected GitHub repository access. Read repository files, branches, commits, issues, pull requests, or perform requested repository changes such as creating/updating/deleting files, branches, commits, or pull requests. Use only when the user asks for GitHub/repository work or the task genuinely requires repository access. For changes, inspect the relevant current state first and then perform the requested write.',
+      description: 'Use SIRE's connected GitHub repository access for repository/code work. Use this when the user explicitly asks to inspect, debug, modify, commit, branch, or otherwise work on the repository implementation. Do NOT use this merely because a request concerns the visible chart; visible chart actions belong to the OpenAlgo Agent.',
       parameters: {
         type: 'object',
         properties: {
@@ -143,13 +143,15 @@ export async function runGptHead(input: {
   ];
 
   let openAlgoUsed = false;
+  const usedToolCalls = new Set<string>();
+  const toolCallHistory: Array<{turn:number;name:string}> = [];
   for (let turn = 0; turn < MAX_TOOL_TURNS; turn++) {
     await emit('GPT','thinking', turn === 0 ? 'GPT is considering your request and deciding what, if anything, it needs to inspect.' : 'GPT is evaluating the latest tool result and deciding the next step.');
     // A chart action is an executable specialist operation. Once OpenAlgo has returned
     // its action/result, force the head to produce the user-facing answer instead of
     // repeatedly delegating the same request until the tool-turn ceiling is reached.
     // After the chart specialist returns, synthesize the result instead of starting another tool chain.
-    const availableTools = openAlgoUsed ? [] : toolDefs;
+    const availableTools = toolDefs.filter((tool:any) => { const name = String(tool?.function?.name || ''); if (name === 'ask_openalgo' && openAlgoUsed) return false; return !usedToolCalls.has(name); });
     const result = await callOpenRouter(messages, availableTools);
     const message = result.message;
     const toolCalls = Array.isArray(message.tool_calls) ? message.tool_calls : [];
@@ -167,6 +169,8 @@ export async function runGptHead(input: {
       let args: any = {};
       try { args = JSON.parse(String(call?.function?.arguments || '{}')); } catch { args = {}; }
       const callId = String(call?.id || `${name}-${turn}`);
+      toolCallHistory.push({ turn, name });
+      usedToolCalls.add(name);
 
       if (name === 'github_request' && input.tools?.githubRequest) {
         const method = String(args.method || 'GET').toUpperCase();
@@ -198,7 +202,9 @@ export async function runGptHead(input: {
     }
   }
 
-  throw new Error('GPT head reached the maximum tool turns without producing a final answer');
+  const counts = toolCallHistory.reduce((acc:Record<string,number>, item) => { acc[item.name]=(acc[item.name]||0)+1; return acc; }, {});
+  const trace = toolCallHistory.map(item => `turn ${item.turn + 1}: ${item.name}`).join(' | ') || 'no tool calls';
+  throw new Error(`GPT tool loop ended before a final answer. Tool trace: ${trace}. Counts: ${JSON.stringify(counts)}`);
 }
 
 export async function runOpenRouter(input: {
