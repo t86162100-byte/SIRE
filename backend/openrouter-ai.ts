@@ -1,18 +1,16 @@
-type ChatMessage = { role: 'user' | 'assistant'; content: string };
+type ChatMessage = { role: 'system' | 'user' | 'assistant' | 'tool'; content: any; tool_call_id?: string; tool_calls?: any[] };
 
-type CouncilTurn = { provider: string; model: string; role: string; text: string };
 type CouncilEvent = (event: { actor: string; phase: string; text: string }) => void | Promise<void>;
-
-import { runGemini } from './gemini-ai.ts';
 
 const MODEL = 'openai/gpt-oss-20b';
 const API_URL = 'https://openrouter.ai/api/v1/chat/completions';
-const REQUEST_TIMEOUT_MS = 30000;
+const REQUEST_TIMEOUT_MS = 45000;
 const MAX_OUTPUT_CHARS = 12000;
+const MAX_TOOL_TURNS = 8;
 
 function getApiKey() {
   const key = process.env.OPENROUTER_API_KEY?.trim();
-  if (!key) throw new Error('OpenAI GPT council is not configured: OPENROUTER_API_KEY is missing');
+  if (!key) throw new Error('GPT head is not configured: OPENROUTER_API_KEY is missing');
   return key;
 }
 
@@ -21,7 +19,7 @@ function cleanHistory(history: unknown): ChatMessage[] {
   return history.slice(-20).flatMap((item: any) => {
     const content = String(item?.text || item?.content || '').trim();
     if (!content) return [];
-    return [{ role: item?.role === 'assistant' || item?.role === 'model' || item?.role === 'sire' ? 'assistant' : 'user', content } as ChatMessage];
+    return [{ role: item?.role === 'assistant' || item?.role === 'model' || item?.role === 'sire' ? 'assistant' : 'user', content }];
   });
 }
 
@@ -32,39 +30,126 @@ function textFromResponse(data: any): string {
   return '';
 }
 
-async function callOpenRouter(messages: ChatMessage[], temperature = 0.7) {
+async function callOpenRouter(messages: ChatMessage[], tools?: any[]) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
   try {
+    const body: any = { model: MODEL, messages, max_tokens: 2048 };
+    if (tools?.length) { body.tools = tools; body.tool_choice = 'auto'; }
     const response = await fetch(API_URL, {
       method: 'POST', signal: controller.signal,
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${getApiKey()}`, 'HTTP-Referer': 'https://sire-rwv9.onrender.com', 'X-Title': 'SIRE AI Council' },
-      body: JSON.stringify({ model: MODEL, messages, temperature, max_tokens: 2048 }),
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${getApiKey()}`, 'HTTP-Referer': 'https://sire-amfv.onrender.com', 'X-Title': 'SIRE' },
+      body: JSON.stringify(body),
     });
     const raw = await response.text();
     let data: any = {};
     try { data = raw ? JSON.parse(raw) : {}; } catch { data = { error: raw }; }
-    if (!response.ok) { const error = new Error(data?.error?.message || `OpenRouter HTTP ${response.status}`); (error as any).status = response.status; throw error; }
-    const text = textFromResponse(data);
-    if (!text) { const error = new Error('OpenAI GPT council returned no text'); (error as any).status = 502; throw error; }
-    return { text: text.slice(0, MAX_OUTPUT_CHARS), responseId: typeof data?.id === 'string' ? data.id : '' };
+    if (!response.ok) {
+      const error = new Error(data?.error?.message || `OpenRouter HTTP ${response.status}`);
+      (error as any).status = response.status;
+      throw error;
+    }
+    return { message: data?.choices?.[0]?.message || {}, responseId: typeof data?.id === 'string' ? data.id : '' };
   } finally { clearTimeout(timer); }
 }
 
 function systemPrompt() {
   return [
-    'You are SIRE, the user-facing AI assistant and one member of a capable AI team.',
-    'Your name is SIRE. Never identify yourself as ChatGPT, OpenAI, Gemini, GPT, GPT-OSS, or another assistant unless the user explicitly asks what technology powers SIRE.',
-    'You are a full-fledged general conversational AI. Handle greetings, small talk, questions, explanations, brainstorming, writing, planning, coding and technical topics naturally.',
-    'Do not assume every message is a task or a market/trading request.',
-    'Preserve conversation context and answer the actual user intent.',
-    'You are collaborating with another capable AI. Treat it like a teammate, not an opponent. You may agree, disagree, ask it questions, propose ideas, split responsibilities, verify its work, combine complementary ideas, or change your mind.',
-    'Do not manufacture disagreement. If the other member is correct, say so and build on it. If both approaches are useful, divide the work and combine them.',
-    'When useful, suggest concrete next steps, checks, research questions, plans, or tool calls. If tools are actually supplied by the runtime, use their results rather than inventing them.',
-    'Never claim to have browsed, searched, verified, executed, or changed something unless the runtime actually did it.',
-    'For the visible council stream, provide short decision-relevant summaries of what you are doing, such as proposing, checking, discussing, planning, researching, agreeing, revising, or concluding. Do not expose private chain-of-thought.',
-    'Do not force labels such as Arguments, Evidence, Assumptions, Objections, or Conclusion. Use whatever structure naturally fits the current discussion.',
+    'You are SIRE, the user-facing AI assistant and the primary reasoning model.',
+    'You are powered by OpenAI gpt-oss-20b through OpenRouter, but normally present yourself simply as SIRE.',
+    'You are a full general-purpose AI. Handle greetings, small talk, explanations, writing, planning, coding, research, technical work, and chart work naturally.',
+    'Do not use keyword routing or canned fast paths. Decide from the actual request whether you can answer directly or should use a tool.',
+    'You are above the available tools and decide when they are useful. You are not required to use a tool.',
+    'Available helpers: OpenAlgo Agent for chart/OpenAlgo/market and related technical context; web_search for current external information.',
+    'Use a helper only when it materially improves the answer. After a helper returns, evaluate its result yourself and continue reasoning.',
+    'Never claim you searched, inspected, changed, deployed, or verified something unless the runtime actually performed that action.',
+    'Visible activity should contain only concise work summaries, never private chain-of-thought.',
+    'If a simple message can be answered directly, answer it directly without unnecessary work.',
+    'If a difficult task needs deeper investigation, delegate a focused task, inspect the result, and integrate it into your own answer.',
   ].join('\n');
+}
+
+export async function runGptHead(input: {
+  query: string;
+  history?: Array<{ role: string; text?: string; content?: string }>;
+  symbol?: string;
+  runtimeContext?: Record<string, unknown>;
+  onEvent?: CouncilEvent;
+  tools?: {
+    askOpenAlgo?: (task: string) => Promise<string>;
+    webSearch?: (query: string) => Promise<string>;
+  };
+}) {
+  const query = input.query.trim();
+  if (!query) throw new Error('query is required');
+  const emit = async (actor: string, phase: string, text: string) => { if (input.onEvent) await input.onEvent({ actor, phase, text }); };
+
+  const toolDefs: any[] = [];
+  if (input.tools?.askOpenAlgo) toolDefs.push({
+    type: 'function',
+    function: {
+      name: 'ask_openalgo',
+      description: 'Ask the OpenAlgo Agent to inspect or act on chart, market, OpenAlgo, or related technical context. Use only when that specialist context is genuinely needed.',
+      parameters: { type: 'object', properties: { task: { type: 'string', description: 'The focused task for the OpenAlgo Agent.' } }, required: ['task'], additionalProperties: false },
+    },
+  });
+  if (input.tools?.webSearch) toolDefs.push({
+    type: 'function',
+    function: {
+      name: 'web_search',
+      description: 'Search the web when current or externally verifiable information is needed.',
+      parameters: { type: 'object', properties: { query: { type: 'string', description: 'A focused web search query.' } }, required: ['query'], additionalProperties: false },
+    },
+  });
+
+  const context = [
+    input.symbol ? `ACTIVE SYMBOL: ${input.symbol}` : '',
+    input.runtimeContext ? `RUNTIME CONTEXT: ${JSON.stringify(input.runtimeContext).slice(0, 12000)}` : '',
+  ].filter(Boolean).join('\n');
+
+  const messages: ChatMessage[] = [
+    { role: 'system', content: systemPrompt() },
+    ...cleanHistory(input.history),
+    { role: 'user', content: context ? `${query}\n\n${context}` : query },
+  ];
+
+  for (let turn = 0; turn < MAX_TOOL_TURNS; turn++) {
+    await emit('GPT','thinking', turn === 0 ? 'GPT is considering your request and deciding what, if anything, it needs to inspect.' : 'GPT is evaluating the latest tool result and deciding the next step.');
+    const result = await callOpenRouter(messages, toolDefs);
+    const message = result.message;
+    const toolCalls = Array.isArray(message.tool_calls) ? message.tool_calls : [];
+
+    if (!toolCalls.length) {
+      const text = textFromResponse({ choices: [{ message }] });
+      if (!text) throw new Error('GPT head returned no text');
+      return { text: text.slice(0, MAX_OUTPUT_CHARS), responseId: result.responseId, model: MODEL, provider: 'OpenAI gpt-oss via OpenRouter' };
+    }
+
+    messages.push({ role: 'assistant', content: message.content ?? '', tool_calls: toolCalls });
+
+    for (const call of toolCalls) {
+      const name = String(call?.function?.name || '');
+      let args: any = {};
+      try { args = JSON.parse(String(call?.function?.arguments || '{}')); } catch { args = {}; }
+      const callId = String(call?.id || `${name}-${turn}`);
+
+      if (name === 'ask_openalgo' && input.tools?.askOpenAlgo) {
+        const task = String(args.task || query).slice(0, 8000);
+        await emit('OpenAlgo Agent','working','GPT asked OpenAlgo Agent to inspect a focused technical/chart question.');
+        const output = await input.tools.askOpenAlgo(task);
+        messages.push({ role: 'tool', tool_call_id: callId, content: output.slice(0, 14000) });
+      } else if (name === 'web_search' && input.tools?.webSearch) {
+        const searchQuery = String(args.query || query).slice(0, 1000);
+        await emit('Web','research','GPT decided that current external information is needed and requested a web search.');
+        const output = await input.tools.webSearch(searchQuery);
+        messages.push({ role: 'tool', tool_call_id: callId, content: output.slice(0, 14000) });
+      } else {
+        messages.push({ role: 'tool', tool_call_id: callId, content: 'Tool unavailable. Continue without it.' });
+      }
+    }
+  }
+
+  throw new Error('GPT head reached the maximum tool turns without producing a final answer');
 }
 
 export async function runOpenRouter(input: {
@@ -76,49 +161,14 @@ export async function runOpenRouter(input: {
 }) {
   const query = input.query.trim();
   if (!query) throw new Error('query is required');
-  const system = input.system || systemPrompt();
-  const history = cleanHistory(input.history);
-  const initialContext = input.councilContext?.trim() || '';
-  const debate: CouncilTurn[] = [];
-  const emit = async (actor: string, phase: string, text: string) => { if (input.onEvent) await input.onEvent({ actor, phase, text }); };
-
-  if (!initialContext) {
-    const result = await callOpenRouter([{ role: 'system', content: system }, ...history, { role: 'user', content: query }]);
-    return { text: result.text, responseId: result.responseId, model: MODEL, provider: 'OpenAI via OpenRouter' };
-  }
-
-  await emit('GPT', 'discussing', 'Reading Gemini’s contribution and deciding how to help.');
-  const challenge = await callOpenRouter([
-    { role: 'system', content: `${system}\n\nYou are joining an active team discussion. First understand the other member's proposal. Then contribute whatever is most useful: validate it, question it, improve it, add a missing idea, propose a different approach, or divide the work. Do not disagree just to create debate. Do not produce the final user answer yet. Give a concise collaboration summary.` },
-    ...history,
+  const messages: ChatMessage[] = [
+    { role: 'system', content: input.system || systemPrompt() },
+    ...cleanHistory(input.history),
+    ...(input.councilContext ? [{ role: 'user', content: `TEAM CONTEXT:\n${input.councilContext}` } as ChatMessage] : []),
     { role: 'user', content: query },
-    { role: 'assistant', content: `Gemini's current contribution:\n\n${initialContext}` },
-    { role: 'user', content: 'Continue the team discussion. Decide what contribution would move the work forward most.' },
-  ]);
-  debate.push({ provider: 'OpenAI via OpenRouter', model: MODEL, role: 'discussion', text: challenge.text });
-  await emit('GPT', 'discussing', challenge.text);
-
-  await emit('Gemini', 'responding', 'Considering GPT’s contribution and deciding whether to agree, refine, divide work, or change direction.');
-  const rebuttal = await runGemini({
-    query,
-    history,
-    councilContext: `USER REQUEST:\n${query}\n\nMY PREVIOUS CONTRIBUTION:\n${initialContext}\n\nGPT TEAMMATE CONTRIBUTION:\n${challenge.text}`,
-    debateRole: 'response',
-    onEvent: input.onEvent,
-  });
-  debate.push({ provider: rebuttal.provider, model: rebuttal.model, role: 'discussion', text: rebuttal.text });
-  await emit('Gemini', 'discussing', rebuttal.text);
-
-  await emit('GPT', 'concluding', 'Combining the useful work from both members into one answer.');
-  const final = await callOpenRouter([
-    { role: 'system', content: `${system}\n\nYou are the final member of the team. Review the complete discussion, resolve genuine differences, preserve agreements, combine complementary ideas, and produce the best direct answer to the user as SIRE. Do not mention internal council mechanics unless asked. Do not expose private chain-of-thought. The final answer must stand on its own.` },
-    ...history,
-    { role: 'user', content: query },
-    { role: 'assistant', content: `TEAM DISCUSSION:\n\nGEMINI:\n${initialContext}\n\nGPT:\n${challenge.text}\n\nGEMINI:\n${rebuttal.text}` },
-    { role: 'user', content: 'Conclude the team discussion and answer the user directly.' },
-  ]);
-  debate.push({ provider: 'OpenAI via OpenRouter', model: MODEL, role: 'conclusion', text: final.text });
-  await emit('GPT', 'conclusion', 'The team has reached a conclusion.');
-
-  return { text: final.text, responseId: final.responseId || rebuttal.responseId || challenge.responseId || '', model: MODEL, provider: 'OpenAI via OpenRouter', council: debate };
+  ];
+  const result = await callOpenRouter(messages);
+  const text = textFromResponse({ choices: [{ message: result.message }] });
+  if (!text) throw new Error('GPT returned no text');
+  return { text: text.slice(0, MAX_OUTPUT_CHARS), responseId: result.responseId, model: MODEL, provider: 'OpenAI gpt-oss via OpenRouter' };
 }
