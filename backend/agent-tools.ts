@@ -221,7 +221,7 @@ export async function verifyConfiguredConnectors() {
     })() : Promise.resolve(),
     process.env.RENDER_API_KEY && connectors.some(x => x.id === 'render') ? (async () => {
       try {
-        const workspaces = await connectorRequest('render', '/owners?limit=100', {}, 'read') as Record<string, unknown>;
+        const workspaces = await connectorRequest('render', 'owners?limit=100', {}, 'read') as Record<string, unknown>;
         const owners = Array.isArray(workspaces?.items) ? workspaces.items : Array.isArray(workspaces) ? workspaces : [];
         checks.render = {
           ok: true,
