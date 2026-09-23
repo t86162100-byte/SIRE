@@ -8,7 +8,6 @@ const { handler } = await import('./backend/index.ts');
 import { handleGeminiRequest } from './backend/gemini-ai.ts';
 import { runAiTeam } from './backend/ai-team.ts';
 import { runOpenRouter } from './backend/openrouter-ai.ts';
-import { runOpenAlgoAgent } from './backend/openalgo-agent.ts';
 import { runAgent } from './backend/sire-agent-gateway.ts';
 import { startAgentWorker } from './workers/sire-agent-worker.ts';
 import { ws } from './compat/appdeploy-sdk/index.js';
