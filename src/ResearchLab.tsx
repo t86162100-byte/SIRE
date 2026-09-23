@@ -4,7 +4,7 @@ import { Bug, Check, Copy, Globe2, Menu, MessageSquarePlus, Plus, Send, Sparkles
 import './sire-council.css';
 
 type Instrument = { symbol: string; name: string };
-type RuntimeContext = { symbol: string; name?: string; timeframe?: string; chartMode?: string; latestPrice?: number | null; activeIndicators?: unknown[]; drawings?: Array<Record<string, unknown>>; chartBars?: number; visibleBars?: number; recentBars?: unknown[]; latestBar?: unknown; visibleRange?: unknown; replay?: unknown; chartState?: unknown; capabilities?: Record<string, unknown>; agentContract?: Record<string, unknown>; selectedInspection?: { epoch: number; price: number } | null; availableInstruments?: Array<{symbol:string;name:string}> };
+type RuntimeContext = { symbol: string; name?: string; timeframe?: string; chartMode?: string; latestPrice?: number | null; activeIndicators?: unknown[]; availableIndicatorIds?: string[]; chartDiagnostics?: Array<Record<string, unknown>>; drawings?: Array<Record<string, unknown>>; chartBars?: number; visibleBars?: number; recentBars?: unknown[]; latestBar?: unknown; visibleRange?: unknown; replay?: unknown; chartState?: unknown; capabilities?: Record<string, unknown>; agentContract?: Record<string, unknown>; selectedInspection?: { epoch: number; price: number } | null; availableInstruments?: Array<{symbol:string;name:string}> };
 type Props = { symbol: string; instruments: Instrument[]; onClose: () => void; onSelectInstrument?: (symbol: string) => void; onSetChartView?: (settings: Record<string, unknown>) => void; onAddMarker?: (label: string) => void; runtimeContext?: RuntimeContext };
 type CouncilActivity = { actor: string; phase: string; text: string };
 type WebSource = { title: string; url: string; publishedDate?: string; author?: string; text?: string };
@@ -116,7 +116,7 @@ export default function ResearchLab({ symbol, instruments, onClose, onSelectInst
   const cancelledJobsRef = useRef<Set<string>>(new Set());
   const abortControllersRef = useRef<Map<string, AbortController>>(new Map());
   const [lastPrompt, setLastPrompt] = useState(''); const [lastError, setLastError] = useState(false); const [activity, setActivity] = useState<CouncilActivity[]>([]); const [webSources, setWebSources] = useState<WebSource[]>([]);
-  const [diagnosticsOpen, setDiagnosticsOpen] = useState(false); const [diagnosticsBusy, setDiagnosticsBusy] = useState(false); const [thinkingSince, setThinkingSince] = useState<number | null>(null); const [thinkingSeconds, setThinkingSeconds] = useState(0); const [diagnosticReport, setDiagnosticReport] = useState<DiagnosticReport|null>(null);
+  const [diagnosticsOpen, setDiagnosticsOpen] = useState(false); const [diagnosticsBusy, setDiagnosticsBusy] = useState(false); const [issueLogs, setIssueLogs] = useState<Array<{id:string;timestamp:number;source:string;level:string;message:string;detail?:string}>>([]); const [thinkingSince, setThinkingSince] = useState<number | null>(null); const [thinkingSeconds, setThinkingSeconds] = useState(0); const [diagnosticReport, setDiagnosticReport] = useState<DiagnosticReport|null>(null);
   const activeChat = chatSessions.find(chat => chat.id === activeChatId) || null;
   const chatMessages = activeChat?.messages || [];
   useEffect(() => {
