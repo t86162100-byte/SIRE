@@ -72,8 +72,6 @@ function systemPrompt() {
 export async function runGptHead(input: {
   query: string;
   history?: Array<{ role: string; text?: string; content?: string }>;
-  symbol?: string;
-  runtimeContext?: Record<string, unknown>;
   onEvent?: CouncilEvent;
   tools?: {
     askOpenAlgo?: (task: string) => Promise<string>;
@@ -102,15 +100,10 @@ export async function runGptHead(input: {
     },
   });
 
-  const context = [
-    input.symbol ? `ACTIVE SYMBOL: ${input.symbol}` : '',
-    input.runtimeContext ? `RUNTIME CONTEXT: ${JSON.stringify(input.runtimeContext).slice(0, 12000)}` : '',
-  ].filter(Boolean).join('\n');
-
   const messages: ChatMessage[] = [
     { role: 'system', content: systemPrompt() },
     ...cleanHistory(input.history),
-    { role: 'user', content: context ? `${query}\n\n${context}` : query },
+    { role: 'user', content: query },
   ];
 
   for (let turn = 0; turn < MAX_TOOL_TURNS; turn++) {
