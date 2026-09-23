@@ -142,9 +142,14 @@ export async function runGptHead(input: {
     { role: 'user', content: query },
   ];
 
+  let openAlgoUsed = false;
   for (let turn = 0; turn < MAX_TOOL_TURNS; turn++) {
     await emit('GPT','thinking', turn === 0 ? 'GPT is considering your request and deciding what, if anything, it needs to inspect.' : 'GPT is evaluating the latest tool result and deciding the next step.');
-    const result = await callOpenRouter(messages, toolDefs);
+    // A chart action is an executable specialist operation. Once OpenAlgo has returned
+    // its action/result, force the head to produce the user-facing answer instead of
+    // repeatedly delegating the same request until the tool-turn ceiling is reached.
+    const availableTools = openAlgoUsed ? toolDefs.filter((tool:any) => tool?.function?.name !== 'ask_openalgo') : toolDefs;
+    const result = await callOpenRouter(messages, availableTools);
     const message = result.message;
     const toolCalls = Array.isArray(message.tool_calls) ? message.tool_calls : [];
 
@@ -175,6 +180,7 @@ export async function runGptHead(input: {
         const task = String(args.task || query).slice(0, 8000);
         await emit('OpenAlgo Agent','working','GPT asked OpenAlgo Agent to inspect a focused technical/chart question.');
         const output = await input.tools.askOpenAlgo(task);
+        openAlgoUsed = true;
         messages.push({ role: 'tool', tool_call_id: callId, content: output.slice(0, 14000) });
       } else if (name === 'check_integrations' && input.tools?.checkIntegrations) {
         await emit('SIRE integrations','checking','GPT is checking the configured GitHub and Render connections.');
