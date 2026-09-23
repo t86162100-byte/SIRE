@@ -1,6 +1,6 @@
 import { db } from '@appdeploy/sdk';
 import { runOpenRouter, runGptHead } from './openrouter-ai.ts';
-import { webSearch, verifyConfiguredConnectors } from './agent-tools.ts';
+import { webSearch, verifyConfiguredConnectors, connectorRequest } from './agent-tools.ts';
 import { runOpenAlgoAgent } from './openalgo-agent.ts';
 import { recordAiRun } from './sire-ai-monitor.ts';
 
@@ -36,6 +36,19 @@ export async function runAiTeam(input:{query:string;workspaceId?:string;history?
       checkIntegrations:async()=>{
         const checks=await verifyConfiguredConnectors();
         return JSON.stringify(checks);
+      },
+      githubRequest:async(input)=>{
+        const method=String(input.method||'GET').toUpperCase();
+        const permission=String(input.permission||((method==='GET')?'read':'write'));
+        const path=String(input.path||'').trim();
+        if(!path.startsWith('/')) throw new Error('GitHub API path must start with /');
+        if(method==='GET') return JSON.stringify(await connectorRequest('github',path,{method},'read'));
+        const body=input.body===undefined?undefined:JSON.stringify(input.body);
+        return JSON.stringify(await connectorRequest('github',path,{
+          method,
+          headers: body ? {'content-type':'application/json'} : undefined,
+          body,
+        },permission as any));
       },
       webSearch:async(q)=>{
         const t=Date.now();await ev('Web','research','Gemini decided that current external information is needed, so SIRE is searching the web.');const r=await webSearch(q,8).catch(()=>({results:[]}));timings.webSearch=Date.now()-t;
