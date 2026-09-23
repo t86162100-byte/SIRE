@@ -6,7 +6,7 @@ const MODEL = 'openai/gpt-oss-20b';
 const API_URL = 'https://openrouter.ai/api/v1/chat/completions';
 const REQUEST_TIMEOUT_MS = 45000;
 const MAX_OUTPUT_CHARS = 12000;
-const MAX_TOOL_TURNS = 8;
+const MAX_TOOL_TURNS = 4;
 
 function getApiKey() {
   const key = process.env.OPENROUTER_API_KEY?.trim();
@@ -64,8 +64,8 @@ function systemPrompt() {
     'Use a helper only when it materially improves the answer. After a helper returns, evaluate its result yourself and continue reasoning.',
     'GitHub access is real and may be read/write. When a repository task requires it, inspect the repository first, then make the requested changes through the GitHub tool and report the actual result. Never claim you searched, inspected, changed, deployed, or verified something unless the runtime actually performed that action.',
     'Visible activity should contain only concise work summaries, never private chain-of-thought.',
-    'If a simple message can be answered directly, answer it directly without unnecessary work.',
-    'If a difficult task needs deeper investigation, delegate a focused task, inspect the result, and integrate it into your own answer.',
+    'The current user message is the task you must answer. Treat earlier conversation as context only; do not continue, repeat, or act on an earlier request unless the current message asks you to. In particular, do not call GitHub, Render, OpenAlgo, or web tools merely because they appeared in earlier turns. If the current message is simple and self-contained, answer it directly without tools.',
+    'If a difficult task needs deeper investigation, delegate a focused task, inspect the result, and integrate it into your own answer. After a tool result, do not call the same tool again unless the new call is required to resolve a specific remaining question; otherwise answer from the evidence already returned.'
   ].join('\n');
 }
 
