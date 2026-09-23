@@ -8,8 +8,6 @@
     "build": "vite build",
     "preview": "vite preview",
     "start": "tsx runtime-server.mjs",
-    "agent:worker": "tsx workers/sire-agent-worker.ts",
-    "agent:gateway": "tsx backend/sire-agent-gateway.ts",
     "postinstall": "puppeteer browsers install chrome"
   },
   "dependencies": {
