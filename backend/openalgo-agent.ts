@@ -183,7 +183,7 @@ export async function runOpenAlgoAgent(input: {
     }
 
     answer = String(parsed.answer || '').trim();
-    actions.push(...normalizeActions(parsed.actions));
+    // Dedupe actions across GPT rounds so the same requested chart change is executed once.\n    const roundActions = normalizeActions(parsed.actions);\n    for (const action of roundActions) {\n      const type = String(action.__sireAction || action.type || '');\n      const key = type === 'add_indicator'\n        ? `${type}:${String(action.indicatorId || action.id || '').toLowerCase()}:${JSON.stringify(action.settings || {})}:${String(action.paneIndex ?? '')}:${String(action.symbol || '')}`\n        : `${type}:${JSON.stringify(action)}`;\n      const duplicate = actions.some(existing => {\n        const existingType = String(existing.__sireAction || existing.type || '');\n        const existingKey = existingType === 'add_indicator'\n          ? `${existingType}:${String(existing.indicatorId || existing.id || '').toLowerCase()}:${JSON.stringify(existing.settings || {})}:${String(existing.paneIndex ?? '')}:${String(existing.symbol || '')}`\n          : `${existingType}:${JSON.stringify(existing)}`;\n        return existingKey === key;\n      });\n      if (!duplicate) actions.push(action);\n    }
 
     const requests = Array.isArray(parsed.toolRequests) ? parsed.toolRequests : [];
     if (!requests.length) break;
@@ -273,17 +273,6 @@ export async function runOpenAlgoAgent(input: {
   if (/\\ball\\s+instruments\\b/i.test(query) && /(trend[- ]?line|draw (the )?current trend|current trend)/i.test(query)) {
     answer = 'Applied the trend-line request to the current chart and queued it for the other instruments. Each instrument resolves its own visible candles so the line is not copied from another market.';
   }
-  // Explicit indicator requests must produce a real chart action when the model omits one.
-  // The browser bridge then applies and verifies the exact OpenAlgo indicator id.
-  if (/(^|\b)(add|show|plot|put|apply)\s+(a\s+)?(14[- ]period\s+)?rsi\b/i.test(query)) {
-    const hasRsi = actions.some(a => {
-      const type = String(a.__sireAction || a.type || '');
-      const id = String(a.indicatorId || a.id || '').toLowerCase();
-      return type === 'add_indicator' && (id === 'rsi' || id === 'relative strength index');
-    });
-    if (!hasRsi) actions.push({ __sireAction:'add_indicator', type:'add_indicator', indicatorId:'rsi', settings:{}, paneIndex:1 });
-  }
-
   if (!answer) answer = 'I could not produce a final agent response.';
   return {
     text: answer.slice(0, MAX_OUTPUT_CHARS),
