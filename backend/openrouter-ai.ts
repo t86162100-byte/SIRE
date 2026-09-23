@@ -89,14 +89,6 @@ export async function runGptHead(input: {
   const emit = async (actor: string, phase: string, text: string) => { if (input.onEvent) await input.onEvent({ actor, phase, text }); };
 
   const toolDefs: any[] = [];
-  if (input.tools?.askOpenAlgo) toolDefs.push({
-    type: 'function',
-    function: {
-      name: 'ask_openalgo',
-      description: 'Ask the OpenAlgo Agent to inspect or ACT ON THE VISIBLE CHART when the user wants something done to the chart (indicators, drawings, timeframe, chart type, replay, settings, scale, screenshots, etc.). This is the chart-action specialist. Do not use GitHub merely because the chart is implemented in code; use GitHub only when the user explicitly asks to inspect or change the repository implementation.',
-      parameters: { type: 'object', properties: { task: { type: 'string', description: 'The focused task for the OpenAlgo Agent.' } }, required: ['task'], additionalProperties: false },
-    },
-  });
   if (input.tools?.checkIntegrations) toolDefs.push({
     type: 'function',
     function: {
@@ -109,7 +101,7 @@ export async function runGptHead(input: {
     type: 'function',
     function: {
       name: 'github_request',
-      description: "Use SIRE's connected GitHub repository access for repository/code work. Use this when the user explicitly asks to inspect, debug, modify, commit, branch, or otherwise work on the repository implementation. Do NOT use this merely because a request concerns the visible chart; visible chart actions belong to the OpenAlgo Agent.",
+      description: "Use SIRE's connected GitHub repository access for repository/code work. Use this when the user explicitly asks to inspect, debug, modify, commit, branch, or otherwise work on the repository implementation. Use this for repository/code work only. For visible chart operations, use the chart-control tools exposed directly to GPT.",
       parameters: {
         type: 'object',
         properties: {
@@ -142,16 +134,11 @@ export async function runGptHead(input: {
     { role: 'user', content: query },
   ];
 
-  let openAlgoUsed = false;
   const usedToolCalls = new Set<string>();
   const toolCallHistory: Array<{turn:number;name:string}> = [];
   for (let turn = 0; turn < MAX_TOOL_TURNS; turn++) {
     await emit('GPT','thinking', turn === 0 ? 'GPT is considering your request and deciding what, if anything, it needs to inspect.' : 'GPT is evaluating the latest tool result and deciding the next step.');
-    // A chart action is an executable specialist operation. Once OpenAlgo has returned
-    // its action/result, force the head to produce the user-facing answer instead of
-    // repeatedly delegating the same request until the tool-turn ceiling is reached.
-    // After the chart specialist returns, synthesize the result instead of starting another tool chain.
-    const availableTools = openAlgoUsed ? [] : toolDefs.filter((tool:any) => !usedToolCalls.has(String(tool?.function?.name || '')));
+    const availableTools = toolDefs.filter((tool:any) => !usedToolCalls.has(String(tool?.function?.name || '')));
     const result = await callOpenRouter(messages, availableTools);
     const message = result.message;
     const toolCalls = Array.isArray(message.tool_calls) ? message.tool_calls : [];
@@ -160,30 +147,6 @@ export async function runGptHead(input: {
       const text = textFromResponse({ choices: [{ message }] });
       if (!text) throw new Error('GPT head returned no text');
       return { text: text.slice(0, MAX_OUTPUT_CHARS), responseId: result.responseId, model: MODEL, provider: 'OpenAI gpt-oss via OpenRouter' };
-    }
-
-    // After a specialist has completed a chart operation, do not allow the head
-    // to delegate again. One clean synthesis pass is enough; this prevents a
-    // simple chart request from consuming the tool-turn budget.
-    if (openAlgoUsed) {
-      const calls = toolCalls.map((call:any) => String(call?.function?.name || '')).join(', ');
-      messages.push({
-        role: 'assistant',
-        content: message.content ?? '',
-        tool_calls: toolCalls,
-      });
-      messages.push({
-        role: 'tool',
-        tool_call_id: String(toolCalls[0]?.id || 'openalgo-synthesis'),
-        content: JSON.stringify({ status: 'completed', note: 'The chart specialist already handled the request. Produce the final user-facing answer now; do not request another tool.' }),
-      });
-      const finalResult = await callOpenRouter(messages, []);
-      const finalMessage = finalResult.message;
-      const finalText = textFromResponse({ choices: [{ message: finalMessage }] });
-      if (finalText) {
-        return { text: finalText.slice(0, MAX_OUTPUT_CHARS), responseId: finalResult.responseId || result.responseId, model: MODEL, provider: 'OpenAI gpt-oss via OpenRouter' };
-      }
-      return { text: 'I completed the chart operation and verified the request with the chart specialist.', responseId: result.responseId, model: MODEL, provider: 'OpenAI gpt-oss via OpenRouter' };
     }
 
     messages.push({ role: 'assistant', content: message.content ?? '', tool_calls: toolCalls });
@@ -204,13 +167,6 @@ export async function runGptHead(input: {
         await emit('GitHub','working',method === 'GET' ? 'GPT is inspecting the repository through GitHub.' : 'GPT is making the requested repository change through GitHub.');
         const output = await input.tools.githubRequest({ method, path: normalizedPath, body: args.body, permission });
         messages.push({ role: 'tool', tool_call_id: callId, content: output.slice(0, 20000) });
-      } else if (name === 'ask_openalgo' && input.tools?.askOpenAlgo) {
-
-        const task = String(args.task || query).slice(0, 8000);
-        await emit('OpenAlgo Agent','working','GPT asked OpenAlgo Agent to inspect a focused technical/chart question.');
-        const output = await input.tools.askOpenAlgo(task);
-        openAlgoUsed = true;
-        messages.push({ role: 'tool', tool_call_id: callId, content: output.slice(0, 14000) });
       } else if (name === 'check_integrations' && input.tools?.checkIntegrations) {
         await emit('SIRE integrations','checking','GPT is checking the configured GitHub and Render connections.');
         const output = await input.tools.checkIntegrations();
