@@ -19,7 +19,7 @@ const stateText=(s:State)=>JSON.stringify({goal:s.goal,responsibilities:s.respon
 export async function runAiTeam(input:{query:string;workspaceId?:string;history?:any[];symbol?:string;runtimeContext?:Record<string,unknown>;execute?:boolean;onEvent?:TeamEvent}){
  const query=clean(input.query);if(!query)throw new Error('query is required');const id=wid(input);
  return lock(id,async()=>{
-  const started=Date.now();const timings:Record<string,number>={};const loadedAt=Date.now();const loaded=await load(id,query);timings.stateLoad=Date.now()-loadedAt;const s=loaded.state;s.goal=query;
+  const started=Date.now();const timings:Record<string,number>={};const delegatedActions:any[]=[];const loadedAt=Date.now();const loaded=await load(id,query);timings.stateLoad=Date.now()-loadedAt;const s=loaded.state;s.goal=query;
   const ev=async(actor:string,phase:string,text:string)=>{const item={actor,phase,text:clean(text,1800),at:new Date().toISOString()};s.activity=[...s.activity,item].slice(-40);if(input.onEvent)await input.onEvent({actor,phase,text:item.text,workspaceId:id});};
   await ev('GPT','thinking','GPT is thinking about your message.');
   const headStarted=Date.now();
@@ -30,8 +30,15 @@ export async function runAiTeam(input:{query:string;workspaceId?:string;history?
     tools:{
       askOpenAlgo:async(task)=>{
         const t=Date.now();await ev('OpenAlgo Agent','thinking','OpenAlgo Agent is inspecting the relevant chart, code, deployment, or tool context.');
-        const r=await runOpenAlgoAgent({query:task,history:Array.isArray(input.history)?input.history.slice(-20):[],symbol:input.symbol,runtimeContext:input.runtimeContext,councilContext:`GPT delegated this task to you. Work on the concrete technical problem and return concise findings/actions for GPT to use. Do not expose hidden chain-of-thought.\n\nUSER REQUEST:\n${query}\n\nDELEGATED TASK:\n${task}`});
-        timings.openAlgo=Date.now()-t;return r.text;
+        try {
+          const r=await runOpenAlgoAgent({query:task,history:Array.isArray(input.history)?input.history.slice(-20):[],symbol:input.symbol,runtimeContext:input.runtimeContext,councilContext:`GPT delegated this task to you. Work on the concrete technical problem and return concise findings/actions for GPT to use. Do not expose hidden chain-of-thought.\\n\\nUSER REQUEST:\\n${query}\\n\\nDELEGATED TASK:\\n${task}`});
+          if (Array.isArray(r.actions)) delegatedActions.push(...r.actions);
+          timings.openAlgo=Date.now()-t;
+          return JSON.stringify({text:r.text,actions:Array.isArray(r.actions)?r.actions:[],skills:r.skills||[],toolTrace:r.toolTrace||[]});
+        } catch (error) {
+          timings.openAlgo=Date.now()-t;
+          return JSON.stringify({error:error instanceof Error?error.message:String(error),actions:[]});
+        }
       },
       checkIntegrations:async()=>{
         const checks=await verifyConfiguredConnectors();
@@ -63,6 +70,6 @@ export async function runAiTeam(input:{query:string;workspaceId?:string;history?
   const totalMs=Date.now()-started;const slowest=Object.entries(timings).sort((a,b)=>b[1]-a[1])[0]||null;
   const diagnostics={totalMs,timings,slowestStage:slowest?.[0]||null,slowestMs:slowest?.[1]||0};
   recordAiRun({startedAt:new Date(started).toISOString(),totalMs,stages:timings,slowestStage:slowest?.[0]||null,slowestMs:slowest?.[1]||0,mode:'gpt-head',queryType:query.slice(0,80),ok:true});
-  return {diagnostics,text:result.text,responseId:result.responseId||'',model:result.model||'openai/gpt-oss-20b',provider:'OpenAI gpt-oss via OpenRouter',teamMode:'gpt-head',workspaceId:id,responsibilities:s.responsibilities,decisions:s.decisions.slice(-12),openQuestions:s.openQuestions.slice(-12),artifacts:s.artifacts.slice(-8),activity:s.activity.slice(-20),execution:input.execute?{status:'planned'}:{status:'not_requested'},agentActions:[],agentSkills:[],agentToolTrace:[],webSearched:Boolean(timings.webSearch),webSources:[],sharedState:stateText(s)};
+  return {diagnostics,text:result.text,responseId:result.responseId||'',model:result.model||'openai/gpt-oss-20b',provider:'OpenAI gpt-oss via OpenRouter',teamMode:'gpt-head',workspaceId:id,responsibilities:s.responsibilities,decisions:s.decisions.slice(-12),openQuestions:s.openQuestions.slice(-12),artifacts:s.artifacts.slice(-8),activity:s.activity.slice(-20),execution:input.execute?{status:'planned'}:{status:'not_requested'},actions:delegatedActions,agentActions:delegatedActions,agentSkills:[],agentToolTrace:[],webSearched:Boolean(timings.webSearch),webSources:[],sharedState:stateText(s)};
  });
 }
