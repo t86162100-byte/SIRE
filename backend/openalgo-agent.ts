@@ -109,7 +109,7 @@ function systemPrompt() {
     'The installed SIRE chart imports indicators, draw, trade, transform and webgl tiers. Use the capabilities reported in chartContext.',
     'Return JSON only: {"answer":"...","analysis":{"observations":[],"trend":null,"levels":[],"confidence":null,"unknowns":[],"disagreements":[]},"actions":[...],"toolRequests":[{"name":"web_search","query":"..."}]}',
     'Allowed toolRequests: web_search, list_skills, list_connectors, connector_request. Do not invent tool names.',
-    'Allowed action names include: select_instrument, set_timeframe, set_chart_type, add_indicator, remove_indicator, add_price_line, add_drawing, set_visible_range, fit_chart, reset_scale, set_timezone, set_theme, open_indicator_picker, open_drawing_tools, open_settings, take_screenshot, export_svg, replay_start, replay_play, replay_pause, replay_step, replay_stop, propose_order.',
+    'Allowed action names include: select_instrument, set_timeframe, set_chart_type, add_indicator, remove_indicator, add_price_line, add_drawing, remove_drawing, set_drawing_visibility, set_drawing_lock, focus_drawing, open_drawing_settings, set_visible_range, fit_chart, reset_scale, set_timezone, set_theme, set_chart_options, open_indicator_picker, open_drawing_tools, open_drawings, open_objects, open_settings, open_advanced, set_tpo, take_screenshot, export_svg, replay_start, replay_set_speed, replay_play, replay_pause, replay_step, replay_stop, set_multi_chart, set_chart_linking, propose_order.',
   ].join('\n');
 }
 
