@@ -116,7 +116,8 @@ export default function ResearchLab({ symbol, instruments, onClose, onSelectInst
   const cancelledJobsRef = useRef<Set<string>>(new Set());
   const abortControllersRef = useRef<Map<string, AbortController>>(new Map());
   const [lastPrompt, setLastPrompt] = useState(''); const [lastError, setLastError] = useState(false); const [activity, setActivity] = useState<CouncilActivity[]>([]); const [webSources, setWebSources] = useState<WebSource[]>([]);
-  const [diagnosticsOpen, setDiagnosticsOpen] = useState(false); const [diagnosticsBusy, setDiagnosticsBusy] = useState(false); const [issueLogs, setIssueLogs] = useState<Array<{id:string;timestamp:number;source:string;level:string;message:string;detail?:string}>>([]); const [thinkingSince, setThinkingSince] = useState<number | null>(null); const [thinkingSeconds, setThinkingSeconds] = useState(0); const [diagnosticReport, setDiagnosticReport] = useState<DiagnosticReport|null>(null);
+  const [diagnosticsOpen, setDiagnosticsOpen] = useState(false); const [diagnosticsBusy, setDiagnosticsBusy] = useState(false); const [issueLogs, setIssueLogs] = useState<Array<{id:string;timestamp:number;source:string;level:string;message:string;detail?:string}>>([]);
+  useEffect(() => { try { const raw=window.localStorage.getItem('sire-issue-finder-logs'); const parsed=raw?JSON.parse(raw):[]; if(Array.isArray(parsed)) setIssueLogs(parsed.slice(-500)); } catch {} }, []); const [thinkingSince, setThinkingSince] = useState<number | null>(null); const [thinkingSeconds, setThinkingSeconds] = useState(0); const [diagnosticReport, setDiagnosticReport] = useState<DiagnosticReport|null>(null);
   const activeChat = chatSessions.find(chat => chat.id === activeChatId) || null;
   const chatMessages = activeChat?.messages || [];
   useEffect(() => {
@@ -146,7 +147,23 @@ export default function ResearchLab({ symbol, instruments, onClose, onSelectInst
     syncJobs();
     return () => { window.removeEventListener('sire:chat-job', syncJobs); window.removeEventListener('storage', syncJobs); };
   }, []);
-  useEffect(() => { runtimeContextRef.current = runtimeContext || null; }, [runtimeContext]); useEffect(() => { if(!currentChatBusy || !thinkingSince){ setThinkingSeconds(0); return; } const tick=()=>setThinkingSeconds(Math.max(0,Math.floor((Date.now()-thinkingSince)/1000))); tick(); const timer=window.setInterval(tick,1000); return ()=>window.clearInterval(timer); }, [currentChatBusy, thinkingSince]); useEffect(() => { setActiveSymbol(symbol); }, [symbol]); useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' }); }, [chatMessages, currentChatBusy, activity, webSources]);
+  useEffect(() => {
+    runtimeContextRef.current = runtimeContext || null;
+    const incoming = Array.isArray((runtimeContext as any)?.chartDiagnostics) ? (runtimeContext as any).chartDiagnostics : [];
+    if (!incoming.length) return;
+    setIssueLogs(previous => {
+      const existing = new Set(previous.map(item => item.id));
+      const additions = incoming.filter((item:any) => item && item.id !== undefined && !existing.has('chart-'+String(item.id))).map((item:any) => ({
+        id: 'chart-'+String(item.id), timestamp: Number(item.timestamp)||Date.now(), source: 'Chart',
+        level: String(item.level||'info'), message: String(item.message||item.code||'Chart diagnostic'),
+        detail: item.detail ? String(item.detail) : undefined
+      }));
+      if (!additions.length) return previous;
+      const next=[...previous,...additions].slice(-500);
+      try { window.localStorage.setItem('sire-issue-finder-logs', JSON.stringify(next)); } catch {}
+      return next;
+    });
+  }, [runtimeContext]); useEffect(() => { if(!currentChatBusy || !thinkingSince){ setThinkingSeconds(0); return; } const tick=()=>setThinkingSeconds(Math.max(0,Math.floor((Date.now()-thinkingSince)/1000))); tick(); const timer=window.setInterval(tick,1000); return ()=>window.clearInterval(timer); }, [currentChatBusy, thinkingSince]); useEffect(() => { setActiveSymbol(symbol); }, [symbol]); useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' }); }, [chatMessages, currentChatBusy, activity, webSources]);
 
   const buildRuntimeContext = (): RuntimeContext => ({ ...(runtimeContextRef.current || (typeof window !== 'undefined' ? ((window as any).__sireChartContexts?.[activeSymbol] || { symbol: activeSymbol }) : { symbol: activeSymbol })), availableInstruments: instruments.map(instrument => ({ symbol: instrument.symbol, name: instrument.name })) });
   const runDiagnostics = async () => {
