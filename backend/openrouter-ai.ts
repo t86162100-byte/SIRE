@@ -66,7 +66,7 @@ function systemPrompt() {
     'You are above the available tools and decide when they are useful. You are not required to use a tool.',
     'You have direct access to the active SIRE chart runtime context and direct chart-control actions. Treat that context as authoritative for the current chart. For EVERY request that asks you to change the chart (add/remove/configure an indicator, change timeframe or chart type, draw, replay, select an instrument, or otherwise operate the chart), you MUST call chart_control with the concrete action(s) before claiming the change was made. Never merely say an indicator was added without issuing the chart_control action. For an indicator request, use __sireAction: add_indicator and indicatorId such as macd, rsi, ema, sma, bollinger, etc. Include settings only when requested or needed. web_search for current external information; GitHub for repository inspection and repository changes when the user asks for them or they are materially needed.',
     'Use a helper only when it materially improves the answer. After a helper returns, evaluate its result yourself and continue reasoning.',
-    'GitHub access is real and may be read/write. When a repository task requires it, inspect the repository first, then make the requested changes through the GitHub tool and report the actual result. Never claim you searched, inspected, changed, deployed, or verified something unless the runtime actually performed that action.',
+    'GitHub access is full repository-level access through the configured GitHub credential, subject to the credential\'s actual GitHub permissions. You may read code and repository metadata, create/update/delete files, create branches and commits, open/update pull requests and issues, inspect workflows/runs, dispatch supported workflows, manage repository-scoped settings exposed by the credential, and perform other repository-scoped GitHub API operations. When a repository task requires it, inspect the repository first, then make the requested changes through GitHub and report the actual result. Do not claim an operation succeeded unless the GitHub tool actually returned success.',
     'Visible activity should contain only concise work summaries, never private chain-of-thought.',
     'If a simple message can be answered directly, answer it directly without unnecessary work.',
     'If a difficult task needs deeper investigation, delegate a focused task, inspect the result, and integrate it into your own answer.',
@@ -104,7 +104,7 @@ export async function runGptHead(input: {
     type: 'function',
     function: {
       name: 'github_request',
-      description: "Use SIRE's connected GitHub repository access for repository/code work. Use this when the user explicitly asks to inspect, debug, modify, commit, branch, or otherwise work on the repository implementation. Use this for repository/code work only. For visible chart operations, use the chart-control tools exposed directly to GPT.",
+      description: "Full repository-level GitHub access for SIRE. Use this for repository inspection and code work: read files and metadata, search, create/update/delete files, branches, commits, pull requests, issues, workflow/run operations, and other repository-scoped GitHub actions allowed by the connected credential. Inspect before changing code and verify the returned result. For visible chart operations, use chart_control instead.",
       parameters: {
         type: 'object',
         properties: {
@@ -144,7 +144,7 @@ export async function runGptHead(input: {
   const toolCallHistory: Array<{turn:number;name:string}> = [];
   for (let turn = 0; turn < MAX_TOOL_TURNS; turn++) {
     await emit('GPT','thinking', turn === 0 ? 'GPT is considering your request and deciding what, if anything, it needs to inspect.' : 'GPT is evaluating the latest tool result and deciding the next step.');
-    const availableTools = toolDefs.filter((tool:any) => !usedToolCalls.has(String(tool?.function?.name || '')));
+    const availableTools = toolDefs.filter((tool:any) => { const name = String(tool?.function?.name || ''); return name === 'github_request' || !usedToolCalls.has(name); });
     const result = await callOpenRouter(messages, availableTools);
     const message = result.message;
     const toolCalls = Array.isArray(message.tool_calls) ? message.tool_calls : [];
