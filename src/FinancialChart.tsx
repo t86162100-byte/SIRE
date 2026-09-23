@@ -337,20 +337,24 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
           const settings = (detail.settings && typeof detail.settings === 'object') ? detail.settings as Record<string, unknown> : {};
           const paneIndex = Number.isFinite(Number(detail.paneIndex)) ? Number(detail.paneIndex) : undefined;
           const chart = widget.chart as any;
-          const existing = typeof chart.indicators === 'function'
-            ? Array.from(chart.indicators() || []).filter((indicator: any) => {
-                const id = String(indicator?.id || indicator?.indicatorId || '').trim().toLowerCase();
-                return id === indicatorId;
-              })
+          const objectRows = widget.objects && typeof (widget.objects as any).list === 'function'
+            ? Array.from((widget.objects as any).list() || [])
             : [];
-          // GPT chart actions are idempotent: one "add MACD" request must not
-          // create another MACD if the requested indicator is already present.
+          const existing = objectRows.filter((item: any) => {
+            const kind = String(item?.kind || '').trim().toLowerCase();
+            const sourceId = String(item?.sourceId || '').trim().toLowerCase();
+            const name = String(item?.name || '').trim().toLowerCase();
+            return kind === 'indicator' && (sourceId === indicatorId || name === indicatorId);
+          });
+          // GPT chart actions are idempotent for every indicator, not just MACD.
+          // OpenAlgo's indicator handle id is an instance id, while sourceId is the
+          // registered indicator descriptor. Use the Objects inventory for identity.
           if (existing.length > 0) {
             reportDiagnostic({
               code: 'CHART_ACTION_ALREADY_PRESENT',
               level: 'info',
               message: `GPT requested indicator "${indicatorId}", but it is already present; no duplicate was created.`,
-              detail: JSON.stringify({ indicatorId, existingCount: existing.length }),
+              detail: JSON.stringify({ indicatorId, existingCount: existing.length, existing: existing.map((item: any) => ({ id: item?.id, sourceId: item?.sourceId, name: item?.name })) }),
               operation: action,
             });
             return;
@@ -370,37 +374,57 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
           const requestedId = String(detail.indicatorId || detail.id || detail.indicator || '').trim().toLowerCase();
           const requestedName = String(detail.name || '').trim().toLowerCase();
           const chart = widget.chart as any;
-          const indicators = typeof chart.indicators === 'function' ? Array.from(chart.indicators() || []) : [];
-          const matches = indicators.filter((indicator: any) => {
-            const id = String(indicator?.id || indicator?.indicatorId || '').trim().toLowerCase();
-            const name = String(indicator?.name || '').trim().toLowerCase();
-            return (requestedId && id === requestedId) || (requestedName && name === requestedName);
+          const objectRows = widget.objects && typeof (widget.objects as any).list === 'function'
+            ? Array.from((widget.objects as any).list() || [])
+            : [];
+          const indicators = objectRows.filter((item: any) => String(item?.kind || '').trim().toLowerCase() === 'indicator');
+          const target = requestedId || requestedName;
+          const matches = indicators.filter((item: any) => {
+            const sourceId = String(item?.sourceId || '').trim().toLowerCase();
+            const name = String(item?.name || '').trim().toLowerCase();
+            const id = String(item?.id || '').trim().toLowerCase();
+            return Boolean(target) && (sourceId === target || name === target || id === target);
           });
           if (!matches.length) {
             reportDiagnostic({
               code: 'CHART_ACTION_NOT_FOUND',
               level: 'warning',
-              message: `GPT requested removal of indicator "${requestedId || requestedName || 'unknown'}", but no matching instance exists.`,
-              detail: JSON.stringify({ requestedId, requestedName, available: indicators.map((indicator: any) => ({ id: indicator?.id || indicator?.indicatorId || '', name: indicator?.name || '' })) }),
+              message: `GPT requested removal of indicator "${target || 'unknown'}", but no matching instance exists.`,
+              detail: JSON.stringify({
+                requestedId,
+                requestedName,
+                available: indicators.map((item: any) => ({ id: item?.id || '', sourceId: item?.sourceId || '', name: item?.name || '' })),
+              }),
               operation: action,
             });
             return;
           }
           let removed = 0;
-          for (const indicator of matches) {
-            if (typeof indicator?.remove === 'function') {
-              indicator.remove();
-              removed += 1;
-            } else {
-              const instanceId = String(indicator?.id || indicator?.instanceId || '').trim();
-              if (instanceId && typeof chart.removeIndicator === 'function' && chart.removeIndicator(instanceId)) removed += 1;
+          for (const item of matches) {
+            const objectId = String(item?.id || '').trim();
+            let ok = false;
+            if (objectId && widget.objects && typeof (widget.objects as any).remove === 'function') {
+              ok = Boolean((widget.objects as any).remove(objectId));
             }
+            if (!ok && objectId && typeof chart.removeIndicator === 'function') {
+              ok = Boolean(chart.removeIndicator(objectId));
+            }
+            if (!ok) {
+              const live = typeof chart.indicators === 'function'
+                ? Array.from(chart.indicators() || []).find((indicator: any) => String(indicator?.id || '').trim() === objectId)
+                : undefined;
+              if (live && typeof live.remove === 'function') {
+                live.remove();
+                ok = true;
+              }
+            }
+            if (ok) removed += 1;
           }
-          if (!removed) throw new Error(`Indicator "${requestedId || requestedName || 'unknown'}" matched ${matches.length} instance(s), but the chart API could not remove them.`);
+          if (!removed) throw new Error(`Indicator "${target || 'unknown'}" matched ${matches.length} instance(s), but the chart API could not remove them.`);
           reportDiagnostic({
             code: 'CHART_ACTION_APPLIED',
             level: 'info',
-            message: `GPT removed ${removed} indicator instance(s) matching "${requestedId || requestedName || 'unknown'}".`,
+            message: `GPT removed ${removed} indicator instance(s) matching "${target || 'unknown'}".`,
             detail: JSON.stringify({ requestedId, requestedName, removed }),
             operation: action,
           });
