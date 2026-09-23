@@ -52,12 +52,16 @@ function githubRepoConfig() {
 
 async function githubRequestForGpt({ method, path, body, permission }) {
   const { token, repo } = githubRepoConfig();
-  const normalizedPath = String(path || '').startsWith('/') ? String(path) : '/' + String(path || '');
+  let normalizedPath = String(path || '').trim();
+  // GPT sometimes returns the full GitHub API URL even though the tool schema asks
+  // for an API path. Normalize that form instead of rejecting a valid repo request.
+  normalizedPath = normalizedPath.replace(/^https?:\\/\\/api\\.github\\.com/i, '');
+  normalizedPath = normalizedPath.startsWith('/') ? normalizedPath : '/' + normalizedPath;
   const repoPrefix = '/repos/' + repo;
   const isRepoScoped = normalizedPath === repoPrefix || normalizedPath.startsWith(repoPrefix + '/');
   const isRepoSearch = normalizedPath.startsWith('/search/code') || normalizedPath.startsWith('/search/commits') || normalizedPath.startsWith('/search/issues') || normalizedPath.startsWith('/search/repositories');
   if (!isRepoScoped && !isRepoSearch) {
-    throw new Error('GPT GitHub access is restricted to the configured repository and repository-scoped GitHub searches.');
+    throw new Error('GPT GitHub access is limited to the configured SIRE repository. Use paths under ' + repoPrefix + ' for repository inspection and changes.');
   }
   const verb = String(method || 'GET').toUpperCase();
   const requestedPermission = String(permission || (verb === 'GET' ? 'read' : 'write')).toLowerCase();
