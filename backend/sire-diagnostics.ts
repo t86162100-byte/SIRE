@@ -1,6 +1,7 @@
 import { db } from '@appdeploy/sdk';
 import { verifyConfiguredConnectors, discoverConnectors } from './agent-tools.ts';
 import { getAiMonitor } from './sire-ai-monitor.ts';
+import { getRecentIssues } from './sire-issue-tracker.ts';
 
 type Check = {
   id:string;
@@ -76,6 +77,15 @@ export async function runSireDiagnostics(){
     checks.push({id:'LAST_AI_RUN',area:'performance',status:'warning',severity:'warning',title:'AI response timing telemetry',detail:'No completed SIRE AI run has been recorded since the current server process started.'});
   }
 
+  const runtimeIssues=getRecentIssues();
+  if(runtimeIssues.length){
+    const latest=runtimeIssues[0];
+    const exactLocation=latest.file ? `Exact runtime location: ${latest.file}${latest.line?':'+latest.line:''}${latest.column?':'+latest.column:''}.` : 'The browser supplied a stack trace but no parseable source location.';
+    checks.push({id:'RUNTIME_ERROR_TRACE',area:'runtime',status:'fail',severity:'critical',title:'Captured runtime failure',detail:`${latest.message} ${exactLocation}`,evidence:{source:latest.source,component:latest.component,file:latest.file,line:latest.line,column:latest.column,url:latest.url,detail:latest.detail,cause:latest.cause,stack:latest.stack}});
+  } else {
+    checks.push({id:'RUNTIME_ERROR_TRACE',area:'runtime',status:'pass',severity:'info',title:'Runtime error trace',detail:'No browser runtime exception or unhandled rejection has been captured by the issue finder.',evidence:{captured:0}});
+  }
+
   const totalMs=Date.now()-startedAt;
   const slowestCheck=checks.filter(x=>typeof x.latencyMs==='number').sort((a,b)=>(b.latencyMs||0)-(a.latencyMs||0))[0];
   const failed=checks.filter(x=>x.status==='fail');
@@ -96,6 +106,7 @@ export async function runSireDiagnostics(){
     checks,
     aiMonitor:monitor,
     connectors:connectorSummary,
+    runtimeIssues,
     routes:{chatRoute:'/api/sire/agent/council/stream',directAgentRoute:'/api/sire/agent/openalgo',directGptRoute:'/api/sire/agent/gpt',autonomousRoute:'/api/sire/autonomous',diagnosticsRoute:'/api/sire/diagnostics'},
     capabilities:{webSearch:true,openAlgoAgent:true,gemini:true,gptOss20b:true,github:connectors.some(x=>x.id==='github'),render:connectors.some(x=>x.id==='render'),persistentState:Boolean(process.env.DATABASE_URL)},
     noSecrets:true
