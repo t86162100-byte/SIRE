@@ -61,10 +61,10 @@ async function githubRequestForGpt({ method, path, body, permission }) {
   // github.com browser URLs, API-v3 proxy URLs, or a repo-relative endpoint.
   // Canonicalize all of those to the same GitHub REST path before authorization.
   try {
-    if (/^https?:\\/\\/api\\.github\\.com/i.test(normalizedPath)) {
+    if (/^https?:\/\/api\.github\.com/i.test(normalizedPath)) {
       const parsedUrl = new URL(normalizedPath);
       normalizedPath = parsedUrl.pathname + parsedUrl.search;
-    } else if (/^https?:\\/\\/github\\.com/i.test(normalizedPath)) {
+    } else if (/^https?:\/\/github\.com/i.test(normalizedPath)) {
       const parsedUrl = new URL(normalizedPath);
       const parts = parsedUrl.pathname.split('/').filter(Boolean);
       if (parts.length >= 2 && parts[0].toLowerCase() === owner.toLowerCase() && parts[1].toLowerCase() === repoName.toLowerCase()) {
@@ -77,9 +77,9 @@ async function githubRequestForGpt({ method, path, body, permission }) {
           normalizedPath = '/repos/' + repo + '/' + suffix.join('/');
         }
       }
-    } else if (/^https?:\\/\\/[^/]+\\/api\\/v3\\/repos\\//i.test(normalizedPath)) {
+    } else if (/^https?:\/\/[^/]+\/api\/v3\/repos\//i.test(normalizedPath)) {
       const parsedUrl = new URL(normalizedPath);
-      normalizedPath = parsedUrl.pathname.replace(/^\\/api\\/v3/i, '') + parsedUrl.search;
+      normalizedPath = parsedUrl.pathname.replace(/^\/api\/v3/i, '') + parsedUrl.search;
     }
   } catch (error) {
     throw new Error('Invalid GitHub path supplied to GPT: ' + (error instanceof Error ? error.message : String(error)));
@@ -95,7 +95,7 @@ async function githubRequestForGpt({ method, path, body, permission }) {
       break;
     }
   }
-  normalizedPath = normalizedPath.replace(/^\\/api\\/v3(?=\\/)/i, '');
+  normalizedPath = normalizedPath.replace(/^\/api\/v3(?=\/)/i, '');
   normalizedPath = normalizedPath.replace(/\\/{2,}/g, '/');
   normalizedPath = normalizedPath.startsWith('/') ? normalizedPath : '/' + normalizedPath;
 
