@@ -308,6 +308,11 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
       if (!detail) return;
       const action = String(detail.__sireAction || detail.type || '').trim().toLowerCase();
       if (!action) return;
+      // ResearchLab broadcasts chart actions globally because it does not own the
+      // chart widget. Only the visible/active FinancialChart instance may execute
+      // the action; otherwise multiple mounted chart instances can each add the
+      // same indicator.
+      if (!isActive) return;
       const targetSymbol = detail.symbol ? String(detail.symbol) : '';
       if (targetSymbol && targetSymbol !== symbolRef.current) return;
 
