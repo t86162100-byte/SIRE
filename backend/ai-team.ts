@@ -1,6 +1,6 @@
 import { db } from '@appdeploy/sdk';
 import { runOpenRouter, runGptHead } from './openrouter-ai.ts';
-import { webSearch } from './agent-tools.ts';
+import { webSearch, verifyConfiguredConnectors } from './agent-tools.ts';
 import { runOpenAlgoAgent } from './openalgo-agent.ts';
 import { recordAiRun } from './sire-ai-monitor.ts';
 
@@ -32,6 +32,10 @@ export async function runAiTeam(input:{query:string;workspaceId?:string;history?
         const t=Date.now();await ev('OpenAlgo Agent','thinking','OpenAlgo Agent is inspecting the relevant chart, code, deployment, or tool context.');
         const r=await runOpenAlgoAgent({query:task,history:Array.isArray(input.history)?input.history.slice(-20):[],symbol:input.symbol,runtimeContext:input.runtimeContext,councilContext:`GPT delegated this task to you. Work on the concrete technical problem and return concise findings/actions for GPT to use. Do not expose hidden chain-of-thought.\n\nUSER REQUEST:\n${query}\n\nDELEGATED TASK:\n${task}`});
         timings.openAlgo=Date.now()-t;return r.text;
+      },
+      checkIntegrations:async()=>{
+        const checks=await verifyConfiguredConnectors();
+        return JSON.stringify(checks);
       },
       webSearch:async(q)=>{
         const t=Date.now();await ev('Web','research','Gemini decided that current external information is needed, so SIRE is searching the web.');const r=await webSearch(q,8).catch(()=>({results:[]}));timings.webSearch=Date.now()-t;
