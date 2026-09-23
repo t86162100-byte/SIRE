@@ -273,6 +273,17 @@ export async function runOpenAlgoAgent(input: {
   if (/\\ball\\s+instruments\\b/i.test(query) && /(trend[- ]?line|draw (the )?current trend|current trend)/i.test(query)) {
     answer = 'Applied the trend-line request to the current chart and queued it for the other instruments. Each instrument resolves its own visible candles so the line is not copied from another market.';
   }
+  // Explicit indicator requests must produce a real chart action when the model omits one.
+  // The browser bridge then applies and verifies the exact OpenAlgo indicator id.
+  if (/(^|\\b)(add|show|plot|put|apply)\\s+(a\\s+)?(14[- ]period\\s+)?rsi\\b/i.test(query)) {
+    const hasRsi = actions.some(a => {
+      const type = String(a.__sireAction || a.type || '');
+      const id = String(a.indicatorId || a.id || '').toLowerCase();
+      return type === 'add_indicator' && (id === 'rsi' || id === 'relative strength index');
+    });
+    if (!hasRsi) actions.push({ __sireAction:'add_indicator', type:'add_indicator', indicatorId:'rsi', settings:{}, paneIndex:1 });
+  }
+
   if (!answer) answer = 'I could not produce a final agent response.';
   return {
     text: answer.slice(0, MAX_OUTPUT_CHARS),
