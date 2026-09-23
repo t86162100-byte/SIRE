@@ -76,6 +76,7 @@ export async function runGptHead(input: {
   tools?: {
     askOpenAlgo?: (task: string) => Promise<string>;
     webSearch?: (query: string) => Promise<string>;
+    checkIntegrations?: () => Promise<string>;
   };
 }) {
   const query = input.query.trim();
@@ -89,6 +90,14 @@ export async function runGptHead(input: {
       name: 'ask_openalgo',
       description: 'Ask the OpenAlgo Agent to inspect or act on chart, market, OpenAlgo, or related technical context. Use only when that specialist context is genuinely needed.',
       parameters: { type: 'object', properties: { task: { type: 'string', description: 'The focused task for the OpenAlgo Agent.' } }, required: ['task'], additionalProperties: false },
+    },
+  });
+  if (input.tools?.checkIntegrations) toolDefs.push({
+    type: 'function',
+    function: {
+      name: 'check_integrations',
+      description: 'Verify whether SIRE currently has working read access to its configured GitHub repository and Render workspace. Use this when the user asks about SIRE access, GitHub, Render, repository, deployment workspace, or connection status.',
+      parameters: { type: 'object', properties: {}, additionalProperties: false },
     },
   });
   if (input.tools?.webSearch) toolDefs.push({
@@ -131,6 +140,10 @@ export async function runGptHead(input: {
         await emit('OpenAlgo Agent','working','GPT asked OpenAlgo Agent to inspect a focused technical/chart question.');
         const output = await input.tools.askOpenAlgo(task);
         messages.push({ role: 'tool', tool_call_id: callId, content: output.slice(0, 14000) });
+      } else if (name === 'check_integrations' && input.tools?.checkIntegrations) {
+        await emit('SIRE integrations','checking','GPT is checking the configured GitHub and Render connections.');
+        const output = await input.tools.checkIntegrations();
+        messages.push({ role: 'tool', tool_call_id: callId, content: output.slice(0, 12000) });
       } else if (name === 'web_search' && input.tools?.webSearch) {
         const searchQuery = String(args.query || query).slice(0, 1000);
         await emit('Web','research','GPT decided that current external information is needed and requested a web search.');
