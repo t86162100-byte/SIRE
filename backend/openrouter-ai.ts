@@ -60,9 +60,9 @@ function systemPrompt() {
     'You are a full general-purpose AI. Handle greetings, small talk, explanations, writing, planning, coding, research, technical work, and chart work naturally.',
     'Do not use keyword routing or canned fast paths. Decide from the actual request whether you can answer directly or should use a tool.',
     'You are above the available tools and decide when they are useful. You are not required to use a tool.',
-    'Available helpers: OpenAlgo Agent for chart/OpenAlgo/market and related technical context; web_search for current external information.',
+    'Available helpers: OpenAlgo Agent for chart/OpenAlgo/market and related technical context; web_search for current external information; GitHub for repository inspection and repository changes when the user asks for them or they are materially needed.',
     'Use a helper only when it materially improves the answer. After a helper returns, evaluate its result yourself and continue reasoning.',
-    'Never claim you searched, inspected, changed, deployed, or verified something unless the runtime actually performed that action.',
+    'GitHub access is real and may be read/write. When a repository task requires it, inspect the repository first, then make the requested changes through the GitHub tool and report the actual result. Never claim you searched, inspected, changed, deployed, or verified something unless the runtime actually performed that action.',
     'Visible activity should contain only concise work summaries, never private chain-of-thought.',
     'If a simple message can be answered directly, answer it directly without unnecessary work.',
     'If a difficult task needs deeper investigation, delegate a focused task, inspect the result, and integrate it into your own answer.',
@@ -77,6 +77,7 @@ export async function runGptHead(input: {
     askOpenAlgo?: (task: string) => Promise<string>;
     webSearch?: (query: string) => Promise<string>;
     checkIntegrations?: () => Promise<string>;
+    githubRequest?: (input: { method: string; path: string; body?: unknown; permission: string }) => Promise<string>;
   };
 }) {
   const query = input.query.trim();
@@ -98,6 +99,24 @@ export async function runGptHead(input: {
       name: 'check_integrations',
       description: 'Verify whether SIRE currently has working read access to its configured GitHub repository and Render workspace. Use this when the user asks about SIRE access, GitHub, Render, repository, deployment workspace, or connection status.',
       parameters: { type: 'object', properties: {}, additionalProperties: false },
+    },
+  });
+  if (input.tools?.githubRequest) toolDefs.push({
+    type: 'function',
+    function: {
+      name: 'github_request',
+      description: 'Use SIRE\'s connected GitHub repository access. Read repository files, branches, commits, issues, pull requests, or perform requested repository changes such as creating/updating/deleting files, branches, commits, or pull requests. Use only when the user asks for GitHub/repository work or the task genuinely requires repository access. For changes, inspect the relevant current state first and then perform the requested write.',
+      parameters: {
+        type: 'object',
+        properties: {
+          method: { type: 'string', enum: ['GET','POST','PUT','PATCH','DELETE'] },
+          path: { type: 'string', description: 'GitHub API path such as /repos/t86162100-byte/SIRE/contents/src/App.tsx. Do not include the API hostname.' },
+          permission: { type: 'string', enum: ['read','write','execute'], description: 'Required connector permission. Use read for inspection; write for repository mutations; execute only for actions that actually execute workflows or similar operations.' },
+          body: { type: ['object','array','string','null'], description: 'Optional JSON request body for POST/PUT/PATCH/DELETE operations.' }
+        },
+        required: ['method','path','permission'],
+        additionalProperties: false
+      },
     },
   });
   if (input.tools?.webSearch) toolDefs.push({
@@ -135,7 +154,15 @@ export async function runGptHead(input: {
       try { args = JSON.parse(String(call?.function?.arguments || '{}')); } catch { args = {}; }
       const callId = String(call?.id || `${name}-${turn}`);
 
-      if (name === 'ask_openalgo' && input.tools?.askOpenAlgo) {
+      if (name === 'github_request' && input.tools?.githubRequest) {
+        const method = String(args.method || 'GET').toUpperCase();
+        const path = String(args.path || '').trim();
+        const permission = String(args.permission || (method === 'GET' ? 'read' : 'write'));
+        await emit('GitHub','working',method === 'GET' ? 'GPT is inspecting the repository through GitHub.' : 'GPT is making the requested repository change through GitHub.');
+        const output = await input.tools.githubRequest({ method, path, body: args.body, permission });
+        messages.push({ role: 'tool', tool_call_id: callId, content: output.slice(0, 20000) });
+      } else f (name === 'ask_openalgo' && input.tools?.askOpenAlgo) {
+
         const task = String(args.task || query).slice(0, 8000);
         await emit('OpenAlgo Agent','working','GPT asked OpenAlgo Agent to inspect a focused technical/chart question.');
         const output = await input.tools.askOpenAlgo(task);
