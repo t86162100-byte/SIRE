@@ -95,8 +95,7 @@ async function githubRequestForGpt({ method, path, body, permission }) {
       break;
     }
   }
-  normalizedPath = normalizedPath.replace(/^\/api\/v3(?=\/)/i, '');
-  normalizedPath = normalizedPath.replace(/\\/{2,}/g, '/');
+  if (normalizedPath.toLowerCase().startsWith('/api/v3/')) normalizedPath = normalizedPath.slice(7);
   normalizedPath = normalizedPath.startsWith('/') ? normalizedPath : '/' + normalizedPath;
 
   const repoPrefix = '/repos/' + repo;
