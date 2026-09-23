@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { ChevronLeft, ChevronRight, Eye, History, Lock, Minus, MoreHorizontal, Pause, Play, RotateCcw, Settings2, SkipBack, SkipForward, Trash2, Wrench, X } from 'lucide-react';
-import { registerInterval, ReplayController, type ReplayState } from 'openalgo-charts';
+import { registerInterval, ReplayController, registeredIndicators, type ReplayState } from 'openalgo-charts';
 import 'openalgo-charts/indicators';
 import 'openalgo-charts/draw';
 import 'openalgo-charts/trade';
@@ -1262,8 +1262,8 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
         visibleBars: visible ? Math.max(0, Math.ceil(Number(visible.to) - Number(visible.from) + 1)) : null,
         visibleRange: visible || null,
         activeIndicators: indicators,
-        availableIndicatorIds: Array.from(new Set(indicators.map((item: any) => String(item?.id || '').trim()).filter(Boolean))),
-        chartDiagnostics: diagnosticsRef.current.slice(-200),
+        availableIndicatorIds: registeredIndicators().map((item: any) => String(item?.id || '').trim()).filter(Boolean),
+        chartDiagnostics: diagnosticsRef.current,
         drawings,
         replay: replayRef.current?.state?.() || null,
         chartState: chart?.getState?.() || null,
