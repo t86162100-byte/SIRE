@@ -53,18 +53,6 @@ async function emit(fn:TeamEvent|undefined,id:string,actor:string,phase:string,t
 
 export async function runAiTeam(input:{query:string;workspaceId?:string;history?:any[];symbol?:string;runtimeContext?:Record<string,unknown>;execute?:boolean;onEvent?:TeamEvent}){
  const query=clean(input.query);if(!query)throw new Error('query is required');const id=wid(input);
- // Keep simple social conversation completely outside persistence, routing, and model calls.
- // This makes greetings genuinely immediate even when the database or Gemini is slow.
- const instant=/^(hi|hey|hello|hey there|hello there|yo|hiya|good morning|good afternoon|good evening|thanks|thank you|thx|ok|okay|alright|cool|nice|great|yes|no|sure|bye|goodbye|how are you|how's it going|whats up|what's up)\s*[!?.,]*$/i.test(query);
- if(instant){
-   await emit(input.onEvent,id,'SIRE','direct','I’m answering this immediately without starting the AI team.');
-   const key=query.toLowerCase().replace(/[!?.,]+$/,'').trim();
-   const replies:Record<string,string>={hi:'Hi! 👋 What can I help you with?',hey:'Hey! 👋 What can I help you with?',hello:'Hello! 👋 What can I help you with?','hey there':'Hey there! 👋 What can I help you with?','hello there':'Hello there! 👋 What can I help you with?',yo:'Hey! 👋 What can I help you with?',hiya:'Hi! 👋 What can I help you with?','how are you':"I’m good and ready to help. What are we working on?","how's it going":"Going well. What would you like to work on?",'whats up':"I’m here and ready. What’s up?","what's up":"I’m here and ready. What’s up?"};
-   const text=replies[key] || (key==='thanks'||key==='thank you'||key==='thx'?"You’re welcome! 👋":"Got it. What’s next?");
-   const now=new Date().toISOString();
-   recordAiRun({startedAt:now,totalMs:0,stages:{instantReply:0},slowestStage:'instantReply',slowestMs:0,mode:'instant-chat',queryType:query.slice(0,80),ok:true});
-   return {diagnostics:{totalMs:0,timings:{instantReply:0},slowestStage:'instantReply',slowestMs:0},text,responseId:'',model:'SIRE instant conversation',provider:'SIRE AI Team',teamMode:'instant-chat',workspaceId:id,responsibilities:[],decisions:[],openQuestions:[],artifacts:[],activity:[{actor:'SIRE',phase:'direct',text:'Answered immediately without starting the AI team.',at:now}],execution:{status:'not_requested'},agentActions:[],agentSkills:[],agentToolTrace:[],webSearched:false,webSources:[]};
- }
  return lock(id,async()=>{
  const runStarted=Date.now(); const timings:Record<string,number>={}; const mark=(name:string,started:number)=>{timings[name]=Date.now()-started;};
  const loadedStarted=Date.now(); const loaded=await load(id,query); mark('stateLoad',loadedStarted);
@@ -97,33 +85,56 @@ export async function runAiTeam(input:{query:string;workspaceId?:string;history?
    return {diagnostics:{totalMs,timings:{stateLoad:timings.stateLoad||0,instantReply:Date.now()-directStarted},slowestStage:'instantReply',slowestMs:Date.now()-directStarted},text,responseId:'',model:'SIRE instant conversation',provider:'SIRE AI Team',teamMode:'instant-chat',workspaceId:id,responsibilities:[],decisions:[],openQuestions:[],artifacts:[],activity:[{actor:'SIRE',phase:'direct',text:'Answered immediately without starting the AI team.',at:new Date().toISOString()}],execution:{status:'not_requested'},agentActions:[],agentSkills:[],agentToolTrace:[],webSearched:false,webSources:[]};
  }
  const routerStarted=Date.now();
- await ev('SIRE','routing','I’m deciding whether this needs a direct answer, research, chart work, coding, Render/GitHub work, or the peer team.');
- const route=await runGemini({query:`You are the SIRE routing layer. You are not a teammate, boss, or decision maker. Your only job is to classify which capabilities are relevant so the three peer AIs can work together when useful. You are not tied to charts, coding, GitHub, Render, research, or the AI council. Normal conversation and unrelated topics should be answered directly without tools. Use chart only when the request actually concerns the user's chart or market/chart state. Use GitHub only for repository/code/file/source-control work. Use Render only for deployment, service, environment, logs, domains, infrastructure, or Render state. Use web research only when freshness or external sources are needed. Use peer collaboration when Gemini, GPT-OSS 20B, and OpenAlgo Agent can materially improve one another's work. Do not use a capability merely because it exists. Return JSON only: {"mode":"direct|chart|github|render|research|collaborate|mixed","useChart":false,"useGitHub":false,"useRender":false,"useWeb":false,"collaborate":false,"reason":"short reason"}. USER REQUEST: ${query}`,history,symbol:input.symbol,runtimeContext:input.runtimeContext,debateRole:'triage'});
- mark('chiefRouter',routerStarted); const routeJson=json(route.text)||{};
+ await ev('SIRE','routing','I’m understanding your request and deciding what kind of help it needs. I’ll answer directly when I can, and bring in tools or the peer team only when they add value.');
+ const decisionPrompt=`You are SIRE's primary reasoning brain. Act like a normal general-purpose AI assistant, not a scripted router.
+You can answer ordinary conversation, explanations, brainstorming, writing, and factual questions yourself. You have access to specialized capabilities when the user's request genuinely needs them: web research for fresh/external information; chart/OpenAlgo for chart or market-state work; GitHub for repository/code work; Render for deployment/infrastructure/service state; and the three-peer team (Gemini, GPT-OSS 20B, OpenAlgo Agent) for tasks where independent expertise or verification materially improves the result.
+Decide dynamically from the actual request. Do NOT classify based on keyword lists, canned examples, or the fact that this endpoint exists.
+For simple requests, answer now. Do not manufacture a workflow, progress stages, tool calls, or team discussion just to look busy.
+For requests requiring current connected-system facts, choose the relevant capability so it can actually be checked.
+For difficult or multi-step work, choose the smallest useful set of capabilities and/or peer collaboration. You may revise the plan later if evidence changes.
+Never claim a tool was used unless the runtime actually uses it.
+Return JSON only:
+{"mode":"direct|chart|github|render|research|collaborate|mixed","useChart":false,"useGitHub":false,"useRender":false,"useWeb":false,"collaborate":false,"answer":"natural user-facing answer when mode=direct, otherwise empty","reason":"brief decision summary"}
+USER REQUEST:
+${query}`;
+ let decision:any;
+ try {
+   decision=await runGemini({query:decisionPrompt,history,symbol:input.symbol,runtimeContext:input.runtimeContext,debateRole:'primary-reasoning'});
+ } catch (error) {
+   const fallback=await runOpenRouter({query:decisionPrompt,history,councilContext:'You are SIRE primary reasoning fallback. Decide whether to answer directly or use capabilities; do not invent tool use.'});
+   decision=fallback;
+ }
+ mark('primaryReasoning',routerStarted); const routeJson=json(decision.text)||{};
  const useChart=Boolean(routeJson.useChart)||routeJson.mode==='chart'||routeJson.mode==='mixed';
  const useGitHub=Boolean(routeJson.useGitHub)||routeJson.mode==='github'||routeJson.mode==='mixed';
  const useRender=Boolean(routeJson.useRender)||routeJson.mode==='render'||routeJson.mode==='mixed';
  const useWeb=Boolean(routeJson.useWeb)||routeJson.mode==='research'||routeJson.mode==='mixed';
  const collaborate=Boolean(routeJson.collaborate)||routeJson.mode==='collaborate'||routeJson.mode==='mixed';
- const needWeb=useWeb;const webStarted=Date.now();
+
+ if(routeJson.mode==='direct' && clean(routeJson.answer,12000)){
+   s.activity=[...s.activity,{actor:'SIRE',phase:'direct',text:'Answered directly from the primary reasoning pass; no extra tools or peer work were needed.',at:new Date().toISOString()}].slice(-40);
+   const saveStarted=Date.now(); await save(s,loaded.id); mark('stateSave',saveStarted);
+   const totalMs=Date.now()-runStarted; const slowest=Object.entries(timings).sort((a,b)=>b[1]-a[1])[0]||null;
+   recordAiRun({startedAt:new Date(runStarted).toISOString(),totalMs,stages:timings,slowestStage:slowest?.[0]||null,slowestMs:slowest?.[1]||0,mode:'adaptive-direct',queryType:query.slice(0,80),ok:true});
+   return {diagnostics:{totalMs,timings,slowestStage:slowest?.[0]||null,slowestMs:slowest?.[1]||0},text:clean(routeJson.answer,12000),responseId:decision.responseId||'',model:decision.model||'primary-reasoning',provider:'SIRE AI Team',teamMode:'adaptive-direct',workspaceId:id,responsibilities:s.responsibilities,decisions:s.decisions.slice(-12),openQuestions:s.openQuestions.slice(-12),artifacts:s.artifacts.slice(-8),activity:s.activity.slice(-20),execution:{status:'not_requested'},agentActions:[],agentSkills:[],agentToolTrace:[],webSearched:false,webSources:[]};
+ }
+
+ const needWeb=useWeb; const webStarted=Date.now();
  if(needWeb) await ev('SIRE','research','I’m gathering current external information because this request needs fresh research.');
  const web=needWeb?await webSearch(query,8).catch(()=>({results:[]})):{results:[]};
- mark('webResearch',webStarted);const sources=Array.isArray((web as any).results)?(web as any).results.map((x:any)=>({title:clean(x.title||x.name||x.url,180),url:clean(x.url||x.link,500),text:clean(x.text||x.content||x.snippet,1400)})).filter((x:any)=>x.url):[];const research=sources.length?'\nLIVE RESEARCH:\n'+sources.map((x:any,i:number)=>`[${i+1}] ${x.title}\n${x.url}\n${x.text}`).join('\n\n'):'';
- if(sources.length)await ev('Web','executing',`The team gathered ${sources.length} live sources for the shared workspace.`);const base=`SHARED TEAM WORKSPACE ${id}\n${stateText(s)}\n\nUSER GOAL:\n${query}${research}`;
+ mark('webResearch',webStarted); const sources=Array.isArray((web as any).results)?(web as any).results.map((x:any)=>({title:clean(x.title||x.name||x.url,180),url:clean(x.url||x.link,500),text:clean(x.text||x.content||x.snippet,1400)})).filter((x:any)=>x.url):[];
+ const research=sources.length?'\\nLIVE RESEARCH:\\n'+sources.map((x:any,i:number)=>`[${i+1}] ${x.title}\\n${x.url}\\n${x.text}`).join('\\n\\n'):'';
+ if(sources.length)await ev('Web','executing',`The system gathered ${sources.length} live sources for the shared workspace.`);
+ const base=`SHARED TEAM WORKSPACE ${id}\\n${stateText(s)}\\n\\nUSER GOAL:\\n${query}${research}`;
+
  const agentStarted=Date.now();
  if(useChart||useGitHub||useRender) await ev('OpenAlgo Agent','executing','OpenAlgo Agent is checking the relevant chart, code, GitHub, Render, or execution context.');
  const agent = (useChart || useGitHub || useRender)
    ? await runOpenAlgoAgent({ query, history, symbol: input.symbol, runtimeContext: input.runtimeContext }).catch(error => ({ text: '', actions: [], toolTrace: [], skills: [], agentMode: 'unavailable', error: error instanceof Error ? error.message : String(error) }))
    : ({ text: '', actions: [], toolTrace: [], skills: [], agentMode: 'not_needed' });
- mark('openAlgoAgent',agentStarted); const agentContext = agent.text ? `\nOPENALGO AGENT RESULT:\n${agent.text}\nAgent skills: ${agent.skills.join(', ')}\nTool trace: ${JSON.stringify(agent.toolTrace)}` : `\nOPENALGO AGENT UNAVAILABLE: ${agent.error || 'unknown error'}`;
- // Let the model decide whether another teammate materially helps. There is no canned greeting/response list.
- const triageStarted=Date.now(); await ev('Gemini','planning','Gemini is checking whether the request is simple enough to answer directly or benefits from the peer team.'); const triage=await runGemini({query:`${base}${agentContext}\n\nAct as the initial Gemini triage pass for this request. You are not the leader of the team. Decide whether this request materially benefits from Gemini+GPT collaboration. Collaboration is optional, not a requirement. For a simple greeting, casual exchange, straightforward factual question, or task you can answer correctly yourself, answer directly and quickly without inventing a team process. Collaborate when another model's expertise, verification, planning, coding, research, or execution would materially improve the result. Never use collaboration merely because this endpoint is called.\n\nReturn JSON only: {"collaborate":true|false,"userAnswer":"...","summary":"..."}. userAnswer must be the natural answer to the user if collaboration is false. Do not expose hidden chain-of-thought.`,history,symbol:input.symbol,runtimeContext:input.runtimeContext,debateRole:'triage'});
- mark('triage',triageStarted); const t=json(triage.text);
- if(t && t.collaborate===false){s.activity=[...s.activity,{actor:'Gemini',phase:'direct',text:clean(t.summary||'Answered directly without unnecessary collaboration.',1200),at:new Date().toISOString()}].slice(-40);const saveStarted=Date.now(); await save(s,loaded.id); mark('stateSave',saveStarted);
-   const totalMs=Date.now()-runStarted; const slowest=Object.entries(timings).sort((a,b)=>b[1]-a[1])[0]||null;
-   recordAiRun({startedAt:new Date(runStarted).toISOString(),totalMs,stages:timings,slowestStage:slowest?.[0]||null,slowestMs:slowest?.[1]||0,mode:'adaptive-direct',queryType:query.slice(0,80),ok:true});
-   return {diagnostics:{totalMs,timings,slowestStage:slowest?.[0]||null,slowestMs:slowest?.[1]||0},text:clean(t.userAnswer||userAnswer(triage.text),12000),responseId:triage.responseId||'',model:triage.model,provider:'SIRE AI Team',teamMode:'adaptive-direct',workspaceId:id,responsibilities:s.responsibilities,decisions:s.decisions.slice(-12),openQuestions:s.openQuestions.slice(-12),artifacts:s.artifacts.slice(-8),activity:s.activity.slice(-20),execution:{status:'not_requested'},agentActions:agent.actions,agentSkills:agent.skills,agentToolTrace:agent.toolTrace,webSearched:sources.length>0,webSources:sources};}
- await ev('SIRE','parallel','The three peer AIs are working independently before seeing one another.');
+ mark('openAlgoAgent',agentStarted); const agentContext = agent.text ? `\\nOPENALGO AGENT RESULT:\\n${agent.text}\\nAgent skills: ${agent.skills.join(', ')}\\nTool trace: ${JSON.stringify(agent.toolTrace)}` : `\\nOPENALGO AGENT UNAVAILABLE: ${agent.error || 'unknown error'}`;
+
+ const triageStarted=Date.now(); await ev('Gemini','planning','Gemini is checking whether the request is simple enough to answer directly or benefits from the peer team.'); await ev('SIRE','parallel','The three peer AIs are working independently before seeing one another.');
  const independentPrompt=base+agentContext+'\n\nYou are one of three equal peer AIs: Gemini, GPT-OSS 20B, or OpenAlgo Agent. Work independently first. Use your own expertise. Give a concise reasoning summary, proposed approach, risks, and work you can own. You have equal authority with the other peers. Do not expose hidden chain-of-thought.';
  const independentStarted=Date.now();
  const [g,p,oa]=await Promise.all([
