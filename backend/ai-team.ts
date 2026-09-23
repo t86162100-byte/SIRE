@@ -53,6 +53,18 @@ async function emit(fn:TeamEvent|undefined,id:string,actor:string,phase:string,t
 
 export async function runAiTeam(input:{query:string;workspaceId?:string;history?:any[];symbol?:string;runtimeContext?:Record<string,unknown>;execute?:boolean;onEvent?:TeamEvent}){
  const query=clean(input.query);if(!query)throw new Error('query is required');const id=wid(input);
+ // Keep simple social conversation completely outside persistence, routing, and model calls.
+ // This makes greetings genuinely immediate even when the database or Gemini is slow.
+ const instant=/^(hi|hey|hello|hey there|hello there|yo|hiya|good morning|good afternoon|good evening|thanks|thank you|thx|ok|okay|alright|cool|nice|great|yes|no|sure|bye|goodbye|how are you|how's it going|whats up|what's up)\s*[!?.,]*$/i.test(query);
+ if(instant){
+   await emit(input.onEvent,id,'SIRE','direct','I’m answering this immediately without starting the AI team.');
+   const key=query.toLowerCase().replace(/[!?.,]+$/,'').trim();
+   const replies:Record<string,string>={hi:'Hi! 👋 What can I help you with?',hey:'Hey! 👋 What can I help you with?',hello:'Hello! 👋 What can I help you with?','hey there':'Hey there! 👋 What can I help you with?','hello there':'Hello there! 👋 What can I help you with?',yo:'Hey! 👋 What can I help you with?',hiya:'Hi! 👋 What can I help you with?','how are you':"I’m good and ready to help. What are we working on?","how's it going":"Going well. What would you like to work on?",'whats up':"I’m here and ready. What’s up?","what's up":"I’m here and ready. What’s up?"};
+   const text=replies[key] || (key==='thanks'||key==='thank you'||key==='thx'?"You’re welcome! 👋":"Got it. What’s next?");
+   const now=new Date().toISOString();
+   recordAiRun({startedAt:now,totalMs:0,stages:{instantReply:0},slowestStage:'instantReply',slowestMs:0,mode:'instant-chat',queryType:query.slice(0,80),ok:true});
+   return {diagnostics:{totalMs:0,timings:{instantReply:0},slowestStage:'instantReply',slowestMs:0},text,responseId:'',model:'SIRE instant conversation',provider:'SIRE AI Team',teamMode:'instant-chat',workspaceId:id,responsibilities:[],decisions:[],openQuestions:[],artifacts:[],activity:[{actor:'SIRE',phase:'direct',text:'Answered immediately without starting the AI team.',at:now}],execution:{status:'not_requested'},agentActions:[],agentSkills:[],agentToolTrace:[],webSearched:false,webSources:[]};
+ }
  return lock(id,async()=>{
  const runStarted=Date.now(); const timings:Record<string,number>={}; const mark=(name:string,started:number)=>{timings[name]=Date.now()-started;};
  const loadedStarted=Date.now(); const loaded=await load(id,query); mark('stateLoad',loadedStarted);
@@ -62,7 +74,7 @@ export async function runAiTeam(input:{query:string;workspaceId?:string;history?
  // Fast path for ordinary conversation. Greetings and tiny social exchanges should never
  // enter the router/council pipeline; that pipeline is reserved for work that benefits
  // from tools, research, coding, chart context, or peer collaboration.
- const instant=/^(hi|hey|hello|hey there|hello there|yo|hiya|good morning|good afternoon|good evening|thanks|thank you|thx|ok|okay|alright|cool|nice|great|yes|no|sure|bye|goodbye|how are you|how's it going|whats up|what's up)\\s*[!?.,]*$/i.test(query);
+ const instant=/^(hi|hey|hello|hey there|hello there|yo|hiya|good morning|good afternoon|good evening|thanks|thank you|thx|ok|okay|alright|cool|nice|great|yes|no|sure|bye|goodbye|how are you|how's it going|whats up|what's up)\s*[!?.,]*$/i.test(query);
  if(instant){
    const directStarted=Date.now();
    const instantReplies:Record<string,string>={
