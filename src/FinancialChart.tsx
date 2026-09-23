@@ -302,6 +302,8 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
   // SIRE GPT chart-control bridge: chart mutations are executed against the live
   // widget here, not merely acknowledged in chat. The bridge is intentionally
   // scoped to this chart instance so actions always target the active chart.
+  const isActiveRef = useRef(Boolean(isActive));
+  isActiveRef.current = Boolean(isActive);
   useEffect(() => {
     const handleAgentChartAction = (event: Event) => {
       const detail = (event as CustomEvent).detail as Record<string, unknown> | undefined;
@@ -312,7 +314,7 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
       // chart widget. Only the visible/active FinancialChart instance may execute
       // the action; otherwise multiple mounted chart instances can each add the
       // same indicator.
-      if (!isActive) return;
+      if (!isActiveRef.current) return;
       const targetSymbol = detail.symbol ? String(detail.symbol) : '';
       if (targetSymbol && targetSymbol !== symbolRef.current) return;
 
@@ -334,12 +336,31 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
           if (!indicatorId) throw new Error('add_indicator requires indicatorId.');
           const settings = (detail.settings && typeof detail.settings === 'object') ? detail.settings as Record<string, unknown> : {};
           const paneIndex = Number.isFinite(Number(detail.paneIndex)) ? Number(detail.paneIndex) : undefined;
-          widget.chart.addIndicator(indicatorId, settings as any, paneIndex === undefined ? {} : { paneIndex });
+          const chart = widget.chart as any;
+          const existing = typeof chart.indicators === 'function'
+            ? Array.from(chart.indicators() || []).filter((indicator: any) => {
+                const id = String(indicator?.id || indicator?.indicatorId || '').trim().toLowerCase();
+                return id === indicatorId;
+              })
+            : [];
+          // GPT chart actions are idempotent: one "add MACD" request must not
+          // create another MACD if the requested indicator is already present.
+          if (existing.length > 0) {
+            reportDiagnostic({
+              code: 'CHART_ACTION_ALREADY_PRESENT',
+              level: 'info',
+              message: `GPT requested indicator "${indicatorId}", but it is already present; no duplicate was created.`,
+              detail: JSON.stringify({ indicatorId, existingCount: existing.length }),
+              operation: action,
+            });
+            return;
+          }
+          const handle = chart.addIndicator(indicatorId, settings as any, paneIndex === undefined ? {} : { paneIndex });
           reportDiagnostic({
             code: 'CHART_ACTION_APPLIED',
             level: 'info',
             message: `GPT added indicator "${indicatorId}".`,
-            detail: JSON.stringify({ indicatorId, settings, paneIndex }),
+            detail: JSON.stringify({ indicatorId, settings, paneIndex, instanceId: handle?.id || handle?.instanceId || null }),
             operation: action,
           });
           return;
@@ -348,15 +369,41 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
         if (action === 'remove_indicator') {
           const requestedId = String(detail.indicatorId || detail.id || detail.indicator || '').trim().toLowerCase();
           const requestedName = String(detail.name || '').trim().toLowerCase();
-          const indicators = typeof (widget.chart as any).indicators === 'function' ? (widget.chart as any).indicators() : [];
-          const list = Array.isArray(indicators) ? indicators : [];
-          const match = list.find((indicator: any) => {
-            const id = String(indicator?.id || indicator?.indicatorId || '').toLowerCase();
-            const name = String(indicator?.name || '').toLowerCase();
+          const chart = widget.chart as any;
+          const indicators = typeof chart.indicators === 'function' ? Array.from(chart.indicators() || []) : [];
+          const matches = indicators.filter((indicator: any) => {
+            const id = String(indicator?.id || indicator?.indicatorId || '').trim().toLowerCase();
+            const name = String(indicator?.name || '').trim().toLowerCase();
             return (requestedId && id === requestedId) || (requestedName && name === requestedName);
           });
-          if (!match?.remove) throw new Error(`Indicator "${requestedId || requestedName || 'unknown'}" is not currently removable through the chart API.`);
-          match.remove();
+          if (!matches.length) {
+            reportDiagnostic({
+              code: 'CHART_ACTION_NOT_FOUND',
+              level: 'warning',
+              message: `GPT requested removal of indicator "${requestedId || requestedName || 'unknown'}", but no matching instance exists.`,
+              detail: JSON.stringify({ requestedId, requestedName, available: indicators.map((indicator: any) => ({ id: indicator?.id || indicator?.indicatorId || '', name: indicator?.name || '' })) }),
+              operation: action,
+            });
+            return;
+          }
+          let removed = 0;
+          for (const indicator of matches) {
+            if (typeof indicator?.remove === 'function') {
+              indicator.remove();
+              removed += 1;
+            } else {
+              const instanceId = String(indicator?.id || indicator?.instanceId || '').trim();
+              if (instanceId && typeof chart.removeIndicator === 'function' && chart.removeIndicator(instanceId)) removed += 1;
+            }
+          }
+          if (!removed) throw new Error(`Indicator "${requestedId || requestedName || 'unknown'}" matched ${matches.length} instance(s), but the chart API could not remove them.`);
+          reportDiagnostic({
+            code: 'CHART_ACTION_APPLIED',
+            level: 'info',
+            message: `GPT removed ${removed} indicator instance(s) matching "${requestedId || requestedName || 'unknown'}".`,
+            detail: JSON.stringify({ requestedId, requestedName, removed }),
+            operation: action,
+          });
           return;
         }
 
