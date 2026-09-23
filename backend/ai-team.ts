@@ -81,12 +81,99 @@ export async function runAiTeam(input:{query:string;workspaceId?:string;history?
    const totalMs=Date.now()-runStarted; const slowest=Object.entries(timings).sort((a,b)=>b[1]-a[1])[0]||null;
    recordAiRun({startedAt:new Date(runStarted).toISOString(),totalMs,stages:timings,slowestStage:slowest?.[0]||null,slowestMs:slowest?.[1]||0,mode:'adaptive-direct',queryType:query.slice(0,80),ok:true});
    return {diagnostics:{totalMs,timings,slowestStage:slowest?.[0]||null,slowestMs:slowest?.[1]||0},text:clean(t.userAnswer||userAnswer(triage.text),12000),responseId:triage.responseId||'',model:triage.model,provider:'SIRE AI Team',teamMode:'adaptive-direct',workspaceId:id,responsibilities:s.responsibilities,decisions:s.decisions.slice(-12),openQuestions:s.openQuestions.slice(-12),artifacts:s.artifacts.slice(-8),activity:s.activity.slice(-20),execution:{status:'not_requested'},agentActions:mergedActions,agentSkills:[...new Set([...(agent.skills||[]),...(oa.skills||[]),...(oa2.skills||[])])],agentToolTrace:[...(agent.toolTrace||[]),...(oa.toolTrace||[]),...(oa2.toolTrace||[])],webSearched:sources.length>0,webSources:sources};}
- await ev('Gemini','proposing','Gemini is opening the team discussion.');const geminiPlanStarted=Date.now(); const g=await runGemini({query:base+agentContext+'\n\nYou are Gemini, one of three equal SIRE teammates. Think independently, state useful conclusions, identify uncertainties, propose work, and invite the other two to challenge you. You have no authority over GPT-OSS 20B or OpenAlgo Agent. Return JSON {"summary":"...","responsibilities":[...],"decisions":["..."],"openQuestions":["..."],"artifacts":[]}. Never expose hidden chain-of-thought.',history,symbol:input.symbol,runtimeContext:input.runtimeContext,debateRole:'proposal'});mark('geminiPlan',geminiPlanStarted); apply(s,'Gemini',g.text);await ev('Gemini','proposed',g.text);
- await ev('GPT-OSS 20B','collaborating','GPT-OSS 20B is reading Gemini and the shared workspace, then adding its own view.');const gptDiscussionStarted=Date.now(); const p=await runOpenRouter({query:base+agentContext+'\n\nGEMINI MESSAGE:\n'+g.text+'\n\nYou are GPT-OSS 20B, one of three equal SIRE teammates. Read Gemini, agree where justified, dispute weak points, add missing ideas, and volunteer for work. You have no authority over Gemini or OpenAlgo Agent. Return JSON {"summary":"...","responsibilities":[...],"decisions":["..."],"openQuestions":["..."],"artifacts":[]}. Do not expose hidden chain-of-thought.',history,councilContext:g.text});mark('gptDiscussion',gptDiscussionStarted);apply(s,'GPT-OSS 20B',p.text);await ev('GPT-OSS 20B','proposed',p.text);
- await ev('OpenAlgo Agent','collaborating','OpenAlgo Agent is reading both teammates and the shared chart/tool context, then contributing its own analysis.');const openAlgoDiscussionStarted=Date.now(); const oa=await runOpenAlgoAgent({query,runtimeContext:input.runtimeContext,symbol:input.symbol,history,councilContext:'GEMINI:\n'+g.text+'\n\nGPT-OSS 20B:\n'+p.text+'\n\nSHARED STATE:\n'+stateText(s)}).catch(error=>({text:'',actions:[],toolTrace:[],skills:[],agentMode:'unavailable',error:error instanceof Error?error.message:String(error)}));mark('openAlgoDiscussion',openAlgoDiscussionStarted);apply(s,'OpenAlgo Agent',oa.text);await ev('OpenAlgo Agent','proposed',oa.text);
- await ev('Gemini','responding','Gemini is responding to GPT-OSS 20B and OpenAlgo Agent so the three can converge or keep a disagreement visible.');const geminiResponseStarted=Date.now(); const g2=await runGemini({query:base+agentContext+'\n\nGEMINI FIRST VIEW:\n'+g.text+'\n\nGPT-OSS 20B:\n'+p.text+'\n\nOPENALGO AGENT:\n'+oa.text+'\n\nYou are still only one equal teammate. Respond to the other two. Agree, dispute, correct yourself, combine ideas, or leave a justified disagreement. Work toward a shared position rather than acting as a boss. Return JSON {"summary":"...","responsibilities":[...],"decisions":["..."],"openQuestions":["..."],"artifacts":[]}. Never expose hidden chain-of-thought.',history,symbol:input.symbol,runtimeContext:input.runtimeContext,councilContext:'GPT-OSS 20B:\n'+p.text+'\n\nOpenAlgo Agent:\n'+oa.text,debateRole:'response'});mark('geminiResponse',geminiResponseStarted);apply(s,'Gemini',g2.text);await ev('Gemini','response',g2.text);
- await ev('GPT-OSS 20B','responding','GPT-OSS 20B is checking the updated discussion and can challenge or accept the emerging team position.');const gptFinalStarted=Date.now(); const f=await runOpenRouter({query:base+agentContext+'\n\nGEMINI:\n'+g2.text+'\n\nOPENALGO AGENT:\n'+oa.text+'\n\nYou are an equal teammate, not a final authority. Review the discussion. State whether you agree, what you dispute, and what the team should do next. If you disagree, propose a correction. Return JSON {"userAnswer":"...","summary":"...","responsibilities":[...],"decisions":["..."],"openQuestions":["..."],"artifacts":[]}. The userAnswer is the team current best answer, not a statement of personal authority. Never expose hidden chain-of-thought.',history,councilContext:'Gemini:\n'+g2.text+'\n\nOpenAlgo Agent:\n'+oa.text});mark('gptFinal',gptFinalStarted);apply(s,'GPT-OSS 20B',f.text);
- await ev('OpenAlgo Agent','responding','OpenAlgo Agent is checking the full discussion and returning its tool-aware position.');const oaFinalStarted=Date.now(); const oa2=await runOpenAlgoAgent({query,runtimeContext:input.runtimeContext,symbol:input.symbol,history,councilContext:'GEMINI:\n'+g2.text+'\n\nGPT-OSS 20B:\n'+f.text+'\n\nOPENALGO FIRST VIEW:\n'+oa.text+'\n\nSHARED STATE:\n'+stateText(s)}).catch(error=>({text:'',actions:[],toolTrace:[],skills:[],agentMode:'unavailable',error:error instanceof Error?error.message:String(error)}));mark('openAlgoFinal',oaFinalStarted);apply(s,'OpenAlgo Agent',oa2.text);await ev('OpenAlgo Agent','response',oa2.text);
+
+ await ev('SIRE','parallel','The three peer AIs are working independently first, then they will cross-review one another.');
+
+ const independentPrompt = base+agentContext+
+"\\n\\nYou are one of three equal peer AIs in SIRE. Work independently before seeing the other peers. Do not imitate or defer to another model. Solve the user's goal from your own expertise. State a concise reasoning summary (not private chain-of-thought), your proposed approach, risks/uncertainties, and any work you can own. You have equal authority with the other peers. Return JSON {\\"summary\\":\\"...\\",\\"responsibilities\\":[...],\\"decisions\\":[...],\\"openQuestions\\":[...],\\"artifacts\\":[]}. Never expose hidden chain-of-thought.";
+
+ const independentStarted=Date.now();
+ const [g,p,oa] = await Promise.all([
+   runGemini({query:independentPrompt,history,symbol:input.symbol,runtimeContext:input.runtimeContext,debateRole:'independent'}),
+   runOpenRouter({query:independentPrompt,history,councilContext:'INDEPENDENT PASS: form your own view before seeing another peer.'}),
+   runOpenAlgoAgent({query,runtimeContext:input.runtimeContext,symbol:input.symbol,history,councilContext:'INDEPENDENT PASS: form your own tool-aware view first. You are an equal peer.'}).catch(error=>({text:'',actions:[],toolTrace:[],skills:[],agentMode:'unavailable',error:error instanceof Error?error.message:String(error)}))
+ ]);
+ mark('independentPeerPass',independentStarted);
+ apply(s,'Gemini',g.text); apply(s,'GPT-OSS 20B',p.text); apply(s,'OpenAlgo Agent',oa.text);
+ await ev('Gemini','independent',g.text);
+ await ev('GPT-OSS 20B','independent',p.text);
+ await ev('OpenAlgo Agent','independent',oa.text);
+
+ const peerPacket =
+ "GEMINI INDEPENDENT VIEW:\\n"+g.text+
+ "\\n\\nGPT-OSS 20B INDEPENDENT VIEW:\\n"+p.text+
+ "\\n\\nOPENALGO AGENT INDEPENDENT VIEW:\\n"+oa.text+
+ "\\n\\nSHARED STATE:\\n"+stateText(s);
+
+ await ev('SIRE','critique','Each peer is now challenging the others instead of simply following the first answer.');
+ const critiqueStarted=Date.now();
+ const [gCrit,pCrit,oaCrit] = await Promise.all([
+   runGemini({query:base+agentContext+peerPacket+
+"\\n\\nYou are Gemini, an equal peer. Critically review both other independent views. Identify agreements, disagreements, missing assumptions, and concrete corrections. Do not defer because another peer sounds confident. Preserve justified disagreement. Return JSON {\\"summary\\":\\"...\\",\\"responsibilities\\":[...],\\"decisions\\":[...],\\"openQuestions\\":[...],\\"artifacts\\":[]}.",history,symbol:input.symbol,runtimeContext:input.runtimeContext,councilContext:peerPacket,debateRole:'critique'}),
+   runOpenRouter({query:base+agentContext+peerPacket+
+"\\n\\nYou are GPT-OSS 20B, an equal peer. Adversarially review both other independent views. Try to falsify weak assumptions, identify edge cases, and propose better approaches. Do not defer to either peer. Return JSON {\\"summary\\":\\"...\\",\\"responsibilities\\":[...],\\"decisions\\":[...],\\"openQuestions\\":[...],\\"artifacts\\":[]}.",history,councilContext:peerPacket}),
+   runOpenAlgoAgent({query,runtimeContext:input.runtimeContext,symbol:input.symbol,history,councilContext:peerPacket+
+"\\n\\nAct as an independent technical critic. Check the proposed work against available chart/tool capabilities. Challenge both peers where needed and state concrete corrections."}).catch(error=>({text:'',actions:[],toolTrace:[],skills:[],agentMode:'unavailable',error:error instanceof Error?error.message:String(error)}))
+ ]);
+ mark('parallelPeerCritique',critiqueStarted);
+ apply(s,'Gemini',gCrit.text); apply(s,'GPT-OSS 20B',pCrit.text); apply(s,'OpenAlgo Agent',oaCrit.text);
+ await ev('Gemini','critique',gCrit.text);
+ await ev('GPT-OSS 20B','critique',pCrit.text);
+ await ev('OpenAlgo Agent','critique',oaCrit.text);
+
+ const convergencePacket =
+ "INDEPENDENT VIEWS:\\nGemini: "+g.text+
+ "\\nGPT-OSS 20B: "+p.text+
+ "\\nOpenAlgo Agent: "+oa.text+
+ "\\n\\nCRITIQUES:\\nGemini: "+gCrit.text+
+ "\\nGPT-OSS 20B: "+pCrit.text+
+ "\\nOpenAlgo Agent: "+oaCrit.text+
+ "\\n\\nSHARED STATE:\\n"+stateText(s);
+
+ await ev('SIRE','convergence','The peers are doing a second independent pass with the full debate visible.');
+ const convergenceStarted=Date.now();
+ const [gFinal,pFinal,oaFinal] = await Promise.all([
+   runGemini({query:base+agentContext+convergencePacket+
+"\\n\\nYou are Gemini, still an equal peer. Re-evaluate your position after the critiques. Change your mind when evidence warrants it. Distinguish consensus from unresolved disagreement. Produce a proposed team answer, not an order to the other peers. Return JSON {\\"userAnswer\\":\\"...\\",\\"summary\\":\\"...\\",\\"responsibilities\\":[...],\\"decisions\\":[...],\\"openQuestions\\":[...],\\"artifacts\\":[],\\"consensus\\":\\"agree|mixed|disagree\\"}.",history,symbol:input.symbol,runtimeContext:input.runtimeContext,councilContext:convergencePacket,debateRole:'convergence'}),
+   runOpenRouter({query:base+agentContext+convergencePacket+
+"\\n\\nYou are GPT-OSS 20B, still an equal peer. Re-evaluate after all critiques. Give the strongest current team answer, explicitly preserving uncertainty where needed. You are not the final authority. Return JSON {\\"userAnswer\\":\\"...\\",\\"summary\\":\\"...\\",\\"responsibilities\\":[...],\\"decisions\\":[...],\\"openQuestions\\":[...],\\"artifacts\\":[],\\"consensus\\":\\"agree|mixed|disagree\\"}.",history,councilContext:convergencePacket}),
+   runOpenAlgoAgent({query,runtimeContext:input.runtimeContext,symbol:input.symbol,history,councilContext:convergencePacket+
+"\\n\\nYou are OpenAlgo Agent, still an equal peer. Re-evaluate after all critiques and provide your strongest current team answer. Do not treat yourself as the final authority. Preserve any remaining disagreement."}).catch(error=>({text:'',actions:[],toolTrace:[],skills:[],agentMode:'unavailable',error:error instanceof Error?error.message:String(error)}))
+ ]);
+ mark('parallelPeerConvergence',convergenceStarted);
+ apply(s,'Gemini',gFinal.text); apply(s,'GPT-OSS 20B',pFinal.text); apply(s,'OpenAlgo Agent',oaFinal.text);
+ await ev('Gemini','convergence',gFinal.text);
+ await ev('GPT-OSS 20B','convergence',pFinal.text);
+ await ev('OpenAlgo Agent','convergence',oaFinal.text);
+
+ // No permanent leader: the synthesis duty rotates between the three peers per turn.
+ const synthIndex = Math.abs((id+'|'+query).split('').reduce((a,c)=>((a*31+c.charCodeAt(0))>>>0),0)) % 3;
+ const synthName = ['Gemini','GPT-OSS 20B','OpenAlgo Agent'][synthIndex];
+ const synthContext =
+ "FINAL GEMINI POSITION:\\n"+gFinal.text+
+ "\\n\\nFINAL GPT-OSS 20B POSITION:\\n"+pFinal.text+
+ "\\n\\nFINAL OPENALGO AGENT POSITION:\\n"+oaFinal.text+
+ "\\n\\nNo peer outranks another. This is a rotating synthesis duty for this turn only. Preserve strong agreement, expose meaningful disagreement, and never invent consensus.";
+
+ await ev(synthName,'synthesis',synthName+' has the rotating synthesis duty for this turn; the other two remain equal peers.');
+ const synthStarted=Date.now();
+ let synthesis:any;
+ if(synthName==='Gemini') {
+   synthesis=await runGemini({query:base+agentContext+synthContext+
+"\\n\\nSynthesize the three peer positions into the current team answer. You have no authority over the other two. If they disagree, explain the disagreement briefly and choose only what the evidence supports. Return JSON {\\"userAnswer\\":\\"...\\",\\"summary\\":\\"...\\",\\"decisions\\":[...],\\"openQuestions\\":[...],\\"artifacts\\":[]}.",history,symbol:input.symbol,runtimeContext:input.runtimeContext,councilContext:synthContext,debateRole:'rotating-synthesis'});
+ } else if(synthName==='GPT-OSS 20B') {
+   synthesis=await runOpenRouter({query:base+agentContext+synthContext+
+"\\n\\nSynthesize the three peer positions into the current team answer. You have no authority over the other two. Preserve uncertainty and genuine disagreement. Return JSON {\\"userAnswer\\":\\"...\\",\\"summary\\":\\"...\\",\\"decisions\\":[...],\\"openQuestions\\":[...],\\"artifacts\\":[]}.",history,councilContext:synthContext});
+ } else {
+   synthesis=await runOpenAlgoAgent({query,runtimeContext:input.runtimeContext,symbol:input.symbol,history,councilContext:synthContext+
+"\\n\\nPerform the rotating synthesis duty only. You have no authority over Gemini or GPT-OSS 20B. Preserve disagreements and return the best evidence-backed team answer."}).catch(error=>({text:'',actions:[],toolTrace:[],skills:[],agentMode:'unavailable',error:error instanceof Error?error.message:String(error)}));
+ }
+ mark('rotatingSynthesis',synthStarted);
+ apply(s,synthName,synthesis.text);
+ await ev(synthName,'synthesis_complete',synthesis.text);
+
+ const finalText=synthesis.text||oaFinal.text||pFinal.text||gFinal.text||oaCrit.text||pCrit.text||gCrit.text||oa.text||p.text||g.text;
+ const mergedActions=[...(agent.actions||[]),...(oa.actions||[]),...(oaFinal.actions||[])];
  const finalText=oa2.text||f.text||g2.text||oa.text||p.text||g.text; const mergedActions=[...(agent.actions||[]),...(oa.actions||[]),...(oa2.actions||[])]; const saveStarted=Date.now(); await save(s,loaded.id); mark('stateSave',saveStarted);await ev('SIRE','conclusion','The shared workspace has been updated with the team’s responsibilities, decisions, and artifacts.');
  const totalMs=Date.now()-runStarted;
  const slowest=Object.entries(timings).sort((a,b)=>b[1]-a[1])[0] || null;
