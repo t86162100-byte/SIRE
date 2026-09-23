@@ -42,6 +42,51 @@ async function handleTeamRequest(parsed, onEvent) {
   return { ...response, councilMode: 'shared-workspace-team', rounds: response.activity.length };
 }
 
+function githubRepoConfig() {
+  const token = String(process.env.GITHUB_TOKEN || process.env.GH_TOKEN || '').trim();
+  const repo = String(process.env.GITHUB_REPOSITORY || 't86162100-byte/SIRE').trim();
+  if (!token) throw new Error('GPT GitHub access is not configured: set GITHUB_TOKEN (or GH_TOKEN) on the SIRE service.');
+  if (!/^[^/]+\/[^/]+$/.test(repo)) throw new Error('Invalid GITHUB_REPOSITORY configuration.');
+  return { token, repo };
+}
+
+async function githubRequestForGpt({ method, path, body, permission }) {
+  const { token, repo } = githubRepoConfig();
+  const normalizedPath = String(path || '').startsWith('/') ? String(path) : '/' + String(path || '');
+  const repoPrefix = '/repos/' + repo;
+  const isRepoScoped = normalizedPath === repoPrefix || normalizedPath.startsWith(repoPrefix + '/');
+  const isRepoSearch = normalizedPath.startsWith('/search/code') || normalizedPath.startsWith('/search/commits') || normalizedPath.startsWith('/search/issues') || normalizedPath.startsWith('/search/repositories');
+  if (!isRepoScoped && !isRepoSearch) {
+    throw new Error('GPT GitHub access is restricted to the configured repository and repository-scoped GitHub searches.');
+  }
+  const verb = String(method || 'GET').toUpperCase();
+  const requestedPermission = String(permission || (verb === 'GET' ? 'read' : 'write')).toLowerCase();
+  if (!['read','write','execute'].includes(requestedPermission)) throw new Error('Invalid GitHub permission.');
+  if (verb === 'GET' && requestedPermission !== 'read') throw new Error('GET requests must use read permission.');
+  if (verb !== 'GET' && requestedPermission === 'read') throw new Error('Mutating GitHub requests require write or execute permission.');
+
+  const url = 'https://api.github.com' + normalizedPath;
+  const response = await fetch(url, {
+    method: verb,
+    headers: {
+      'Accept': 'application/vnd.github+json',
+      'Authorization': 'Bearer ' + token,
+      'X-GitHub-Api-Version': '2022-11-28',
+      'User-Agent': 'SIRE-GPT',
+      ...(body !== undefined && body !== null ? {'Content-Type':'application/json'} : {}),
+    },
+    ...(body !== undefined && body !== null ? { body: typeof body === 'string' ? body : JSON.stringify(body) } : {}),
+  });
+  const raw = await response.text();
+  let data = raw;
+  try { data = raw ? JSON.parse(raw) : {}; } catch {}
+  if (!response.ok) {
+    const detail = typeof data === 'object' && data ? (data.message || JSON.stringify(data)) : String(data);
+    throw new Error('GitHub API ' + response.status + ': ' + detail);
+  }
+  return JSON.stringify({ ok:true, status:response.status, method:verb, path:normalizedPath, result:data });
+}
+
 async function handleDirectGptRequest(parsed) {
   const query = String(parsed.query || '').trim();
   if (!query) throw new Error('query is required');
@@ -53,6 +98,21 @@ async function handleDirectGptRequest(parsed) {
     onEvent: parsed.onEvent,
     tools: {
       chartControl: async actions => JSON.stringify({ ok:true, actions }),
+      githubRequest: githubRequestForGpt,
+      checkIntegrations: async () => {
+        const result = { github: { configured:false, repository:String(process.env.GITHUB_REPOSITORY || 't86162100-byte/SIRE') }, render: { configured:true } };
+        try {
+          const { repo } = githubRepoConfig();
+          result.github.configured = true;
+          result.github.repository = repo;
+          await githubRequestForGpt({ method:'GET', path:'/repos/' + repo, permission:'read' });
+          result.github.connected = true;
+        } catch (error) {
+          result.github.connected = false;
+          result.github.error = error instanceof Error ? error.message : String(error);
+        }
+        return JSON.stringify(result);
+      },
     },
   });
   return { text: gpt.text, responseId: gpt.responseId || '', model: gpt.model, provider: gpt.provider, actions: gpt.actions || [], directGpt: true };
