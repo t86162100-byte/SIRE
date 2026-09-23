@@ -49,7 +49,7 @@ export async function runGemini(input: { query: string; history?: Array<{ role: 
   for (const model of MODELS) {
     try {
       for (let turn = 0; turn < MAX_TOOL_TURNS; turn++) {
-        const requestBody = { { parts: [{ text: systemInstruction }] }, contents, tools: HEAD_TOOLS, toolConfig: { functionCallingConfig: { mode: 'AUTO' } }, generationConfig: { temperature: 0.7, maxOutputTokens: 2048 } };
+        const requestBody = { systemInstruction: { parts: [{ text: systemInstruction }] }, contents, tools: HEAD_TOOLS, toolConfig: { functionCallingConfig: { mode: 'AUTO' } }, generationConfig: { temperature: 0.7, maxOutputTokens: 2048 } };
         const { response, data } = await requestModel(model, requestBody, apiKey);
         if (!response.ok) { const status = response.status; lastError = Object.assign(new Error(data?.error?.message || `Gemini HTTP ${status}`), { status, model }); if (status === 429 || status === 503 || status === 500 || status === 502) break; throw lastError; }
         const candidate = data?.candidates?.[0]; const parts = Array.isArray(candidate?.content?.parts) ? candidate.content.parts : [];
