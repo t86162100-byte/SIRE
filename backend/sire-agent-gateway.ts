@@ -1,6 +1,6 @@
 /* SIRE Agent Gateway - provider-neutral autonomous tool-calling runtime. */
 import { createServer } from 'node:http';
-import { AGENT_CAPABILITIES, connectorRequest, discoverConnectors, enqueueAgentTask, webSearch } from './agent-tools';
+import { AGENT_CAPABILITIES, connectorRequest, discoverConnectors, enqueueAgentTask, verifyConfiguredConnectors, webSearch } from './agent-tools';
 
 const PORT = Number(process.env.SIRE_AGENT_PORT || 10001);
 const BASE_URL = (process.env.SIRE_AGENT_BASE_URL || '').replace(/\/$/, '');
@@ -32,7 +32,28 @@ async function model(messages: any[]) {
 }
 
 export async function runAgent(input: string) {
-  const messages: any[] = [{ role: 'system', content: SYSTEM }, { role: 'user', content: input }];
+  const task = String(input || '').trim();
+
+  // Access/connection questions are verified directly at the gateway so the
+  // answer cannot be replaced by a stale model claim about SIRE's capabilities.
+  if (/(github|render)/i.test(task) && /(access|connected|connection|workspace|repository|repo|permission|credential|api key|token|check|have)/i.test(task)) {
+    const verification = await verifyConfiguredConnectors();
+    const github = verification.github as Record<string, unknown> | undefined;
+    const render = verification.render as Record<string, unknown> | undefined;
+    const githubText = github?.ok
+      ? `GitHub access is verified (authenticated as ${String(github.login || 'the configured account')}).`
+      : `GitHub access is not verified: ${String(github?.error || 'connector unavailable')}.`;
+    const renderText = render?.ok
+      ? `Render access is verified; I can see ${String(render.workspaceCount ?? 0)} configured workspace(s).`
+      : `Render access is not verified: ${String(render?.error || 'connector unavailable')}.`;
+    return {
+      answer: `${githubText} ${renderText} I verified this from SIRE's server-side connectors; no credentials are exposed.`,
+      steps: 1,
+      connectorVerification: verification,
+    };
+  }
+
+  const messages: any[] = [{ role: 'system', content: SYSTEM }, { role: 'user', content: task }];
   for (let step = 0; step < MAX_STEPS; step += 1) {
     const result = await model(messages);
     const message = result?.choices?.[0]?.message;
