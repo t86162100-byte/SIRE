@@ -57,6 +57,19 @@ export async function runAiTeam(input:{query:string;workspaceId?:string;history?
  const runStarted=Date.now(); const timings:Record<string,number>={}; const mark=(name:string,started:number)=>{timings[name]=Date.now()-started;};
  const loadedStarted=Date.now(); const loaded=await load(id,query); mark('stateLoad',loadedStarted);
  const s=loaded.state;s.goal=query;const history=Array.isArray(input.history)?input.history.slice(-20):[];const ev=(a:string,p:string,t:string)=>emit(input.onEvent,id,a,p,t);
+ const fastPath=/^(hi|hello|hey|thanks|thank you|ok|okay|good morning|good afternoon|good evening|how are you|what can you do)\\b/i.test(query)
+   || /\\b(analy[sz]e the (current|this|my) chart|chart analysis|analy[sz]e current market)\\b/i.test(query);
+ if(fastPath){
+   const fastStarted=Date.now();
+   await ev('SIRE','checking',/chart/i.test(query)?'Reading the current chart context directly.':'Answering directly without running the full council.');
+   const fastResult=await runGemini({query,history,symbol:input.symbol,runtimeContext:input.runtimeContext,debateRole:'response'}).catch(error=>({text:'',responseId:'',model:'',provider:'Google Gemini',error:error instanceof Error?error.message:String(error)}));
+   mark('fastResponse',fastStarted);
+   if(!fastResult.text) throw new Error(fastResult.error||'Fast SIRE response failed');
+   const totalMs=Date.now()-runStarted; const slowest=Object.entries(timings).sort((a,b)=>b[1]-a[1])[0]||null;
+   const diagnostics={totalMs,timings,slowestStage:slowest?.[0]||null,slowestMs:slowest?.[1]||0};
+   recordAiRun({startedAt:new Date(runStarted).toISOString(),totalMs,stages:timings,slowestStage:slowest?.[0]||null,slowestMs:slowest?.[1]||0,mode:'fast-path',queryType:query.slice(0,80),ok:true});
+   return {diagnostics,text:userAnswer(fastResult.text),responseId:fastResult.responseId||'',model:fastResult.model,provider:'SIRE AI Team',teamMode:'fast-path',workspaceId:id,responsibilities:s.responsibilities,decisions:s.decisions.slice(-12),openQuestions:s.openQuestions.slice(-12),artifacts:s.artifacts.slice(-8),activity:s.activity.slice(-20),execution:{status:'not_requested'},agentActions:[],agentSkills:[],agentToolTrace:[],webSearched:false,webSources:[]};
+ }
  const needWeb=/\b(latest|today|current|now|recent|news|price|market|research|search|look up|source|compare|2026|2025)\b/i.test(query)||/https?:\/\//.test(query);const webStarted=Date.now();
  const web=needWeb?await webSearch(query,8).catch(()=>({results:[]})):{results:[]};
  mark('webResearch',webStarted);const sources=Array.isArray((web as any).results)?(web as any).results.map((x:any)=>({title:clean(x.title||x.name||x.url,180),url:clean(x.url||x.link,500),text:clean(x.text||x.content||x.snippet,1400)})).filter((x:any)=>x.url):[];const research=sources.length?'\nLIVE RESEARCH:\n'+sources.map((x:any,i:number)=>`[${i+1}] ${x.title}\n${x.url}\n${x.text}`).join('\n\n'):'';
