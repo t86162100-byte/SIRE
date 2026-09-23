@@ -57,6 +57,28 @@ export async function runAiTeam(input:{query:string;workspaceId?:string;history?
  const runStarted=Date.now(); const timings:Record<string,number>={}; const mark=(name:string,started:number)=>{timings[name]=Date.now()-started;};
  const loadedStarted=Date.now(); const loaded=await load(id,query); mark('stateLoad',loadedStarted);
  const s=loaded.state;s.goal=query;const history=Array.isArray(input.history)?input.history.slice(-20):[];const ev=(a:string,p:string,t:string)=>emit(input.onEvent,id,a,p,t);
+ const accessQuery=/\b(github|git hub|render)\b/i.test(query)&&/\b(access|permission|permissions|connected|connection|repository|repo|workspace|authenticate|authentication|auth)\b/i.test(query);
+ if(accessQuery){
+   const verifyStarted=Date.now();
+   const verified=await verifyConfiguredConnectors();
+   mark('connectorVerification',verifyStarted);
+   const gh:any=verified.github||{}, rr:any=verified.render||{};
+   const githubReady=Boolean(gh.ok), renderReady=Boolean(rr.ok);
+   const textAnswer=[
+     githubReady
+       ? `GitHub access is verified for ${gh.login||'the configured account'} and the SIRE repository (${gh.repository?.fullName||'t86162100-byte/SIRE'}).`
+       : `GitHub access is NOT available to the SIRE runtime because ${gh.error||'GITHUB_TOKEN is not configured in the server process'}.`,
+     renderReady
+       ? `Render access is verified; SIRE can see ${rr.workspaceCount||0} Render workspace/owner entries.`
+       : `Render access is NOT available to the SIRE runtime because ${rr.error||'RENDER_API_KEY is not configured in the server process'}.`,
+     'This is the SIRE server runtime result, not the ChatGPT/GitHub connection in this chat.'
+   ].join(' ');
+   const totalMs=Date.now()-runStarted;
+   const slowest=Object.entries(timings).sort((a,b)=>b[1]-a[1])[0]||null;
+   const diagnostics={totalMs,timings,slowestStage:slowest?.[0]||null,slowestMs:slowest?.[1]||0};
+   recordAiRun({startedAt:new Date(runStarted).toISOString(),totalMs,stages:timings,slowestStage:slowest?.[0]||null,slowestMs:slowest?.[1]||0,mode:'connector-verification',queryType:query.slice(0,80),ok:githubReady&&renderReady});
+   return {diagnostics,text:textAnswer,responseId:'',model:'connector-verification',provider:'SIRE runtime',teamMode:'verified-access',workspaceId:id,responsibilities:[],decisions:[],openQuestions:[],artifacts:[],activity:[],execution:{status:'not_requested'},agentActions:[],agentSkills:[],agentToolTrace:[{tool:'verify_configured_connectors',github:gh.ok?'verified':'unavailable',render:rr.ok?'verified':'unavailable'}],webSearched:false,webSources:[]};
+ }
  const fastPath=/^(hi|hello|hey|thanks|thank you|ok|okay|good morning|good afternoon|good evening|how are you|what can you do)\b/i.test(query)
    || /\b(analy[sz]e the (current|this|my) chart|chart analysis|analy[sz]e current market)\b/i.test(query);
  if(fastPath){
