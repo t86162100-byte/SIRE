@@ -158,6 +158,50 @@ async function githubRequestForGpt({ method, path, body, permission }) {
   const raw = await response.text();
   let data = raw;
   try { data = raw ? JSON.parse(raw) : {}; } catch {}
+  if (!response.ok && response.status === 404 && verb === 'GET') {
+    const branchPrefix = '/repos/' + repo + '/branches/';
+    const lowerBranchPath = normalizedPath.toLowerCase();
+    if (lowerBranchPath.startsWith(branchPrefix.toLowerCase())) {
+      const requestedBranch = decodeURIComponent(normalizedPath.slice(branchPrefix.length));
+      const listUrl = 'https://api.github.com/repos/' + repo + '/branches?per_page=100';
+      const listResponse = await fetch(listUrl, {
+        headers: {
+          'Accept': 'application/vnd.github+json',
+          'Authorization': 'Bearer ' + token,
+          'X-GitHub-Api-Version': '2022-11-28',
+          'User-Agent': 'SIRE-GPT',
+        },
+      });
+      if (listResponse.ok) {
+        const list = await listResponse.json().catch(() => []);
+        const branches = Array.isArray(list) ? list.map(item => String(item?.name || '')).filter(Boolean) : [];
+        const normalizedRequested = requestedBranch.toLowerCase().replace(/\s+/g, '-');
+        const matchedBranch = branches.find(name =>
+          name.toLowerCase() === requestedBranch.toLowerCase() ||
+          name.toLowerCase().replace(/\s+/g, '-') === normalizedRequested
+        );
+        if (matchedBranch) {
+          normalizedPath = branchPrefix + encodeURIComponent(matchedBranch);
+          const retryResponse = await fetch('https://api.github.com' + normalizedPath, {
+            method: 'GET',
+            headers: {
+              'Accept': 'application/vnd.github+json',
+              'Authorization': 'Bearer ' + token,
+              'X-GitHub-Api-Version': '2022-11-28',
+              'User-Agent': 'SIRE-GPT',
+            },
+          });
+          const retryRaw = await retryResponse.text();
+          let retryData = retryRaw;
+          try { retryData = retryRaw ? JSON.parse(retryRaw) : {}; } catch {}
+          if (retryResponse.ok) {
+            return JSON.stringify({ ok:true, status:retryResponse.status, method:'GET', path:normalizedPath, result:retryData, branchResolvedFrom:requestedBranch });
+          }
+          data = retryData;
+        }
+      }
+    }
+  }
   if (!response.ok) {
     const detail = typeof data === 'object' && data ? (data.message || JSON.stringify(data)) : String(data);
     throw new Error('GitHub API ' + response.status + ': ' + detail);
