@@ -141,6 +141,26 @@ function resolveTrendLinePoints(sourceBars: any[], visibleRange: any, tool: stri
   ];
 }
 
+function resolveRectanglePoints(sourceBars: any[], visibleRange: any) {
+  if (!Array.isArray(sourceBars) || sourceBars.length < 2) return [];
+  const from = visibleRange && Number.isFinite(Number(visibleRange.from)) ? Math.max(0, Math.floor(Number(visibleRange.from))) : 0;
+  const to = visibleRange && Number.isFinite(Number(visibleRange.to)) ? Math.min(sourceBars.length - 1, Math.ceil(Number(visibleRange.to))) : sourceBars.length - 1;
+  const visible = sourceBars.slice(from, to + 1).filter((bar: any) =>
+    Number.isFinite(Number(bar?.high)) && Number.isFinite(Number(bar?.low)) && bar?.time !== undefined
+  );
+  if (visible.length < 2) return [];
+  const windowSize = Math.max(8, Math.min(40, Math.floor(visible.length * 0.28)));
+  const zone = visible.slice(-windowSize);
+  const low = Math.min(...zone.map((bar: any) => Number(bar.low)));
+  const high = Math.max(...zone.map((bar: any) => Number(bar.high)));
+  const first = zone[0];
+  const last = zone[zone.length - 1];
+  return [
+    { time: first.time, price: low },
+    { time: last.time, price: high },
+  ];
+}
+
 type DiagnosticLocation = { file: string; line: number; column: number; functionName?: string };
 type ChartDiagnostic = DerivFeedDiagnostic & { id: number; timestamp: number; stack?: string; location?: DiagnosticLocation; operation?: string };
 
@@ -1405,9 +1425,18 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
           const price = Number(detail.price);
           if (Number.isFinite(price)) widget.chart.addPriceLine({ price, label: String(detail.label || 'SIRE level') } as any, 0);
         } else if (action === 'add_drawing') {
-          const tool = String(detail.tool || 'horizontal-line');
+          const requestedTool = String(detail.tool || 'horizontal-line').trim().toLowerCase();
+          const toolAliases: Record<string, string> = {
+            trend: 'trend-line',
+            trendline: 'trend-line',
+            trend_line: 'trend-line',
+            box: 'rectangle',
+            rect: 'rectangle',
+            zone: 'rectangle',
+          };
+          const tool = toolAliases[requestedTool] || requestedTool;
           const targetInterval = String(detail.interval || detail.timeframe || '');
-          const resolve = detail.resolveFromVisibleRange === true || tool === 'trend-line' || tool === 'ray' || tool === 'horizontal-line';
+          const resolve = detail.resolveFromVisibleRange === true || tool === 'trend-line' || tool === 'ray' || tool === 'horizontal-line' || tool === 'rectangle';
 
           const actionId = String(detail.actionId || `ai-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`);
           reportDiagnostic({ level: 'info', code: 'AI_AGENT_ACTION_STARTED', message: `SIRE started chart action ${action}: ${tool}`, detail: JSON.stringify({ actionId, symbol: symbolRef.current, timeframe: targetInterval || String(widgetRef.current?.interval?.() || ''), tool }).slice(0, 900), operation: actionId });
@@ -1440,7 +1469,9 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
             let points = resolve ? [] : (Array.isArray(detail.points) ? detail.points : []);
             if (resolve) {
               const range = (liveWidget.chart?.timeScale as any)?.getVisibleLogicalRange?.();
-              points = resolveTrendLinePoints(bars, range, tool);
+              points = tool === 'rectangle'
+                ? resolveRectanglePoints(bars, range)
+                : resolveTrendLinePoints(bars, range, tool);
             }
             if (points.length >= 2) {
               const before = (liveWidget.objects.list?.() || []).filter((item: any) => item?.kind === 'drawing').length;
