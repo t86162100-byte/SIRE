@@ -107,6 +107,30 @@ export default function App() {
     return () => window.removeEventListener('sire:open-research', open);
   }, []);
 
+  useEffect(() => {
+    const onAgentChartAction = (event: Event) => {
+      const detail = (event as CustomEvent).detail as Record<string, unknown> | undefined;
+      if (!detail) return;
+      const action = String(detail.__sireAction || detail.type || '');
+      if (action === 'set_multi_chart') {
+        const requestedLayout = Number(detail.layout ?? detail.count ?? 1);
+        const layout = requestedLayout >= 2 ? 2 : 1;
+        const requestedSymbols = Array.isArray(detail.symbols) ? detail.symbols.map(value => String(value)).filter(Boolean) : [];
+        setChartLayout(layout as 1 | 2);
+        if (requestedSymbols.length) setChartSymbols(current => layout === 2
+          ? [requestedSymbols[0] || current[0] || selected?.symbol || instruments[0]?.symbol || '', requestedSymbols[1] || current[1] || instruments[1]?.symbol || '']
+          : [requestedSymbols[0] || current[0] || selected?.symbol || instruments[0]?.symbol || '']);
+        if (detail.position === 'up' || detail.position === 'down' || detail.position === 'left' || detail.position === 'right') {
+          setMultiChartPosition(detail.position);
+        }
+      } else if (action === 'set_chart_linking') {
+        setLinked(Boolean(detail.enabled));
+      }
+    };
+    window.addEventListener('sire:agent-chart-action', onAgentChartAction);
+    return () => window.removeEventListener('sire:agent-chart-action', onAgentChartAction);
+  }, [instruments, selected?.symbol]);
+
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     return q
