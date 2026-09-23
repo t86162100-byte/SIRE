@@ -26,13 +26,11 @@ export async function runAiTeam(input:{query:string;workspaceId?:string;history?
   const result=await runGptHead({
     query,
     history:Array.isArray(input.history)?input.history.slice(-20):[],
-    symbol:input.symbol,
-    runtimeContext:input.runtimeContext,
     onEvent:async(e)=>{await ev(e.actor,e.phase,e.text);},
     tools:{
       askOpenAlgo:async(task)=>{
         const t=Date.now();await ev('OpenAlgo Agent','thinking','OpenAlgo Agent is inspecting the relevant chart, code, deployment, or tool context.');
-        const r=await runOpenAlgoAgent({query:task,history:Array.isArray(input.history)?input.history.slice(-20):[],symbol:input.symbol,runtimeContext:input.runtimeContext,councilContext:`Gemini delegated this task to you. Work on the concrete technical problem and return concise findings/actions for Gemini to use. Do not expose hidden chain-of-thought.\n\nUSER REQUEST:\n${query}\n\nDELEGATED TASK:\n${task}`});
+        const r=await runOpenAlgoAgent({query:task,history:Array.isArray(input.history)?input.history.slice(-20):[],symbol:input.symbol,runtimeContext:input.runtimeContext,councilContext:`GPT delegated this task to you. Work on the concrete technical problem and return concise findings/actions for GPT to use. Do not expose hidden chain-of-thought.\n\nUSER REQUEST:\n${query}\n\nDELEGATED TASK:\n${task}`});
         timings.openAlgo=Date.now()-t;return r.text;
       },
       webSearch:async(q)=>{
@@ -41,7 +39,7 @@ export async function runAiTeam(input:{query:string;workspaceId?:string;history?
       },
     }
   });
-  timings.geminiHead=Date.now()-headStarted;
+  timings.gptHead=Date.now()-headStarted;
   s.decisions=[...s.decisions,`GPT head completed the request and delegated only where useful.`].slice(-20);
   s.activity=[...s.activity,{actor:'GPT',phase:'conclusion',text:'GPT completed the response after deciding dynamically whether additional help was needed.',at:new Date().toISOString()}].slice(-40);
   const saveAt=Date.now();await save(s,loaded.id);timings.stateSave=Date.now()-saveAt;
