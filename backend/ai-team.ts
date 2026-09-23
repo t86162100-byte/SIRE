@@ -58,6 +58,32 @@ export async function runAiTeam(input:{query:string;workspaceId?:string;history?
  const loadedStarted=Date.now(); const loaded=await load(id,query); mark('stateLoad',loadedStarted);
  const s=loaded.state;s.goal=query;const history=Array.isArray(input.history)?input.history.slice(-20):[];const ev=(a:string,p:string,t:string)=>emit(input.onEvent,id,a,p,t);
  await ev('SIRE','starting','I’m receiving your message and starting the response. I’ll keep you updated while I work.');
+
+ // Fast path for ordinary conversation. Greetings and tiny social exchanges should never
+ // enter the router/council pipeline; that pipeline is reserved for work that benefits
+ // from tools, research, coding, chart context, or peer collaboration.
+ const instant=/^(hi|hey|hello|hey there|hello there|yo|hiya|good morning|good afternoon|good evening|thanks|thank you|thx|ok|okay|alright|cool|nice|great|yes|no|sure|bye|goodbye|how are you|how's it going|whats up|what's up)\\s*[!?.,]*$/i.test(query);
+ if(instant){
+   const directStarted=Date.now();
+   const instantReplies:Record<string,string>={
+     hi:'Hi! 👋 What can I help you with?',
+     hey:'Hey! 👋 What can I help you with?',
+     hello:'Hello! 👋 What can I help you with?',
+     'hey there':'Hey there! 👋 What can I help you with?',
+     'hello there':'Hello there! 👋 What can I help you with?',
+     yo:'Hey! 👋 What can I help you with?',
+     hiya:'Hi! 👋 What can I help you with?',
+     'how are you':"I’m good and ready to help. What are we working on?",
+     "how's it going":"Going well. What would you like to work on?",
+     'whats up':"I’m here and ready. What’s up?",
+     "what's up":"I’m here and ready. What’s up?"
+   };
+   const key=query.toLowerCase().replace(/[!?.,]+$/,'').trim();
+   const text=instantReplies[key] || (key==='thanks'||key==='thank you'||key==='thx' ? "You’re welcome! 👋" : "Got it. What’s next?");
+   const totalMs=Date.now()-runStarted;
+   recordAiRun({startedAt:new Date(runStarted).toISOString(),totalMs,stages:{stateLoad:timings.stateLoad||0,instantReply:Date.now()-directStarted},slowestStage:'instantReply',slowestMs:Date.now()-directStarted,mode:'instant-chat',queryType:query.slice(0,80),ok:true});
+   return {diagnostics:{totalMs,timings:{stateLoad:timings.stateLoad||0,instantReply:Date.now()-directStarted},slowestStage:'instantReply',slowestMs:Date.now()-directStarted},text,responseId:'',model:'SIRE instant conversation',provider:'SIRE AI Team',teamMode:'instant-chat',workspaceId:id,responsibilities:[],decisions:[],openQuestions:[],artifacts:[],activity:[{actor:'SIRE',phase:'direct',text:'Answered immediately without starting the AI team.',at:new Date().toISOString()}],execution:{status:'not_requested'},agentActions:[],agentSkills:[],agentToolTrace:[],webSearched:false,webSources:[]};
+ }
  const routerStarted=Date.now();
  await ev('SIRE','routing','I’m deciding whether this needs a direct answer, research, chart work, coding, Render/GitHub work, or the peer team.');
  const route=await runGemini({query:`You are the SIRE routing layer. You are not a teammate, boss, or decision maker. Your only job is to classify which capabilities are relevant so the three peer AIs can work together when useful. You are not tied to charts, coding, GitHub, Render, research, or the AI council. Normal conversation and unrelated topics should be answered directly without tools. Use chart only when the request actually concerns the user's chart or market/chart state. Use GitHub only for repository/code/file/source-control work. Use Render only for deployment, service, environment, logs, domains, infrastructure, or Render state. Use web research only when freshness or external sources are needed. Use peer collaboration when Gemini, GPT-OSS 20B, and OpenAlgo Agent can materially improve one another's work. Do not use a capability merely because it exists. Return JSON only: {"mode":"direct|chart|github|render|research|collaborate|mixed","useChart":false,"useGitHub":false,"useRender":false,"useWeb":false,"collaborate":false,"reason":"short reason"}. USER REQUEST: ${query}`,history,symbol:input.symbol,runtimeContext:input.runtimeContext,debateRole:'triage'});
