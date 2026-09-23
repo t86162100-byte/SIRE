@@ -235,6 +235,14 @@ export async function runOpenAlgoAgent(input: {
     answer = 'Requested MACD on the current chart.';
   }
 
+  // Deterministic moving-average fallback. Resolve the exact runtime id in FinancialChart
+  // and never claim success unless the chart bridge can verify the mutation.
+  if (/\b(moving\s+average|sma)\b/i.test(query) && !/\b(remove|delete|hide)\b/i.test(query) &&
+      !actions.some(a => String(a.__sireAction || a.type || '') === 'add_indicator')) {
+    actions.push({ __sireAction: 'add_indicator', type: 'add_indicator', indicatorId: 'sma', paneIndex: 0, settings: { period: 20 } });
+    answer = 'Requested a 20-period moving average on the current chart.';
+  }
+
   // Generic indicator request: open the picker without selecting or hardcoding a particular indicator.
   if (/\b(add|show|plot|put|apply)\s+(an?\s+)?indicator\b/i.test(query) &&
       !/\b(rsi|macd|ema|sma|supertrend|bollinger|adx|vwap)\b/i.test(query) &&
