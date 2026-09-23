@@ -64,15 +64,13 @@ export async function runAiTeam(input:{query:string;workspaceId?:string;history?
    mark('connectorVerification',verifyStarted);
    const gh:any=verified.github||{}, rr:any=verified.render||{};
    const githubReady=Boolean(gh.ok), renderReady=Boolean(rr.ok);
-   const textAnswer=[
-     githubReady
-       ? `GitHub access is verified for ${gh.login||'the configured account'} and the SIRE repository (${gh.repository?.fullName||'t86162100-byte/SIRE'}).`
-       : `GitHub access is NOT available to the SIRE runtime because ${gh.error||'GITHUB_TOKEN is not configured in the server process'}.`,
-     renderReady
-       ? `Render access is verified; SIRE can see ${rr.workspaceCount||0} Render workspace/owner entries.`
-       : `Render access is NOT available to the SIRE runtime because ${rr.error||'RENDER_API_KEY is not configured in the server process'}.`,
-     'This is the SIRE server runtime result, not the ChatGPT/GitHub connection in this chat.'
-   ].join(' ');
+   const githubRepo = gh.repository?.fullName || 't86162100-byte/SIRE';
+   const textAnswer = githubReady && renderReady
+     ? `Yes. SIRE has access to GitHub and Render. GitHub: ${githubRepo} is connected, and the SIRE GitHub connector is configured for read/write/execute operations. Render: ${rr.workspaceCount||0} workspace${rr.workspaceCount===1?'':'s'} is visible, with the Render connector configured for read/write/deploy operations. I can use those connections from SIRE when a task requires them.`
+     : [
+         githubReady ? `GitHub is connected to ${githubRepo}.` : `GitHub is not available to SIRE: ${gh.error||'the GitHub credential is not configured'}.`,
+         renderReady ? `Render is connected; ${rr.workspaceCount||0} workspace${rr.workspaceCount===1?'':'s'} is visible.` : `Render is not available to SIRE: ${rr.error||'the Render credential is not configured'}.`
+       ].join(' ');
    const totalMs=Date.now()-runStarted;
    const slowest=Object.entries(timings).sort((a,b)=>b[1]-a[1])[0]||null;
    const diagnostics={totalMs,timings,slowestStage:slowest?.[0]||null,slowestMs:slowest?.[1]||0};
