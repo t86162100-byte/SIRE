@@ -212,7 +212,41 @@ export default function ResearchLab({ symbol, instruments, onClose, onSelectInst
   };
   const startNewChat = () => { const created = createChat(); setChatSessions(previous => [created, ...previous].slice(0, 100)); setActiveChatId(created.id); setChatInput(''); setActivity([]); setWebSources([]); setLastError(false); setLastPrompt(''); setSidebarOpen(false); };
   const openChat = (id: string) => { setActiveChatId(id); setActivity([]); setWebSources([]); setLastError(false); setSidebarOpen(false); };
-  const deleteChat = (id: string) => { abortControllersRef.current.get(id)?.abort(); abortControllersRef.current.delete(id); cancelledJobsRef.current.add(id); writeJob(id, 'cancelled'); setProcessingChats(previous => previous.filter(chatId => chatId !== id)); setChatSessions(previous => previous.filter(chat => chat.id !== id)); if (activeChatId === id) { const replacement = chatSessions.find(chat => chat.id !== id); setActiveChatId(replacement?.id || null); } };
+  const deleteChat = (id: string) => {
+    // Deletion is a hard boundary: cancel in-flight work, invalidate the chat id,
+    // remove its persisted messages/jobs immediately, and prevent any late response
+    // from being written back into storage or sent as context on a future turn.
+    cancelledJobsRef.current.add(id);
+    abortControllersRef.current.get(id)?.abort();
+    abortControllersRef.current.delete(id);
+    try {
+      const rawSessions = window.localStorage.getItem('sire-chat-sessions');
+      const sessions = rawSessions ? JSON.parse(rawSessions) : [];
+      if (Array.isArray(sessions)) {
+        window.localStorage.setItem(
+          'sire-chat-sessions',
+          JSON.stringify(sessions.filter((chat: ChatSession) => chat?.id !== id)),
+        );
+      }
+      const rawJobs = window.localStorage.getItem('sire-chat-jobs');
+      const jobs = rawJobs ? JSON.parse(rawJobs) : [];
+      if (Array.isArray(jobs)) {
+        window.localStorage.setItem(
+          'sire-chat-jobs',
+          JSON.stringify(jobs.filter((job: PersistedJob) => job?.chatId !== id)),
+        );
+      }
+      if (window.localStorage.getItem('sire-active-chat-id') === id) {
+        window.localStorage.removeItem('sire-active-chat-id');
+      }
+    } catch { /* storage can be unavailable */ }
+    setProcessingChats(previous => previous.filter(chatId => chatId !== id));
+    setChatSessions(previous => previous.filter(chat => chat.id !== id));
+    if (activeChatId === id) {
+      const replacement = chatSessions.find(chat => chat.id !== id);
+      setActiveChatId(replacement?.id || null);
+    }
+  };
   const formatChatDate = (timestamp: number) => { const date = new Date(timestamp); const today = new Date(); const yesterday = new Date(Date.now() - 86400000); if (date.toDateString() === today.toDateString()) return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }); if (date.toDateString() === yesterday.toDateString()) return 'Yesterday'; return date.toLocaleDateString([], { month: 'short', day: 'numeric' }); };
   const suggestions = ['Explain this market to me', 'Research the latest news', 'Analyze the current chart'];
   return <div className="sire-chat-only-overlay"><section className="sire-chat-only" aria-label="SIRE conversation">
