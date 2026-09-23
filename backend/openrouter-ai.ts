@@ -109,7 +109,7 @@ export async function runGptHead(input: {
     type: 'function',
     function: {
       name: 'github_request',
-      description: 'Use SIRE's connected GitHub repository access for repository/code work. Use this when the user explicitly asks to inspect, debug, modify, commit, branch, or otherwise work on the repository implementation. Do NOT use this merely because a request concerns the visible chart; visible chart actions belong to the OpenAlgo Agent.',
+      description: "Use SIRE's connected GitHub repository access for repository/code work. Use this when the user explicitly asks to inspect, debug, modify, commit, branch, or otherwise work on the repository implementation. Do NOT use this merely because a request concerns the visible chart; visible chart actions belong to the OpenAlgo Agent.",
       parameters: {
         type: 'object',
         properties: {
@@ -151,7 +151,7 @@ export async function runGptHead(input: {
     // its action/result, force the head to produce the user-facing answer instead of
     // repeatedly delegating the same request until the tool-turn ceiling is reached.
     // After the chart specialist returns, synthesize the result instead of starting another tool chain.
-    const availableTools = toolDefs.filter((tool:any) => { const name = String(tool?.function?.name || ''); if (name === 'ask_openalgo' && openAlgoUsed) return false; return !usedToolCalls.has(name); });
+    const availableTools = openAlgoUsed ? [] : toolDefs.filter((tool:any) => !usedToolCalls.has(String(tool?.function?.name || '')));
     const result = await callOpenRouter(messages, availableTools);
     const message = result.message;
     const toolCalls = Array.isArray(message.tool_calls) ? message.tool_calls : [];
