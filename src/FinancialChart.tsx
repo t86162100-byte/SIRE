@@ -1134,8 +1134,90 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
             }
           }
         } else if (action === 'remove_indicator') {
-          const id = String(detail.instanceId || detail.id || '');
-          if (id) widget.chart.removeIndicator(id);
+          const requested = String(detail.instanceId || detail.id || detail.indicatorId || detail.name || '').trim();
+          const before = (widget.chart.indicators?.() || []) as any[];
+          const normalized = requested.toLowerCase().replace(/[^a-z0-9]+/g, '');
+          const target = before.find((item: any) =>
+            String(item?.id || '').toLowerCase() === requested.toLowerCase() ||
+            String(item?.name || '').toLowerCase() === requested.toLowerCase() ||
+            String(item?.id || '').toLowerCase().replace(/[^a-z0-9]+/g, '') === normalized ||
+            String(item?.name || '').toLowerCase().replace(/[^a-z0-9]+/g, '') === normalized
+          );
+          const id = String(target?.id || requested);
+          const actionId = String(detail.actionId || `ai-remove-indicator-${Date.now()}-${Math.random().toString(36).slice(2,8)}`);
+          if (!id) {
+            reportDiagnostic({ level:'error', code:'AI_AGENT_ACTION_FAILED', message:'The AI requested an indicator removal without identifying an indicator.', detail:JSON.stringify({actionId,requested}), operation:actionId });
+          } else {
+            try {
+              const removed = widget.chart.removeIndicator(id);
+              const verify = (attempt=0) => {
+                const current = (widgetRef.current?.chart?.indicators?.() || []) as any[];
+                const stillThere = current.some((item:any) => String(item?.id || '') === id);
+                if (!stillThere) {
+                  reportDiagnostic({ level:'info', code:'AI_AGENT_ACTION_VERIFIED', message:'SIRE verified the indicator was removed from the visible chart.', detail:JSON.stringify({actionId,id,requested}).slice(0,1200), operation:actionId });
+                  return;
+                }
+                if (attempt < 20) { window.setTimeout(() => verify(attempt+1),100); return; }
+                reportDiagnostic({ level:'error', code:'AI_AGENT_ACTION_FAILED', message:'The indicator removal did not change the visible chart.', detail:JSON.stringify({actionId,id,requested,indicators:current}).slice(0,1800), operation:actionId });
+              };
+              void removed;
+              window.setTimeout(() => verify(),0);
+            } catch(error) {
+              reportDiagnostic({ level:'error', code:'AI_AGENT_ACTION_FAILED', message:error instanceof Error ? error.message : 'OpenAlgo rejected the indicator removal.', detail:JSON.stringify({actionId,id,requested}), ...diagnosticErrorDetails(error,'remove_indicator') });
+            }
+          }
+        } else if (action === 'remove_drawing') {
+          const requested = String(detail.id || detail.drawingId || detail.name || '').trim();
+          const normalized = requested.toLowerCase().replace(/[^a-z0-9]+/g,'');
+          const rows = (widget.objects.list?.() || []) as any[];
+          const target = rows.find((item:any) => item?.kind === 'drawing' && (
+            String(item?.id || '').toLowerCase() === requested.toLowerCase() ||
+            String(item?.name || '').toLowerCase() === requested.toLowerCase() ||
+            String(item?.id || '').toLowerCase().replace(/[^a-z0-9]+/g,'') === normalized ||
+            String(item?.name || '').toLowerCase().replace(/[^a-z0-9]+/g,'') === normalized ||
+            (detail.selected === true && item?.selected)
+          ));
+          const id = String(target?.id || requested);
+          const actionId = String(detail.actionId || `ai-remove-drawing-${Date.now()}-${Math.random().toString(36).slice(2,8)}`);
+          try {
+            const removed = id ? widget.objects.remove(id) : false;
+            const verify = (attempt=0) => {
+              const current = (widgetRef.current?.objects.list?.() || []) as any[];
+              if (!current.some((item:any)=>item?.kind==='drawing' && String(item?.id||'')===id)) {
+                reportDiagnostic({level:'info',code:'AI_AGENT_ACTION_VERIFIED',message:'SIRE verified the drawing was removed from the visible chart.',detail:JSON.stringify({actionId,id,requested}).slice(0,1200),operation:actionId});
+                return;
+              }
+              if(attempt<20){window.setTimeout(()=>verify(attempt+1),100);return;}
+              reportDiagnostic({level:'error',code:'AI_AGENT_ACTION_FAILED',message:'The drawing removal did not change the visible chart.',detail:JSON.stringify({actionId,id,requested}).slice(0,1400),operation:actionId});
+            };
+            void removed; window.setTimeout(()=>verify(),0);
+          } catch(error) {
+            reportDiagnostic({level:'error',code:'AI_AGENT_ACTION_FAILED',message:error instanceof Error?error.message:'OpenAlgo rejected the drawing removal.',detail:JSON.stringify({actionId,id,requested}),...diagnosticErrorDetails(error,'remove_drawing')});
+          }
+        } else if (action === 'set_drawing_visibility' || action === 'set_drawing_lock') {
+          const requested = String(detail.id || detail.drawingId || detail.name || '').trim();
+          const rows = (widget.objects.list?.() || []) as any[];
+          const target = rows.find((item:any)=>item?.kind==='drawing' && (String(item?.id||'')===requested || String(item?.name||'').toLowerCase()===requested.toLowerCase() || (detail.selected===true && item?.selected)));
+          if (!target) {
+            reportDiagnostic({level:'error',code:'AI_AGENT_ACTION_FAILED',message:'The requested drawing was not found.',detail:JSON.stringify({requested,action}),operation:action});
+          } else {
+            const on = detail.visible !== undefined ? Boolean(detail.visible) : detail.locked !== undefined ? Boolean(detail.locked) : true;
+            if(action==='set_drawing_visibility') widget.objects.setVisible(target.id,on);
+            else widget.objects.setLocked(target.id,on);
+            window.setTimeout(()=>{
+              const row=(widgetRef.current?.objects.list?.()||[]).find((item:any)=>item?.id===target.id) as any;
+              const ok=action==='set_drawing_visibility' ? Boolean(row?.visible)===on : Boolean(row?.locked)===on;
+              reportDiagnostic({level:ok?'info':'error',code:ok?'AI_AGENT_ACTION_VERIFIED':'AI_AGENT_ACTION_FAILED',message:ok?'SIRE verified the drawing setting change.':'The drawing setting change was not reflected by the chart.',detail:JSON.stringify({actionId:detail.actionId||action,id:target.id,on,action}).slice(0,1200),operation:String(detail.actionId||action)});
+            },50);
+          }
+        } else if (action === 'focus_drawing' || action === 'open_drawing_settings') {
+          const requested=String(detail.id||detail.drawingId||detail.name||'').trim();
+          const target=(widget.objects.list?.()||[]).find((item:any)=>item?.kind==='drawing' && (String(item?.id||'')===requested || String(item?.name||'').toLowerCase()===requested.toLowerCase() || (detail.selected===true && item?.selected))) as any;
+          if(target) {
+            if(action==='focus_drawing') widget.objects.focus(target.id);
+            else widget.objects.openSettings(target.id);
+            reportDiagnostic({level:'info',code:'AI_AGENT_ACTION_VERIFIED',message:'SIRE opened the requested drawing control.',detail:JSON.stringify({action,id:target.id}).slice(0,1000),operation:String(detail.actionId||action)});
+          } else reportDiagnostic({level:'error',code:'AI_AGENT_ACTION_FAILED',message:'The requested drawing was not found.',detail:JSON.stringify({requested}),operation:action});
         } else if (action === 'add_price_line') {
           const price = Number(detail.price);
           if (Number.isFinite(price)) widget.chart.addPriceLine({ price, label: String(detail.label || 'SIRE level') } as any, 0);
@@ -1224,6 +1306,24 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
           anchor.download = String(detail.filename || 'sire-chart.svg');
           anchor.click();
           URL.revokeObjectURL(url);
+        } else if (action === 'replay_start') {
+          const requestedStart = detail.start || detail.startTime || detail.replayStart;
+          const requestedEnd = detail.end || detail.endTime || detail.replayEnd;
+          const speed = Number(detail.speed);
+          if (Number.isFinite(speed) && speed > 0) { replaySpeedRef.current = speed; setReplayDraftSpeed(speed); }
+          if (typeof requestedStart === 'string') setReplayStartInput(requestedStart);
+          if (typeof requestedEnd === 'string') setReplayEndInput(requestedEnd);
+          const fromBeginning = Boolean(detail.fromBeginning);
+          window.setTimeout(() => {
+            void startReplayFromInputs(fromBeginning, true);
+          }, 0);
+        } else if (action === 'replay_set_speed') {
+          const speed = Number(detail.speed);
+          if (Number.isFinite(speed) && speed > 0) {
+            replaySpeedRef.current = speed; setReplayDraftSpeed(speed);
+            if (replayRef.current) replayRef.current.play({ speed });
+            reportDiagnostic({level:'info',code:'AI_AGENT_ACTION_VERIFIED',message:'SIRE applied the requested replay speed.',detail:JSON.stringify({speed}),operation:String(detail.actionId||action)});
+          }
         } else if (action === 'replay_play') {
           const replay = replayRef.current;
           if (replay && !replay.state().playing) replay.play({ speed: replaySpeedRef.current });
@@ -1233,6 +1333,20 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
           replayRef.current?.step();
         } else if (action === 'replay_stop') {
           stopReplay();
+        } else if (action === 'set_tpo') {
+          setTpoEnabled(Boolean(detail.enabled));
+          reportDiagnostic({level:'info',code:'AI_AGENT_ACTION_VERIFIED',message:'SIRE changed the chart profile/TPO setting.',detail:JSON.stringify({enabled:Boolean(detail.enabled)}),operation:String(detail.actionId||action)});
+        } else if (action === 'open_advanced') {
+          setAdvancedOpen(Boolean(detail.open ?? true));
+        } else if (action === 'open_drawings') {
+          setDrawRackOpen(Boolean(detail.open ?? true));
+        } else if (action === 'set_chart_options') {
+          const options = detail.options;
+          if (!options || typeof options !== 'object') throw new Error('set_chart_options requires an options object');
+          widget.chart.applyOptions(options as any);
+          reportDiagnostic({level:'info',code:'AI_AGENT_ACTION_VERIFIED',message:'SIRE applied chart customization options.',detail:JSON.stringify(options).slice(0,1600),operation:String(detail.actionId||action)});
+        } else if (action === 'open_objects') {
+          widget.openObjects();
         }
         if (action !== 'set_timeframe') {
           reportDiagnostic({ level: 'info', code: 'AI_AGENT_CHART_ACTION', message: 'SIRE AI agent applied chart action: ' + action, detail: JSON.stringify(detail).slice(0, 900) });
