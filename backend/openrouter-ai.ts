@@ -151,11 +151,30 @@ export async function runGptHead(input: {
 
     if (!toolCalls.length) {
       const text = textFromResponse({ choices: [{ message }] });
-      if (!text) throw new Error('GPT head returned no text');
+      if (!text) {
+        const recoveryMessages = [
+          ...messages,
+          { role: 'system', content: 'The previous model turn completed its tool work but did not provide visible text. Give the user a concise final answer now. Do not call tools in this recovery response.' },
+        ];
+        const recovery = await callOpenRouter(recoveryMessages);
+        const recoveryText = textFromResponse({ choices: [{ message: recovery.message }] });
+        if (!recoveryText) {
+          const fallback = chartActions.length
+            ? 'The requested chart action was sent to the live chart.'
+            : 'The request was processed, but GPT did not return a visible response.';
+          return { text: fallback, responseId: recovery.responseId || result.responseId, model: MODEL, provider: 'OpenAI gpt-oss via OpenRouter', actions: chartActions };
+        }
+        return { text: recoveryText.slice(0, MAX_OUTPUT_CHARS), responseId: recovery.responseId || result.responseId, model: MODEL, provider: 'OpenAI gpt-oss via OpenRouter', actions: chartActions };
+      }
       return { text: text.slice(0, MAX_OUTPUT_CHARS), responseId: result.responseId, model: MODEL, provider: 'OpenAI gpt-oss via OpenRouter', actions: chartActions };
     }
 
-    messages.push({ role: 'assistant', content: message.content ?? '', tool_calls: toolCalls });
+    messages.push({
+      role: 'assistant',
+      content: message.content ?? '',
+      tool_calls: toolCalls,
+      ...(Array.isArray(message.reasoning_details) ? { reasoning_details: message.reasoning_details } : {}),
+    });
 
     for (const call of toolCalls) {
       const name = String(call?.function?.name || '');
