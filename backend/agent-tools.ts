@@ -196,8 +196,10 @@ export async function webSearch(query: string, limit = 8) {
 export async function verifyConfiguredConnectors() {
   const checks: Record<string, unknown> = {};
   const connectors = discoverConnectors();
+  if (!process.env.GITHUB_TOKEN) checks.github = { ok: false, configured: false, error: 'GITHUB_TOKEN is not present in the SIRE server process environment' };
+  if (!process.env.RENDER_API_KEY) checks.render = { ok: false, configured: false, error: 'RENDER_API_KEY is not present in the SIRE server process environment' };
   await Promise.all([
-    connectors.some(x => x.id === 'github') ? (async () => {
+    process.env.GITHUB_TOKEN && connectors.some(x => x.id === 'github') ? (async () => {
       try {
         const [user, repo] = await Promise.all([
           connectorRequest('github', '/user', {}, 'read') as Promise<Record<string, unknown>>,
@@ -217,7 +219,7 @@ export async function verifyConfiguredConnectors() {
         checks.github = { ok: false, error: error instanceof Error ? error.message : String(error) };
       }
     })() : Promise.resolve(),
-    connectors.some(x => x.id === 'render') ? (async () => {
+    process.env.RENDER_API_KEY && connectors.some(x => x.id === 'render') ? (async () => {
       try {
         const workspaces = await connectorRequest('render', '/owners?limit=100', {}, 'read') as Record<string, unknown>;
         const owners = Array.isArray(workspaces?.items) ? workspaces.items : Array.isArray(workspaces) ? workspaces : [];
