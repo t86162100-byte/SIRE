@@ -1011,8 +1011,7 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
     setMarketQuote(null);
     lastTickAtRef.current = null;
     lastLiveQuoteRef.current = null;
-    diagnosticsRef.current = [];
-    setDiagnostics([]);
+    // Keep chart diagnostics persistent across instrument/timeframe changes.
     if (widget.symbol() !== symbol) widget.setSymbol(symbol, 'DERIV');
   }, [symbol]);
 
@@ -1098,14 +1097,9 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
           const type = String(detail.chartType || detail.typeId || '');
           if (type) widget.setChartType(type);
         } else if (action === 'add_indicator') {
+          // Indicator ids are resolved by OpenAlgo; SIRE does not hard-code a particular indicator.
           const rawId = String(detail.indicatorId || detail.id || '').trim();
-          const indicatorAliases: Record<string,string> = {
-            rsi: 'rsi', 'relative strength index': 'rsi',
-            macd: 'macd', ema: 'ema', sma: 'sma', wma: 'wma',
-            bollinger: 'bollinger', 'bollinger bands': 'bollinger',
-            stochastic: 'stochastic', adx: 'adx', atr: 'atr', vwap: 'vwap',
-          };
-          const id = indicatorAliases[rawId.toLowerCase()] || rawId.toLowerCase();
+          const id = rawId.toLowerCase();
           if (!id) {
             reportDiagnostic({ level:'error', code:'AI_AGENT_ACTION_FAILED', message:'The AI requested an indicator without an indicator id.', detail:JSON.stringify(detail).slice(0,900), operation:'add_indicator' });
           } else {
@@ -1268,6 +1262,8 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
         visibleBars: visible ? Math.max(0, Math.ceil(Number(visible.to) - Number(visible.from) + 1)) : null,
         visibleRange: visible || null,
         activeIndicators: indicators,
+        availableIndicatorIds: Array.from(new Set(indicators.map((item: any) => String(item?.id || '').trim()).filter(Boolean))),
+        chartDiagnostics: diagnosticsRef.current.slice(-200),
         drawings,
         replay: replayRef.current?.state?.() || null,
         chartState: chart?.getState?.() || null,
