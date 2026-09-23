@@ -1102,7 +1102,15 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
           const catalog = registeredIndicators() as any[];
           const normalizeIndicatorText = (value: unknown) => String(value || '').toLowerCase().replace(/[^a-z0-9]+/g, '');
           const requestedKey = normalizeIndicatorText(rawId);
-          const exact = catalog.find((item: any) => normalizeIndicatorText(item?.id) === requestedKey || normalizeIndicatorText(item?.name || item?.label || item?.title) === requestedKey);
+          const indicatorAliases: Record<string,string[]> = {
+            sma: ['simplemovingaverage','movingaverage','movingavg','sma'],
+            ma: ['movingaverage','movingavg','sma'],
+            movingaverage: ['simplemovingaverage','movingaverage','movingavg','sma'],
+            macd: ['macd','movingaverageconvergencedivergence'],
+            ema: ['exponentialmovingaverage','ema'],
+          };
+          const candidateKeys = new Set([requestedKey, ...(indicatorAliases[requestedKey] || [])]);
+          const exact = catalog.find((item: any) => candidateKeys.has(normalizeIndicatorText(item?.id)) || candidateKeys.has(normalizeIndicatorText(item?.name || item?.label || item?.title)));
           const fuzzy = exact || catalog.find((item: any) => {
             const key = normalizeIndicatorText(item?.id);
             const name = normalizeIndicatorText(item?.name || item?.label || item?.title);
