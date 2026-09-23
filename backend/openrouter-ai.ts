@@ -64,7 +64,7 @@ function systemPrompt() {
     'The CURRENT USER MESSAGE is the only task you are executing now. Previous conversation history is context only, not a pending task, instruction, or requirement. Never continue, repeat, or enforce an action from an earlier message unless the current user message explicitly asks for it.',
     'Do not let earlier requests for GitHub, Render, web search, deployments, repository edits, or other tools cause you to call those tools for a new unrelated request.',
     'You are above the available tools and decide when they are useful. You are not required to use a tool.',
-    'You have direct access to the active SIRE chart runtime context and direct chart-control actions. Treat that context as authoritative for the current chart. web_search for current external information; GitHub for repository inspection and repository changes when the user asks for them or they are materially needed.',
+    'You have direct access to the active SIRE chart runtime context and direct chart-control actions. Treat that context as authoritative for the current chart. For EVERY request that asks you to change the chart (add/remove/configure an indicator, change timeframe or chart type, draw, replay, select an instrument, or otherwise operate the chart), you MUST call chart_control with the concrete action(s) before claiming the change was made. Never merely say an indicator was added without issuing the chart_control action. For an indicator request, use __sireAction: add_indicator and indicatorId such as macd, rsi, ema, sma, bollinger, etc. Include settings only when requested or needed. web_search for current external information; GitHub for repository inspection and repository changes when the user asks for them or they are materially needed.',
     'Use a helper only when it materially improves the answer. After a helper returns, evaluate its result yourself and continue reasoning.',
     'GitHub access is real and may be read/write. When a repository task requires it, inspect the repository first, then make the requested changes through the GitHub tool and report the actual result. Never claim you searched, inspected, changed, deployed, or verified something unless the runtime actually performed that action.',
     'Visible activity should contain only concise work summaries, never private chain-of-thought.',
@@ -91,20 +91,7 @@ export async function runGptHead(input: {
 
   const toolDefs: any[] = [];
   if (input.tools?.chartControl) toolDefs.push({ type: 'function', function: { name: 'chart_control', description: 'Directly operate the active SIRE chart using the authoritative live runtime context. Use for instrument selection, timeframe, chart type, indicators, drawings, replay, chart linking, multi-chart layout and supported chart actions. Do not ask for the current instrument when the context supplies it.', parameters: { type:'object', properties: { actions:{ type:'array', items:{type:'object', additionalProperties:true} } }, required:['actions'], additionalProperties:false } } });
-  if (input.tools?.chartControl) toolDefs.push({
-    type: 'function',
-    function: {
-      name: 'chart_control',
-      description: 'Directly operate the active SIRE chart. You receive the live chart runtime context below. Use this for instrument selection, timeframe changes, chart type, indicators, drawings, replay, chart linking, multi-chart layout, and other supported chart operations. Do not ask the user for the current instrument when runtime context already provides it. Return all requested chart actions in one call when possible.',
-      parameters: {
-        type: 'object',
-        properties: {
-          actions: { type: 'array', items: { type: 'object', additionalProperties: true }, description: 'Chart actions. Each action must contain __sireAction (or type) and the action-specific fields.' }
-        },
-        required: ['actions'], additionalProperties: false
-      }
-    }
-  });
+
   if (input.tools?.checkIntegrations) toolDefs.push({
     type: 'function',
     function: {
