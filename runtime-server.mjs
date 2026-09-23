@@ -16,6 +16,7 @@ import { realtime } from './backend/realtime.ts';
 import { getStoredHistory, persistHistoryBars, historyStoreStatus } from './backend/deriv-history-store.ts';
 import { signup, login, logout, currentUser, googleStart, googleCallback } from './backend/auth.ts';
 import { runSireDiagnostics } from './backend/sire-diagnostics.ts';
+import { recordIssue, getRecentIssues } from './backend/sire-issue-tracker.ts';
 
 const PORT = Number(process.env.PORT || 10000);
 const HOST = '0.0.0.0';
@@ -179,6 +180,19 @@ const server = http.createServer(async (req,res) => {
     if (pathname === '/api/auth/logout' && req.method === 'POST') { const result = await logout(req); return res.writeHead(200,{ 'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8','Access-Control-Allow-Credentials':'true','Set-Cookie':result.setCookie }).end(JSON.stringify({ ok:true })); }
     if (req.method === 'POST' && pathname === '/api/sire/autonomous') { const parsed = body ? JSON.parse(body) : {}; if (!String(parsed.task || '').trim()) return res.writeHead(400,{ 'Access-Control-Allow-Origin':'*','Content-Type':'application/json; charset=utf-8' }).end(JSON.stringify({ error:'task is required' })); try { const response = await runAgent(String(parsed.task)); return res.writeHead(200,{ 'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8' }).end(JSON.stringify(response)); } catch (cause) { const message = cause instanceof Error ? cause.message : String(cause); console.error('[AUTONOMOUS AGENT]', message); return res.writeHead(502,{ 'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8' }).end(JSON.stringify({ error:message })); } }
     if (req.method === 'GET' && pathname === '/api/sire/autonomous/health') return res.writeHead(200,{ 'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8' }).end(JSON.stringify({ ok:true, service:'sire-autonomous-runtime', gateway:'127.0.0.1:10001', continuousWorker:true, webSearch:true, webSearchProvider:'SearXNG', webSearchFree:true }));
+    if (req.method === 'POST' && pathname === '/api/sire/issues') {
+      try {
+        const parsed = body ? JSON.parse(body) : {};
+        const issue = recordIssue(parsed);
+        console.error('[SIRE ISSUE TRACE]', JSON.stringify(issue));
+        return res.writeHead(201,{ 'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8' }).end(JSON.stringify({ok:true,issue}));
+      } catch (cause) {
+        return res.writeHead(400,{ 'Access-Control-Allow-Origin':'*','Content-Type':'application/json; charset=utf-8' }).end(JSON.stringify({ok:false,error:cause instanceof Error?cause.message:String(cause)}));
+      }
+    }
+    if (req.method === 'GET' && pathname === '/api/sire/issues') {
+      return res.writeHead(200,{ 'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8' }).end(JSON.stringify({ok:true,issues:getRecentIssues()}));
+    }
     if (req.method === 'GET' && pathname === '/api/sire/diagnostics') { try { const report = await runSireDiagnostics(); return res.writeHead(report.ok ? 200 : 502,{ 'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8' }).end(JSON.stringify(report)); } catch (cause) { const message = cause instanceof Error ? cause.message : String(cause); return res.writeHead(500,{ 'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8' }).end(JSON.stringify({ ok:false, error:message, noSecrets:true })); } }
     if (req.method === 'POST' && pathname === '/api/sire/deriv/history') {
       let parsed = {};
