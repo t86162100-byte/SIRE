@@ -48,10 +48,10 @@ export async function runAiTeam(input:{query:string;workspaceId?:string;history?
         const method=String(input.method||'GET').toUpperCase();
         const permission=String(input.permission||((method==='GET')?'read':'write'));
         const path=String(input.path||'').trim();
-        if(!path.startsWith('/')) throw new Error('GitHub API path must start with /');
-        if(method==='GET') return JSON.stringify(await connectorRequest('github',path,{method},'read'));
+        const normalizedPath=path.startsWith('/')?path:`/${path}`;
+        if(method==='GET') return JSON.stringify(await connectorRequest('github',normalizedPath,{method},'read'));
         const body=input.body===undefined?undefined:JSON.stringify(input.body);
-        return JSON.stringify(await connectorRequest('github',path,{
+        return JSON.stringify(await connectorRequest('github',normalizedPath,{
           method,
           headers: body ? {'content-type':'application/json'} : undefined,
           body,
