@@ -163,7 +163,18 @@ export default function ResearchLab({ symbol, instruments, onClose, onSelectInst
       try { window.localStorage.setItem('sire-issue-finder-logs', JSON.stringify(next)); } catch {}
       return next;
     });
-  }, [runtimeContext]); useEffect(() => { if(!currentChatBusy || !thinkingSince){ setThinkingSeconds(0); return; } const tick=()=>setThinkingSeconds(Math.max(0,Math.floor((Date.now()-thinkingSince)/1000))); tick(); const timer=window.setInterval(tick,1000); return ()=>window.clearInterval(timer); }, [currentChatBusy, thinkingSince]); useEffect(() => { setActiveSymbol(symbol); }, [symbol]); useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' }); }, [chatMessages, currentChatBusy, activity, webSources]);
+  }, [runtimeContext]); useEffect(() => { if(!currentChatBusy || !thinkingSince){ setThinkingSeconds(0); return; } const tick=()=>setThinkingSeconds(Math.max(0,Math.floor((Date.now()-thinkingSince)/1000))); tick(); const timer=window.setInterval(tick,1000); return ()=>window.clearInterval(timer); }, [currentChatBusy, thinkingSince]); useEffect(() => {
+    if (!activity.length) return;
+    const latest=activity[activity.length-1];
+    const id='activity-'+latest.actor+'-'+latest.phase+'-'+latest.text;
+    setIssueLogs(previous => {
+      if (previous.some(item => item.id===id)) return previous;
+      const next=[...previous,{id,timestamp:Date.now(),source:latest.actor,level:'info',message:latest.text}].slice(-500);
+      try { window.localStorage.setItem('sire-issue-finder-logs', JSON.stringify(next)); } catch {}
+      return next;
+    });
+  }, [activity]);
+  useEffect(() => { setActiveSymbol(symbol); }, [symbol]); useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' }); }, [chatMessages, currentChatBusy, activity, webSources]);
 
   const buildRuntimeContext = (): RuntimeContext => ({ ...(runtimeContextRef.current || (typeof window !== 'undefined' ? ((window as any).__sireChartContexts?.[activeSymbol] || { symbol: activeSymbol }) : { symbol: activeSymbol })), availableInstruments: instruments.map(instrument => ({ symbol: instrument.symbol, name: instrument.name })) });
   const runDiagnostics = async () => {
