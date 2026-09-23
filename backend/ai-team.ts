@@ -57,8 +57,8 @@ export async function runAiTeam(input:{query:string;workspaceId?:string;history?
  const runStarted=Date.now(); const timings:Record<string,number>={}; const mark=(name:string,started:number)=>{timings[name]=Date.now()-started;};
  const loadedStarted=Date.now(); const loaded=await load(id,query); mark('stateLoad',loadedStarted);
  const s=loaded.state;s.goal=query;const history=Array.isArray(input.history)?input.history.slice(-20):[];const ev=(a:string,p:string,t:string)=>emit(input.onEvent,id,a,p,t);
- const fastPath=/^(hi|hello|hey|thanks|thank you|ok|okay|good morning|good afternoon|good evening|how are you|what can you do)\\b/i.test(query)
-   || /\\b(analy[sz]e the (current|this|my) chart|chart analysis|analy[sz]e current market)\\b/i.test(query);
+ const fastPath=/^(hi|hello|hey|thanks|thank you|ok|okay|good morning|good afternoon|good evening|how are you|what can you do)\b/i.test(query)
+   || /\b(analy[sz]e the (current|this|my) chart|chart analysis|analy[sz]e current market)\b/i.test(query);
  if(fastPath){
    const fastStarted=Date.now();
    await ev('SIRE','checking',/chart/i.test(query)?'Reading the current chart context directly.':'Answering directly without running the full council.');
