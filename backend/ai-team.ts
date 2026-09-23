@@ -1,7 +1,7 @@
 import { db } from '@appdeploy/sdk';
 import { runGemini } from './gemini-ai.ts';
 import { runOpenRouter } from './openrouter-ai.ts';
-import { webSearch } from './agent-tools.ts';
+import { webSearch, verifyConfiguredConnectors } from './agent-tools.ts';
 import { runOpenAlgoAgent } from './openalgo-agent.ts';
 
 type TeamEvent = (e:{actor:string;phase:string;text:string;workspaceId:string})=>void|Promise<void>;
