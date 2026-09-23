@@ -202,7 +202,7 @@ export default function ResearchLab({ symbol, instruments, onClose, onSelectInst
     const started=Date.now();
     try {
       const context=buildRuntimeContext();
-      const [serverResponse, derivResponse]=await Promise.all([fetch('/api/sire/diagnostics',{cache:'no-store'}),fetch('/api/sire/deriv/health',{cache:'no-store'})]);
+      const [serverResponse, derivResponse, issueResponse]=await Promise.all([fetch('/api/sire/diagnostics',{cache:'no-store'}),fetch('/api/sire/deriv/health',{cache:'no-store'}),fetch('/api/sire/issues',{cache:'no-store'})]);
       const server=await serverResponse.json().catch(()=>({ok:false,error:'Diagnostics HTTP '+serverResponse.status}));
       const deriv=await derivResponse.json().catch(()=>({ok:false,error:'Deriv health HTTP '+derivResponse.status}));
       const checks:DiagnosticCheck[]=[...(Array.isArray(server.checks)?server.checks:[])];
