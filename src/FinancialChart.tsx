@@ -299,6 +299,105 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
   const replayModeRef = useRef(false);
   const replayCleanupRef = useRef<(() => void) | null>(null);
 
+  // SIRE GPT chart-control bridge: chart mutations are executed against the live
+  // widget here, not merely acknowledged in chat. The bridge is intentionally
+  // scoped to this chart instance so actions always target the active chart.
+  useEffect(() => {
+    const handleAgentChartAction = (event: Event) => {
+      const detail = (event as CustomEvent).detail as Record<string, unknown> | undefined;
+      if (!detail) return;
+      const action = String(detail.__sireAction || detail.type || '').trim().toLowerCase();
+      if (!action) return;
+      const targetSymbol = detail.symbol ? String(detail.symbol) : '';
+      if (targetSymbol && targetSymbol !== symbolRef.current) return;
+
+      const widget = widgetRef.current;
+      if (!widget) {
+        reportDiagnostic({
+          code: 'CHART_ACTION_FAILED',
+          level: 'error',
+          message: `GPT chart action "${action}" was requested before the chart widget was ready.`,
+          detail: 'The chart-control bridge received the action, but widgetRef.current was unavailable.',
+          operation: action,
+        });
+        return;
+      }
+
+      try {
+        if (action === 'add_indicator') {
+          const indicatorId = String(detail.indicatorId || detail.id || detail.indicator || '').trim().toLowerCase();
+          if (!indicatorId) throw new Error('add_indicator requires indicatorId.');
+          const settings = (detail.settings && typeof detail.settings === 'object') ? detail.settings as Record<string, unknown> : {};
+          const paneIndex = Number.isFinite(Number(detail.paneIndex)) ? Number(detail.paneIndex) : undefined;
+          widget.chart.addIndicator(indicatorId, settings as any, paneIndex === undefined ? {} : { paneIndex });
+          reportDiagnostic({
+            code: 'CHART_ACTION_APPLIED',
+            level: 'info',
+            message: `GPT added indicator "${indicatorId}".`,
+            detail: JSON.stringify({ indicatorId, settings, paneIndex }),
+            operation: action,
+          });
+          return;
+        }
+
+        if (action === 'remove_indicator') {
+          const requestedId = String(detail.indicatorId || detail.id || detail.indicator || '').trim().toLowerCase();
+          const requestedName = String(detail.name || '').trim().toLowerCase();
+          const indicators = typeof (widget.chart as any).indicators === 'function' ? (widget.chart as any).indicators() : [];
+          const list = Array.isArray(indicators) ? indicators : [];
+          const match = list.find((indicator: any) => {
+            const id = String(indicator?.id || indicator?.indicatorId || '').toLowerCase();
+            const name = String(indicator?.name || '').toLowerCase();
+            return (requestedId && id === requestedId) || (requestedName && name === requestedName);
+          });
+          if (!match?.remove) throw new Error(`Indicator "${requestedId || requestedName || 'unknown'}" is not currently removable through the chart API.`);
+          match.remove();
+          return;
+        }
+
+        if (action === 'open_indicator_picker') {
+          widget.openIndicatorPicker();
+          return;
+        }
+
+        if (action === 'set_timeframe') {
+          const interval = String(detail.interval || detail.timeframe || '').trim();
+          if (!interval) throw new Error('set_timeframe requires interval.');
+          setActiveTimeframe(interval);
+          widget.setInterval(interval);
+          return;
+        }
+
+        if (action === 'set_chart_type') {
+          const chartType = String(detail.chartType || detail.typeName || '').trim();
+          if (!chartType) throw new Error('set_chart_type requires chartType.');
+          widget.setChartType(chartType as any);
+          return;
+        }
+
+        if (action === 'set_chart_view') {
+          const settings = (detail.settings && typeof detail.settings === 'object') ? detail.settings as Record<string, unknown> : {};
+          const chart = widget.chart as any;
+          if (settings.fitContent && typeof chart.timeScale?.fitContent === 'function') chart.timeScale.fitContent();
+          if (Number.isFinite(Number(settings.visibleBars)) && typeof chart.timeScale?.fitContent === 'function') chart.timeScale.fitContent(Number(settings.visibleBars));
+          return;
+        }
+      } catch (error) {
+        reportDiagnostic({
+          code: 'CHART_ACTION_FAILED',
+          level: 'error',
+          message: error instanceof Error ? error.message : String(error),
+          detail: JSON.stringify(detail),
+          operation: action,
+          ...diagnosticErrorDetails(error, action),
+        });
+      }
+    };
+
+    window.addEventListener('sire:agent-chart-action', handleAgentChartAction);
+    return () => window.removeEventListener('sire:agent-chart-action', handleAgentChartAction);
+  }, []);
+
   const dataFeedRef = useRef<ReturnType<typeof createDerivDataFeed> | null>(null);
   const instrumentsRef = useRef(instruments);
   const onSelectInstrumentRef = useRef(onSelectInstrument);
