@@ -45,29 +45,6 @@ async function handleTeamRequest(parsed, onEvent) {
   return { ...response, councilMode: 'shared-workspace-team', rounds: response.activity.length };
 }
 
-async function handleDirectOpenAlgoAgentRequest(parsed) {
-  const query = String(parsed.query || '').trim();
-  if (!query) throw new Error('query is required');
-  const agent = await runOpenAlgoAgent({
-    query,
-    history: Array.isArray(parsed.history) ? parsed.history : [],
-    symbol: parsed.symbol ? String(parsed.symbol) : undefined,
-    runtimeContext: parsed.runtimeContext && typeof parsed.runtimeContext === 'object' ? parsed.runtimeContext : undefined,
-  });
-  return {
-    text: agent.text,
-    responseId: agent.responseId || '',
-    model: agent.model,
-    provider: agent.provider,
-    actions: agent.actions,
-    agentActions: agent.actions,
-    agentSkills: agent.skills,
-    agentToolTrace: agent.toolTrace,
-    agentMode: agent.agentMode,
-    agentOnly: true,
-  };
-}
-
 async function handleDirectGptRequest(parsed) {
   const query = String(parsed.query || '').trim();
   if (!query) throw new Error('query is required');
@@ -259,18 +236,6 @@ const server = http.createServer(async (req,res) => {
     if (req.method === 'POST' && pathname === '/api/sire/agent/chat') { const parsed = body ? JSON.parse(body) : {}; const response = await handleGeminiRequest(parsed); return res.writeHead(response.status,{ 'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8' }).end(JSON.stringify(response.body ?? {})); }
     if (req.method === 'POST' && pathname === '/api/sire/agent/council') { const parsed = body ? JSON.parse(body) : {}; if (!String(parsed.query || '').trim()) return res.writeHead(400,{ 'Access-Control-Allow-Origin':'*','Content-Type':'application/json; charset=utf-8' }).end(JSON.stringify({ error:'query is required' })); try { const response = await handleTeamRequest(parsed); return res.writeHead(200,{ 'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8' }).end(JSON.stringify(response)); } catch (cause) { const message = cause instanceof Error ? cause.message : String(cause); console.error('[AI TEAM]', message); return res.writeHead(502,{ 'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8' }).end(JSON.stringify({ error:message, teamMode:'shared-workspace-team' })); } }
     if (req.method === 'POST' && pathname === '/api/sire/agent/council/stream') { const parsed = body ? JSON.parse(body) : {}; if (!String(parsed.query || '').trim()) return res.writeHead(400,{ 'Access-Control-Allow-Origin':'*','Content-Type':'application/json; charset=utf-8' }).end(JSON.stringify({ error:'query is required' })); res.writeHead(200,{ 'Access-Control-Allow-Origin':'*','Cache-Control':'no-cache, no-transform','Content-Type':'text/event-stream; charset=utf-8','Connection':'keep-alive','X-Accel-Buffering':'no' }); const send = (type, payload) => { if (!res.writableEnded) res.write(`event: ${type}\ndata: ${JSON.stringify(payload)}\n\n`); }; try { const response = await handleTeamRequest(parsed, event => send('council.stage', event)); send('council.done', response); } catch (cause) { send('council.error', { error: cause instanceof Error ? cause.message : String(cause) }); } return res.end(); }
-    if (req.method === 'POST' && pathname === '/api/sire/agent/openalgo') {
-      const parsed = body ? JSON.parse(body) : {};
-      if (!String(parsed.query || '').trim()) return res.writeHead(400,{ 'Access-Control-Allow-Origin':'*','Content-Type':'application/json; charset=utf-8' }).end(JSON.stringify({ error:'query is required' }));
-      try {
-        const response = await handleDirectOpenAlgoAgentRequest(parsed);
-        return res.writeHead(200,{ 'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8' }).end(JSON.stringify(response));
-      } catch (cause) {
-        const message = cause instanceof Error ? cause.message : String(cause);
-        console.error('[OPENALGO AGENT ONLY]', message);
-        return res.writeHead(502,{ 'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8' }).end(JSON.stringify({ error:`OpenAlgo Agent test failed: ${message}`, agentOnly:true }));
-      }
-    }
     if (req.method === 'POST' && pathname === '/api/sire/agent/gpt') { const parsed = body ? JSON.parse(body) : {}; if (!String(parsed.query || '').trim()) return res.writeHead(400,{ 'Access-Control-Allow-Origin':'*','Content-Type':'application/json; charset=utf-8' }).end(JSON.stringify({ error:'query is required' })); try { const response = await handleDirectGptRequest(parsed); return res.writeHead(200,{ 'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8' }).end(JSON.stringify(response)); } catch (cause) { const message = cause instanceof Error ? cause.message : String(cause); console.error('[DIRECT GPT]', message); return res.writeHead(502,{ 'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8' }).end(JSON.stringify({ error:`Direct GPT test failed: ${message}` })); } }
     const response=await handler(toEvent(req,body)); const statusCode=Number.isInteger(response?.statusCode)?response.statusCode:200; const rawBody=response?.body!==undefined?response.body:response; const isString=typeof rawBody==='string'; res.writeHead(statusCode,{ 'Access-Control-Allow-Origin':'*','Cache-Control':'no-store',...(isString?{}:{'Content-Type':'application/json; charset=utf-8'}),...(response?.headers||{}) }); res.end(isString?rawBody:JSON.stringify(rawBody??{}));
   } catch(cause) { const message=cause instanceof Error?cause.message:String(cause); console.error('[HTTP ERROR]',req.method,req.url,message); if (!res.headersSent) res.writeHead(500,{'Content-Type':'application/json','Access-Control-Allow-Origin':'*'}); res.end(JSON.stringify({error:message})); } });
