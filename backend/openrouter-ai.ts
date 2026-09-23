@@ -157,9 +157,10 @@ export async function runGptHead(input: {
       if (name === 'github_request' && input.tools?.githubRequest) {
         const method = String(args.method || 'GET').toUpperCase();
         const path = String(args.path || '').trim();
+        const normalizedPath = path.startsWith('/') ? path : `/${path}`;
         const permission = String(args.permission || (method === 'GET' ? 'read' : 'write'));
         await emit('GitHub','working',method === 'GET' ? 'GPT is inspecting the repository through GitHub.' : 'GPT is making the requested repository change through GitHub.');
-        const output = await input.tools.githubRequest({ method, path, body: args.body, permission });
+        const output = await input.tools.githubRequest({ method, path: normalizedPath, body: args.body, permission });
         messages.push({ role: 'tool', tool_call_id: callId, content: output.slice(0, 20000) });
       } else if (name === 'ask_openalgo' && input.tools?.askOpenAlgo) {
 
