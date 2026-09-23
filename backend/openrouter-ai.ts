@@ -161,7 +161,7 @@ export async function runGptHead(input: {
         await emit('GitHub','working',method === 'GET' ? 'GPT is inspecting the repository through GitHub.' : 'GPT is making the requested repository change through GitHub.');
         const output = await input.tools.githubRequest({ method, path, body: args.body, permission });
         messages.push({ role: 'tool', tool_call_id: callId, content: output.slice(0, 20000) });
-      } else f (name === 'ask_openalgo' && input.tools?.askOpenAlgo) {
+      } else if (name === 'ask_openalgo' && input.tools?.askOpenAlgo) {
 
         const task = String(args.task || query).slice(0, 8000);
         await emit('OpenAlgo Agent','working','GPT asked OpenAlgo Agent to inspect a focused technical/chart question.');
