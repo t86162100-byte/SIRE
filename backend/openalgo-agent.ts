@@ -1,4 +1,4 @@
-import { webSearch } from './agent-tools.ts';
+import { connectorRequest, discoverConnectors, webSearch } from './agent-tools.ts';
 
 type HistoryItem = { role: string; text?: string; content?: string };
 type RuntimeContext = Record<string, unknown>;
@@ -113,7 +113,7 @@ function systemPrompt() {
     'Time values are UTC seconds. Logical ranges are chart-local; never copy a logical index from another chart as though it were a timestamp.',
     'The installed SIRE chart imports indicators, draw, trade, transform and webgl tiers. Use the capabilities reported in chartContext.',
     'Return JSON only: {"answer":"...","analysis":{"observations":[],"trend":null,"levels":[],"confidence":null,"unknowns":[],"disagreements":[]},"actions":[...],"toolRequests":[{"name":"web_search","query":"..."}]}',
-    'Allowed toolRequests: web_search, list_skills. Do not invent tool names.',
+    'Allowed toolRequests: web_search, list_skills, list_connectors, connector_request. Do not invent tool names.',
     'Allowed action names include: select_instrument, set_timeframe, set_chart_type, add_indicator, remove_indicator, add_price_line, add_drawing, set_visible_range, fit_chart, reset_scale, set_timezone, set_theme, open_indicator_picker, open_drawing_tools, open_settings, take_screenshot, export_svg, replay_start, replay_play, replay_pause, replay_step, replay_stop, propose_order.',
   ].join('\n');
 }
@@ -187,6 +187,20 @@ export async function runOpenAlgoAgent(input: {
           results.push({ name, ok: true, result: value });
         } else if (name === 'list_skills') {
           results.push({ name, ok: true, result: OPENALGO_SKILLS });
+        } else if (name === 'list_connectors') {
+          results.push({ name, ok: true, result: discoverConnectors() });
+        } else if (name === 'connector_request') {
+          const connectorId = String(request.connectorId || '');
+          const path = String(request.path || '');
+          const method = String(request.method || 'GET').toUpperCase();
+          const permission = String(request.permission || 'read') as any;
+          if (!connectorId || !path) throw new Error('connector_request requires connectorId and path');
+          const value = await connectorRequest(connectorId, path, {
+            method,
+            body: request.body === undefined ? undefined : JSON.stringify(request.body),
+            headers: request.body === undefined ? undefined : { 'content-type': 'application/json' },
+          }, permission);
+          results.push({ name, ok: true, connectorId, path, result: value });
         } else {
           results.push({ name, ok: false, error: 'Unknown agent tool' });
         }
