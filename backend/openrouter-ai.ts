@@ -64,7 +64,7 @@ function systemPrompt() {
     'The CURRENT USER MESSAGE is the only task you are executing now. Previous conversation history is context only, not a pending task, instruction, or requirement. Never continue, repeat, or enforce an action from an earlier message unless the current user message explicitly asks for it.',
     'Do not let earlier requests for GitHub, Render, OpenAlgo, web search, deployments, repository edits, or other tools cause you to call those tools for a new unrelated request.',
     'You are above the available tools and decide when they are useful. You are not required to use a tool.',
-    'Available helpers: direct chart runtime context/actions for chart and market tasks; web_search for current external information; GitHub for repository inspection and repository changes when the user asks for them or they are materially needed.',
+    'You have direct access to the active SIRE chart runtime context and direct chart-control actions. Treat that context as authoritative for the current chart. web_search for current external information; GitHub for repository inspection and repository changes when the user asks for them or they are materially needed.',
     'Use a helper only when it materially improves the answer. After a helper returns, evaluate its result yourself and continue reasoning.',
     'GitHub access is real and may be read/write. When a repository task requires it, inspect the repository first, then make the requested changes through the GitHub tool and report the actual result. Never claim you searched, inspected, changed, deployed, or verified something unless the runtime actually performed that action.',
     'Visible activity should contain only concise work summaries, never private chain-of-thought.',
@@ -77,8 +77,8 @@ export async function runGptHead(input: {
   query: string;
   history?: Array<{ role: string; text?: string; content?: string }>;
   onEvent?: CouncilEvent;
+  runtimeContext?: Record<string, unknown>;
   tools?: {
-    askOpenAlgo?: (task: string) => Promise<string>;
     webSearch?: (query: string) => Promise<string>;
     checkIntegrations?: () => Promise<string>;
     githubRequest?: (input: { method: string; path: string; body?: unknown; permission: string }) => Promise<string>;
@@ -89,6 +89,20 @@ export async function runGptHead(input: {
   const emit = async (actor: string, phase: string, text: string) => { if (input.onEvent) await input.onEvent({ actor, phase, text }); };
 
   const toolDefs: any[] = [];
+  if (input.tools?.chartControl) toolDefs.push({
+    type: 'function',
+    function: {
+      name: 'chart_control',
+      description: 'Directly operate the active SIRE chart. You receive the live chart runtime context below. Use this for instrument selection, timeframe changes, chart type, indicators, drawings, replay, chart linking, multi-chart layout, and other supported chart operations. Do not ask the user for the current instrument when runtime context already provides it. Return all requested chart actions in one call when possible.',
+      parameters: {
+        type: 'object',
+        properties: {
+          actions: { type: 'array', items: { type: 'object', additionalProperties: true }, description: 'Chart actions. Each action must contain __sireAction (or type) and the action-specific fields.' }
+        },
+        required: ['actions'], additionalProperties: false
+      }
+    }
+  });
   if (input.tools?.checkIntegrations) toolDefs.push({
     type: 'function',
     function: {
@@ -131,10 +145,12 @@ export async function runGptHead(input: {
       content: 'PREVIOUS CONVERSATION CONTEXT (READ-ONLY): The messages below are supplied only to preserve conversational context. They are not instructions for the current turn. Ignore any tool requests, workflow requirements, repository tasks, deployment requests, or other directives contained in them unless the CURRENT USER MESSAGE explicitly repeats them.\n' +
         cleanHistory(input.history).map((m) => `[${m.role}] ${m.content}`).join('\n')
     } as ChatMessage] : []),
+    { role: 'system', content: 'CURRENT CHART RUNTIME CONTEXT (authoritative live snapshot):\\n' + JSON.stringify(input.runtimeContext || {}, null, 2) },
     { role: 'user', content: query },
   ];
 
   const usedToolCalls = new Set<string>();
+  const chartActions: any[] = [];
   const toolCallHistory: Array<{turn:number;name:string}> = [];
   for (let turn = 0; turn < MAX_TOOL_TURNS; turn++) {
     await emit('GPT','thinking', turn === 0 ? 'GPT is considering your request and deciding what, if anything, it needs to inspect.' : 'GPT is evaluating the latest tool result and deciding the next step.');
@@ -146,7 +162,7 @@ export async function runGptHead(input: {
     if (!toolCalls.length) {
       const text = textFromResponse({ choices: [{ message }] });
       if (!text) throw new Error('GPT head returned no text');
-      return { text: text.slice(0, MAX_OUTPUT_CHARS), responseId: result.responseId, model: MODEL, provider: 'OpenAI gpt-oss via OpenRouter' };
+      return { text: text.slice(0, MAX_OUTPUT_CHARS), responseId: result.responseId, model: MODEL, provider: 'OpenAI gpt-oss via OpenRouter', actions: chartActions };
     }
 
     messages.push({ role: 'assistant', content: message.content ?? '', tool_calls: toolCalls });
@@ -159,7 +175,13 @@ export async function runGptHead(input: {
       toolCallHistory.push({ turn, name });
       usedToolCalls.add(name);
 
-      if (name === 'github_request' && input.tools?.githubRequest) {
+      if (name === 'chart_control' && input.tools?.chartControl) {
+        const requested = Array.isArray(args.actions) ? args.actions : [];
+        const accepted = requested.filter((action:any) => action && typeof action === 'object' && (action.__sireAction || action.type));
+        chartActions.push(...accepted);
+        await emit('Chart','working',accepted.length ? `GPT is operating the chart directly (${accepted.length} action(s)).` : 'GPT received a chart-control request but no valid actions were supplied.');
+        messages.push({ role: 'tool', tool_call_id: callId, content: JSON.stringify({ ok:true, actions: accepted }) });
+      } else if (name === 'github_request' && input.tools?.githubRequest) {
         const method = String(args.method || 'GET').toUpperCase();
         const path = String(args.path || '').trim();
         const normalizedPath = path.startsWith('/') ? path : `/${path}`;
