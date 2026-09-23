@@ -195,36 +195,44 @@ export async function webSearch(query: string, limit = 8) {
 
 export async function verifyConfiguredConnectors() {
   const checks: Record<string, unknown> = {};
-  if (discoverConnectors().some(x => x.id === 'github')) {
-    try {
-      const user = await connectorRequest('github', '/user', {}, 'read') as Record<string, unknown>;
-      const repo = await connectorRequest('github', '/repos/t86162100-byte/SIRE', {}, 'read') as Record<string, unknown>;
-      checks.github = {
-        ok: true,
-        login: user.login,
-        name: user.name || null,
-        repository: { fullName: repo.full_name || 't86162100-byte/SIRE', private: Boolean(repo.private), defaultBranch: repo.default_branch || null },
-      };
-    } catch (error) {
-      checks.github = { ok: false, error: error instanceof Error ? error.message : String(error) };
-    }
-  }
-  if (discoverConnectors().some(x => x.id === 'render')) {
-    try {
-      const workspaces = await connectorRequest('render', '/owners?limit=100', {}, 'read') as Record<string, unknown>;
-      const owners = Array.isArray(workspaces?.items) ? workspaces.items : Array.isArray(workspaces) ? workspaces : [];
-      checks.render = {
-        ok: true,
-        workspaceCount: owners.length,
-        workspaces: owners.slice(0, 20).map((owner: any) => ({ id: owner.id, name: owner.name, type: owner.type || null })),
-      };
-    } catch (error) {
-      checks.render = { ok: false, error: error instanceof Error ? error.message : String(error) };
-    }
-  }
+  const connectors = discoverConnectors();
+  await Promise.all([
+    connectors.some(x => x.id === 'github') ? (async () => {
+      try {
+        const [user, repo] = await Promise.all([
+          connectorRequest('github', '/user', {}, 'read') as Promise<Record<string, unknown>>,
+          connectorRequest('github', '/repos/t86162100-byte/SIRE', {}, 'read') as Promise<Record<string, unknown>>,
+        ]);
+        checks.github = {
+          ok: true,
+          login: user.login,
+          name: user.name || null,
+          repository: {
+            fullName: repo.full_name || 't86162100-byte/SIRE',
+            private: Boolean(repo.private),
+            defaultBranch: repo.default_branch || null,
+          },
+        };
+      } catch (error) {
+        checks.github = { ok: false, error: error instanceof Error ? error.message : String(error) };
+      }
+    })() : Promise.resolve(),
+    connectors.some(x => x.id === 'render') ? (async () => {
+      try {
+        const workspaces = await connectorRequest('render', '/owners?limit=100', {}, 'read') as Record<string, unknown>;
+        const owners = Array.isArray(workspaces?.items) ? workspaces.items : Array.isArray(workspaces) ? workspaces : [];
+        checks.render = {
+          ok: true,
+          workspaceCount: owners.length,
+          workspaces: owners.slice(0, 20).map((owner: any) => ({ id: owner.id, name: owner.name, type: owner.type || null })),
+        };
+      } catch (error) {
+        checks.render = { ok: false, error: error instanceof Error ? error.message : String(error) };
+      }
+    })() : Promise.resolve(),
+  ]);
   return checks;
 }
-
 export async function connectorRequest(connectorId: string, path: string, init: RequestInit = {}, required: AgentPermission = 'read') {
   const connector = discoverConnectors().find(x => x.id === connectorId);
   if (!connector) throw new Error(`Connector ${connectorId} is unavailable`);
