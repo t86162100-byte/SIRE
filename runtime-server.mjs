@@ -52,33 +52,92 @@ function githubRepoConfig() {
 
 async function githubRequestForGpt({ method, path, body, permission }) {
   const { token, repo } = githubRepoConfig();
+  const repoParts = repo.split('/');
+  const owner = repoParts[0];
+  const repoName = repoParts[1];
   let normalizedPath = String(path || '').trim();
-  // GPT sometimes returns the full GitHub API URL even though the tool schema asks
-  // for an API path. Normalize that form instead of rejecting a valid repo request.
-  if (/^https?:\/\/api\.github\.com/i.test(normalizedPath)) {
-    const parsedUrl = new URL(normalizedPath);
-    normalizedPath = parsedUrl.pathname + parsedUrl.search;
-  } else if (/^https?:\/\/github\.com/i.test(normalizedPath)) {
-    const parsedUrl = new URL(normalizedPath);
-    const parts = parsedUrl.pathname.split('/').filter(Boolean);
-    if (parts.length >= 2 && parts[0] === repo.split('/')[0] && parts[1] === repo.split('/')[1]) {
-      const suffix = parts.slice(2);
-      if (suffix[0] === 'blob' || suffix[0] === 'tree') {
-        const ref = suffix[1] || '';
-        const filePath = suffix.slice(2).join('/');
-        normalizedPath = '/repos/' + repo + '/contents/' + filePath + (ref ? '?ref=' + encodeURIComponent(ref) : '');
-      } else {
-        normalizedPath = '/repos/' + repo + '/' + suffix.join('/');
+
+  // GPT/OpenAI tool calls can return API paths, absolute api.github.com URLs,
+  // github.com browser URLs, API-v3 proxy URLs, or a repo-relative endpoint.
+  // Canonicalize all of those to the same GitHub REST path before authorization.
+  try {
+    if (/^https?:\\/\\/api\\.github\\.com/i.test(normalizedPath)) {
+      const parsedUrl = new URL(normalizedPath);
+      normalizedPath = parsedUrl.pathname + parsedUrl.search;
+    } else if (/^https?:\\/\\/github\\.com/i.test(normalizedPath)) {
+      const parsedUrl = new URL(normalizedPath);
+      const parts = parsedUrl.pathname.split('/').filter(Boolean);
+      if (parts.length >= 2 && parts[0].toLowerCase() === owner.toLowerCase() && parts[1].toLowerCase() === repoName.toLowerCase()) {
+        const suffix = parts.slice(2);
+        if (suffix[0] === 'blob' || suffix[0] === 'tree') {
+          const ref = suffix[1] || '';
+          const filePath = suffix.slice(2).join('/');
+          normalizedPath = '/repos/' + repo + '/contents/' + filePath + (ref ? '?ref=' + encodeURIComponent(ref) : '');
+        } else {
+          normalizedPath = '/repos/' + repo + '/' + suffix.join('/');
+        }
       }
+    } else if (/^https?:\\/\\/[^/]+\\/api\\/v3\\/repos\\//i.test(normalizedPath)) {
+      const parsedUrl = new URL(normalizedPath);
+      normalizedPath = parsedUrl.pathname.replace(/^\\/api\\/v3/i, '') + parsedUrl.search;
+    }
+  } catch (error) {
+    throw new Error('Invalid GitHub path supplied to GPT: ' + (error instanceof Error ? error.message : String(error)));
+  }
+
+  // Normalize encoding and harmless path formatting variants.
+  for (let i = 0; i < 2; i++) {
+    try {
+      const decoded = decodeURIComponent(normalizedPath);
+      if (decoded === normalizedPath) break;
+      normalizedPath = decoded;
+    } catch {
+      break;
     }
   }
+  normalizedPath = normalizedPath.replace(/^\\/api\\/v3(?=\\/)/i, '');
+  normalizedPath = normalizedPath.replace(/\\/{2,}/g, '/');
   normalizedPath = normalizedPath.startsWith('/') ? normalizedPath : '/' + normalizedPath;
+
   const repoPrefix = '/repos/' + repo;
-  const isRepoScoped = normalizedPath === repoPrefix || normalizedPath.startsWith(repoPrefix + '/');
-  const isRepoSearch = normalizedPath.startsWith('/search/code') || normalizedPath.startsWith('/search/commits') || normalizedPath.startsWith('/search/issues') || normalizedPath.startsWith('/search/repositories');
+  const lowerPath = normalizedPath.toLowerCase();
+  const lowerRepoPrefix = repoPrefix.toLowerCase();
+
+  // Accept repo-relative GitHub REST endpoints too, while still forcing them
+  // into the configured repository.
+  const repoRelativePrefixes = [
+    '/contents/', '/contents',
+    '/branches/', '/branches',
+    '/commits/', '/commits',
+    '/git/', '/git',
+    '/pulls/', '/pulls',
+    '/issues/', '/issues',
+    '/actions/', '/actions',
+    '/deployments/', '/deployments',
+    '/releases/', '/releases',
+    '/collaborators/', '/collaborators',
+  ];
+  if (repoRelativePrefixes.some(prefix => lowerPath === prefix || lowerPath.startsWith(prefix))) {
+    normalizedPath = repoPrefix + normalizedPath;
+  }
+
+  const finalLowerPath = normalizedPath.toLowerCase();
+  const isRepoScoped = finalLowerPath === lowerRepoPrefix || finalLowerPath.startsWith(lowerRepoPrefix + '/');
+  const isRepoSearch = finalLowerPath.startsWith('/search/code') ||
+    finalLowerPath.startsWith('/search/commits') ||
+    finalLowerPath.startsWith('/search/issues') ||
+    finalLowerPath.startsWith('/search/repositories');
+
   if (!isRepoScoped && !isRepoSearch) {
+    console.warn('[GPT GitHub] blocked path after normalization:', JSON.stringify({
+      requestedPath: path,
+      normalizedPath,
+      configuredRepository: repo,
+      method,
+    }));
     throw new Error('GPT GitHub access is limited to the configured SIRE repository. Use paths under ' + repoPrefix + ' for repository inspection and changes.');
   }
+
   const verb = String(method || 'GET').toUpperCase();
   const requestedPermission = String(permission || (verb === 'GET' ? 'read' : 'write')).toLowerCase();
   if (!['read','write','execute'].includes(requestedPermission)) throw new Error('Invalid GitHub permission.');
@@ -106,7 +165,6 @@ async function githubRequestForGpt({ method, path, body, permission }) {
   }
   return JSON.stringify({ ok:true, status:response.status, method:verb, path:normalizedPath, result:data });
 }
-
 async function handleDirectGptRequest(parsed) {
   const query = String(parsed.query || '').trim();
   if (!query) throw new Error('query is required');
