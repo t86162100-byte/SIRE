@@ -6,7 +6,7 @@ const MODEL = 'openai/gpt-oss-20b';
 const API_URL = 'https://openrouter.ai/api/v1/chat/completions';
 const REQUEST_TIMEOUT_MS = 45000;
 const MAX_OUTPUT_CHARS = 12000;
-const MAX_TOOL_TURNS = 4;
+const MAX_TOOL_TURNS = 8;
 
 function getApiKey() {
   const key = process.env.OPENROUTER_API_KEY?.trim();
@@ -148,7 +148,8 @@ export async function runGptHead(input: {
     // A chart action is an executable specialist operation. Once OpenAlgo has returned
     // its action/result, force the head to produce the user-facing answer instead of
     // repeatedly delegating the same request until the tool-turn ceiling is reached.
-    const availableTools = openAlgoUsed ? toolDefs.filter((tool:any) => tool?.function?.name !== 'ask_openalgo') : toolDefs;
+    // After the chart specialist returns, synthesize the result instead of starting another tool chain.
+    const availableTools = openAlgoUsed ? [] : toolDefs;
     const result = await callOpenRouter(messages, availableTools);
     const message = result.message;
     const toolCalls = Array.isArray(message.tool_calls) ? message.tool_calls : [];
