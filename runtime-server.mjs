@@ -55,7 +55,7 @@ async function githubRequestForGpt({ method, path, body, permission }) {
   let normalizedPath = String(path || '').trim();
   // GPT sometimes returns the full GitHub API URL even though the tool schema asks
   // for an API path. Normalize that form instead of rejecting a valid repo request.
-  normalizedPath = normalizedPath.replace(/^https?:\\/\\/api\\.github\\.com/i, '');
+  if (normalizedPath.startsWith('https://api.github.com') || normalizedPath.startsWith('http://api.github.com')) { const parsedUrl = new URL(normalizedPath); normalizedPath = parsedUrl.pathname + parsedUrl.search; }
   normalizedPath = normalizedPath.startsWith('/') ? normalizedPath : '/' + normalizedPath;
   const repoPrefix = '/repos/' + repo;
   const isRepoScoped = normalizedPath === repoPrefix || normalizedPath.startsWith(repoPrefix + '/');
