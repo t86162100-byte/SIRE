@@ -47,8 +47,8 @@ export function discoverConnectors(): ConnectorDefinition[] {
   const out = [...configured];
   const builtins: ConnectorDefinition[] = [
     { id: 'web-search', name: 'Web Search (SearXNG + free HTTP + Chrome)', kind: 'http', baseUrl: searxngInstances()[0], permissions: ['read'], enabled: true },
-    { id: 'github', name: 'GitHub', kind: 'github', authEnv: 'GITHUB_TOKEN', permissions: ['read', 'write', 'execute'], enabled: Boolean(process.env.GITHUB_TOKEN) },
-    { id: 'render', name: 'Render', kind: 'render', authEnv: 'RENDER_API_KEY', permissions: ['read', 'write', 'deploy'], enabled: Boolean(process.env.RENDER_API_KEY) },
+    { id: 'github', name: 'GitHub', kind: 'github', baseUrl: 'https://api.github.com/', authEnv: 'GITHUB_TOKEN', permissions: ['read', 'write', 'execute'], enabled: Boolean(process.env.GITHUB_TOKEN) },
+    { id: 'render', name: 'Render', kind: 'render', baseUrl: 'https://api.render.com/v1/', authEnv: 'RENDER_API_KEY', permissions: ['read', 'write', 'deploy'], enabled: Boolean(process.env.RENDER_API_KEY) },
     { id: 'sire-data', name: 'SIRE Data', kind: 'database', permissions: ['read', 'write', 'execute'], enabled: true },
   ];
   for (const c of builtins) if (!out.some(x => x.id === c.id)) out.push(c);
@@ -202,6 +202,7 @@ export async function connectorRequest(connectorId: string, path: string, init: 
   const url = new URL(path, connector.baseUrl);
   const headers = new Headers(init.headers);
   if (token) headers.set('authorization', `Bearer ${token}`);
+  if (connectorId === 'github') { headers.set('accept', 'application/vnd.github+json'); headers.set('x-github-api-version', '2022-11-28'); }
   headers.set('user-agent', 'SIRE-Agent/1.0');
   const response = await fetch(url, { ...init, headers });
   const text = await response.text();
