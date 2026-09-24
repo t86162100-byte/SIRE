@@ -268,6 +268,92 @@ async function githubRequestForGpt({ method, path, body, permission }) {
   }
   return JSON.stringify({ ok:true, status:response.status, method:verb, path:normalizedPath, result:data });
 }
+async function marketDataRequestForGpt(input) {
+  const symbol = String(input?.symbol || '').trim();
+  const dataType = String(input?.dataType || 'candles').toLowerCase();
+  const interval = input?.interval ? String(input.interval).trim() : '';
+  const count = Math.max(1, Math.min(1000, Math.floor(Number(input?.count) || 100)));
+  const from = Number.isFinite(Number(input?.from)) ? Math.floor(Number(input.from)) : undefined;
+  const to = Number.isFinite(Number(input?.to)) ? Math.floor(Number(input.to)) : undefined;
+  if (!symbol) throw new Error('Market-data request requires a symbol.');
+  if (dataType !== 'candles' && dataType !== 'ticks') throw new Error('Market-data dataType must be candles or ticks.');
+  if (dataType === 'candles' && !interval) throw new Error('Candle history requires an interval.');
+  if (from !== undefined && to !== undefined && from > to) throw new Error('Market-data from must be before or equal to to.');
+
+  if (dataType === 'ticks') {
+    const payload = {
+      ticks_history: symbol,
+      end: to ?? 'latest',
+      ...(from !== undefined ? { start: from } : {}),
+      count,
+      style: 'ticks',
+      adjust_start_time: 1,
+      subscribe: 0,
+    };
+    const result = await requestDerivPublic(payload);
+    const history = result?.history || {};
+    const times = Array.isArray(history.times) ? history.times : [];
+    const prices = Array.isArray(history.prices) ? history.prices : [];
+    const ticks = times.map((time, index) => ({
+      epoch: Number(time),
+      price: Number(prices[index]),
+    })).filter(item => Number.isFinite(item.epoch) && Number.isFinite(item.price));
+    return JSON.stringify({
+      ok: true,
+      dataType: 'ticks',
+      symbol,
+      requested: { count, from: from ?? null, to: to ?? 'latest' },
+      returned: ticks.length,
+      data: ticks,
+    });
+  }
+
+  const seconds = Number((await import('./src/derivMarketData.ts').catch(() => null))?.DERIV_INTERVAL_SECONDS?.[interval] || 0);
+  const intervalSeconds = ({
+    '1m':60,'2m':120,'3m':180,'5m':300,'10m':600,'15m':900,'20m':1200,'30m':1800,'45m':2700,
+    '1h':3600,'2h':7200,'3h':10800,'4h':14400,'6h':21600,'8h':28800,'12h':43200,'1d':86400,'1w':604800
+  })[interval];
+  if (!intervalSeconds) throw new Error('Unsupported candle interval: ' + interval);
+  const requestedCount = from !== undefined && to !== undefined
+    ? Math.max(1, Math.min(1000, Math.ceil((to - from) / intervalSeconds) + 1))
+    : count;
+  const payload = {
+    ticks_history: symbol,
+    end: to ?? 'latest',
+    ...(from !== undefined ? { start: from } : {}),
+    count: requestedCount,
+    style: 'candles',
+    granularity: intervalSeconds,
+    adjust_start_time: 1,
+    subscribe: 0,
+  };
+  const result = await requestDerivPublic(payload);
+  const candles = Array.isArray(result?.candles) ? result.candles.map(candle => ({
+    epoch: Number(candle?.epoch),
+    open: Number(candle?.open),
+    high: Number(candle?.high),
+    low: Number(candle?.low),
+    close: Number(candle?.close),
+    ...(candle?.volume !== undefined ? { volume: Number(candle.volume) } : {}),
+  })).filter(candle =>
+    Number.isFinite(candle.epoch) &&
+    Number.isFinite(candle.open) &&
+    Number.isFinite(candle.high) &&
+    Number.isFinite(candle.low) &&
+    Number.isFinite(candle.close)
+  ) : [];
+  return JSON.stringify({
+    ok: true,
+    dataType: 'candles',
+    symbol,
+    interval,
+    intervalSeconds,
+    requested: { count: requestedCount, from: from ?? null, to: to ?? 'latest' },
+    returned: candles.length,
+    data: candles,
+  });
+}
+
 async function handleDirectGptRequest(parsed, onEvent) {
   const query = String(parsed.query || '').trim();
   if (!query) throw new Error('query is required');
@@ -279,6 +365,7 @@ async function handleDirectGptRequest(parsed, onEvent) {
     tools: {
       githubRequest: githubRequestForGpt,
       renderRequest: renderRequestForGpt,
+      marketDataRequest: marketDataRequestForGpt,
       checkIntegrations: async () => {
         const result = {
           github: { configured: false, repository: String(process.env.GITHUB_REPOSITORY || 't86162100-byte/SIRE') },
