@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { ChevronLeft, ChevronRight, Eye, History, Lock, Minus, MoreHorizontal, Pause, Play, RotateCcw, Settings2, SkipBack, SkipForward, Trash2, Wrench, X } from 'lucide-react';
 import { registerInterval, ReplayController, registeredIndicators, type ReplayState } from 'openalgo-charts';
+import { registeredDrawingTools } from 'openalgo-charts/draw';
 import 'openalgo-charts/indicators';
 import 'openalgo-charts/draw';
 import 'openalgo-charts/trade';
@@ -318,6 +319,7 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
   const replayRef = useRef<ReplayController | null>(null);
   const replayModeRef = useRef(false);
   const replayCleanupRef = useRef<(() => void) | null>(null);
+  const drawingInspectionRef = useRef<{ symbol: string; timeframe: string; capturedAt: number; id: string } | null>(null);
 
   const dataFeedRef = useRef<ReturnType<typeof createDerivDataFeed> | null>(null);
   const instrumentsRef = useRef(instruments);
@@ -1026,6 +1028,107 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
         const scale = () => getChartTimeScale(chart);
         const logical = () => scale()?.getVisibleLogicalRange?.() || chart.getVisibleLogicalRange?.() || null;
         const wait = (ms: number) => new Promise(resolve => window.setTimeout(resolve, ms));
+        const drawingSnapshot = () => {
+          const draw: any = (widget as any).draw;
+          const list = typeof draw?.drawings === 'function' ? draw.drawings() : [];
+          return (Array.isArray(list) ? list : []).map((item: any) => ({
+            id: item.id,
+            tool: item.tool,
+            name: String(registeredDrawingTools().find((tool: any) => tool.id === item.tool)?.name || item.tool),
+            paneIndex: item.paneIndex,
+            points: Array.isArray(item.points) ? item.points.map((point: any) => ({ time: Number(point.time), price: Number(point.price) })) : [],
+            style: item.style || {},
+            text: item.text || null,
+            props: item.props || null,
+            locked: item.locked === true,
+            visible: item.visible !== false,
+            zIndex: Number(item.zIndex ?? 0),
+            createdAt: item.createdAt ?? null,
+          }));
+        };
+        const normalizeDrawingTool = (value: any) => {
+          const raw = String(value || '').trim().toLowerCase().replace(/[_\s]+/g, '-');
+          const aliases: Record<string, string> = {
+            trendline: 'trend-line',
+            'trend-line': 'trend-line',
+            horizontal: 'horizontal-line',
+            'horizontal-line': 'horizontal-line',
+            vertical: 'vertical-line',
+            'vertical-line': 'vertical-line',
+            ray: 'ray',
+            channel: 'parallel-channel',
+            'parallel-channel': 'parallel-channel',
+            rectangle: 'rectangle',
+            fibonacci: 'fib-retracement',
+            fib: 'fib-retracement',
+            'fib-retracement': 'fib-retracement',
+            text: 'text',
+            label: 'text',
+            'text-label': 'text',
+          };
+          return aliases[raw] || raw;
+        };
+        const drawingInspection = (op: any) => {
+          const maxBars = Math.max(1, Math.min(300, Math.floor(Number(op?.maxBars) || 150)));
+          const bars = ((chart.primarySeries?.()?.getData?.() || []) as any[]).filter((bar: any) =>
+            Number.isFinite(Number(bar?.time)) &&
+            Number.isFinite(Number(bar?.open)) &&
+            Number.isFinite(Number(bar?.high)) &&
+            Number.isFinite(Number(bar?.low)) &&
+            Number.isFinite(Number(bar?.close))
+          );
+          const range = logical();
+          const from = range && Number.isFinite(Number(range.from)) ? Math.max(0, Math.floor(Number(range.from))) : 0;
+          const to = range && Number.isFinite(Number(range.to)) ? Math.min(bars.length - 1, Math.ceil(Number(range.to))) : bars.length - 1;
+          if (bars.length < 2 || to < from) throw new Error('Not enough chart bars are available to inspect drawing coordinates.');
+          const visibleBars = bars.slice(from, to + 1);
+          const stride = Math.max(1, Math.ceil(visibleBars.length / maxBars));
+          const selected = visibleBars.filter((_bar: any, index: number) => index % stride === 0 || index === visibleBars.length - 1);
+          const actualBars = selected.map((bar: any, index: number) => {
+            const sourceIndex = from + visibleBars.indexOf(bar);
+            return {
+              index: sourceIndex,
+              time: Number(bar.time),
+              open: Number(bar.open),
+              high: Number(bar.high),
+              low: Number(bar.low),
+              close: Number(bar.close),
+              coordinates: {
+                x: Number(chart.timeToCoordinate?.(Number(bar.time))),
+                openY: chart.priceToCoordinate?.(Number(bar.open), 0),
+                highY: chart.priceToCoordinate?.(Number(bar.high), 0),
+                lowY: chart.priceToCoordinate?.(Number(bar.low), 0),
+                closeY: chart.priceToCoordinate?.(Number(bar.close), 0),
+              },
+            };
+          });
+          const first = visibleBars[0];
+          const last = visibleBars[visibleBars.length - 1];
+          const inspection = {
+            id: 'draw-inspect-' + Date.now() + '-' + Math.random().toString(36).slice(2, 7),
+            symbol: widget.symbol(),
+            timeframe: widget.interval(),
+            capturedAt: Date.now(),
+            visibleRange: range,
+            visibleBarCount: visibleBars.length,
+            timeRange: { from: Number(first.time), to: Number(last.time) },
+            priceRange: {
+              low: Math.min(...visibleBars.map((bar: any) => Number(bar.low))),
+              high: Math.max(...visibleBars.map((bar: any) => Number(bar.high))),
+            },
+            bars: actualBars,
+            coordinateSystem: {
+              timeUnit: 'UTC seconds',
+              priceUnit: 'chart price',
+              xUnit: 'container media pixels',
+              yUnit: 'container media pixels',
+              mapping: 'chart.timeToCoordinate(time), chart.priceToCoordinate(price, paneIndex)',
+            },
+            drawingTools: registeredDrawingTools().map((tool: any) => ({ id: tool.id, name: tool.name, points: tool.points, freehand: Boolean(tool.freehand) })),
+          };
+          drawingInspectionRef.current = { symbol: inspection.symbol, timeframe: inspection.timeframe, capturedAt: inspection.capturedAt, id: inspection.id };
+          return { action: 'inspect_drawing_context', ok: true, inspection };
+        };
         const indicatorSnapshot = () => {
           const bars = ((chart.primarySeries?.()?.getData?.() || []) as any[]);
           return (chart.indicators?.() || []).map((item: any) => {
@@ -1095,6 +1198,79 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
             await wait(100);
             if (widget.interval() !== interval) throw new Error('Chart did not accept timeframe ' + interval + '.');
             return { action, ok: true, interval: widget.interval() };
+          }
+          if (action === 'inspect_drawing_context') {
+            return drawingInspection(operation);
+          }
+          if (action === 'read_drawings') {
+            return { action, ok: true, drawings: drawingSnapshot(), selectedIds: typeof (widget as any).draw?.selection === 'function' ? (widget as any).draw.selection() : [] };
+          }
+          if (action === 'add_drawing') {
+            const inspected = drawingInspectionRef.current;
+            if (!inspected || inspected.symbol !== widget.symbol() || inspected.timeframe !== widget.interval() || Date.now() - inspected.capturedAt > 60000) {
+              throw new Error('Drawing creation requires a fresh inspect_drawing_context result for the current chart before anchors can be created.');
+            }
+            const draw: any = (widget as any).draw;
+            if (!draw || typeof draw.add !== 'function') throw new Error('OpenAlgo DrawingController is not available on the active chart.');
+            const tool = normalizeDrawingTool(op?.drawingTool || op?.tool);
+            const descriptor: any = registeredDrawingTools().find((item: any) => item.id === tool);
+            if (!descriptor) throw new Error('Drawing tool is not registered in OpenAlgo Charts: ' + tool);
+            const points = Array.isArray(op?.points) ? op.points.map((point: any) => ({ time: Number(point.time), price: Number(point.price) })) : [];
+            if (!points.length || points.some((point: any) => !Number.isFinite(point.time) || !Number.isFinite(point.price))) throw new Error('add_drawing requires real finite {time, price} anchor coordinates.');
+            if (descriptor.points > 0 && points.length !== descriptor.points) throw new Error(descriptor.name + ' requires exactly ' + descriptor.points + ' anchor point(s); received ' + points.length + '.');
+            const input: any = {
+              tool,
+              points,
+              paneIndex: Number.isInteger(op?.paneIndex) ? Math.max(0, Number(op.paneIndex)) : 0,
+              style: op?.style && typeof op.style === 'object' ? op.style : {},
+            };
+            if (op?.text && typeof op.text === 'object') input.text = op.text;
+            if (op?.props && typeof op.props === 'object') input.props = op.props;
+            if (op?.locked === true) input.locked = true;
+            if (op?.visible === false) input.visible = false;
+            if (Number.isFinite(Number(op?.zIndex))) input.zIndex = Number(op.zIndex);
+            const created = draw.add(input);
+            await wait(50);
+            const current = typeof draw.get === 'function' ? draw.get(created.id) : null;
+            if (!current) throw new Error('Drawing was accepted but is not present in the DrawingController.');
+            const snapshot = drawingSnapshot().find((item: any) => item.id === created.id);
+            if (!snapshot) throw new Error('Drawing was created but could not be verified from the chart runtime.');
+            return { action, ok: true, drawing: snapshot, inspectionId: inspected.id };
+          }
+          if (action === 'remove_drawing') {
+            const draw: any = (widget as any).draw;
+            const id = String(op?.drawingId || '').trim();
+            if (!id) throw new Error('remove_drawing requires drawingId.');
+            const existing = typeof draw?.get === 'function' ? draw.get(id) : null;
+            if (!existing) throw new Error('Drawing not found: ' + id);
+            const removed = typeof draw.remove === 'function' ? draw.remove(id) : (draw.removeMany?.([id]), true);
+            if (removed === false) throw new Error('Drawing could not be removed: ' + id);
+            await wait(30);
+            if (typeof draw.get === 'function' && draw.get(id)) throw new Error('Drawing ' + id + ' is still present after removal.');
+            return { action, ok: true, removedDrawingId: id };
+          }
+          if (action === 'modify_drawing') {
+            const draw: any = (widget as any).draw;
+            const id = String(op?.drawingId || '').trim();
+            if (!id) throw new Error('modify_drawing requires drawingId.');
+            if (typeof draw?.get !== 'function' || !draw.get(id)) throw new Error('Drawing not found: ' + id);
+            const patch: any = {};
+            if (Array.isArray(op?.points)) {
+              patch.points = op.points.map((point: any) => ({ time: Number(point.time), price: Number(point.price) }));
+              if (patch.points.some((point: any) => !Number.isFinite(point.time) || !Number.isFinite(point.price))) throw new Error('modify_drawing points must contain finite real chart coordinates.');
+            }
+            if (op?.style && typeof op.style === 'object') patch.style = op.style;
+            if (op?.text && typeof op.text === 'object') patch.text = op.text;
+            if (op?.props && typeof op.props === 'object') patch.props = op.props;
+            if (typeof op?.locked === 'boolean') patch.locked = op.locked;
+            if (typeof op?.visible === 'boolean') patch.visible = op.visible;
+            if (Number.isFinite(Number(op?.zIndex))) patch.zIndex = Number(op.zIndex);
+            if (!Object.keys(patch).length) throw new Error('modify_drawing requires points, style, text, props, locked, visible, or zIndex.');
+            if (typeof draw.update !== 'function' || draw.update(id, patch) === false) throw new Error('Drawing could not be modified: ' + id);
+            await wait(30);
+            const updated = drawingSnapshot().find((item: any) => item.id === id);
+            if (!updated) throw new Error('Drawing disappeared after modification: ' + id);
+            return { action, ok: true, drawing: updated };
           }
           if (action === 'add_indicator') {
             const indicatorId = resolveIndicatorId(op);
@@ -1293,10 +1469,9 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
       const series = chart?.primarySeries?.();
       const bars = (series?.getData?.() || []) as DerivBar[];
       const visible = (chart?.timeScale as any)?.getVisibleLogicalRange?.();
-      const drawings = ((widget?.objects as any)?.list?.() || []).slice(-100).map((item: any) => ({
-        id: item.id, kind: item.kind, tool: item.tool, name: item.name, selected: item.selected, visible: item.visible, locked: item.locked,
-        points: Array.isArray(item.points) ? item.points.slice(0, 8) : undefined, paneIndex: item.paneIndex,
-      }));
+      const drawings = typeof (widget as any)?.draw?.drawings === 'function'
+        ? (widget as any).draw.drawings().slice(-100).map((item: any) => ({ id: item.id, kind: 'drawing', tool: item.tool, name: registeredDrawingTools().find((tool: any) => tool.id === item.tool)?.name || item.tool, selected: (widget as any).draw.selection?.().includes(item.id) || false, visible: item.visible !== false, locked: item.locked === true, points: Array.isArray(item.points) ? item.points.slice(0, 8) : undefined, paneIndex: item.paneIndex }))
+        : ((widget?.objects as any)?.list?.() || []).slice(-100).map((item: any) => ({ id: item.id, kind: item.kind, tool: item.tool, name: item.name, selected: item.selected, visible: item.visible, locked: item.locked, points: Array.isArray(item.points) ? item.points.slice(0, 8) : undefined, paneIndex: item.paneIndex }));
       const indicators = (chart?.indicators?.() || []).map((item: any) => {
         const rawValues = typeof item.values === 'function' ? item.values() : {};
         const values: Record<string, any> = {};
