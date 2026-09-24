@@ -5,7 +5,7 @@ import './sire-council.css';
 
 type Instrument = { symbol: string; name: string };
 type RuntimeContext = { symbol: string; name?: string; timeframe?: string; chartMode?: string; latestPrice?: number | null; activeIndicators?: unknown[]; availableIndicatorIds?: string[]; chartDiagnostics?: Array<Record<string, unknown>>; drawings?: Array<Record<string, unknown>>; chartBars?: number; visibleBars?: number; recentBars?: unknown[]; latestBar?: unknown; visibleRange?: unknown; replay?: unknown; chartState?: unknown; capabilities?: Record<string, unknown>; agentContract?: Record<string, unknown>; selectedInspection?: { epoch: number; price: number } | null; availableInstruments?: Array<{symbol:string;name:string}> };
-type Props = { symbol: string; instruments: Instrument[]; onClose: () => void; onSelectInstrument?: (symbol: string) => void; onSetChartView?: (settings: Record<string, unknown>) => void; onAddMarker?: (label: string) => void; runtimeContext?: RuntimeContext };
+type Props = { symbol: string; instruments: Instrument[]; onClose: () => void; runtimeContext?: RuntimeContext };
 type CouncilActivity = { actor: string; phase: string; text: string };
 type WebSource = { title: string; url: string; publishedDate?: string; author?: string; text?: string };
 type ChatMessage = { id: string; role: 'user' | 'sire'; text: string; meta?: string };
@@ -81,10 +81,10 @@ function RichMessage({ text }: { text: string }) {
 
 function MessageActions({ text }: { text: string }) { const [copied, setCopied] = useState(false); const copy = async () => { try { await navigator.clipboard.writeText(text); setCopied(true); window.setTimeout(() => setCopied(false), 1400); } catch { /* native long-press selection remains available */ } }; return <div className="sire-message-actions"><button type="button" onClick={() => void copy()} aria-label="Copy response">{copied ? <Check size={14} /> : <Copy size={14} />}<span>{copied ? 'Copied' : 'Copy'}</span></button></div>; }
 
-export default function ResearchLab({ symbol, instruments, onClose, onSelectInstrument, onSetChartView, onAddMarker, runtimeContext }: Props) {
+export default function ResearchLab({ symbol, instruments, onClose, runtimeContext }: Props) {
   const createChat = (title = 'New chat'): ChatSession => ({ id: `chat-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`, title, messages: [], createdAt: Date.now(), updatedAt: Date.now() });
   const chatEndRef = useRef<HTMLDivElement | null>(null); const runtimeContextRef = useRef<RuntimeContext | null>(runtimeContext || null);
-  const [activeSymbol, setActiveSymbol] = useState(symbol); const [chatInput, setChatInput] = useState('');
+  const [chatInput, setChatInput] = useState('');
   const [chatSessions, setChatSessions] = useState<ChatSession[]>(() => {
     try {
       const raw = window.localStorage.getItem('sire-chat-sessions');
@@ -194,15 +194,14 @@ export default function ResearchLab({ symbol, instruments, onClose, onSelectInst
       return next;
     });
   }, [activity]);
-  useEffect(() => { setActiveSymbol(symbol); }, [symbol]); useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' }); }, [chatMessages, currentChatBusy, activity, webSources]);
+   useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' }); }, [chatMessages, currentChatBusy, activity, webSources]);
 
-  const buildRuntimeContext = (): RuntimeContext => ({ ...(runtimeContextRef.current || (typeof window !== 'undefined' ? ((window as any).__sireChartContexts?.[activeSymbol] || { symbol: activeSymbol }) : { symbol: activeSymbol })), availableInstruments: instruments.map(instrument => ({ symbol: instrument.symbol, name: instrument.name })) });
   const runDiagnostics = async () => {
     if (diagnosticsBusy) return;
     setDiagnosticsOpen(true); setDiagnosticsBusy(true); setDiagnosticReport(null);
     const started=Date.now();
     try {
-      const context=buildRuntimeContext();
+      const context=runtimeContextRef.current;
       const [serverResponse, derivResponse, issueResponse]=await Promise.all([fetch('/api/sire/diagnostics',{cache:'no-store'}),fetch('/api/sire/deriv/health',{cache:'no-store'}),fetch('/api/sire/issues',{cache:'no-store'})]);
       const server=await serverResponse.json().catch(()=>({ok:false,error:'Diagnostics HTTP '+serverResponse.status}));
       const deriv=await derivResponse.json().catch(()=>({ok:false,error:'Deriv health HTTP '+derivResponse.status}));
@@ -361,7 +360,7 @@ export default function ResearchLab({ symbol, instruments, onClose, onSelectInst
       <div className="sire-chat-history-label">Recent</div>
       <div className="sire-chat-history-list">{chatSessions.filter(chat => chat.messages.length > 0).map(chat => <div className={`sire-chat-history-item ${chat.id === activeChatId ? 'active' : ''}`} key={chat.id}><button type="button" className="sire-chat-history-open" onClick={() => openChat(chat.id)}><span className="sire-chat-history-title">{chat.title || 'New chat'}</span><small>{processingChats.includes(chat.id) ? '● Responding…' : formatChatDate(chat.updatedAt)}</small></button><button type="button" className="sire-chat-history-delete" onClick={() => deleteChat(chat.id)} aria-label={`Delete ${chat.title || 'chat'}`}><Trash2 size={14} /></button></div>)}{chatSessions.every(chat => chat.messages.length === 0) && <p className="sire-chat-history-empty">Your conversations will appear here.</p>}</div>
     </aside>
-    <header className="sire-chat-only-header"><button className="sire-chat-history-toggle" type="button" onClick={() => setSidebarOpen(true)} aria-label="Open chat history"><Menu size={19} /></button><div className="sire-chat-only-brand"><div className="sire-chat-only-mark"><Sparkles size={16} /></div><span>SIRE</span><i className={currentChatBusy ? 'sire-live-dot active' : 'sire-live-dot'} /></div><div className="sire-chat-context"><span>{instruments.find(item => item.symbol === activeSymbol)?.name || activeSymbol}</span></div><div className="sire-chat-header-actions"><button className="sire-chat-header-new" type="button" onClick={() => void runDiagnostics()} aria-label="Run SIRE issue finder" title="Find SIRE issues"><Bug size={17} /><span>Issue finder</span></button><button className="sire-chat-header-new" type="button" onClick={startNewChat}><MessageSquarePlus size={17} /><span>New chat</span></button><button className="sire-chat-only-close" onClick={onClose} aria-label="Close SIRE"><X size={18} /></button></div></header>
+    <header className="sire-chat-only-header"><button className="sire-chat-history-toggle" type="button" onClick={() => setSidebarOpen(true)} aria-label="Open chat history"><Menu size={19} /></button><div className="sire-chat-only-brand"><div className="sire-chat-only-mark"><Sparkles size={16} /></div><span>SIRE</span><i className={currentChatBusy ? 'sire-live-dot active' : 'sire-live-dot'} /></div><div className="sire-chat-context"><span>{instruments.find(item => item.symbol === symbol)?.name || symbol}</span></div><div className="sire-chat-header-actions"><button className="sire-chat-header-new" type="button" onClick={() => void runDiagnostics()} aria-label="Run SIRE issue finder" title="Find SIRE issues"><Bug size={17} /><span>Issue finder</span></button><button className="sire-chat-header-new" type="button" onClick={startNewChat}><MessageSquarePlus size={17} /><span>New chat</span></button><button className="sire-chat-only-close" onClick={onClose} aria-label="Close SIRE"><X size={18} /></button></div></header>
     <main className="sire-chat-only-messages"><div className="sire-chat-only-inner">
       {chatMessages.length === 0 && <div className="sire-chat-only-empty"><h1>What can I help you explore?</h1><p>Ask SIRE to research, reason through a problem, or work with your market context.</p><div className="sire-suggestion-grid">{suggestions.map((suggestion, index) => <button key={suggestion} type="button" onClick={() => void runAgent(suggestion)}><span>{index === 0 ? 'Explore' : index === 1 ? 'Research' : 'Analyze'}</span><strong>{suggestion}</strong></button>)}</div></div>}
       {chatMessages.map(item => <article className={`sire-chat-only-message ${item.role}`} key={item.id}><div className="sire-chat-only-bubble">{item.role === 'sire' ? <RichMessage text={item.text} /> : <div className="sire-user-text">{item.text}</div>}</div>{item.role === 'sire' && <MessageActions text={item.text} />}{item.meta && <small>{item.meta}</small>}</article>)}
