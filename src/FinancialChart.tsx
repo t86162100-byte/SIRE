@@ -1475,14 +1475,34 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
             }
             if (points.length >= 2) {
               const before = (liveWidget.objects.list?.() || []).filter((item: any) => item?.kind === 'drawing').length;
-              const created = liveWidget.draw.add({ tool, points, paneIndex: Number(detail.paneIndex || 0), style: detail.style || undefined, text: detail.text || undefined } as any);
+              const created = liveWidget.draw.add({ tool, points, paneIndex: Number(detail.paneIndex || 0), style: detail.style || undefined } as any);
+              const label = String(detail.label || detail.text || '').trim();
+              let labelCreated = null;
+              if (label && points[0]) {
+                try {
+                  labelCreated = liveWidget.draw.add({
+                    tool: 'text',
+                    points: [points[0]],
+                    paneIndex: Number(detail.paneIndex || 0),
+                    text: { value: label, bold: true, align: 'left', position: 'outside' },
+                  } as any);
+                } catch (labelError) {
+                  reportDiagnostic({
+                    level: 'warning',
+                    code: 'AI_AGENT_LABEL_FAILED',
+                    message: 'The chart markout was created, but its label could not be rendered.',
+                    detail: String(labelError instanceof Error ? labelError.message : labelError),
+                    operation: actionId,
+                  });
+                }
+              }
               window.setTimeout(() => {
                 const afterObjects = (liveWidget.objects.list?.() || []).filter((item: any) => item?.kind === 'drawing');
                 const verified = afterObjects.length > before;
                 if (!verified) {
                   reportDiagnostic({ level: 'error', code: 'AI_AGENT_ACTION_FAILED', message: 'The drawing action completed but verification found no new drawing object.', detail: JSON.stringify({ actionId, tool, points, created }).slice(0, 900), operation: actionId });
                 } else {
-                  reportDiagnostic({ level: 'info', code: 'AI_AGENT_ACTION_VERIFIED', message: 'SIRE verified the AI chart action on the active OpenAlgo chart.', detail: JSON.stringify({ actionId, symbol: symbolRef.current, timeframe: currentInterval, tool, drawingCount: afterObjects.length, points }).slice(0, 900), operation: actionId });
+                  reportDiagnostic({ level: 'info', code: 'AI_AGENT_ACTION_VERIFIED', message: 'SIRE verified the AI chart action on the active OpenAlgo chart.', detail: JSON.stringify({ actionId, symbol: symbolRef.current, timeframe: currentInterval, tool, label, labelCreated: Boolean(labelCreated), drawingCount: afterObjects.length, points }).slice(0, 900), operation: actionId });
                 }
               }, 50);
             } else {
