@@ -15,7 +15,7 @@ async function save(s:State,id?:string){s.updatedAt=new Date().toISOString();mem
 async function lock<T>(id:string,fn:()=>Promise<T>):Promise<T>{const p=locks.get(id)||Promise.resolve();let release!:()=>void;const c=new Promise<void>(r=>release=r);locks.set(id,p.then(()=>c));await p;try{return await fn()}finally{release();if(locks.get(id)===c)locks.delete(id)}}
 const stateText=(s:State)=>JSON.stringify({goal:s.goal,responsibilities:s.responsibilities.slice(-12),decisions:s.decisions.slice(-12),openQuestions:s.openQuestions.slice(-12),artifacts:s.artifacts.slice(-8)},null,2);
 
-export async function runAiTeam(input:{query:string;workspaceId?:string;history?:any[];symbol?:string;runtimeContext?:Record<string,unknown>;execute?:boolean;onEvent?:TeamEvent}){
+export async function runAiTeam(input:{query:string;workspaceId?:string;history?:any[];execute?:boolean;onEvent?:TeamEvent}){
  const query=clean(input.query);if(!query)throw new Error('query is required');const id=wid(input);
  return lock(id,async()=>{
   const started=Date.now();const timings:Record<string,number>={};const loadedAt=Date.now();const loaded=await load(id,query);timings.stateLoad=Date.now()-loadedAt;const s=loaded.state;s.goal=query;
@@ -51,7 +51,7 @@ export async function runAiTeam(input:{query:string;workspaceId?:string;history?
     }
   });
   timings.gptHead=Date.now()-headStarted;
-  s.decisions=[...s.decisions,'GPT head completed the request directly; no OpenAlgo agent delegation is available.'].slice(-20);
+  s.decisions=[...s.decisions,'GPT head completed the request directly.'].slice(-20);
   s.activity=[...s.activity,{actor:'GPT',phase:'conclusion',text:'GPT completed the response using its direct SIRE capabilities.',at:new Date().toISOString()}].slice(-40);
   const saveAt=Date.now();await save(s,loaded.id);timings.stateSave=Date.now()-saveAt;
   const totalMs=Date.now()-started;const slowest=Object.entries(timings).sort((a,b)=>b[1]-a[1])[0]||null;
