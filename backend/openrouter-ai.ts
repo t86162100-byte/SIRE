@@ -70,7 +70,6 @@ export async function runGptHead(input: {
   onEvent?: CouncilEvent;
   tools?: {
     webSearch?: (query: string) => Promise<string>;
-    runtimeContext?: Record<string, unknown>;
     checkIntegrations?: () => Promise<string>;
     githubRequest?: (input: { method: string; path: string; body?: unknown; permission: string }) => Promise<string>;
   };
@@ -116,7 +115,7 @@ export async function runGptHead(input: {
   });
 
   const messages: ChatMessage[] = [
-    { role: 'system', content: systemPrompt(input.tools?.runtimeContext) },
+    { role: 'system', content: systemPrompt() },
     ...cleanHistory(input.history),
     { role: 'user', content: query },
   ];
@@ -182,13 +181,12 @@ export async function runOpenRouter(input: {
   history?: Array<{ role: string; text?: string; content?: string }>;
   system?: string;
   councilContext?: string;
-  runtimeContext?: Record<string, unknown>;
   onEvent?: CouncilEvent;
 }) {
   const query = input.query.trim();
   if (!query) throw new Error('query is required');
   const messages: ChatMessage[] = [
-    { role: 'system', content: input.system || systemPrompt(input.runtimeContext) },
+    { role: 'system', content: input.system || systemPrompt() },
     ...cleanHistory(input.history),
     ...(input.councilContext ? [{ role: 'user', content: `TEAM CONTEXT:\n${input.councilContext}` } as ChatMessage] : []),
     { role: 'user', content: query },
