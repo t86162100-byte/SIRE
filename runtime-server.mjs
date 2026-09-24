@@ -268,6 +268,19 @@ async function handleDirectGptRequest(parsed) {
           result.github.connected = false;
           result.github.error = error instanceof Error ? error.message : String(error);
         }
+        if (result.render.configured) {
+          try {
+            const service = await renderRequestForGpt({ method:'GET', path:'/v1/services/' + result.render.serviceId, permission:'read' });
+            result.render.connected = true;
+            result.render.service = JSON.parse(service);
+          } catch (error) {
+            result.render.connected = false;
+            result.render.error = error instanceof Error ? error.message : String(error);
+          }
+        } else {
+          result.render.connected = false;
+          result.render.error = 'RENDER_API_KEY is not configured on the SIRE service.';
+        }
         return JSON.stringify(result);
       },
     },
