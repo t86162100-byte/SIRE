@@ -274,6 +274,7 @@ async function handleDirectGptRequest(parsed, onEvent) {
   const gpt = await runGptHead({
     query,
     history: Array.isArray(parsed.history) ? parsed.history : [],
+    chartSnapshot: parsed.chartSnapshot && typeof parsed.chartSnapshot === 'object' ? parsed.chartSnapshot : undefined,
     onEvent,
     tools: {
       githubRequest: githubRequestForGpt,
