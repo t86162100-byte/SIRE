@@ -32,13 +32,13 @@ function textFromResponse(data: any): string {
   return '';
 }
 
-async function callOpenRouter(messages: ChatMessage[], tools?: any[], requestId = 'unknown') {
+async function callOpenRouter(messages: ChatMessage[], tools?: any[], requestId = 'unknown', toolChoice: any = 'auto') {
   const controller = new AbortController();
   let timedOut = false;
   const timer = setTimeout(() => { timedOut = true; controller.abort(); }, REQUEST_TIMEOUT_MS);
   try {
     const body: any = { model: MODEL, messages, max_tokens: 2048 };
-    if (tools?.length) { body.tools = tools; body.tool_choice = 'auto'; }
+    if (tools?.length) { body.tools = tools; body.tool_choice = toolChoice; }
     let response: Response;
     try {
       response = await fetch(API_URL, {
@@ -122,7 +122,7 @@ export async function runGptHead(input: {
   if (input.tools?.githubRequest) toolDefs.push({ type:'function', function:{ name:'github_request', description:'Repository-scoped GitHub access for SIRE. Use for repository inspection and code changes requested by the user.', parameters:{type:'object',properties:{method:{type:'string',enum:['GET','POST','PUT','PATCH','DELETE']},path:{type:'string'},permission:{type:'string',enum:['read','write','execute']},body:{type:['object','array','string','null']}},required:['method','path','permission'],additionalProperties:false} } });
   if (input.tools?.webSearch) toolDefs.push({ type:'function', function:{ name:'web_search', description:'Search the web when current or externally verifiable information is needed.', parameters:{type:'object',properties:{query:{type:'string'}},required:['query'],additionalProperties:false} } });
   if (input.chartSnapshot && typeof input.chartSnapshot === 'object') toolDefs.push({ type:'function', function:{ name:'read_live_market_data', description:'Read the controlled live market-data state published by the SIRE chart runtime. Returns current quote/latest tick, live candle source state, connection status, subscription status, provider data timestamp, data age, and stale-data detection. Read-only; never connects to Deriv directly.', parameters:{type:'object',properties:{},additionalProperties:false} } });
-  if (input.tools?.chartControl) toolDefs.push({ type:'function', function:{ name:'control_chart', description:'Operate the active SIRE chart through its controlled chart-runtime interface, then return verified chart state. Use when the user asks to switch instrument, switch timeframe, change chart type, zoom, pan, move to a specific time, reset view, fit chart to data, open/close chart panes, or open chart settings. This is the only supported write interface to the visual chart. Do not claim success without using this tool and reading its verification result.', parameters:{type:'object',properties:{operations:{type:'array',minItems:1,maxItems:10,items:{type:'object',properties:{action:{type:'string',enum:['switch_instrument','switch_timeframe','set_chart_type','zoom','pan','move_to_time','reset_view','fit_data','open_pane','close_pane','open_settings','set_theme','set_timezone','set_grid','set_price_scale','set_crosshair']},symbol:{type:'string'},name:{type:'string'},interval:{type:'string'},chartType:{type:'string'},direction:{type:'string',enum:['in','out','left','right']},factor:{type:'number'},bars:{type:'number'},time:{type:'number'},paneIndex:{type:'integer'},open:{type:'boolean'},theme:{type:'string',enum:['dark','light']},timezone:{type:'string'},settings:{type:'object',additionalProperties:true}},required:['action'],additionalProperties:false}}},required:['operations'],additionalProperties:false} } });
+  if (input.tools?.chartControl) toolDefs.push({ type:'function', function:{ name:'control_chart', description:'Operate the active SIRE chart through its controlled chart-runtime interface, then return verified chart state. Use when the user asks to switch instrument, switch timeframe, change chart type, zoom, pan, move to a specific time, reset view, fit chart to data, open/close chart panes, or open chart settings. IMPORTANT: common Deriv instrument names map directly to symbols: BOOM 1000 = BOOM1000, CRASH 1000 = CRASH1000, etc. Time phrases map to chart intervals: 1-minute = 1m, 5-minute = 5m, 15-minute = 15m, 30-minute = 30m, 1-hour = 1h. This is the only supported write interface to the visual chart. Do not claim success without using this tool and reading its verification result.', parameters:{type:'object',properties:{operations:{type:'array',minItems:1,maxItems:10,items:{type:'object',properties:{action:{type:'string',enum:['switch_instrument','switch_timeframe','set_chart_type','zoom','pan','move_to_time','reset_view','fit_data','open_pane','close_pane','open_settings','set_theme','set_timezone','set_grid','set_price_scale','set_crosshair']},symbol:{type:'string'},name:{type:'string'},interval:{type:'string'},chartType:{type:'string'},direction:{type:'string',enum:['in','out','left','right']},factor:{type:'number'},bars:{type:'number'},time:{type:'number'},paneIndex:{type:'integer'},open:{type:'boolean'},theme:{type:'string',enum:['dark','light']},timezone:{type:'string'},settings:{type:'object',additionalProperties:true}},required:['action'],additionalProperties:false}}},required:['operations'],additionalProperties:false} } });
   if (input.tools?.marketDataRequest) toolDefs.push({ type:'function', function:{ name:'request_market_data', description:'Read historical Deriv market data and return the actual data. Use for candles/bars/ticks beyond the chart snapshot, specific ranges, different timeframes, older history, OHLC, or volume where returned. dataType is candles or ticks. For candles, interval is required; for ticks, omit interval. Use count for recent points up to 10,000; larger requests are automatically paged in 1,000-point chunks. Use from/to as Unix seconds for a range. Do not invent data.', parameters:{type:'object',properties:{symbol:{type:'string'},interval:{type:'string'},count:{type:'integer',minimum:1,maximum:10000},from:{type:'number'},to:{type:'number'},dataType:{type:'string',enum:['candles','ticks']}},required:['symbol','dataType'],additionalProperties:false} } });
 
   const history = cleanHistory(input.history);
@@ -136,12 +136,12 @@ export async function runGptHead(input: {
     { role:'user', content:query },
   ];
 
-  const usedToolCalls = new Set<string>();
+  const chartIntent = /\b(open|switch|change|set|show|load|go to|move|zoom|pan|reset|fit)\b[\s\S]{0,120}\b(chart|instrument|market|timeframe|candle|candlestick|5[- ]?minute|1[- ]?minute|15[- ]?minute|30[- ]?minute|hour|BOOM|CRASH)\b/i.test(query) || /\b(BOOM|CRASH)\s*\d+\b/i.test(query);\n  const usedToolCalls = new Set<string>();
   const toolCallHistory:Array<{turn:number;name:string}> = [];
   for (let turn=0; turn<MAX_TOOL_TURNS; turn++) {
     await emit('GPT','working',turn===0?'Reading your request…':'Reviewing the latest result…');
     const availableTools = toolDefs.filter((tool:any) => { const name=String(tool?.function?.name||''); return name==='github_request' || name==='request_market_data' || !usedToolCalls.has(name); });
-    const result=await callOpenRouter(messages,availableTools,requestId);
+    const forcedTool = turn === 0 && chartIntent && input.tools?.chartControl ? { type:'function', function:{ name:'control_chart' } } : 'auto';\n    const result=await callOpenRouter(messages,availableTools,requestId,forcedTool);
     const message=result.message;
     const toolCalls=Array.isArray(message.tool_calls)?message.tool_calls:[];
     if(!toolCalls.length){
