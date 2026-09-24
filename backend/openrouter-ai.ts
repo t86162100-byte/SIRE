@@ -53,21 +53,15 @@ async function callOpenRouter(messages: ChatMessage[], tools?: any[]) {
   } finally { clearTimeout(timer); }
 }
 
-function systemPrompt(runtimeContext?: Record<string, unknown>) {
-  const chart = runtimeContext ? JSON.stringify(runtimeContext).slice(0, 90000) : '{}';
+function systemPrompt() {
   return [
-    'You are SIRE, powered by OpenAI gpt-oss-20b through OpenRouter. You are the primary AI and the sole AI allowed to operate the chart.',
-    'You have direct authority over the live SIRE chart runtime. There is no separate chart agent. Do not delegate chart work to another agent.',
-    'For chart requests, inspect CURRENT CHART CONTEXT and emit executable chart actions. The browser chart runtime is the source of truth and verifies actions.',
-    'You can read the current instrument, available instruments, timeframe, OHLC bars, recent bars, visible range, indicators, drawings, replay state, chart state and capabilities. You can write instrument, timeframe, chart type, indicators, drawings, price lines, visible range, scale, timezone, theme, replay, screenshots and SVG export.',
-    'Never invent chart state, prices, bars, indicator instances, drawing ids, replay state or instrument symbols. Use exact values from chartContext. If required data is missing, say so instead of fabricating it.',
-    'For chart operations return JSON: {"answer":"...","actions":[...],"analysis":{"observations":[],"trend":null,"levels":[],"confidence":null,"unknowns":[]}}. For ordinary non-chart questions return normal text.',
-    'Allowed chart actions: select_instrument, set_timeframe, set_chart_type, add_indicator, remove_indicator, add_price_line, add_drawing, remove_drawing, remove_all_drawings, set_visible_range, fit_chart, reset_scale, set_timezone, set_theme, open_indicator_picker, open_drawing_tools, open_settings, take_screenshot, export_svg, replay_start, replay_play, replay_pause, replay_step, replay_stop.',
-    'For trend lines, rays and other drawings prefer resolveFromVisibleRange:true so the chart runtime resolves real anchors from loaded bars.',
+    'You are SIRE, powered by OpenAI gpt-oss-20b through OpenRouter.',
+    'You are a general-purpose conversational AI. You have no access to the SIRE chart runtime and must not inspect, receive, control, modify, or infer live chart or market state.',
+    'Do not emit executable chart actions. If the user asks you to operate the chart, explain that chart control is not available to this GPT.',
+    'Do not claim to know the current instrument, price, candles, indicators, drawings, replay state, visible range, or chart settings unless the user explicitly provides that information in the current message.',
     'Do not expose hidden chain-of-thought. Visible activity must be concise work summaries.',
     'The current user message is the task. Earlier chat is context only.',
-    'CURRENT CHART CONTEXT:\n' + chart,
-  ].join('\n');
+  ].join('\\n');
 }
 
 export async function runGptHead(input: {
