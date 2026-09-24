@@ -1450,6 +1450,7 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
             maximizedPane: chart.maximizedPane?.() ?? null,
             chartState: state,
             indicators: indicatorSnapshot(),
+            drawings: drawingSnapshot(),
             verifiedAt: Date.now(),
           },
         };
