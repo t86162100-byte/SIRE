@@ -12,7 +12,6 @@ import { realtime } from './backend/realtime.ts';
 import { getStoredHistory, persistHistoryBars, historyStoreStatus } from './backend/deriv-history-store.ts';
 import { signup, login, logout, currentUser, googleStart, googleCallback } from './backend/auth.ts';
 import { runSireDiagnostics } from './backend/sire-diagnostics.ts';
-import { analyzeChartRuntime } from './backend/openrouter-ai.ts';
 import { recordIssue, getRecentIssues } from './backend/sire-issue-tracker.ts';
 
 const PORT = Number(process.env.PORT || 10000);
@@ -39,7 +38,13 @@ function toEvent(req, body) {
 async function handleTeamRequest(parsed, onEvent) {
   const query = String(parsed.query || '').trim();
   if (!query) throw new Error('query is required');
-  const response = await runAiTeam({ query, workspaceId: parsed.workspaceId || parsed.workspace || parsed.sessionId || 'default', history: Array.isArray(parsed.history) ? parsed.history : [], symbol: parsed.symbol ? String(parsed.symbol) : undefined, runtimeContext: parsed.runtimeContext && typeof parsed.runtimeContext === 'object' ? parsed.runtimeContext : undefined, execute: Boolean(parsed.execute), onEvent });
+  const response = await runAiTeam({
+    query,
+    workspaceId: parsed.workspaceId || parsed.workspace || parsed.sessionId || 'default',
+    history: Array.isArray(parsed.history) ? parsed.history : [],
+    execute: Boolean(parsed.execute),
+    onEvent
+  });
   return { ...response, councilMode: 'shared-workspace-team', rounds: response.activity.length };
 }
 
@@ -266,28 +271,23 @@ async function githubRequestForGpt({ method, path, body, permission }) {
 async function handleDirectGptRequest(parsed, onEvent) {
   const query = String(parsed.query || '').trim();
   if (!query) throw new Error('query is required');
-  const runtimeContext = parsed.runtimeContext && typeof parsed.runtimeContext === 'object' ? parsed.runtimeContext : {};
   const gpt = await runGptHead({
     query,
     history: Array.isArray(parsed.history) ? parsed.history : [],
-    runtimeContext,
     onEvent,
     tools: {
-      chartControl: async actions => JSON.stringify({ ok:true, actions }),
-      chartAnalyze: async focus => JSON.stringify(analyzeChartRuntime(runtimeContext, focus)),
       githubRequest: githubRequestForGpt,
       renderRequest: renderRequestForGpt,
       checkIntegrations: async () => {
-        const result = { github: { configured:false, repository:String(process.env.GITHUB_REPOSITORY || 't86162100-byte/SIRE') }, render: { configured:Boolean(process.env.RENDER_API_KEY), serviceId:String(process.env.RENDER_SERVICE_ID || 'srv-daprrarbc2fs73bqt1r0') } };
+        const result = {
+          github: { configured: false, repository: String(process.env.GITHUB_REPOSITORY || 't86162100-byte/SIRE') },
+          render: { configured: Boolean(process.env.RENDER_API_KEY), serviceId: String(process.env.RENDER_SERVICE_ID || 'srv-daprrarbc2fs73bqt1r0') }
+        };
         try {
           const { repo } = githubRepoConfig();
           result.github.configured = true;
           result.github.repository = repo;
           await githubRequestForGpt({ method:'GET', path:'/repos/' + repo, permission:'read' });
-          const branchResult = await githubRequestForGpt({ method:'GET', path:'/repos/' + repo + '/branches/render-migration', permission:'read' });
-          result.github.branch = 'render-migration';
-          result.github.branchVerified = true;
-          result.github.branchResult = JSON.parse(branchResult);
           result.github.connected = true;
         } catch (error) {
           result.github.connected = false;
@@ -310,7 +310,7 @@ async function handleDirectGptRequest(parsed, onEvent) {
       },
     },
   });
-  return { text: gpt.text, responseId: gpt.responseId || '', model: gpt.model, provider: gpt.provider, actions: gpt.actions || [], directGpt: true };
+  return { text:gpt.text, responseId:gpt.responseId || '', model:gpt.model, provider:gpt.provider, actions:[], directGpt:true };
 }
 
 async function requestDerivPublic(payload, timeoutMs = 12000) {
