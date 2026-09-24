@@ -148,7 +148,7 @@ export default function ResearchLab({ symbol, instruments, onClose, onSelectInst
   }, []);
   useEffect(() => { if(!currentChatBusy || !thinkingSince){ setThinkingSeconds(0); return; } const tick=()=>setThinkingSeconds(Math.max(0,Math.floor((Date.now()-thinkingSince)/1000))); tick(); const timer=window.setInterval(tick,1000); return ()=>window.clearInterval(timer); }, [currentChatBusy, thinkingSince]); useEffect(() => { setActiveSymbol(symbol); }, [symbol]); useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' }); }, [chatMessages, currentChatBusy, activity, webSources]);
 
-  const buildRuntimeContext = (): RuntimeContext => ({ ...(runtimeContextRef.current || (typeof window !== 'undefined' ? ((window as any).__sireChartContexts?.[activeSymbol] || { symbol: activeSymbol }) : { symbol: activeSymbol })), availableInstruments: instruments.map(instrument => ({ symbol: instrument.symbol, name: instrument.name })) });
+  const buildRuntimeContext = (): RuntimeContext => ({ ...((typeof window !== 'undefined' ? ((window as any).__sireChartContexts?.[activeSymbol] || { symbol: activeSymbol }) : { symbol: activeSymbol })), availableInstruments: instruments.map(instrument => ({ symbol: instrument.symbol, name: instrument.name })) });
   const runDiagnostics = async () => {
     if (diagnosticsBusy) return;
     setDiagnosticsOpen(true); setDiagnosticsBusy(true); setDiagnosticReport(null);
