@@ -292,7 +292,11 @@ export default function ResearchLab({ symbol, instruments, onClose, onSelectInst
           if(value) consume(decoder.decode(value,{stream:!done}));
           if(done) break;
         }
-        if(!finalData) throw new Error('Direct GPT ended without a final response.');
+        // Some proxies terminate an SSE stream immediately after the final event,
+        // leaving that event in the decoder buffer without the trailing blank line.
+        // Flush the buffer once more before declaring the response missing.
+        if(buffer.trim()) consume('\\n\\n');
+        if(!finalData) throw new Error('Direct GPT stream closed before a final response event was received.');
         const data=finalData;
         if(data.error) throw new Error(String(data.error));
         if(isCancelled()) return;
