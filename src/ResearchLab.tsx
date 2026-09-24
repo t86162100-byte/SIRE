@@ -221,45 +221,6 @@ export default function ResearchLab({ symbol, instruments, onClose, onSelectInst
     } catch(error) { setDiagnosticReport({ok:false,durationMs:Date.now()-started,mainIssue:{severity:'critical',id:'ISSUE_FINDER',title:'Issue finder failed',detail:error instanceof Error?error.message:String(error)}}); }
     finally { setDiagnosticsBusy(false); }
   };
-  const applyActions = (actions: unknown) => {
-    if (!Array.isArray(actions)) return;
-    let targetSymbol = activeSymbol;
-    const normalize = (value: unknown) => String(value || '').toLowerCase().replace(/[^a-z0-9]+/g, '');
-    const resolveInstrument = (requestedValue: unknown) => {
-      const requested = String(requestedValue || '').trim();
-      if (!requested) return undefined;
-      const key = normalize(requested);
-      return instruments.find(item => normalize(item.symbol) === key)
-        || instruments.find(item => normalize(item.name) === key)
-        || instruments.find(item => {
-          const symbolKey = normalize(item.symbol);
-          const nameKey = normalize(item.name);
-          return symbolKey.includes(key) || key.includes(symbolKey) || nameKey.includes(key) || key.includes(nameKey);
-        });
-    };
-    actions.forEach(action => {
-      const item = action as Record<string, unknown>;
-      const type = String(item.__sireAction || item.type || '');
-      let resolvedSymbol = String(item.symbol || targetSymbol);
-      if (type === 'select_instrument') {
-        const requested = String(item.symbol || item.name || item.instrument || '');
-        const instrument = resolveInstrument(requested);
-        if (instrument) {
-          targetSymbol = instrument.symbol;
-          resolvedSymbol = instrument.symbol;
-          setActiveSymbol(instrument.symbol);
-          onSelectInstrument?.(instrument.symbol);
-        }
-      }
-      if (type && typeof window !== 'undefined') {
-        window.dispatchEvent(new CustomEvent('sire:agent-chart-action', {
-          detail: { ...item, __sireAction: type, symbol: resolvedSymbol }
-        }));
-      }
-      if (type === 'set_chart_view') onSetChartView?.((item.settings || {}) as Record<string, unknown>);
-      else if (type === 'add_chart_marker') onAddMarker?.(String(item.label || 'SIRE marker'));
-    });
-  };
   const cancelConversation = (chatId: string) => {
     cancelledJobsRef.current.add(chatId);
     abortControllersRef.current.get(chatId)?.abort();
@@ -349,9 +310,9 @@ export default function ResearchLab({ symbol, instruments, onClose, onSelectInst
         setChatSessions(previous=>previous.map(chat=>chat.id===chatId?{...chat,messages:[...chat.messages,reply].slice(-200),updatedAt:Date.now()}:chat));
         return;
       }
-      const response = await fetch('/api/sire/agent/council/stream', { method: 'POST', headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream' }, signal: controller.signal, body: JSON.stringify({ query: actualQuery, symbol: activeSymbol, history, runtimeContext: buildRuntimeContext() }) }); if (!response.ok || !response.body) throw new Error(`SIRE council connection failed (${response.status})`);
+      const response = await fetch('/api/sire/agent/council/stream', { method: 'POST', headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream' }, signal: controller.signal, body: JSON.stringify({ query: actualQuery, history }) }); if (!response.ok || !response.body) throw new Error(`SIRE council connection failed (${response.status})`);
       const reader = response.body.getReader(); const decoder = new TextDecoder(); let buffer = ''; let finalData: AgentResponse | null = null; const consume = (chunk: string) => { buffer += chunk; const events = buffer.split('\n\n'); buffer = events.pop() || ''; events.forEach(event => { let type = ''; let data = ''; event.split('\n').forEach(line => { if (line.startsWith('event:')) type = line.slice(6).trim(); else if (line.startsWith('data:')) data += line.slice(5).trim(); }); if (!data) return; const payload = JSON.parse(data); if (type === 'council.stage') setActivity(previous => [...previous, payload as CouncilActivity]); if (type === 'council.done') finalData = payload as AgentResponse; if (type === 'council.error') throw new Error(String(payload.error || 'Council failed')); }); };
-      while (true) { const { value, done } = await reader.read(); if (value) consume(decoder.decode(value, { stream: !done })); if (done) break; } if (!finalData) throw new Error('The council ended without a final answer.'); if (isCancelled()) return; if (finalData.error) throw new Error(String(finalData.error)); if (Array.isArray(finalData.webSources)) setWebSources(finalData.webSources); applyActions([...(finalData.actions || []), ...(finalData.agentActions || [])]); const reply = { id: `m-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, role: 'sire' as const, text: String(finalData?.text || '').trim() || 'I’m here. Tell me more.' };
+      while (true) { const { value, done } = await reader.read(); if (value) consume(decoder.decode(value, { stream: !done })); if (done) break; } if (!finalData) throw new Error('The council ended without a final answer.'); if (isCancelled()) return; if (finalData.error) throw new Error(String(finalData.error)); if (Array.isArray(finalData.webSources)) setWebSources(finalData.webSources); const reply = { id: `m-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, role: 'sire' as const, text: String(finalData?.text || '').trim() || 'I’m here. Tell me more.' };
       persistChatMessage(chatId, reply); writeJob(chatId, 'complete'); setProcessingChats(previous => previous.filter(id => id !== chatId)); setChatSessions(previous => previous.map(chat => chat.id === chatId ? { ...chat, messages: [...chat.messages, reply].slice(-200), updatedAt: Date.now() } : chat));
     } catch (error) { setIssueLogs(previous => { const errorObject=error instanceof Error?error:new Error(String(error)); const stack=String(errorObject.stack||''); const location=stack.match(/(?:at\s+[^\n(]+\s*\()?((?:https?:\/\/[^\s)]+|\/[^\s):]+|[^\s):]+)):(\d+):(\d+)\)?/); const item:IssueLog={id:'error-'+Date.now(),timestamp:Date.now(),source:'SIRE',level:'error',message:errorObject.message,detail:query,stack,url:window.location.href,line:location?Number(location[2]):undefined,column:location?Number(location[3]):undefined,file:location?location[1].split('/').pop()||location[1]:undefined,component:'chat-request'}; const next=[...previous,item]; void fetch('/api/sire/issues',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(item)}).catch(()=>{}); try { window.localStorage.setItem('sire-issue-finder-logs', JSON.stringify(next)); } catch {} return next; }); if (isCancelled() || (error instanceof DOMException && error.name === 'AbortError')) return; const detail = error instanceof Error ? error.message : 'Connection failed'; setLastError(true); const reply = { id: `m-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, role: 'sire' as const, text: `I couldn’t complete that message. ${detail}`, meta: 'Retry available' }; persistChatMessage(chatId, reply); writeJob(chatId, 'error'); setThinkingSince(null); setProcessingChats(previous => previous.filter(id => id !== chatId)); setChatSessions(previous => previous.map(chat => chat.id === chatId ? { ...chat, messages: [...chat.messages, reply].slice(-200), updatedAt: Date.now() } : chat)); } finally { if (retrying) setLastError(false); }
   };
