@@ -1048,7 +1048,9 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
             const settings = typeof item.settings === 'function' ? item.settings() : {};
             const dataStatus = typeof item.dataStatus === 'function' ? item.dataStatus() : null;
             const allFinite = Object.values(rawValues || {}).some((column: any) => Array.isArray(column) && column.some((value: any) => Number.isFinite(Number(value))));
-            return { id: item.id, indicatorId: item.indicatorId, name: item.name, paneIndex: item.paneIndex, visible: typeof item.visible === 'function' ? item.visible() : true, settings, values, dataStatus, rendered: allFinite && (typeof item.visible !== 'function' || item.visible()) };
+            const descriptor = registeredIndicators().find((candidate: any) => String(candidate?.id || '') === String(item.indicatorId || ''));
+            const placement = String(descriptor?.placement || '');
+            return { id: item.id, indicatorId: item.indicatorId, name: item.name, placement, paneIndex: item.paneIndex, visible: typeof item.visible === 'function' ? item.visible() : true, settings, values, dataStatus, rendered: allFinite && (typeof item.visible !== 'function' || item.visible()) };
           });
         };
         const findIndicator = (op: any) => {
@@ -1098,13 +1100,23 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
             const indicatorId = resolveIndicatorId(op);
             const settings = op?.settings && typeof op.settings === 'object' ? op.settings : {};
             const options: any = {};
-            if (Number.isInteger(op?.paneIndex) && Number(op.paneIndex) >= 0) options.paneIndex = Number(op.paneIndex);
-            const indicator = chart.addIndicator(indicatorId, settings, options);
+            const descriptor = registeredIndicators().find((candidate: any) => String(candidate?.id || '') === indicatorId);
+            const placement = String(descriptor?.placement || '');
+            // OpenAlgo declares oscillator/study indicators with placement='pane'.
+            // A pane indicator must never be forced into price pane 0: doing so makes
+            // values such as MACD's zero line participate in the price autoscale.
+            if (placement === 'pane') {
+              if (Number.isInteger(op?.paneIndex) && Number(op.paneIndex) > 0) options.paneIndex = Number(op.paneIndex);
+            } else if (Number.isInteger(op?.paneIndex) && Number(op.paneIndex) >= 0) {
+              options.paneIndex = Number(op.paneIndex);
+            }
+            const indicator = Object.keys(options).length ? chart.addIndicator(indicatorId, settings, options) : chart.addIndicator(indicatorId, settings);
             await wait(50);
             const current = (chart.indicators?.() || []).find((item: any) => item.id === indicator.id);
             if (!current) throw new Error('Indicator was added but is not present in the chart indicator registry.');
             const snapshot = indicatorSnapshot().find((item: any) => item.id === current.id);
             if (!snapshot?.rendered) throw new Error('Indicator ' + current.name + ' was added but did not render a finite value on the chart.');
+            if (placement === 'pane' && Number(current.paneIndex) === 0) throw new Error('Pane indicator ' + current.name + ' was incorrectly placed in the price pane.');
             return { action, ok: true, indicator: snapshot };
           }
           if (action === 'remove_indicator') {
