@@ -1026,6 +1026,67 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
         const scale = () => getChartTimeScale(chart);
         const logical = () => scale()?.getVisibleLogicalRange?.() || chart.getVisibleLogicalRange?.() || null;
         const wait = (ms: number) => new Promise(resolve => window.setTimeout(resolve, ms));
+        const indicatorSnapshot = () => {
+          const bars = ((chart.primarySeries?.()?.getData?.() || []) as any[]);
+          return (chart.indicators?.() || []).map((item: any) => {
+            const rawValues = typeof item.values === 'function' ? item.values() : {};
+            const values: Record<string, any> = {};
+            for (const [plotKey, column] of Object.entries(rawValues || {})) {
+              const series = Array.isArray(column) ? column as any[] : [];
+              const recent = series.slice(Math.max(0, series.length - 20)).map((value: any, offset: number) => ({
+                time: bars[Math.max(0, series.length - 20) + offset]?.time ?? null,
+                value: Number.isFinite(Number(value)) ? Number(value) : null,
+              }));
+              const latestFiniteIndex = (() => {
+                for (let i = series.length - 1; i >= 0; i -= 1) if (Number.isFinite(Number(series[i]))) return i;
+                return -1;
+              })();
+              values[plotKey] = {
+                latest: latestFiniteIndex >= 0 ? Number(series[latestFiniteIndex]) : null,
+                latestTime: latestFiniteIndex >= 0 ? (bars[latestFiniteIndex]?.time ?? null) : null,
+                recent,
+              };
+            }
+            const settings = typeof item.settings === 'function' ? item.settings() : {};
+            const dataStatus = typeof item.dataStatus === 'function' ? item.dataStatus() : null;
+            const allFinite = Object.values(rawValues || {}).some((column: any) => Array.isArray(column) && column.some((value: any) => Number.isFinite(Number(value))));
+            return {
+              id: item.id,
+              indicatorId: item.indicatorId,
+              name: item.name,
+              paneIndex: item.paneIndex,
+              visible: typeof item.visible === 'function' ? item.visible() : true,
+              settings,
+              values,
+              dataStatus,
+              rendered: allFinite && (typeof item.visible !== 'function' || item.visible()),
+            };
+          });
+        };
+        const findIndicator = (op: any) => {
+          const list = chart.indicators?.() || [];
+          const instanceId = String(op?.instanceId || '').trim();
+          if (instanceId) {
+            const found = list.find((item: any) => item.id === instanceId);
+            if (!found) throw new Error('Indicator instance not found: ' + instanceId);
+            return found;
+          }
+          const query = String(op?.indicatorId || op?.name || '').trim().toLowerCase();
+          const matches = list.filter((item: any) => item.indicatorId.toLowerCase() === query || item.name.toLowerCase() === query || item.name.toLowerCase().includes(query));
+          if (!matches.length) throw new Error('Indicator not found: ' + query);
+          if (matches.length > 1) throw new Error('Multiple ' + query + ' indicator instances exist; specify instanceId.');
+          return matches[0];
+        };
+        const resolveIndicatorId = (op: any) => {
+          const query = String(op?.indicatorId || op?.name || '').trim().toLowerCase();
+          const descriptor = registeredIndicators().find((item: any) =>
+            String(item?.id || '').toLowerCase() === query ||
+            String(item?.name || item?.label || item?.title || '').toLowerCase() === query ||
+            String(item?.name || item?.label || item?.title || '').toLowerCase().includes(query)
+          );
+          if (!descriptor?.id) throw new Error('Indicator is not registered in OpenAlgo Charts: ' + query);
+          return String(descriptor.id);
+        };
         const executeOne = async (op: any) => {
           const action = String(op?.action || '');
           if (action === 'switch_instrument') {
@@ -1044,6 +1105,63 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
             await wait(100);
             if (widget.interval() !== interval) throw new Error('Chart did not accept timeframe ' + interval + '.');
             return { action, ok: true, interval: widget.interval() };
+          }
+          if (action === 'add_indicator') {
+            const indicatorId = resolveIndicatorId(op);
+            const settings = op?.settings && typeof op.settings === 'object' ? op.settings : {};
+            const options: any = {};
+            if (Number.isInteger(op?.paneIndex) && Number(op.paneIndex) >= 0) options.paneIndex = Number(op.paneIndex);
+            const indicator = chart.addIndicator(indicatorId, settings, options);
+            await wait(50);
+            const current = (chart.indicators?.() || []).find((item: any) => item.id === indicator.id);
+            if (!current) throw new Error('Indicator was added but is not present in the chart indicator registry.');
+            const snapshot = indicatorSnapshot().find((item: any) => item.id === current.id);
+            if (!snapshot?.rendered) throw new Error('Indicator ' + current.name + ' was added but did not render a finite value on the chart.');
+            return { action, ok: true, indicator: snapshot };
+          }
+          if (action === 'remove_indicator') {
+            const indicator = findIndicator(op);
+            const instanceId = indicator.id;
+            const removed = chart.removeIndicator?.(instanceId);
+            if (removed === false) throw new Error('Chart could not remove indicator ' + instanceId + '.');
+            await wait(30);
+            if ((chart.indicators?.() || []).some((item: any) => item.id === instanceId)) throw new Error('Indicator ' + instanceId + ' is still present after removal.');
+            return { action, ok: true, removedInstanceId: instanceId };
+          }
+          if (action === 'modify_indicator') {
+            const indicator = findIndicator(op);
+            const settings = op?.settings && typeof op.settings === 'object' ? op.settings : {};
+            if (!Object.keys(settings).length) throw new Error('modify_indicator requires a non-empty settings object.');
+            indicator.setSettings(settings);
+            await wait(50);
+            const current = (chart.indicators?.() || []).find((item: any) => item.id === indicator.id);
+            const snapshot = indicatorSnapshot().find((item: any) => item.id === indicator.id);
+            if (!current || !snapshot) throw new Error('Indicator disappeared while applying settings.');
+            for (const [key, value] of Object.entries(settings)) if ((current.settings?.() || {})[key] !== value) throw new Error('Indicator setting ' + key + ' was not applied.');
+            if (!snapshot.rendered) throw new Error('Indicator ' + current.name + ' no longer has a rendered finite value after the settings change.');
+            return { action, ok: true, indicator: snapshot };
+          }
+          if (action === 'move_indicator') {
+            const indicator = findIndicator(op);
+            const paneIndex = Math.max(0, Math.floor(Number(op?.paneIndex)));
+            if (!Number.isFinite(paneIndex)) throw new Error('move_indicator requires paneIndex.');
+            const moved = chart.moveIndicator?.(indicator.id, paneIndex);
+            if (moved === false) throw new Error('Chart could not move indicator ' + indicator.id + ' to pane ' + paneIndex + '.');
+            await wait(30);
+            const current = (chart.indicators?.() || []).find((item: any) => item.id === indicator.id);
+            if (!current || current.paneIndex !== paneIndex) throw new Error('Indicator did not move to pane ' + paneIndex + '.');
+            return { action, ok: true, indicator: indicatorSnapshot().find((item: any) => item.id === indicator.id) };
+          }
+          if (action === 'set_indicator_visibility') {
+            const indicator = findIndicator(op);
+            if (typeof op?.visible !== 'boolean') throw new Error('set_indicator_visibility requires visible true or false.');
+            indicator.setVisible(op.visible);
+            await wait(20);
+            if (indicator.visible?.() !== op.visible) throw new Error('Indicator visibility did not change.');
+            return { action, ok: true, indicator: indicatorSnapshot().find((item: any) => item.id === indicator.id) };
+          }
+          if (action === 'read_indicators') {
+            return { action, ok: true, indicators: indicatorSnapshot() };
           }
           if (action === 'set_chart_type') {
             const chartType = String(op?.chartType || '').trim();
@@ -1155,6 +1273,7 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
             paneCount: (chart.panes?.() || []).length,
             maximizedPane: chart.maximizedPane?.() ?? null,
             chartState: state,
+            indicators: indicatorSnapshot(),
             verifiedAt: Date.now(),
           },
         };
