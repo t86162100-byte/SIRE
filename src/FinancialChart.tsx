@@ -1018,7 +1018,11 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
   }, [symbol]);
 
   useEffect(() => {
-    if (typeof window === 'undefined' || !isActive) return;
+    if (typeof window === 'undefined') return;
+    // Keep the bridge available while this chart component remains mounted.
+    // GPT requests can be issued from the chat surface while the chart tab is
+    // not the foreground tab; tying the bridge lifetime to isActive caused
+    // valid chart-control commands to time out with no browser error.
     const controls = {
       execute: async (operations: any[]) => {
         const widget = widgetRef.current;
@@ -1181,7 +1185,12 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
           return String(descriptor.id);
         };
         const executeOne = async (op: any) => {
-          const action = String(op?.action || '');
+          const rawAction = String(op?.action || '');
+          // Accept the canonical SIRE action names plus the older drawing
+          // command shape that some model turns may still produce. The
+          // runtime always converts it to the verified DrawingController API.
+          const action = rawAction === 'create' ? 'add_drawing' : rawAction;
+          const legacyProps = op?.toolProperties && typeof op.toolProperties === 'object' ? op.toolProperties : {};
           if (action === 'switch_instrument') {
             const query = String(op?.symbol || op?.name || '').trim().toLowerCase();
             const instrument = instrumentsRef.current.find(item => item.symbol.toLowerCase() === query || item.name.toLowerCase() === query || item.name.toLowerCase().includes(query));
@@ -1212,20 +1221,28 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
             }
             const draw: any = (widget as any).draw;
             if (!draw || typeof draw.add !== 'function') throw new Error('OpenAlgo DrawingController is not available on the active chart.');
-            const tool = normalizeDrawingTool(op?.drawingTool || op?.tool);
+            const tool = normalizeDrawingTool(op?.drawingTool || op?.tool || op?.toolName || legacyProps?.tool || legacyProps?.toolName);
             const descriptor: any = registeredDrawingTools().find((item: any) => item.id === tool);
             if (!descriptor) throw new Error('Drawing tool is not registered in OpenAlgo Charts: ' + tool);
-            const points = Array.isArray(op?.points) ? op.points.map((point: any) => ({ time: Number(point.time), price: Number(point.price) })) : [];
+            const rawPoints = Array.isArray(op?.points) ? op.points : (Array.isArray(legacyProps?.points) ? legacyProps.points : []);
+            let points = rawPoints.map((point: any) => ({ time: Number(point.time), price: Number(point.price) }));
+            // OpenAlgo's horizontal-line and vertical-line are one-anchor
+            // tools. Accept a two-endpoint horizontal/vertical command by
+            // collapsing it to the first real anchor instead of silently
+            // rejecting a valid price/time level described in an older shape.
             if (!points.length || points.some((point: any) => !Number.isFinite(point.time) || !Number.isFinite(point.price))) throw new Error('add_drawing requires real finite {time, price} anchor coordinates.');
+            if ((tool === 'horizontal-line' || tool === 'vertical-line') && points.length >= 1 && descriptor.points === 1) points = [points[0]];
             if (descriptor.points > 0 && points.length !== descriptor.points) throw new Error(descriptor.name + ' requires exactly ' + descriptor.points + ' anchor point(s); received ' + points.length + '.');
             const input: any = {
               tool,
               points,
               paneIndex: Number.isInteger(op?.paneIndex) ? Math.max(0, Number(op.paneIndex)) : 0,
-              style: op?.style && typeof op.style === 'object' ? op.style : {},
+              style: (op?.style && typeof op.style === 'object' ? op.style : (legacyProps?.style && typeof legacyProps.style === 'object' ? legacyProps.style : {})),
             };
             if (op?.text && typeof op.text === 'object') input.text = op.text;
+            else if (legacyProps?.text && typeof legacyProps.text === 'object') input.text = legacyProps.text;
             if (op?.props && typeof op.props === 'object') input.props = op.props;
+            else if (legacyProps?.props && typeof legacyProps.props === 'object') input.props = legacyProps.props;
             if (op?.locked === true) input.locked = true;
             if (op?.visible === false) input.visible = false;
             if (Number.isFinite(Number(op?.zIndex))) input.zIndex = Number(op.zIndex);
@@ -1460,7 +1477,7 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
     return () => {
       if ((window as any).__sireChartControl === controls) delete (window as any).__sireChartControl;
     };
-  }, [isActive]);
+  }, []);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
