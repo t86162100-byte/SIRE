@@ -175,7 +175,7 @@ export async function runGptHead(input: {
       } else if(name==='control_chart'&&input.tools?.chartControl){
         await emit('Chart','working','Executing the requested chart control…');
         const output=await input.tools.chartControl({operations:Array.isArray(args.operations)?args.operations:[]});
-        messages.push({role:'tool',tool_call_id:callId,content:output.slice(0,30000)});
+        messages.push({role:'tool',tool_call_id:callId,content:String(output).slice(0,30000)});
        } else if(name==='request_market_data'&&input.tools?.marketDataRequest){
         await emit('Market Data','working','Requesting historical market data…');
         const output=await input.tools.marketDataRequest({symbol:String(args.symbol||''),interval:args.interval?String(args.interval):undefined,count:Number.isFinite(Number(args.count))?Number(args.count):undefined,from:Number.isFinite(Number(args.from))?Number(args.from):undefined,to:Number.isFinite(Number(args.to))?Number(args.to):undefined,dataType:String(args.dataType||'candles')});
