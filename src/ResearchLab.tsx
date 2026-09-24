@@ -265,7 +265,7 @@ export default function ResearchLab({ symbol, instruments, onClose, onSelectInst
         let finalData:AgentResponse|null=null;
         const consume=(chunk:string)=>{
           buffer+=chunk;
-          const events=buffer.split('\\n\\n');
+          const events=buffer.split(/\r?\n\r?\n/);
           buffer=events.pop()||'';
           events.forEach(event=>{
             let type='';
@@ -295,7 +295,7 @@ export default function ResearchLab({ symbol, instruments, onClose, onSelectInst
         // Some proxies terminate an SSE stream immediately after the final event,
         // leaving that event in the decoder buffer without the trailing blank line.
         // Flush the buffer once more before declaring the response missing.
-        if(buffer.trim()) consume('\\n\\n');
+        if(buffer.trim()) consume('\n\n');
         if(!finalData) throw new Error('Direct GPT stream closed before a final response event was received.');
         const data=finalData;
         if(data.error) throw new Error(String(data.error));
