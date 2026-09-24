@@ -142,7 +142,8 @@ export async function runGptHead(input: {
   for (let turn=0; turn<MAX_TOOL_TURNS; turn++) {
     await emit('GPT','working',turn===0?'Reading your request…':'Reviewing the latest result…');
     const availableTools = toolDefs.filter((tool:any) => { const name=String(tool?.function?.name||''); return name==='github_request' || name==='request_market_data' || !usedToolCalls.has(name); });
-    const forcedTool = turn === 0 && chartIntent && input.tools?.chartControl ? { type:'function', function:{ name:'control_chart' } } : 'auto';\n    const result=await callOpenRouter(messages,availableTools,requestId,forcedTool);
+    const forcedTool = turn === 0 && chartIntent && input.tools?.chartControl ? { type:'function', function:{ name:'control_chart' } } : 'auto';
+    const result=await callOpenRouter(messages,availableTools,requestId,forcedTool);
     const message=result.message;
     const toolCalls=Array.isArray(message.tool_calls)?message.tool_calls:[];
     if(!toolCalls.length){
