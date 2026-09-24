@@ -12,6 +12,7 @@ import { realtime } from './backend/realtime.ts';
 import { getStoredHistory, persistHistoryBars, historyStoreStatus } from './backend/deriv-history-store.ts';
 import { signup, login, logout, currentUser, googleStart, googleCallback } from './backend/auth.ts';
 import { runSireDiagnostics } from './backend/sire-diagnostics.ts';
+import { analyzeChartRuntime } from './backend/openrouter-ai.ts';
 import { recordIssue, getRecentIssues } from './backend/sire-issue-tracker.ts';
 
 const PORT = Number(process.env.PORT || 10000);
@@ -219,6 +220,7 @@ async function handleDirectGptRequest(parsed) {
     onEvent: parsed.onEvent,
     tools: {
       chartControl: async actions => JSON.stringify({ ok:true, actions }),
+      chartAnalyze: async focus => JSON.stringify(analyzeChartRuntime(runtimeContext, focus)),
       githubRequest: githubRequestForGpt,
       checkIntegrations: async () => {
         const result = { github: { configured:false, repository:String(process.env.GITHUB_REPOSITORY || 't86162100-byte/SIRE') }, render: { configured:true } };
