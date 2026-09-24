@@ -25,9 +25,9 @@ const HEAD_TOOLS = [
   ]},
 ];
 
-export async function runGemini(input: { query: string; history?: Array<{ role: string; text?: string; content?: string }>; runtimeContext?: Record<string, unknown>; symbol?: string; councilContext?: string; debateRole?: string; onEvent?: CouncilEvent }) {
+export async function runGemini(input: { query: string; history?: Array<{ role: string; text?: string; content?: string }>; councilContext?: string; debateRole?: string; onEvent?: CouncilEvent }) {
   const query = input.query.trim(); if (!query) throw new Error('query is required');
-  const environmentContext = needsEnvironmentContext(query) ? JSON.stringify({ symbol: input.symbol || null, runtimeContext: input.runtimeContext || null }) : 'Not relevant to this message.';
+  const environmentContext = 'No hidden SIRE application, chart, market, instrument, price, candle, indicator, drawing, or replay context is available.';
   const hasCouncilContext = Boolean(input.councilContext?.trim());
   const systemInstruction = [
     'You are SIRE, a normal general-purpose conversational AI. You are the primary conversational intelligence and Gemini is the head of this system.',
@@ -82,5 +82,5 @@ export async function runGemini(input: { query: string; history?: Array<{ role: 
 
 export async function handleGeminiRequest(body: unknown) {
   const payload = (body || {}) as Record<string, unknown>; const query = String(payload.query || '').trim(); if (!query) return { status: 400, body: { error: 'query is required' } };
-  try { return { status: 200, body: await runGemini({ query, symbol: payload.symbol ? String(payload.symbol) : undefined, history: Array.isArray(payload.history) ? payload.history as Array<{ role: string; text?: string; content?: string }> : [], runtimeContext: payload.runtimeContext && typeof payload.runtimeContext === 'object' ? payload.runtimeContext as Record<string, unknown> : undefined }) }; } catch (cause) { const status = Number.isInteger((cause as any)?.status) ? Number((cause as any).status) : 502; return { status, body: { error: cause instanceof Error ? cause.message : String(cause), provider: 'Google Gemini', retryable: status === 429 || status === 500 || status === 502 || status === 503 } }; }
+  try { return { status: 200, body: await runGemini({ query, history: Array.isArray(payload.history) ? payload.history as Array<{ role: string; text?: string; content?: string }> : [] }) }; } catch (cause) { const status = Number.isInteger((cause as any)?.status) ? Number((cause as any).status) : 502; return { status, body: { error: cause instanceof Error ? cause.message : String(cause), provider: 'Google Gemini', retryable: status === 429 || status === 500 || status === 502 || status === 503 } }; }
 }
