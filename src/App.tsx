@@ -33,24 +33,64 @@ export default function App() {
 
   useEffect(() => {
     let cancelled = false;
+    let retryTimer: number | null = null;
+
     const startup = async (): Promise<DerivInstrument[]> => {
-      const healthResponse = await fetch('/api/sire/deriv/health', { cache: 'no-store' });
-      let health: any = null;
-      try { health = await healthResponse.json(); } catch {}
-      if (!healthResponse.ok || !health?.ok) {
-        throw new Error(`Deriv startup health check failed at ${health?.stage || 'unknown stage'}: ${health?.error || `HTTP ${healthResponse.status}`}`);
+      const maxAttempts = 3;
+      const retryDelaysMs = [0, 2500, 5000];
+
+      let lastError = 'Deriv market catalogue failed to load.';
+      for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+        if (cancelled) throw new Error('SIRE startup cancelled.');
+        if (retryDelaysMs[attempt - 1] > 0) {
+          await new Promise<void>(resolve => {
+            retryTimer = window.setTimeout(() => {
+              retryTimer = null;
+              resolve();
+            }, retryDelaysMs[attempt - 1]);
+          });
+        }
+
+        try {
+          console.info('[DERIV STARTUP] requesting market-data health', { attempt, maxAttempts });
+          const healthResponse = await fetch('/api/sire/deriv/health', {
+            cache: 'no-store',
+            headers: { 'Cache-Control': 'no-cache' },
+          });
+          let health: any = null;
+          try { health = await healthResponse.json(); } catch {}
+          if (!healthResponse.ok || !health?.ok) {
+            lastError = `Deriv startup health check failed at ${health?.stage || 'unknown stage'}: ${health?.error || `HTTP ${healthResponse.status}`}`;
+            console.warn('[DERIV STARTUP] health attempt failed', { attempt, maxAttempts, error: lastError, health });
+            continue;
+          }
+          if (!Array.isArray(health?.activeSymbols)) {
+            lastError = 'Deriv startup health check connected successfully but did not return the active instrument catalogue.';
+            console.warn('[DERIV STARTUP] active-symbol catalogue missing', { attempt, maxAttempts });
+            continue;
+          }
+
+          const items = health.activeSymbols
+            .map((item: any) => normalizeDerivInstrument(item))
+            .filter(Boolean) as DerivInstrument[];
+          if (!items.length) {
+            lastError = 'Deriv returned an empty active-symbol catalogue.';
+            console.warn('[DERIV STARTUP] active-symbol catalogue empty', { attempt, maxAttempts });
+            continue;
+          }
+
+          return sortDerivInstruments(items);
+        } catch (error) {
+          lastError = error instanceof Error ? error.message : 'Deriv market catalogue failed to load.';
+          console.warn('[DERIV STARTUP] health request failed', { attempt, maxAttempts, error: lastError });
+        }
       }
-      if (!Array.isArray(health?.activeSymbols)) {
-        throw new Error('Deriv startup health check connected successfully but did not return the active instrument catalogue.');
-      }
-      const items = health.activeSymbols
-        .map((item: any) => normalizeDerivInstrument(item))
-        .filter(Boolean) as DerivInstrument[];
-      return sortDerivInstruments(items);
+
+      throw new Error(lastError);
     };
+
     startup().then(items => {
       if (cancelled) return;
-      if (!items.length) throw new Error('Deriv returned an empty active-symbol catalogue.');
       const next = items;
       const initial = chooseInitialDerivInstrument(next);
       if (!initial) throw new Error('Deriv returned an empty active-symbol catalogue.');
@@ -60,7 +100,7 @@ export default function App() {
       setSelected(current => current && next.some(item => item.symbol === current.symbol) ? current : initial);
       setChartSymbols(current => current.length ? current : [initial.symbol]);
     }).catch(error => {
-      if (cancelled) return;
+      if (cancelled || error?.message === 'SIRE startup cancelled.') return;
       console.error('[DERIV MARKET DATA] active symbol discovery failed', error);
       setDerivLoading(false);
       setDerivError(error instanceof Error ? error.message : 'Deriv market catalogue failed to load.');
@@ -68,7 +108,11 @@ export default function App() {
       setSelected(null);
       setChartSymbols([]);
     });
-    return () => { cancelled = true; };
+
+    return () => {
+      cancelled = true;
+      if (retryTimer !== null) window.clearTimeout(retryTimer);
+    };
   }, []);
 
   useEffect(() => {
