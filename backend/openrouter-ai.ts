@@ -136,7 +136,8 @@ export async function runGptHead(input: {
     { role:'user', content:query },
   ];
 
-  const chartIntent = /\b(open|switch|change|set|show|load|go to|move|zoom|pan|reset|fit)\b[\s\S]{0,120}\b(chart|instrument|market|timeframe|candle|candlestick|5[- ]?minute|1[- ]?minute|15[- ]?minute|30[- ]?minute|hour|BOOM|CRASH)\b/i.test(query) || /\b(BOOM|CRASH)\s*\d+\b/i.test(query);\n  const usedToolCalls = new Set<string>();
+  const chartIntent = /\b(open|switch|change|set|show|load|go to|move|zoom|pan|reset|fit)\b[\s\S]{0,120}\b(chart|instrument|market|timeframe|candle|candlestick|5[- ]?minute|1[- ]?minute|15[- ]?minute|30[- ]?minute|hour|BOOM|CRASH)\b/i.test(query) || /\b(BOOM|CRASH)\s*\d+\b/i.test(query);
+  const usedToolCalls = new Set<string>();
   const toolCallHistory:Array<{turn:number;name:string}> = [];
   for (let turn=0; turn<MAX_TOOL_TURNS; turn++) {
     await emit('GPT','working',turn===0?'Reading your request…':'Reviewing the latest result…');
