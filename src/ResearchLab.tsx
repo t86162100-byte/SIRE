@@ -252,7 +252,7 @@ export default function ResearchLab({ symbol, instruments, onClose, onSelectInst
           method:'POST',
           headers:{'Content-Type':'application/json','Accept':'text/event-stream'},
           signal:controller.signal,
-          body:JSON.stringify({ query:actualQuery, symbol:activeSymbol, history, runtimeContext:buildRuntimeContext() })
+          body:JSON.stringify({ query:actualQuery, history })
         });
         if (!response.ok || !response.body) {
           const fallback = await response.text().catch(()=>'');
@@ -301,7 +301,6 @@ export default function ResearchLab({ symbol, instruments, onClose, onSelectInst
         const data=finalData;
         if(data.error) throw new Error(String(data.error));
         if(isCancelled()) return;
-        applyActions(data.actions);
         const reply={id:`m-${Date.now()}-${Math.random().toString(36).slice(2,7)}`,role:'sire' as const,text:String(data.text||'').trim()||'I’m here. Tell me more.'};
         persistChatMessage(chatId,reply);
         writeJob(chatId,'complete');
