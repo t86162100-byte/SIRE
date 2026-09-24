@@ -555,6 +555,8 @@ export function createDerivDataFeed(
       onDiagnostic?.({ level: older.length ? 'info' : 'warning', code: older.length ? 'HISTORY_PAGE_LOADED' : 'HISTORY_PAGE_EMPTY', message: older.length ? `OpenAlgo loaded ${older.length} older candles for ${symbol}.` : `No older candles were returned for ${symbol}.`, detail: 'OpenAlgo dataController owns the paging cursor, retention and viewport anchoring.' });
       return { bars: older, hasMore: older.length > 0 && older[0].time > 1, nextBefore: older[0]?.time };
     },
+    let subscriptionStatus: 'idle' | 'connecting' | 'active' | 'error' | 'stopped' = 'idle';
+    let lastLiveQuote: { symbol: string; price: number; epoch: number } | null = null;
     subscribeBars(
       { symbol, interval }: { symbol: string; interval: string },
       onBar: (bar: DerivBar) => void,
@@ -586,6 +588,21 @@ export function createDerivDataFeed(
       return () => {
         stopped = true;
         unsubscribe?.();
+      };
+    },
+    getLiveState() {
+      const connectionStatus = client.getConnectionStatus();
+      const latestTick = (lastLiveQuote as any) || null;
+      const ageMs = latestTick?.epoch ? Math.max(0, Date.now() - Number(latestTick.epoch) * 1000) : null;
+      return {
+        connectionStatus,
+        subscriptionStatus: subscriptionStatus,
+        latestTick: latestTick ? { ...latestTick } : null,
+        dataTimestamp: latestTick?.epoch ?? null,
+        dataAgeMs: ageMs,
+        stale: ageMs !== null ? ageMs > 30000 : false,
+        staleThresholdMs: 30000,
+        checkedAt: Date.now(),
       };
     },
     close() { client.close(); },
