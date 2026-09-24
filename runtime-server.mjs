@@ -263,6 +263,10 @@ async function handleDirectGptRequest(parsed) {
           result.github.configured = true;
           result.github.repository = repo;
           await githubRequestForGpt({ method:'GET', path:'/repos/' + repo, permission:'read' });
+          const branchResult = await githubRequestForGpt({ method:'GET', path:'/repos/' + repo + '/branches/render-migration', permission:'read' });
+          result.github.branch = 'render-migration';
+          result.github.branchVerified = true;
+          result.github.branchResult = JSON.parse(branchResult);
           result.github.connected = true;
         } catch (error) {
           result.github.connected = false;
