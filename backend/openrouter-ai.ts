@@ -136,7 +136,7 @@ export async function runGptHead(input: {
     { role:'user', content:query },
   ];
 
-  const chartIntent = (/\b(open|switch|change|set|show|load|go to|move|zoom|pan|reset|fit|add|remove|delete|modify|edit|change|put|draw|plot|mark)\b/i.test(query) && /\b(chart|instrument|market|timeframe|candle|candlestick|minute|hour|indicator|indicators|ema|sma|wma|rsi|macd|bollinger|adx|atr|vwap|stochastic|drawing|drawings|trendline|trend|horizontal|vertical|ray|channel|rectangle|fibonacci|fib|label|text|line|BOOM|CRASH)\b/i.test(query)) || /\b(BOOM|CRASH)\s*\d+\b/i.test(query);
+  const chartIntent = (/\b(open|switch|change|set|show|load|go to|move|zoom|pan|reset|fit|add|remove|delete|modify|edit|change|put|draw|plot|mark|read|list|inspect)\b/i.test(query) && /\b(chart|instrument|market|timeframe|candle|candlestick|minute|hour|indicator|indicators|ema|sma|wma|rsi|macd|bollinger|adx|atr|vwap|stochastic|drawing|drawings|trendline|trend|horizontal|vertical|ray|channel|rectangle|fibonacci|fib|label|text|line|BOOM|CRASH)\b/i.test(query)) || /\b(BOOM|CRASH)\s*\d+\b/i.test(query);
   const usedToolCalls = new Set<string>();
   const toolCallHistory:Array<{turn:number;name:string}> = [];
   for (let turn=0; turn<MAX_TOOL_TURNS; turn++) {
