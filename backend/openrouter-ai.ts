@@ -53,19 +53,20 @@ async function callOpenRouter(messages: ChatMessage[], tools?: any[]) {
   } finally { clearTimeout(timer); }
 }
 
-function systemPrompt() {
+function systemPrompt(runtimeContext?: Record<string, unknown>) {
+  const chart = runtimeContext ? JSON.stringify(runtimeContext).slice(0, 90000) : '{}';
   return [
-    'You are SIRE, the user-facing AI assistant and the primary reasoning model.',
-    'You are powered by OpenAI gpt-oss-20b through OpenRouter, but normally present yourself simply as SIRE.',
-    'You are a full general-purpose AI. Handle greetings, small talk, explanations, writing, planning, coding, research, technical work, and chart work naturally.',
-    'Do not use keyword routing or canned fast paths. Decide from the actual request whether you can answer directly or should use a tool.',
-    'You are above the available tools and decide when they are useful. You are not required to use a tool.',
-    'Available helpers: OpenAlgo Agent for chart/OpenAlgo/market and related technical context; web_search for current external information; GitHub for repository inspection and repository changes when the user asks for them or they are materially needed.',
-    'Use a helper only when it materially improves the answer. After a helper returns, evaluate its result yourself and continue reasoning.',
-    'GitHub access is real and may be read/write. When a repository task requires it, inspect the repository first, then make the requested changes through the GitHub tool and report the actual result. Never claim you searched, inspected, changed, deployed, or verified something unless the runtime actually performed that action.',
-    'Visible activity should contain only concise work summaries, never private chain-of-thought.',
-    'The current user message is the task you must answer. Treat earlier conversation as context only; do not continue, repeat, or act on an earlier request unless the current message asks you to. In particular, do not call GitHub, Render, OpenAlgo, or web tools merely because they appeared in earlier turns. If the current message is simple and self-contained, answer it directly without tools.',
-    'If a difficult task needs deeper investigation, delegate a focused task, inspect the result, and integrate it into your own answer. After a tool result, do not call the same tool again unless the new call is required to resolve a specific remaining question; otherwise answer from the evidence already returned.'
+    'You are SIRE, powered by OpenAI gpt-oss-20b through OpenRouter. You are the primary AI and the sole AI allowed to operate the chart.',
+    'You have direct authority over the live SIRE chart runtime. There is no separate chart agent. Do not delegate chart work to another agent.',
+    'For chart requests, inspect CURRENT CHART CONTEXT and emit executable chart actions. The browser chart runtime is the source of truth and verifies actions.',
+    'You can read the current instrument, available instruments, timeframe, OHLC bars, recent bars, visible range, indicators, drawings, replay state, chart state and capabilities. You can write instrument, timeframe, chart type, indicators, drawings, price lines, visible range, scale, timezone, theme, replay, screenshots and SVG export.',
+    'Never invent chart state, prices, bars, indicator instances, drawing ids, replay state or instrument symbols. Use exact values from chartContext. If required data is missing, say so instead of fabricating it.',
+    'For chart operations return JSON: {"answer":"...","actions":[...],"analysis":{"observations":[],"trend":null,"levels":[],"confidence":null,"unknowns":[]}}. For ordinary non-chart questions return normal text.',
+    'Allowed chart actions: select_instrument, set_timeframe, set_chart_type, add_indicator, remove_indicator, add_price_line, add_drawing, remove_drawing, remove_all_drawings, set_visible_range, fit_chart, reset_scale, set_timezone, set_theme, open_indicator_picker, open_drawing_tools, open_settings, take_screenshot, export_svg, replay_start, replay_play, replay_pause, replay_step, replay_stop.',
+    'For trend lines, rays and other drawings prefer resolveFromVisibleRange:true so the chart runtime resolves real anchors from loaded bars.',
+    'Do not expose hidden chain-of-thought. Visible activity must be concise work summaries.',
+    'The current user message is the task. Earlier chat is context only.',
+    'CURRENT CHART CONTEXT:\n' + chart,
   ].join('\n');
 }
 
@@ -74,8 +75,8 @@ export async function runGptHead(input: {
   history?: Array<{ role: string; text?: string; content?: string }>;
   onEvent?: CouncilEvent;
   tools?: {
-    askOpenAlgo?: (task: string) => Promise<string>;
     webSearch?: (query: string) => Promise<string>;
+    runtimeContext?: Record<string, unknown>;
     checkIntegrations?: () => Promise<string>;
     githubRequest?: (input: { method: string; path: string; body?: unknown; permission: string }) => Promise<string>;
   };
@@ -85,14 +86,6 @@ export async function runGptHead(input: {
   const emit = async (actor: string, phase: string, text: string) => { if (input.onEvent) await input.onEvent({ actor, phase, text }); };
 
   const toolDefs: any[] = [];
-  if (input.tools?.askOpenAlgo) toolDefs.push({
-    type: 'function',
-    function: {
-      name: 'ask_openalgo',
-      description: 'Ask the OpenAlgo Agent to inspect or act on chart, market, OpenAlgo, or related technical context. Use only when that specialist context is genuinely needed.',
-      parameters: { type: 'object', properties: { task: { type: 'string', description: 'The focused task for the OpenAlgo Agent.' } }, required: ['task'], additionalProperties: false },
-    },
-  });
   if (input.tools?.checkIntegrations) toolDefs.push({
     type: 'function',
     function: {
@@ -129,7 +122,7 @@ export async function runGptHead(input: {
   });
 
   const messages: ChatMessage[] = [
-    { role: 'system', content: systemPrompt() },
+    { role: 'system', content: systemPrompt(input.tools?.runtimeContext) },
     ...cleanHistory(input.history),
     { role: 'user', content: query },
   ];
@@ -143,7 +136,17 @@ export async function runGptHead(input: {
     if (!toolCalls.length) {
       const text = textFromResponse({ choices: [{ message }] });
       if (!text) throw new Error('GPT head returned no text');
-      return { text: text.slice(0, MAX_OUTPUT_CHARS), responseId: result.responseId, model: MODEL, provider: 'OpenAI gpt-oss via OpenRouter' };
+      let answer = text; let actions: any[] = []; let analysis: any = null;
+      try {
+        const raw = text.replace(/^\s*\`\`\`json\s*/i, '').replace(/\s*\`\`\`\s*$/i, '');
+        const parsed = JSON.parse(raw);
+        if (parsed && typeof parsed === 'object' && ('answer' in parsed || 'actions' in parsed)) {
+          answer = String(parsed.answer || '').trim() || 'Done.';
+          actions = Array.isArray(parsed.actions) ? parsed.actions.slice(0, 40) : [];
+          analysis = parsed.analysis ?? null;
+        }
+      } catch {}
+      return { text: answer.slice(0, MAX_OUTPUT_CHARS), actions, analysis, responseId: result.responseId, model: MODEL, provider: 'OpenAI gpt-oss via OpenRouter' };
     }
 
     messages.push({ role: 'assistant', content: message.content ?? '', tool_calls: toolCalls });
@@ -162,12 +165,6 @@ export async function runGptHead(input: {
         await emit('GitHub','working',method === 'GET' ? 'GPT is inspecting the repository through GitHub.' : 'GPT is making the requested repository change through GitHub.');
         const output = await input.tools.githubRequest({ method, path: normalizedPath, body: args.body, permission });
         messages.push({ role: 'tool', tool_call_id: callId, content: output.slice(0, 20000) });
-      } else if (name === 'ask_openalgo' && input.tools?.askOpenAlgo) {
-
-        const task = String(args.task || query).slice(0, 8000);
-        await emit('OpenAlgo Agent','working','GPT asked OpenAlgo Agent to inspect a focused technical/chart question.');
-        const output = await input.tools.askOpenAlgo(task);
-        messages.push({ role: 'tool', tool_call_id: callId, content: output.slice(0, 14000) });
       } else if (name === 'check_integrations' && input.tools?.checkIntegrations) {
         await emit('SIRE integrations','checking','GPT is checking the configured GitHub and Render connections.');
         const output = await input.tools.checkIntegrations();
@@ -204,5 +201,15 @@ export async function runOpenRouter(input: {
   const result = await callOpenRouter(messages);
   const text = textFromResponse({ choices: [{ message: result.message }] });
   if (!text) throw new Error('GPT returned no text');
-  return { text: text.slice(0, MAX_OUTPUT_CHARS), responseId: result.responseId, model: MODEL, provider: 'OpenAI gpt-oss via OpenRouter' };
+  let answer = text; let actions: any[] = []; let analysis: any = null;
+  try {
+    const raw = text.replace(/^\s*\`\`\`json\s*/i, '').replace(/\s*\`\`\`\s*$/i, '');
+    const parsed = JSON.parse(raw);
+    if (parsed && typeof parsed === 'object' && ('answer' in parsed || 'actions' in parsed)) {
+      answer = String(parsed.answer || '').trim() || 'Done.';
+      actions = Array.isArray(parsed.actions) ? parsed.actions.slice(0, 40) : [];
+      analysis = parsed.analysis ?? null;
+    }
+  } catch {}
+  return { text: answer.slice(0, MAX_OUTPUT_CHARS), actions, analysis, responseId: result.responseId, model: MODEL, provider: 'OpenAI gpt-oss via OpenRouter' };
 }
