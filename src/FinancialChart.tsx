@@ -1436,7 +1436,18 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
           };
           const tool = toolAliases[requestedTool] || requestedTool;
           const targetInterval = String(detail.interval || detail.timeframe || '');
-          const resolve = detail.resolveFromVisibleRange === true || tool === 'trend-line' || tool === 'ray' || tool === 'horizontal-line' || tool === 'rectangle';
+          // Preserve measured analysis anchors supplied by GPT. Only fall back to
+          // visible-range heuristics when the action did not provide concrete points
+          // (or explicitly requested resolution). This prevents an intelligent SMC/ICT/
+          // CRT analysis from being replaced by a generic line/box.
+          const suppliedPoints = Array.isArray(detail.points)
+            ? detail.points.filter((point: any) => Number.isFinite(Number(point?.time)) && Number.isFinite(Number(point?.price)))
+            : [];
+          const hasConcretePoints = suppliedPoints.length >= 2;
+          const resolve = detail.resolveFromVisibleRange === true || (
+            !hasConcretePoints &&
+            (tool === 'trend-line' || tool === 'ray' || tool === 'horizontal-line' || tool === 'rectangle')
+          );
 
           const actionId = String(detail.actionId || `ai-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`);
           reportDiagnostic({ level: 'info', code: 'AI_AGENT_ACTION_STARTED', message: `SIRE started chart action ${action}: ${tool}`, detail: JSON.stringify({ actionId, symbol: symbolRef.current, timeframe: targetInterval || String(widgetRef.current?.interval?.() || ''), tool }).slice(0, 900), operation: actionId });
@@ -1466,7 +1477,7 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
               return;
             }
 
-            let points = resolve ? [] : (Array.isArray(detail.points) ? detail.points : []);
+            let points = hasConcretePoints ? suppliedPoints : [];
             if (resolve) {
               const range = (liveWidget.chart?.timeScale as any)?.getVisibleLogicalRange?.();
               points = tool === 'rectangle'
