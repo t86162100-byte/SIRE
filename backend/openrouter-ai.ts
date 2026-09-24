@@ -161,13 +161,13 @@ export async function runGptHead(input: {
       if(name==='render_request'&&input.tools?.renderRequest){
         const method=String(args.method||'GET').toUpperCase(); await emit('Render','working',method==='GET'?'Checking deployment…':'Updating deployment…');
         const output=await input.tools.renderRequest({method,path:String(args.path||''),body:args.body,permission:String(args.permission||(method==='GET'?'read':'execute'))});
-        messages.push({role:'tool',tool_call_id:callId,content:output.slice(0,16000)});
+        messages.push({role:'tool',tool_call_id:callId,content:String(output).slice(0,16000)});
       } else if(name==='github_request'&&input.tools?.githubRequest){
         const method=String(args.method||'GET').toUpperCase(); await emit('GitHub','working',method==='GET'?'Reading code…':'Updating code…');
         const output=await input.tools.githubRequest({method,path:String(args.path||''),body:args.body,permission:String(args.permission||(method==='GET'?'read':'write'))});
-        messages.push({role:'tool',tool_call_id:callId,content:output.slice(0,20000)});
+        messages.push({role:'tool',tool_call_id:callId,content:String(output).slice(0,20000)});
       } else if(name==='check_integrations'&&input.tools?.checkIntegrations){
-        await emit('SIRE integrations','checking','Checking connections…'); const output=await input.tools.checkIntegrations(); messages.push({role:'tool',tool_call_id:callId,content:output.slice(0,12000)});
+        await emit('SIRE integrations','checking','Checking connections…'); const output=await input.tools.checkIntegrations(); messages.push({role:'tool',tool_call_id:callId,content:String(output).slice(0,12000)});
       } else if(name==='read_live_market_data' && input.chartSnapshot && typeof input.chartSnapshot === 'object') {
         await emit('Market Data','working','Reading live market-data state…');
         const live = (input.chartSnapshot as any)?.liveMarketData || null;
@@ -179,9 +179,9 @@ export async function runGptHead(input: {
        } else if(name==='request_market_data'&&input.tools?.marketDataRequest){
         await emit('Market Data','working','Requesting historical market data…');
         const output=await input.tools.marketDataRequest({symbol:String(args.symbol||''),interval:args.interval?String(args.interval):undefined,count:Number.isFinite(Number(args.count))?Number(args.count):undefined,from:Number.isFinite(Number(args.from))?Number(args.from):undefined,to:Number.isFinite(Number(args.to))?Number(args.to):undefined,dataType:String(args.dataType||'candles')});
-        messages.push({role:'tool',tool_call_id:callId,content:output.slice(0,120000)});
+        messages.push({role:'tool',tool_call_id:callId,content:String(output).slice(0,120000)});
       } else if(name==='web_search'&&input.tools?.webSearch){
-        await emit('Web','research','Searching the web…'); const output=await input.tools.webSearch(String(args.query||query).slice(0,1000)); messages.push({role:'tool',tool_call_id:callId,content:output.slice(0,14000)});
+        await emit('Web','research','Searching the web…'); const output=await input.tools.webSearch(String(args.query||query).slice(0,1000)); messages.push({role:'tool',tool_call_id:callId,content:String(output).slice(0,14000)});
       } else messages.push({role:'tool',tool_call_id:callId,content:'Tool unavailable. Continue without it.'});
     }
   }
