@@ -494,6 +494,7 @@ const server = http.createServer(async (req,res) => {
     if (req.method === 'POST' && pathname === '/api/sire/agent/gpt/stream') {
       const parsed = body ? JSON.parse(body) : {};
       if (!String(parsed.query || '').trim()) return res.writeHead(400,{ 'Access-Control-Allow-Origin':'*','Content-Type':'application/json; charset=utf-8' }).end(JSON.stringify({ error:'query is required' }));
+      const requestId = `gpt-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
       const sendEvent = (type, payload) => {
         if (res.writableEnded) return;
         res.write(`event: ${type}\ndata: ${JSON.stringify(payload)}\n\n`);
@@ -509,17 +510,18 @@ const server = http.createServer(async (req,res) => {
           try { res.write(`: keep-alive ${Date.now()}\\n\\n`); } catch {}
         }
       }, 5000);
-      sendEvent('gpt.status',{actor:'SIRE',phase:'starting',text:'SIRE connected. I’m starting the requested task.'});
+      sendEvent('gpt.status',{actor:'SIRE',phase:'starting',text:`SIRE connected. GPT request ${requestId} is starting.`,requestId});
       try {
-        const response = await handleDirectGptRequest(parsed, async event => sendEvent('gpt.status', event));
+        const response = await handleDirectGptRequest({ ...parsed, requestId }, async event => sendEvent('gpt.status', { ...event, requestId }));
         if (!res.writableEnded && !res.destroyed) {
-          sendEvent('gpt.status',{actor:'SIRE',phase:'finishing',text:'GPT has completed the work. Sending the final response.'});
+          sendEvent('gpt.status',{actor:'SIRE',phase:'finishing',text:'GPT has completed the work. Sending the final response.',requestId});
           sendEvent('gpt.done', response);
         }
       } catch (cause) {
         const message = cause instanceof Error ? cause.message : String(cause);
-        console.error('[DIRECT GPT STREAM]', message);
-        if (!res.writableEnded && !res.destroyed) sendEvent('gpt.error',{error:`Direct GPT test failed: ${message}`});
+        const detail = cause && typeof cause === 'object' ? { status: cause.status ?? null, code: cause.code ?? null, requestId: cause.requestId ?? requestId, providerBody: typeof cause.providerBody === 'string' ? cause.providerBody.slice(0, 2000) : null } : { status: null, code: null, requestId, providerBody: null };
+        console.error('[DIRECT GPT STREAM]', JSON.stringify({ requestId, message, ...detail }));
+        if (!res.writableEnded && !res.destroyed) sendEvent('gpt.error',{error:`Direct GPT failed [${requestId}]: ${message}`,requestId,...detail});
       } finally {
         clearInterval(heartbeat);
         if (!res.writableEnded) res.end();
