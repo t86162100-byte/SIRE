@@ -188,12 +188,13 @@ export async function runOpenRouter(input: {
   history?: Array<{ role: string; text?: string; content?: string }>;
   system?: string;
   councilContext?: string;
+  runtimeContext?: Record<string, unknown>;
   onEvent?: CouncilEvent;
 }) {
   const query = input.query.trim();
   if (!query) throw new Error('query is required');
   const messages: ChatMessage[] = [
-    { role: 'system', content: input.system || systemPrompt() },
+    { role: 'system', content: input.system || systemPrompt(input.runtimeContext) },
     ...cleanHistory(input.history),
     ...(input.councilContext ? [{ role: 'user', content: `TEAM CONTEXT:\n${input.councilContext}` } as ChatMessage] : []),
     { role: 'user', content: query },
