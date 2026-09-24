@@ -129,17 +129,16 @@ export async function runGptHead(input: {
     if (!toolCalls.length) {
       const text = textFromResponse({ choices: [{ message }] });
       if (!text) throw new Error('GPT head returned no text');
-      let answer = text; let actions: any[] = []; let analysis: any = null;
+      let answer = text; let analysis: any = null;
       try {
         const raw = text.replace(/^\s*\`\`\`json\s*/i, '').replace(/\s*\`\`\`\s*$/i, '');
         const parsed = JSON.parse(raw);
         if (parsed && typeof parsed === 'object' && ('answer' in parsed || 'actions' in parsed)) {
           answer = String(parsed.answer || '').trim() || 'Done.';
-          actions = Array.isArray(parsed.actions) ? parsed.actions.slice(0, 40) : [];
           analysis = parsed.analysis ?? null;
         }
       } catch {}
-      return { text: answer.slice(0, MAX_OUTPUT_CHARS), actions, analysis, responseId: result.responseId, model: MODEL, provider: 'OpenAI gpt-oss via OpenRouter' };
+      return { text: answer.slice(0, MAX_OUTPUT_CHARS), analysis, responseId: result.responseId, model: MODEL, provider: 'OpenAI gpt-oss via OpenRouter' };
     }
 
     messages.push({ role: 'assistant', content: message.content ?? '', tool_calls: toolCalls });
@@ -194,15 +193,14 @@ export async function runOpenRouter(input: {
   const result = await callOpenRouter(messages);
   const text = textFromResponse({ choices: [{ message: result.message }] });
   if (!text) throw new Error('GPT returned no text');
-  let answer = text; let actions: any[] = []; let analysis: any = null;
+  let answer = text; let analysis: any = null;
   try {
     const raw = text.replace(/^\s*\`\`\`json\s*/i, '').replace(/\s*\`\`\`\s*$/i, '');
     const parsed = JSON.parse(raw);
     if (parsed && typeof parsed === 'object' && ('answer' in parsed || 'actions' in parsed)) {
       answer = String(parsed.answer || '').trim() || 'Done.';
-      actions = Array.isArray(parsed.actions) ? parsed.actions.slice(0, 40) : [];
       analysis = parsed.analysis ?? null;
     }
   } catch {}
-  return { text: answer.slice(0, MAX_OUTPUT_CHARS), actions, analysis, responseId: result.responseId, model: MODEL, provider: 'OpenAI gpt-oss via OpenRouter' };
+  return { text: answer.slice(0, MAX_OUTPUT_CHARS), analysis, responseId: result.responseId, model: MODEL, provider: 'OpenAI gpt-oss via OpenRouter' };
 }
