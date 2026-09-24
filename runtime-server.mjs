@@ -51,6 +51,39 @@ function githubRepoConfig() {
   return { token, repo };
 }
 
+async function renderRequestForGpt({ method, path, body, permission }) {
+  const token = String(process.env.RENDER_API_KEY || '').trim();
+  const serviceId = String(process.env.RENDER_SERVICE_ID || 'srv-daprrarbc2fs73bqt1r0').trim();
+  if (!token) throw new Error('GPT Render control is not configured: set RENDER_API_KEY on the SIRE service.');
+  let normalizedPath = String(path || '').trim();
+  if (!normalizedPath.startsWith('/')) normalizedPath = '/' + normalizedPath;
+  const servicePrefix = '/v1/services/' + serviceId;
+  if (!(normalizedPath === servicePrefix || normalizedPath.startsWith(servicePrefix + '/'))) {
+    throw new Error('GPT Render access is limited to the configured SIRE service.');
+  }
+  const verb = String(method || 'GET').toUpperCase();
+  const requestedPermission = String(permission || (verb === 'GET' ? 'read' : 'execute')).toLowerCase();
+  if (verb === 'GET' && requestedPermission !== 'read') throw new Error('GET Render requests require read permission.');
+  if (verb !== 'GET' && requestedPermission !== 'execute') throw new Error('Mutating Render requests require execute permission.');
+  const response = await fetch('https://api.render.com' + normalizedPath, {
+    method: verb,
+    headers: {
+      'Accept':'application/json',
+      'Authorization':'Bearer ' + token,
+      ...(body !== undefined ? {'Content-Type':'application/json'} : {}),
+    },
+    ...(body !== undefined ? {body: JSON.stringify(body)} : {}),
+  });
+  const raw = await response.text();
+  let data = raw;
+  try { data = raw ? JSON.parse(raw) : {}; } catch {}
+  if (!response.ok) {
+    const detail = typeof data === 'object' && data ? (data.message || data.error || JSON.stringify(data)) : String(data);
+    throw new Error('Render API ' + response.status + ': ' + detail);
+  }
+  return JSON.stringify({ok:true,status:response.status,path:normalizedPath,result:data});
+}
+
 async function githubRequestForGpt({ method, path, body, permission }) {
   const { token, repo } = githubRepoConfig();
   const repoParts = repo.split('/');
@@ -222,8 +255,9 @@ async function handleDirectGptRequest(parsed) {
       chartControl: async actions => JSON.stringify({ ok:true, actions }),
       chartAnalyze: async focus => JSON.stringify(analyzeChartRuntime(runtimeContext, focus)),
       githubRequest: githubRequestForGpt,
+      renderRequest: renderRequestForGpt,
       checkIntegrations: async () => {
-        const result = { github: { configured:false, repository:String(process.env.GITHUB_REPOSITORY || 't86162100-byte/SIRE') }, render: { configured:true } };
+        const result = { github: { configured:false, repository:String(process.env.GITHUB_REPOSITORY || 't86162100-byte/SIRE') }, render: { configured:Boolean(process.env.RENDER_API_KEY), serviceId:String(process.env.RENDER_SERVICE_ID || 'srv-daprrarbc2fs73bqt1r0') } };
         try {
           const { repo } = githubRepoConfig();
           result.github.configured = true;
