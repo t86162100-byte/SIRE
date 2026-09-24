@@ -57,108 +57,31 @@ async function callOpenRouter(messages: ChatMessage[], tools?: any[]) {
 
 export function analyzeChartRuntime(runtimeContext: Record<string, unknown> = {}, focus?: string) {
   const raw = Array.isArray(runtimeContext.recentBars) ? runtimeContext.recentBars : [];
-  const bars = raw.map((b: any) => ({
-    time: Number(b?.time), open: Number(b?.open), high: Number(b?.high), low: Number(b?.low), close: Number(b?.close),
-  })).filter((b: any) => Number.isFinite(b.time) && Number.isFinite(b.open) && Number.isFinite(b.high) && Number.isFinite(b.low) && Number.isFinite(b.close));
-  if (bars.length < 20) return { ok:false, reason:'Not enough OHLC bars for structural analysis.', bars:bars.length };
-
-  const closes = bars.map((b:any)=>b.close);
-  const ema = (period:number) => {
-    const k = 2 / (period + 1);
-    let value = closes[0];
-    for (let i=1;i<closes.length;i++) value = closes[i] * k + value * (1-k);
-    return value;
-  };
-  const atrPeriod = 14;
-  const trs = bars.map((b:any,i:number) => i===0 ? b.high-b.low : Math.max(b.high-b.low, Math.abs(b.high-bars[i-1].close), Math.abs(b.low-bars[i-1].close)));
-  const atr = trs.slice(-atrPeriod).reduce((a:number,b:number)=>a+b,0) / atrPeriod;
-  const lookback = bars.slice(-40);
-  const recent = bars.slice(-20);
-  const recentHigh = Math.max(...recent.map((b:any)=>b.high));
-  const recentLow = Math.min(...recent.map((b:any)=>b.low));
-  const mid = (recentHigh + recentLow) / 2;
-  const e20 = ema(20), e50 = ema(50);
-  const slope20 = e20 - (function(){ const p=20; const k=2/(p+1); let v=closes[0]; const cutoff=Math.max(0,closes.length-8); for(let i=1;i<cutoff;i++) v=closes[i]*k+v*(1-k); return v; })();
-  const trend = e20 > e50 && slope20 > 0 ? 'bullish' : e20 < e50 && slope20 < 0 ? 'bearish' : 'mixed/ranging';
-
+  const bars = raw.map((b:any)=>({time:Number(b?.time),open:Number(b?.open),high:Number(b?.high),low:Number(b?.low),close:Number(b?.close)}))
+    .filter((b:any)=>Number.isFinite(b.time)&&Number.isFinite(b.open)&&Number.isFinite(b.high)&&Number.isFinite(b.low)&&Number.isFinite(b.close));
+  if(bars.length<30) return {ok:false,reason:'Not enough OHLC bars for conservative structural analysis.',bars:bars.length,confirmedStructures:[],drawings:[]};
+  const closes=bars.map((b:any)=>b.close);
+  const ema=(period:number)=>{const k=2/(period+1);let v=closes[0];for(let i=1;i<closes.length;i++)v=closes[i]*k+v*(1-k);return v;};
+  const tr=bars.map((b:any,i:number)=>i===0?b.high-b.low:Math.max(b.high-b.low,Math.abs(b.high-bars[i-1].close),Math.abs(b.low-bars[i-1].close)));
+  const atr14=tr.slice(-14).reduce((a:number,b:number)=>a+b,0)/Math.min(14,tr.length);
+  const e20=ema(20),e50=ema(50),recent=bars.slice(-20),last=bars[bars.length-1];
+  const recentHigh=Math.max(...recent.map((b:any)=>b.high)),recentLow=Math.min(...recent.map((b:any)=>b.low));
   const pivots:{index:number;kind:'high'|'low';price:number}[]=[];
-  for(let i=2;i<bars.length-2;i++){
-    const b=bars[i];
-    if(b.high>bars[i-1].high && b.high>bars[i-2].high && b.high>=bars[i+1].high && b.high>=bars[i+2].high) pivots.push({index:i,kind:'high',price:b.high});
-    if(b.low<bars[i-1].low && b.low<bars[i-2].low && b.low<=bars[i+1].low && b.low<=bars[i+2].low) pivots.push({index:i,kind:'low',price:b.low});
-  }
-  const last = bars[bars.length-1];
-  const lastHigh = [...pivots].reverse().find(p=>p.kind==='high' && p.index<bars.length-2);
-  const lastLow = [...pivots].reverse().find(p=>p.kind==='low' && p.index<bars.length-2);
-  const structure = last.close > (lastHigh?.price ?? Infinity) ? 'bullish BOS' : last.close < (lastLow?.price ?? -Infinity) ? 'bearish BOS' : trend;
-  const tolerance = Math.max(atr * 0.18, Math.abs(last.close)*0.00015);
-  const equalHighs = pivots.filter(p=>p.kind==='high' && Math.abs(p.price-recentHigh)<=tolerance).slice(-3);
-  const equalLows = pivots.filter(p=>p.kind==='low' && Math.abs(p.price-recentLow)<=tolerance).slice(-3);
-
-  const drawings:any[]=[];
-  if(lastHigh && lastLow) {
-    const from = bars[Math.min(lastLow.index,lastHigh.index)];
-    drawings.push({
-      tool:'trend-line',
-      points:[{time:from.time,price:trend==='bearish'?lastHigh.price:lastLow.price},{time:last.time,price:last.close}],
-      text: trend==='bullish'?'Market Structure ↑':'Market Structure ↓',
-      rationale:'Connects the most recent confirmed swing structure to current price; not an arbitrary chart-spanning line.'
-    });
-  }
-  if(lastHigh && lastLow) {
-    const obIndex = structure === 'bullish BOS' ? lastLow.index : structure === 'bearish BOS' ? lastHigh.index : -1;
-    if(obIndex >= 0 && obIndex < bars.length) {
-      const ob=bars[obIndex];
-      drawings.push({
-        tool:'rectangle',
-        points:[{time:ob.time,price:ob.low},{time:last.time,price:ob.high}],
-        text: structure === 'bullish BOS' ? 'Bullish Order Block' : 'Bearish Order Block',
-        rationale:'Uses the last confirmed opposite-side swing candle associated with the detected structural break.'
-      });
-    }
-  }
-  if(equalHighs.length>=2) drawings.push({
-    tool:'rectangle',
-    points:[{time:bars[Math.max(0,equalHighs[0].index-2)].time,price:recentHigh-tolerance},{time:last.time,price:recentHigh+tolerance}],
-    text:'Buy-side Liquidity',
-    rationale:'Repeated swing highs cluster within volatility-adjusted tolerance, creating a measurable liquidity pool.'
-  });
-  if(equalLows.length>=2) drawings.push({
-    tool:'rectangle',
-    points:[{time:bars[Math.max(0,equalLows[0].index-2)].time,price:recentLow-tolerance},{time:last.time,price:recentLow+tolerance}],
-    text:'Sell-side Liquidity',
-    rationale:'Repeated swing lows cluster within volatility-adjusted tolerance, creating a measurable liquidity pool.'
-  });
-  if(recent.length>=8) drawings.push({
-    tool:'rectangle',
-    points:[{time:recent[0].time,price:recentLow},{time:last.time,price:recentHigh}],
-    text:'Current Range',
-    rationale:'Recent 20-bar high/low defines the actual consolidation envelope used for range analysis.'
-  });
-
-  return {
-    ok:true,
-    symbol:runtimeContext.symbol,
-    timeframe:runtimeContext.timeframe,
-    price:last.close,
-    bars:bars.length,
-    atr14:atr,
-    ema20:e20,
-    ema50:e50,
-    trend,
-    structure,
-    recentHigh,
-    recentLow,
-    rangeSize:recentHigh-recentLow,
-    rangePosition:(last.close-recentLow)/Math.max(recentHigh-recentLow,Number.EPSILON),
-    swingHigh:lastHigh ? {time:bars[lastHigh.index].time,price:lastHigh.price} : null,
-    swingLow:lastLow ? {time:bars[lastLow.index].time,price:lastLow.price} : null,
-    liquidity:{buySide:equalHighs.map(p=>p.price),sellSide:equalLows.map(p=>p.price)},
-    drawings,
-    caveat:'This is a structured technical reading of the supplied OHLC window, not a guarantee of future price movement.'
-  };
+  for(let i=2;i<bars.length-2;i++){const b=bars[i];if(b.high>bars[i-1].high&&b.high>bars[i-2].high&&b.high>=bars[i+1].high&&b.high>=bars[i+2].high)pivots.push({index:i,kind:'high',price:b.high});if(b.low<bars[i-1].low&&b.low<bars[i-2].low&&b.low<=bars[i+1].low&&b.low<=bars[i+2].low)pivots.push({index:i,kind:'low',price:b.low});}
+  const highs=pivots.filter(p=>p.kind==='high'),lows=pivots.filter(p=>p.kind==='low'),lastHigh=highs.at(-1)||null,lastLow=lows.at(-1)||null;
+  const bullishBos=Boolean(lastHigh&&last.close>lastHigh.price&&last.close>last.open),bearishBos=Boolean(lastLow&&last.close<lastLow.price&&last.close<last.open);
+  const structure=bullishBos?'bullish BOS':bearishBos?'bearish BOS':'no confirmed BOS';
+  const trend=bullishBos?'bullish':bearishBos?'bearish':(e20>e50?'bullish':e20<e50?'bearish':'mixed/ranging');
+  const tolerance=Math.max(atr14*0.12,Math.abs(last.close)*0.0001),equalHighs=highs.filter(p=>Math.abs(p.price-recentHigh)<=tolerance).slice(-4),equalLows=lows.filter(p=>Math.abs(p.price-recentLow)<=tolerance).slice(-4);
+  const confirmedStructures:any[]=[],drawings:any[]=[];
+  if(bullishBos||bearishBos){const broken=bullishBos?lastHigh!:lastLow!;confirmedStructures.push({name:bullishBos?'Bullish Break of Structure':'Bearish Break of Structure',type:'BOS',confirmed:true,evidence:'Latest confirmed swing level was closed through by a directional candle.',level:{time:bars[broken.index].time,price:broken.price}});drawings.push({confirmed:true,tool:'horizontal-line',points:[{time:bars[Math.max(0,broken.index-4)].time,price:broken.price},{time:last.time,price:broken.price}],label:bullishBos?'SMC • Bullish BOS':'SMC • Bearish BOS',rationale:'Confirmed structural break at the last confirmed swing level.'});}
+  if(equalHighs.length>=2){confirmedStructures.push({name:'Buy-side liquidity',type:'liquidity',confirmed:true,price:recentHigh,evidence:'At least two confirmed swing highs cluster inside a volatility-adjusted tolerance.'});drawings.push({confirmed:true,tool:'rectangle',points:[{time:bars[Math.max(0,equalHighs[0].index-2)].time,price:recentHigh-tolerance},{time:bars[Math.min(bars.length-1,equalHighs.at(-1)!.index+2)].time,price:recentHigh+tolerance}],label:'ICT • Buy-side Liquidity',rationale:'Confirmed equal-high cluster limited to the measured liquidity area.'});}
+  if(equalLows.length>=2){confirmedStructures.push({name:'Sell-side liquidity',type:'liquidity',confirmed:true,price:recentLow,evidence:'At least two confirmed swing lows cluster inside a volatility-adjusted tolerance.'});drawings.push({confirmed:true,tool:'rectangle',points:[{time:bars[Math.max(0,equalLows[0].index-2)].time,price:recentLow-tolerance},{time:bars[Math.min(bars.length-1,equalLows.at(-1)!.index+2)].time,price:recentLow+tolerance}],label:'ICT • Sell-side Liquidity',rationale:'Confirmed equal-low cluster limited to the measured liquidity area.'});}
+  const crtWindow=bars.slice(-9,-1);if(crtWindow.length>=8){const hi=Math.max(...crtWindow.map((b:any)=>b.high)),lo=Math.min(...crtWindow.map((b:any)=>b.low)),compact=hi-lo<=atr14*2.5,bull=compact&&last.close>hi&&last.close-last.open>atr14*.5,bear=compact&&last.close<lo&&last.open-last.close>atr14*.5;if(bull||bear){confirmedStructures.push({name:'CRT range expansion',type:'CRT',confirmed:true,direction:bull?'bullish':'bearish',range:{low:lo,high:hi},evidence:'Prior compact range followed by a directional expansion close outside it.'});drawings.push({confirmed:true,tool:'rectangle',points:[{time:crtWindow[0].time,price:lo},{time:crtWindow.at(-1)!.time,price:hi}],label:'CRT • Confirmed Range',rationale:'Measured prior consolidation that produced a confirmed expansion.'});}}
+  const displacementIndex=bars.findIndex((b:any,i:number)=>i>=Math.max(3,bars.length-8)&&Math.abs(b.close-b.open)>=atr14*.9&&Math.max(b.high-b.close,b.close-b.low)<=Math.max(Math.abs(b.close-b.open)*.6,atr14*.35));
+  if((bullishBos||bearishBos)&&displacementIndex>0){const d=bars[displacementIndex],opp=bullishBos?[...Array(displacementIndex).keys()].reverse().find(i=>bars[i].close<bars[i].open):[...Array(displacementIndex).keys()].reverse().find(i=>bars[i].close>bars[i].open);if(opp!==undefined){const ob=bars[opp];confirmedStructures.push({name:bullishBos?'Bullish order block':'Bearish order block',type:'order-block',confirmed:true,zone:{low:ob.low,high:ob.high},evidence:'Last opposite candle before confirmed displacement/BOS.'});drawings.push({confirmed:true,tool:'rectangle',points:[{time:ob.time,price:ob.low},{time:d.time,price:ob.high}],label:bullishBos?'SMC • Bullish Order Block':'SMC • Bearish Order Block',rationale:'Last opposite candle before confirmed displacement and BOS.'});}}
+  return {ok:true,symbol:runtimeContext.symbol,timeframe:runtimeContext.timeframe,price:last.close,bars:bars.length,atr14,ema20:e20,ema50:e50,trend,structure,recentHigh,recentLow,rangeSize:recentHigh-recentLow,rangePosition:(last.close-recentLow)/Math.max(recentHigh-recentLow,Number.EPSILON),swingHigh:lastHigh?{time:bars[lastHigh.index].time,price:lastHigh.price}:null,swingLow:lastLow?{time:bars[lastLow.index].time,price:lastLow.price}:null,confirmedStructures,drawings,focus:focus||'general',caveat:'Only structures meeting conservative confirmation rules are returned for markout.'};
 }
-
 function systemPrompt() {
   return [
     'You are SIRE, the user-facing AI assistant and the primary reasoning model.',
@@ -271,6 +194,8 @@ export async function runGptHead(input: {
 
   const usedToolCalls = new Set<string>();
   const chartActions: any[] = [];
+  let lastChartAnalysis: any = null;
+  const analysisRequest = /\b(analy[sz]e|analysis|smc|ict|crt|market structure|order block|liquidity|supply|demand)\b/i.test(query) && /\b(chart|market|instrument|5m|timeframe|boom)\b/i.test(query);
   const toolCallHistory: Array<{turn:number;name:string}> = [];
   for (let turn = 0; turn < MAX_TOOL_TURNS; turn++) {
     await emit('GPT','thinking', turn === 0 ? 'GPT is considering your request and deciding what, if anything, it needs to inspect.' : 'GPT is evaluating the latest tool result and deciding the next step.');
@@ -296,6 +221,17 @@ export async function runGptHead(input: {
         }
         return { text: recoveryText.slice(0, MAX_OUTPUT_CHARS), responseId: recovery.responseId || result.responseId, model: MODEL, provider: 'OpenAI gpt-oss via OpenRouter', actions: chartActions };
       }
+      if (analysisRequest && chartActions.length===0 && input.tools?.chartAnalyze && input.tools?.chartControl) {
+        try {
+          const a=lastChartAnalysis || JSON.parse(await input.tools.chartAnalyze(query));
+          const ds=Array.isArray(a?.drawings)?a.drawings.filter((d:any)=>d?.confirmed===true&&Array.isArray(d?.points)&&d.points.length>=2):[];
+          if(ds.length){
+            const acts=ds.map((d:any)=>({__sireAction:'add_drawing',symbol:String(a.symbol||input.runtimeContext?.symbol||''),interval:String(a.timeframe||input.runtimeContext?.timeframe||''),tool:String(d.tool||'rectangle'),points:d.points,label:String(d.label||'Confirmed structure'),rationale:String(d.rationale||''),resolveFromVisibleRange:false,actionId:'analysis-'+Date.now()+'-'+Math.random().toString(36).slice(2,8)}));
+            await input.tools.chartControl(acts); chartActions.push(...acts);
+            await emit('Chart','working',`GPT is marking ${acts.length} confirmed structure(s) from the measured analysis.`);
+          }
+        } catch {}
+      }
       return { text: text.slice(0, MAX_OUTPUT_CHARS), responseId: result.responseId, model: MODEL, provider: 'OpenAI gpt-oss via OpenRouter', actions: chartActions };
     }
 
@@ -320,6 +256,16 @@ export async function runGptHead(input: {
         chartActions.push(...accepted);
         await emit('Chart','working',accepted.length ? `GPT is operating the chart directly (${accepted.length} action(s)).` : 'GPT received a chart-control request but no valid actions were supplied.');
         messages.push({ role: 'tool', tool_call_id: callId, content: JSON.stringify({ ok:true, actions: accepted }) });
+      } else if (name === 'chart_analyze' && input.tools?.chartAnalyze) {
+        await emit('Chart','analysis','GPT is running measured SMC/ICT/CRT structure analysis on the live OHLC context.');
+        const output = await input.tools.chartAnalyze(String(args.focus || query).slice(0,500));
+        try { lastChartAnalysis = JSON.parse(output); } catch { lastChartAnalysis = null; }
+        messages.push({ role: 'tool', tool_call_id: callId, content: output.slice(0,18000) });
+      } else if (name === 'render_request' && input.tools?.renderRequest) {
+        const method=String(args.method||'GET').toUpperCase(), path=String(args.path||'').trim(), permission=String(args.permission||(method==='GET'?'read':'execute'));
+        await emit('Render','working',method==='GET'?'GPT is inspecting the SIRE deployment through Render.':'GPT is operating the SIRE deployment through Render.');
+        const output=await input.tools.renderRequest({method,path,body:args.body,permission});
+        messages.push({ role:'tool', tool_call_id:callId, content:output.slice(0,16000) });
       } else if (name === 'github_request' && input.tools?.githubRequest) {
         const method = String(args.method || 'GET').toUpperCase();
         const path = String(args.path || '').trim();
