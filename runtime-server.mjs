@@ -8,7 +8,6 @@ const { handler } = await import('./backend/index.ts');
 import { handleGeminiRequest } from './backend/gemini-ai.ts';
 import { runAiTeam } from './backend/ai-team.ts';
 import { runOpenRouter } from './backend/openrouter-ai.ts';
-import { runOpenAlgoAgent } from './backend/openalgo-agent.ts';
 import { runAgent } from './backend/sire-agent-gateway.ts';
 import { startAgentWorker } from './workers/sire-agent-worker.ts';
 import { ws } from './compat/appdeploy-sdk/index.js';
@@ -45,34 +44,15 @@ async function handleTeamRequest(parsed, onEvent) {
   return { ...response, councilMode: 'shared-workspace-team', rounds: response.activity.length };
 }
 
-async function handleDirectOpenAlgoAgentRequest(parsed) {
-  const query = String(parsed.query || '').trim();
-  if (!query) throw new Error('query is required');
-  const agent = await runOpenAlgoAgent({
-    query,
-    history: Array.isArray(parsed.history) ? parsed.history : [],
-    symbol: parsed.symbol ? String(parsed.symbol) : undefined,
-    runtimeContext: parsed.runtimeContext && typeof parsed.runtimeContext === 'object' ? parsed.runtimeContext : undefined,
-  });
-  return {
-    text: agent.text,
-    responseId: agent.responseId || '',
-    model: agent.model,
-    provider: agent.provider,
-    actions: agent.actions,
-    agentActions: agent.actions,
-    agentSkills: agent.skills,
-    agentToolTrace: agent.toolTrace,
-    agentMode: agent.agentMode,
-    agentOnly: true,
-  };
-}
-
 async function handleDirectGptRequest(parsed) {
   const query = String(parsed.query || '').trim();
   if (!query) throw new Error('query is required');
-  const gpt = await runOpenRouter({ query, history: Array.isArray(parsed.history) ? parsed.history : [] });
-  return { text: gpt.text, responseId: gpt.responseId || '', model: gpt.model, provider: gpt.provider, directGptTest: true };
+  const gpt = await runOpenRouter({
+    query,
+    history: Array.isArray(parsed.history) ? parsed.history : [],
+    system: undefined,
+  });
+  return { text: gpt.text, actions: Array.isArray(gpt.actions) ? gpt.actions : [], analysis: gpt.analysis || null, responseId: gpt.responseId || '', model: gpt.model, provider: gpt.provider, directGptTest: true };
 }
 
 if (process.env.SIRE_AGENT_WORKER_ENABLED === 'true') startAgentWorker().catch(error => console.error('[SIRE agent worker]', error));
