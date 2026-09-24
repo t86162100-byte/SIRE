@@ -221,7 +221,45 @@ export default function ResearchLab({ symbol, instruments, onClose, onSelectInst
     } catch(error) { setDiagnosticReport({ok:false,durationMs:Date.now()-started,mainIssue:{severity:'critical',id:'ISSUE_FINDER',title:'Issue finder failed',detail:error instanceof Error?error.message:String(error)}}); }
     finally { setDiagnosticsBusy(false); }
   };
-  const applyActions = (actions: unknown) => { if (!Array.isArray(actions)) return; let targetSymbol = activeSymbol; actions.forEach(action => { const item = action as Record<string, unknown>; const type = String(item.__sireAction || item.type || ''); if (type === 'select_instrument') { const requested = String(item.symbol || ''); if (requested && instruments.some(instrument => instrument.symbol === requested)) { targetSymbol = requested; setActiveSymbol(requested); onSelectInstrument?.(requested); } } if (type && typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('sire:agent-chart-action', { detail: { ...item, __sireAction: type, symbol: item.symbol || targetSymbol } })); if (type === 'set_chart_view') onSetChartView?.((item.settings || {}) as Record<string, unknown>); else if (type === 'add_chart_marker') onAddMarker?.(String(item.label || 'SIRE marker')); }); };
+  const applyActions = (actions: unknown) => {
+    if (!Array.isArray(actions)) return;
+    let targetSymbol = activeSymbol;
+    const normalize = (value: unknown) => String(value || '').toLowerCase().replace(/[^a-z0-9]+/g, '');
+    const resolveInstrument = (requestedValue: unknown) => {
+      const requested = String(requestedValue || '').trim();
+      if (!requested) return undefined;
+      const key = normalize(requested);
+      return instruments.find(item => normalize(item.symbol) === key)
+        || instruments.find(item => normalize(item.name) === key)
+        || instruments.find(item => {
+          const symbolKey = normalize(item.symbol);
+          const nameKey = normalize(item.name);
+          return symbolKey.includes(key) || key.includes(symbolKey) || nameKey.includes(key) || key.includes(nameKey);
+        });
+    };
+    actions.forEach(action => {
+      const item = action as Record<string, unknown>;
+      const type = String(item.__sireAction || item.type || '');
+      let resolvedSymbol = String(item.symbol || targetSymbol);
+      if (type === 'select_instrument') {
+        const requested = String(item.symbol || item.name || item.instrument || '');
+        const instrument = resolveInstrument(requested);
+        if (instrument) {
+          targetSymbol = instrument.symbol;
+          resolvedSymbol = instrument.symbol;
+          setActiveSymbol(instrument.symbol);
+          onSelectInstrument?.(instrument.symbol);
+        }
+      }
+      if (type && typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('sire:agent-chart-action', {
+          detail: { ...item, __sireAction: type, symbol: resolvedSymbol }
+        }));
+      }
+      if (type === 'set_chart_view') onSetChartView?.((item.settings || {}) as Record<string, unknown>);
+      else if (type === 'add_chart_marker') onAddMarker?.(String(item.label || 'SIRE marker'));
+    });
+  };
   const cancelConversation = (chatId: string) => {
     cancelledJobsRef.current.add(chatId);
     abortControllersRef.current.get(chatId)?.abort();
