@@ -32,26 +32,51 @@ function textFromResponse(data: any): string {
   return '';
 }
 
-async function callOpenRouter(messages: ChatMessage[], tools?: any[]) {
+async function callOpenRouter(messages: ChatMessage[], tools?: any[], requestId = 'unknown') {
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  let timedOut = false;
+  const timer = setTimeout(() => { timedOut = true; controller.abort(); }, REQUEST_TIMEOUT_MS);
   try {
     const body: any = { model: MODEL, messages, max_tokens: 2048 };
     if (tools?.length) { body.tools = tools; body.tool_choice = 'auto'; }
-    const response = await fetch(API_URL, {
-      method: 'POST', signal: controller.signal,
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${getApiKey()}`, 'HTTP-Referer': 'https://sire-amfv.onrender.com', 'X-Title': 'SIRE' },
-      body: JSON.stringify(body),
-    });
+    let response: Response;
+    try {
+      response = await fetch(API_URL, {
+        method: 'POST', signal: controller.signal,
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${getApiKey()}`, 'HTTP-Referer': 'https://sire-amfv.onrender.com', 'X-Title': 'SIRE', 'X-SIRE-Request-Id': requestId },
+        body: JSON.stringify(body),
+      });
+    } catch (cause) {
+      const message = cause instanceof Error ? cause.message : String(cause);
+      const error = new Error(timedOut ? `OpenRouter request timed out after ${Math.round(REQUEST_TIMEOUT_MS / 1000)}s` : `OpenRouter network error: ${message}`);
+      (error as any).code = timedOut ? 'OPENROUTER_TIMEOUT' : 'OPENROUTER_NETWORK_ERROR';
+      (error as any).requestId = requestId;
+      console.error('[OpenRouter]', JSON.stringify({ requestId, model: MODEL, code: (error as any).code, message }));
+      throw error;
+    }
     const raw = await response.text();
     let data: any = {};
     try { data = raw ? JSON.parse(raw) : {}; } catch { data = { error: raw }; }
     if (!response.ok) {
-      const error = new Error(data?.error?.message || `OpenRouter HTTP ${response.status}`);
+      const providerMessage = typeof data?.error?.message === 'string' ? data.error.message : '';
+      const safeBody = raw.slice(0, 2000).replace(/(?:Bearer|api[_ -]?key|authorization)\s*[:=]\s*[^,}\n]+/gi, '[REDACTED]');
+      const message = providerMessage || `OpenRouter HTTP ${response.status}`;
+      const error = new Error(`OpenRouter HTTP ${response.status}${response.statusText ? ` ${response.statusText}` : ''}: ${message}`);
       (error as any).status = response.status;
+      (error as any).statusText = response.statusText;
+      (error as any).providerBody = safeBody;
+      (error as any).requestId = requestId;
+      console.error('[OpenRouter]', JSON.stringify({ requestId, model: MODEL, status: response.status, statusText: response.statusText, providerMessage: message, providerBody: safeBody }));
       throw error;
     }
-    return { message: data?.choices?.[0]?.message || {}, responseId: typeof data?.id === 'string' ? data.id : '' };
+    const message = data?.choices?.[0]?.message || {};
+    if (!message || typeof message !== 'object') {
+      const error = new Error('OpenRouter returned an invalid message payload');
+      (error as any).code = 'OPENROUTER_INVALID_RESPONSE';
+      (error as any).requestId = requestId;
+      throw error;
+    }
+    return { message, responseId: typeof data?.id === 'string' ? data.id : '', usage: data?.usage || null };
   } finally { clearTimeout(timer); }
 }
 
@@ -116,7 +141,9 @@ export async function runGptHead(input: {
 }) {
   const query = input.query.trim();
   if (!query) throw new Error('query is required');
+  const requestId = `gpt-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   const emit = async (actor: string, phase: string, text: string) => { if (input.onEvent) await input.onEvent({ actor, phase, text }); };
+  await emit('GPT','starting',`GPT request ${requestId} started using ${MODEL}.`);
 
   const toolDefs: any[] = [];
   if (input.tools?.chartControl) toolDefs.push({ type: 'function', function: { name: 'chart_control', description: 'Directly operate the active SIRE chart using the authoritative live runtime context. Use for instrument selection, timeframe, chart type, indicators, drawings, replay, chart linking, multi-chart layout and supported chart actions. Do not ask for the current instrument when the context supplies it.', parameters: { type:'object', properties: { actions:{ type:'array', items:{type:'object', additionalProperties:true} } }, required:['actions'], additionalProperties:false } } });  if (input.tools?.chartAnalyze) toolDefs.push({
@@ -200,7 +227,7 @@ export async function runGptHead(input: {
   for (let turn = 0; turn < MAX_TOOL_TURNS; turn++) {
     await emit('GPT','thinking', turn === 0 ? 'GPT is considering your request and deciding what, if anything, it needs to inspect.' : 'GPT is evaluating the latest tool result and deciding the next step.');
     const availableTools = toolDefs.filter((tool:any) => { const name = String(tool?.function?.name || ''); return name === 'github_request' || !usedToolCalls.has(name); });
-    const result = await callOpenRouter(messages, availableTools);
+    const result = await callOpenRouter(messages, availableTools, requestId);
     const message = result.message;
     const toolCalls = Array.isArray(message.tool_calls) ? message.tool_calls : [];
 
@@ -211,7 +238,7 @@ export async function runGptHead(input: {
           ...messages,
           { role: 'system', content: 'The previous model turn completed its tool work but did not provide visible text. Give the user a concise final answer now. Do not call tools in this recovery response.' },
         ];
-        const recovery = await callOpenRouter(recoveryMessages);
+        const recovery = await callOpenRouter(recoveryMessages, undefined, requestId);
         const recoveryText = textFromResponse({ choices: [{ message: recovery.message }] });
         if (!recoveryText) {
           const fallback = chartActions.length
