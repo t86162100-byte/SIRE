@@ -1108,6 +1108,38 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
             if (opened === false) throw new Error('Chart settings dialog is not available.');
             return { action, ok: true, opened: opened !== false };
           }
+          if (action === 'set_theme') {
+            const theme = String(op?.theme || '').trim();
+            if (theme !== 'dark' && theme !== 'light') throw new Error('Theme must be dark or light.');
+            widget.setTheme(theme);
+            if (widget.theme?.() !== theme) throw new Error('Chart theme did not change to ' + theme + '.');
+            return { action, ok: true, theme: widget.theme() };
+          }
+          if (action === 'set_timezone') {
+            const timezone = String(op?.timezone || '').trim();
+            if (!timezone) throw new Error('set_timezone requires an IANA timezone.');
+            chart.setTimezone?.(timezone);
+            return { action, ok: true, timezone: chart.timezone?.() || timezone };
+          }
+          if (action === 'set_grid') {
+            const settings = op?.settings && typeof op.settings === 'object' ? op.settings : {};
+            chart.setGridOptions?.(settings);
+            return { action, ok: true, grid: chart.gridOptions?.() || settings };
+          }
+          if (action === 'set_price_scale') {
+            const settings = op?.settings && typeof op.settings === 'object' ? op.settings : {};
+            const scope = settings.scope === 'axes' || settings.scope === 'all' ? settings.scope : 'primary';
+            const patch = { ...settings };
+            delete patch.scope;
+            chart.setPriceScaleOptions?.(patch, scope);
+            return { action, ok: true, priceScale: chart.priceScaleOptions?.() || patch };
+          }
+          if (action === 'set_crosshair') {
+            const mode = String(op?.settings?.mode || '').trim();
+            if (mode !== 'normal' && mode !== 'magnet') throw new Error('Crosshair mode must be normal or magnet.');
+            chart.applyOptions?.({ crosshairMode: mode });
+            return { action, ok: true, crosshairMode: chart.crosshairMode?.() || mode };
+          }
           throw new Error('Unsupported chart control action: ' + action);
         };
         for (const operation of Array.isArray(operations) ? operations.slice(0, 10) : []) results.push(await executeOne(operation));
