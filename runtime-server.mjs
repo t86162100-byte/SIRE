@@ -500,15 +500,28 @@ const server = http.createServer(async (req,res) => {
       };
       res.writeHead(200,{ 'Access-Control-Allow-Origin':'*','Cache-Control':'no-cache, no-transform','Content-Type':'text/event-stream; charset=utf-8','Connection':'keep-alive','X-Accel-Buffering':'no' });
       res.flushHeaders?.();
+      res.socket?.setKeepAlive?.(true);
+      // Render/proxy layers can close an otherwise healthy SSE response while GPT is
+      // waiting on a slow upstream model call. Send comment heartbeats so the stream
+      // stays active even when no user-visible status event is ready.
+      const heartbeat = setInterval(() => {
+        if (!res.writableEnded && !res.destroyed) {
+          try { res.write(`: keep-alive ${Date.now()}\\n\\n`); } catch {}
+        }
+      }, 5000);
       sendEvent('gpt.status',{actor:'SIRE',phase:'starting',text:'SIRE connected. I’m starting the requested task.'});
       try {
         const response = await handleDirectGptRequest(parsed, async event => sendEvent('gpt.status', event));
-        sendEvent('gpt.done', response);
+        if (!res.writableEnded && !res.destroyed) {
+          sendEvent('gpt.status',{actor:'SIRE',phase:'finishing',text:'GPT has completed the work. Sending the final response.'});
+          sendEvent('gpt.done', response);
+        }
       } catch (cause) {
         const message = cause instanceof Error ? cause.message : String(cause);
         console.error('[DIRECT GPT STREAM]', message);
-        sendEvent('gpt.error',{error:`Direct GPT test failed: ${message}`});
+        if (!res.writableEnded && !res.destroyed) sendEvent('gpt.error',{error:`Direct GPT test failed: ${message}`});
       } finally {
+        clearInterval(heartbeat);
         if (!res.writableEnded) res.end();
       }
       return;
