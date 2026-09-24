@@ -524,6 +524,8 @@ export function createDerivDataFeed(
   onDiagnostic?: DiagnosticHandler,
 ) {
   const client = new DerivMarketDataClient();
+  let subscriptionStatus: 'idle' | 'connecting' | 'active' | 'error' | 'stopped' = 'idle';
+  let lastLiveQuote: { symbol: string; price: number; epoch: number } | null = null;
   return {
     async getBars({ symbol, interval, from, to, countBack }: { symbol: string; interval: string; from?: number; to?: number; countBack?: number }) {
       onDiagnostic?.({ level: 'info', code: 'HISTORY_REQUEST_STARTED', message: `OpenAlgo requested ${interval} history for ${symbol}.`, detail: `OpenAlgo supplied the history window ${from ?? 'open'} → ${to ?? 'open'} and requested approximately ${countBack ?? 'window-sized'} bars.` });
@@ -555,8 +557,6 @@ export function createDerivDataFeed(
       onDiagnostic?.({ level: older.length ? 'info' : 'warning', code: older.length ? 'HISTORY_PAGE_LOADED' : 'HISTORY_PAGE_EMPTY', message: older.length ? `OpenAlgo loaded ${older.length} older candles for ${symbol}.` : `No older candles were returned for ${symbol}.`, detail: 'OpenAlgo dataController owns the paging cursor, retention and viewport anchoring.' });
       return { bars: older, hasMore: older.length > 0 && older[0].time > 1, nextBefore: older[0]?.time };
     },
-    let subscriptionStatus: 'idle' | 'connecting' | 'active' | 'error' | 'stopped' = 'idle';
-    let lastLiveQuote: { symbol: string; price: number; epoch: number } | null = null;
     subscribeBars(
       { symbol, interval }: { symbol: string; interval: string },
       onBar: (bar: DerivBar) => void,
@@ -568,9 +568,12 @@ export function createDerivDataFeed(
       let current = options?.seedFrom ? { ...options.seedFrom } : null;
       let unsubscribe: (() => void) | null = null;
       const start = async () => {
+        subscriptionStatus = 'connecting';
         try {
           unsubscribe = await client.subscribeTicks(symbol, tick => {
             if (stopped) return;
+            lastLiveQuote = tick;
+            subscriptionStatus = 'active';
             const next = tickToBar(current, tick.epoch, tick.price, seconds);
             current = next;
             onQuote?.(tick);
@@ -580,6 +583,7 @@ export function createDerivDataFeed(
           if (!stopped) {
             const message = error instanceof Error ? error.message : String(error);
             onDiagnostic?.({ level: 'error', code: 'LIVE_TICK_SUBSCRIPTION_FAILED', message: `Live price subscription failed for ${symbol}: ${message}`, detail: 'Historical candles may still be available, but live price updates are not healthy.' });
+            subscriptionStatus = 'error';
             console.error('[DERIV TICKS]', symbol, error);
           }
         }
@@ -587,6 +591,7 @@ export function createDerivDataFeed(
       void start();
       return () => {
         stopped = true;
+        subscriptionStatus = 'stopped';
         unsubscribe?.();
       };
     },
