@@ -287,8 +287,6 @@ async function marketDataRequestForGpt(input) {
       ...(from !== undefined ? { start: from } : {}),
       count,
       style: 'ticks',
-      adjust_start_time: 1,
-      subscribe: 0,
     };
     const result = await requestDerivPublic(payload);
     const history = result?.history || {};
@@ -323,8 +321,6 @@ async function marketDataRequestForGpt(input) {
     count: requestedCount,
     style: 'candles',
     granularity: intervalSeconds,
-    adjust_start_time: 1,
-    subscribe: 0,
   };
   const result = await requestDerivPublic(payload);
   const candles = Array.isArray(result?.candles) ? result.candles.map(candle => ({
