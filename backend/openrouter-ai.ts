@@ -133,7 +133,7 @@ export async function runGptHead(input: {
       try {
         const raw = text.replace(/^\s*\`\`\`json\s*/i, '').replace(/\s*\`\`\`\s*$/i, '');
         const parsed = JSON.parse(raw);
-        if (parsed && typeof parsed === 'object' && ('answer' in parsed || 'actions' in parsed)) {
+        if (parsed && typeof parsed === 'object' && ('answer' in parsed)) {
           answer = String(parsed.answer || '').trim() || 'Done.';
           analysis = parsed.analysis ?? null;
         }
