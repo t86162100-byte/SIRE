@@ -1133,6 +1133,12 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
         } else if (action === 'remove_indicator') {
           const id = String(detail.instanceId || detail.id || '');
           if (id) widget.chart.removeIndicator(id);
+        } else if (action === 'remove_drawing') {
+          const id = String(detail.id || detail.drawingId || '');
+          if (id) widget.objects.remove(id);
+        } else if (action === 'remove_all_drawings') {
+          const drawings = (widget.objects.list?.() || []).filter((item:any) => item?.kind === 'drawing');
+          drawings.forEach((item:any) => { if (item?.id) widget.objects.remove(item.id); });
         } else if (action === 'add_price_line') {
           const price = Number(detail.price);
           if (Number.isFinite(price)) widget.chart.addPriceLine({ price, label: String(detail.label || 'SIRE level') } as any, 0);
@@ -1221,6 +1227,10 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
           anchor.download = String(detail.filename || 'sire-chart.svg');
           anchor.click();
           URL.revokeObjectURL(url);
+        } else if (action === 'replay_start') {
+          const fromBeginning = detail.fromBeginning === true;
+          const toLatest = detail.toLatest !== false;
+          void startReplayFromInputs(fromBeginning, toLatest);
         } else if (action === 'replay_play') {
           const replay = replayRef.current;
           if (replay && !replay.state().playing) replay.play({ speed: replaySpeedRef.current });
@@ -1232,7 +1242,7 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
           stopReplay();
         }
         if (action !== 'set_timeframe') {
-          reportDiagnostic({ level: 'info', code: 'AI_AGENT_CHART_ACTION', message: 'SIRE AI agent applied chart action: ' + action, detail: JSON.stringify(detail).slice(0, 900) });
+          reportDiagnostic({ level: 'info', code: 'AI_CHART_ACTION', message: 'SIRE GPT applied chart action: ' + action, detail: JSON.stringify(detail).slice(0, 900) });
         }
       } catch (error) {
         reportDiagnostic({ level: 'error', code: 'AI_AGENT_CHART_ACTION_FAILED', message: 'SIRE AI agent chart action failed: ' + action, detail: error instanceof Error ? error.message : String(error), ...diagnosticErrorDetails(error, 'AI agent chart action') });
