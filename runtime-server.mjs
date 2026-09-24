@@ -40,7 +40,7 @@ function toEvent(req, body) {
 async function handleTeamRequest(parsed, onEvent) {
   const query = String(parsed.query || '').trim();
   if (!query) throw new Error('query is required');
-  const response = await runAiTeam({ query, workspaceId: parsed.workspaceId || parsed.workspace || parsed.sessionId || 'default', history: Array.isArray(parsed.history) ? parsed.history : [], symbol: parsed.symbol ? String(parsed.symbol) : undefined, runtimeContext: parsed.runtimeContext && typeof parsed.runtimeContext === 'object' ? parsed.runtimeContext : undefined, execute: Boolean(parsed.execute), onEvent });
+  const response = await runAiTeam({ query, workspaceId: parsed.workspaceId || parsed.workspace || parsed.sessionId || 'default', history: Array.isArray(parsed.history) ? parsed.history : [], symbol: parsed.symbol ? String(parsed.symbol) : undefined, execute: Boolean(parsed.execute), onEvent });
   return { ...response, councilMode: 'shared-workspace-team', rounds: response.activity.length };
 }
 
@@ -50,7 +50,6 @@ async function handleDirectGptRequest(parsed) {
   const gpt = await runOpenRouter({
     query,
     history: Array.isArray(parsed.history) ? parsed.history : [],
-    runtimeContext: parsed.runtimeContext && typeof parsed.runtimeContext === 'object' ? parsed.runtimeContext : undefined,
   });
   return { text: gpt.text, actions: Array.isArray(gpt.actions) ? gpt.actions : [], analysis: gpt.analysis || null, responseId: gpt.responseId || '', model: gpt.model, provider: gpt.provider, directGptTest: true };
 }
