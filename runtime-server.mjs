@@ -272,7 +272,7 @@ async function marketDataRequestForGpt(input) {
   const symbol = String(input?.symbol || '').trim();
   const dataType = String(input?.dataType || 'candles').toLowerCase();
   const interval = input?.interval ? String(input.interval).trim() : '';
-  const count = Math.max(1, Math.min(1000, Math.floor(Number(input?.count) || 100)));
+  const requestedCount = Math.max(1, Math.min(10000, Math.floor(Number(input?.count) || 100)));
   const from = Number.isFinite(Number(input?.from)) ? Math.floor(Number(input.from)) : undefined;
   const to = Number.isFinite(Number(input?.to)) ? Math.floor(Number(input.to)) : undefined;
   if (!symbol) throw new Error('Market-data request requires a symbol.');
@@ -280,72 +280,92 @@ async function marketDataRequestForGpt(input) {
   if (dataType === 'candles' && !interval) throw new Error('Candle history requires an interval.');
   if (from !== undefined && to !== undefined && from > to) throw new Error('Market-data from must be before or equal to to.');
 
-  if (dataType === 'ticks') {
-    const payload = {
-      ticks_history: symbol,
-      end: to ?? 'latest',
-      ...(from !== undefined ? { start: from } : {}),
-      count,
-      style: 'ticks',
-    };
-    const result = await requestDerivPublic(payload);
-    const history = result?.history || {};
-    const times = Array.isArray(history.times) ? history.times : [];
-    const prices = Array.isArray(history.prices) ? history.prices : [];
-    const ticks = times.map((time, index) => ({
-      epoch: Number(time),
-      price: Number(prices[index]),
-    })).filter(item => Number.isFinite(item.epoch) && Number.isFinite(item.price));
-    return JSON.stringify({
-      ok: true,
-      dataType: 'ticks',
-      symbol,
-      requested: { count, from: from ?? null, to: to ?? 'latest' },
-      returned: ticks.length,
-      data: ticks,
-    });
-  }
-
-    const intervalSeconds = ({
+  const intervalSeconds = dataType === 'candles' ? ({
     '1m':60,'2m':120,'3m':180,'5m':300,'10m':600,'15m':900,'20m':1200,'30m':1800,'45m':2700,
     '1h':3600,'2h':7200,'3h':10800,'4h':14400,'6h':21600,'8h':28800,'12h':43200,'1d':86400,'1w':604800
-  })[interval];
-  if (!intervalSeconds) throw new Error('Unsupported candle interval: ' + interval);
-  const requestedCount = from !== undefined && to !== undefined
-    ? Math.max(1, Math.min(1000, Math.ceil((to - from) / intervalSeconds) + 1))
-    : count;
-  const payload = {
-    ticks_history: symbol,
-    end: to ?? 'latest',
-    ...(from !== undefined ? { start: from } : {}),
-    count: requestedCount,
-    style: 'candles',
-    granularity: intervalSeconds,
-  };
-  const result = await requestDerivPublic(payload);
-  const candles = Array.isArray(result?.candles) ? result.candles.map(candle => ({
-    epoch: Number(candle?.epoch),
-    open: Number(candle?.open),
-    high: Number(candle?.high),
-    low: Number(candle?.low),
-    close: Number(candle?.close),
-    ...(candle?.volume !== undefined ? { volume: Number(candle.volume) } : {}),
-  })).filter(candle =>
-    Number.isFinite(candle.epoch) &&
-    Number.isFinite(candle.open) &&
-    Number.isFinite(candle.high) &&
-    Number.isFinite(candle.low) &&
-    Number.isFinite(candle.close)
-  ) : [];
+  })[interval] : undefined;
+  if (dataType === 'candles' && !intervalSeconds) throw new Error('Unsupported candle interval: ' + interval);
+
+  const rangeCount = from !== undefined && to !== undefined && dataType === 'candles'
+    ? Math.max(1, Math.ceil((to - from) / intervalSeconds) + 1)
+    : undefined;
+  const targetCount = rangeCount ? Math.min(10000, rangeCount) : requestedCount;
+  const chunkSize = 1000;
+  const chunks = [];
+  let cursorEnd = to ?? 'latest';
+
+  // Deriv's public market-data API accepts one-time historical requests. We
+  // deliberately page large GPT requests in <=1000-point chunks and pace them
+  // to avoid bursty traffic against the shared WebSocket budget.
+  for (let remaining = targetCount; remaining > 0; remaining -= chunkSize) {
+    const chunkCount = Math.min(chunkSize, remaining);
+    const payload = dataType === 'ticks'
+      ? {
+          ticks_history: symbol,
+          end: cursorEnd,
+          ...(from !== undefined ? { start: from } : {}),
+          count: chunkCount,
+          style: 'ticks',
+        }
+      : {
+          ticks_history: symbol,
+          end: cursorEnd,
+          ...(from !== undefined ? { start: from } : {}),
+          count: chunkCount,
+          style: 'candles',
+          granularity: intervalSeconds,
+        };
+
+    const result = await requestDerivPublic(payload);
+    if (dataType === 'ticks') {
+      const history = result?.history || {};
+      const times = Array.isArray(history.times) ? history.times : [];
+      const prices = Array.isArray(history.prices) ? history.prices : [];
+      for (let i = 0; i < Math.min(times.length, prices.length); i++) {
+        const item = { epoch: Number(times[i]), price: Number(prices[i]) };
+        if (Number.isFinite(item.epoch) && Number.isFinite(item.price)) chunks.push(item);
+      }
+      if (chunks.length < chunkCount || chunks.length >= targetCount) break;
+      const oldest = Number(times[0]);
+      if (!Number.isFinite(oldest)) break;
+      cursorEnd = oldest - 1;
+    } else {
+      const candles = Array.isArray(result?.candles) ? result.candles : [];
+      for (const candle of candles) {
+        const item = {
+          epoch: Number(candle?.epoch),
+          open: Number(candle?.open),
+          high: Number(candle?.high),
+          low: Number(candle?.low),
+          close: Number(candle?.close),
+          ...(candle?.volume !== undefined ? { volume: Number(candle.volume) } : {}),
+        };
+        if (Number.isFinite(item.epoch) && Number.isFinite(item.open) && Number.isFinite(item.high) &&
+            Number.isFinite(item.low) && Number.isFinite(item.close)) chunks.push(item);
+      }
+      if (candles.length < chunkCount || chunks.length >= targetCount) break;
+      const oldest = Number(candles[0]?.epoch);
+      if (!Number.isFinite(oldest)) break;
+      cursorEnd = oldest - intervalSeconds;
+    }
+    if (remaining > chunkSize) await new Promise(resolve => setTimeout(resolve, 150));
+  }
+
+  const data = chunks
+    .sort((a, b) => Number(a.epoch) - Number(b.epoch))
+    .slice(-targetCount);
+
   return JSON.stringify({
     ok: true,
-    dataType: 'candles',
+    dataType,
     symbol,
-    interval,
-    intervalSeconds,
-    requested: { count: requestedCount, from: from ?? null, to: to ?? 'latest' },
-    returned: candles.length,
-    data: candles,
+    ...(interval ? { interval, intervalSeconds } : {}),
+    requested: { count: targetCount, from: from ?? null, to: to ?? 'latest' },
+    returned: data.length,
+    complete: data.length >= targetCount,
+    pageSize: chunkSize,
+    pages: Math.ceil(data.length / chunkSize),
+    data,
   });
 }
 
