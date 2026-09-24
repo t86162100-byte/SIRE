@@ -143,7 +143,7 @@ export async function runGptHead(input: {
   if (!query) throw new Error('query is required');
   const requestId = `gpt-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   const emit = async (actor: string, phase: string, text: string) => { if (input.onEvent) await input.onEvent({ actor, phase, text }); };
-  await emit('GPT','starting',`GPT request ${requestId} started using ${MODEL}.`);
+  await emit('GPT','working','Starting…');
 
   const toolDefs: any[] = [];
   if (input.tools?.chartControl) toolDefs.push({ type: 'function', function: { name: 'chart_control', description: 'Directly operate the active SIRE chart using the authoritative live runtime context. Use for instrument selection, timeframe, chart type, indicators, drawings, replay, chart linking, multi-chart layout and supported chart actions. Do not ask for the current instrument when the context supplies it.', parameters: { type:'object', properties: { actions:{ type:'array', items:{type:'object', additionalProperties:true} } }, required:['actions'], additionalProperties:false } } });  if (input.tools?.chartAnalyze) toolDefs.push({
@@ -225,7 +225,7 @@ export async function runGptHead(input: {
   const analysisRequest = /\b(analy[sz]e|analysis|smc|ict|crt|market structure|order block|liquidity|supply|demand)\b/i.test(query) && /\b(chart|market|instrument|5m|timeframe|boom)\b/i.test(query);
   const toolCallHistory: Array<{turn:number;name:string}> = [];
   for (let turn = 0; turn < MAX_TOOL_TURNS; turn++) {
-    await emit('GPT','thinking', turn === 0 ? 'GPT is considering your request and deciding what, if anything, it needs to inspect.' : 'GPT is evaluating the latest tool result and deciding the next step.');
+    await emit('GPT','working', turn === 0 ? 'Reading your request…' : 'Reviewing the latest result…');
     const availableTools = toolDefs.filter((tool:any) => { const name = String(tool?.function?.name || ''); return name === 'github_request' || !usedToolCalls.has(name); });
     const result = await callOpenRouter(messages, availableTools, requestId);
     const message = result.message;
@@ -281,16 +281,16 @@ export async function runGptHead(input: {
         const requested = Array.isArray(args.actions) ? args.actions : [];
         const accepted = requested.filter((action:any) => action && typeof action === 'object' && (action.__sireAction || action.type));
         chartActions.push(...accepted);
-        await emit('Chart','working',accepted.length ? `GPT is operating the chart directly (${accepted.length} action(s)).` : 'GPT received a chart-control request but no valid actions were supplied.');
+        await emit('Chart','working',accepted.length ? 'Updating the chart…' : 'Checking the chart action…');
         messages.push({ role: 'tool', tool_call_id: callId, content: JSON.stringify({ ok:true, actions: accepted }) });
       } else if (name === 'chart_analyze' && input.tools?.chartAnalyze) {
-        await emit('Chart','analysis','GPT is running measured SMC/ICT/CRT structure analysis on the live OHLC context.');
+        await emit('Chart','analysis','Reading live chart data…');
         const output = await input.tools.chartAnalyze(String(args.focus || query).slice(0,500));
         try { lastChartAnalysis = JSON.parse(output); } catch { lastChartAnalysis = null; }
         messages.push({ role: 'tool', tool_call_id: callId, content: output.slice(0,18000) });
       } else if (name === 'render_request' && input.tools?.renderRequest) {
         const method=String(args.method||'GET').toUpperCase(), path=String(args.path||'').trim(), permission=String(args.permission||(method==='GET'?'read':'execute'));
-        await emit('Render','working',method==='GET'?'GPT is inspecting the SIRE deployment through Render.':'GPT is operating the SIRE deployment through Render.');
+        await emit('Render','working',method==='GET'?'Checking deployment…':'Updating deployment…');
         const output=await input.tools.renderRequest({method,path,body:args.body,permission});
         messages.push({ role:'tool', tool_call_id:callId, content:output.slice(0,16000) });
       } else if (name === 'github_request' && input.tools?.githubRequest) {
@@ -298,16 +298,16 @@ export async function runGptHead(input: {
         const path = String(args.path || '').trim();
         const normalizedPath = path.startsWith('/') ? path : `/${path}`;
         const permission = String(args.permission || (method === 'GET' ? 'read' : 'write'));
-        await emit('GitHub','working',method === 'GET' ? 'GPT is inspecting the repository through GitHub.' : 'GPT is making the requested repository change through GitHub.');
+        await emit('GitHub','working',method === 'GET' ? 'Reading code…' : 'Updating code…');
         const output = await input.tools.githubRequest({ method, path: normalizedPath, body: args.body, permission });
         messages.push({ role: 'tool', tool_call_id: callId, content: output.slice(0, 20000) });
       } else if (name === 'check_integrations' && input.tools?.checkIntegrations) {
-        await emit('SIRE integrations','checking','GPT is checking the configured GitHub and Render connections.');
+        await emit('SIRE integrations','checking','Checking connections…');
         const output = await input.tools.checkIntegrations();
         messages.push({ role: 'tool', tool_call_id: callId, content: output.slice(0, 12000) });
       } else if (name === 'web_search' && input.tools?.webSearch) {
         const searchQuery = String(args.query || query).slice(0, 1000);
-        await emit('Web','research','GPT decided that current external information is needed and requested a web search.');
+        await emit('Web','research','Searching the web…');
         const output = await input.tools.webSearch(searchQuery);
         messages.push({ role: 'tool', tool_call_id: callId, content: output.slice(0, 14000) });
       } else {
