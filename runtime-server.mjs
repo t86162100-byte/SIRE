@@ -263,7 +263,7 @@ async function githubRequestForGpt({ method, path, body, permission }) {
   }
   return JSON.stringify({ ok:true, status:response.status, method:verb, path:normalizedPath, result:data });
 }
-async function handleDirectGptRequest(parsed) {
+async function handleDirectGptRequest(parsed, onEvent) {
   const query = String(parsed.query || '').trim();
   if (!query) throw new Error('query is required');
   const runtimeContext = parsed.runtimeContext && typeof parsed.runtimeContext === 'object' ? parsed.runtimeContext : {};
@@ -271,7 +271,7 @@ async function handleDirectGptRequest(parsed) {
     query,
     history: Array.isArray(parsed.history) ? parsed.history : [],
     runtimeContext,
-    onEvent: parsed.onEvent,
+    onEvent,
     tools: {
       chartControl: async actions => JSON.stringify({ ok:true, actions }),
       chartAnalyze: async focus => JSON.stringify(analyzeChartRuntime(runtimeContext, focus)),
@@ -491,6 +491,28 @@ const server = http.createServer(async (req,res) => {
     }
     if (req.method === 'GET' && pathname === '/api/sire/deriv/health') { const result = await checkDerivPublicMarketData(); console.log('[DERIV HEALTH]', JSON.stringify(result)); return res.writeHead(result.ok ? 200 : 502,{ 'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8' }).end(JSON.stringify(result)); }
     if (req.method === 'POST' && pathname === '/api/sire/agent/chat') { const parsed = body ? JSON.parse(body) : {}; const response = await handleGeminiRequest(parsed); return res.writeHead(response.status,{ 'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8' }).end(JSON.stringify(response.body ?? {})); }
+    if (req.method === 'POST' && pathname === '/api/sire/agent/gpt/stream') {
+      const parsed = body ? JSON.parse(body) : {};
+      if (!String(parsed.query || '').trim()) return res.writeHead(400,{ 'Access-Control-Allow-Origin':'*','Content-Type':'application/json; charset=utf-8' }).end(JSON.stringify({ error:'query is required' }));
+      const sendEvent = (type, payload) => {
+        if (res.writableEnded) return;
+        res.write(`event: ${type}\ndata: ${JSON.stringify(payload)}\n\n`);
+      };
+      res.writeHead(200,{ 'Access-Control-Allow-Origin':'*','Cache-Control':'no-cache, no-transform','Content-Type':'text/event-stream; charset=utf-8','Connection':'keep-alive','X-Accel-Buffering':'no' });
+      res.flushHeaders?.();
+      sendEvent('gpt.status',{actor:'SIRE',phase:'starting',text:'SIRE connected. I’m starting the requested task.'});
+      try {
+        const response = await handleDirectGptRequest(parsed, async event => sendEvent('gpt.status', event));
+        sendEvent('gpt.done', response);
+      } catch (cause) {
+        const message = cause instanceof Error ? cause.message : String(cause);
+        console.error('[DIRECT GPT STREAM]', message);
+        sendEvent('gpt.error',{error:`Direct GPT test failed: ${message}`});
+      } finally {
+        if (!res.writableEnded) res.end();
+      }
+      return;
+    }
     if (req.method === 'POST' && pathname === '/api/sire/agent/gpt') { const parsed = body ? JSON.parse(body) : {}; if (!String(parsed.query || '').trim()) return res.writeHead(400,{ 'Access-Control-Allow-Origin':'*','Content-Type':'application/json; charset=utf-8' }).end(JSON.stringify({ error:'query is required' })); try { const response = await handleDirectGptRequest(parsed); return res.writeHead(200,{ 'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8' }).end(JSON.stringify(response)); } catch (cause) { const message = cause instanceof Error ? cause.message : String(cause); console.error('[DIRECT GPT]', message); return res.writeHead(502,{ 'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8' }).end(JSON.stringify({ error:`Direct GPT test failed: ${message}` })); } }
     const response=await handler(toEvent(req,body)); const statusCode=Number.isInteger(response?.statusCode)?response.statusCode:200; const rawBody=response?.body!==undefined?response.body:response; const isString=typeof rawBody==='string'; res.writeHead(statusCode,{ 'Access-Control-Allow-Origin':'*','Cache-Control':'no-store',...(isString?{}:{'Content-Type':'application/json; charset=utf-8'}),...(response?.headers||{}) }); res.end(isString?rawBody:JSON.stringify(rawBody??{}));
   } catch(cause) { const message=cause instanceof Error?cause.message:String(cause); console.error('[HTTP ERROR]',req.method,req.url,message); if (!res.headersSent) res.writeHead(500,{'Content-Type':'application/json','Access-Control-Allow-Origin':'*'}); res.end(JSON.stringify({error:message})); } });
