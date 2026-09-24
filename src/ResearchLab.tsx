@@ -248,8 +248,63 @@ export default function ResearchLab({ symbol, instruments, onClose, onSelectInst
     setChatSessions(previous => previous.map(chat => chat.id === chatId ? { ...chat, title: chat.title === 'New chat' ? query.slice(0, 48) || 'New chat' : chat.title, messages: [...chat.messages, { id: `m-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, role: 'user', text: query }].slice(-200), updatedAt: Date.now() } : chat));
     const isCancelled = () => cancelledJobsRef.current.has(chatId);
     try { const lowerQuery = query.toLowerCase(); const directGptTest = true; const actualQuery = lowerQuery.startsWith('/gpt ') ? query.slice(5).trim() : query; if (!actualQuery) throw new Error(directGptTest ? 'Message is required.' : 'Message is required.'); const history = [...chatMessages.map(message => ({ role: message.role, text: message.text })), { role: 'user', text: actualQuery }];
-      if (directGptTest) { const response = await api.post('/api/sire/agent/gpt', { query: actualQuery, symbol: activeSymbol, history, runtimeContext: buildRuntimeContext() }); const raw = response as unknown; const data = ((raw && typeof raw === 'object' && 'data' in raw && (raw as Record<string, unknown>).data !== undefined ? (raw as Record<string, unknown>).data : raw) || {}) as AgentResponse; if (data.error) throw new Error(String(data.error)); if (isCancelled()) return; applyActions(data.actions); const reply = { id: `m-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, role: 'sire' as const, text: String(data.text || '').trim() || 'I’m here. Tell me more.' };
-        persistChatMessage(chatId, reply); writeJob(chatId, 'complete'); setThinkingSince(null); setProcessingChats(previous => previous.filter(id => id !== chatId)); setChatSessions(previous => previous.map(chat => chat.id === chatId ? { ...chat, messages: [...chat.messages, reply].slice(-200), updatedAt: Date.now() } : chat)); return; }
+      if (directGptTest) {
+        const response = await fetch('/api/sire/agent/gpt/stream', {
+          method:'POST',
+          headers:{'Content-Type':'application/json','Accept':'text/event-stream'},
+          signal:controller.signal,
+          body:JSON.stringify({ query:actualQuery, symbol:activeSymbol, history, runtimeContext:buildRuntimeContext() })
+        });
+        if (!response.ok || !response.body) {
+          const fallback = await response.text().catch(()=>'');
+          throw new Error(fallback || `Direct GPT connection failed (${response.status})`);
+        }
+        const reader=response.body.getReader();
+        const decoder=new TextDecoder();
+        let buffer='';
+        let finalData:AgentResponse|null=null;
+        const consume=(chunk:string)=>{
+          buffer+=chunk;
+          const events=buffer.split('\\n\\n');
+          buffer=events.pop()||'';
+          events.forEach(event=>{
+            let type='';
+            let data='';
+            event.split('\\n').forEach(line=>{
+              if(line.startsWith('event:')) type=line.slice(6).trim();
+              else if(line.startsWith('data:')) data+=line.slice(5).trim();
+            });
+            if(!data) return;
+            let payload:any;
+            try { payload=JSON.parse(data); } catch { return; }
+            if(type==='gpt.status') {
+              const item=payload as CouncilActivity;
+              setActivity(previous=>[...previous,item]);
+            } else if(type==='gpt.done') {
+              finalData=payload as AgentResponse;
+            } else if(type==='gpt.error') {
+              throw new Error(String(payload.error||'Direct GPT failed'));
+            }
+          });
+        };
+        while(true) {
+          const {value,done}=await reader.read();
+          if(value) consume(decoder.decode(value,{stream:!done}));
+          if(done) break;
+        }
+        if(!finalData) throw new Error('Direct GPT ended without a final response.');
+        const data=finalData;
+        if(data.error) throw new Error(String(data.error));
+        if(isCancelled()) return;
+        applyActions(data.actions);
+        const reply={id:`m-${Date.now()}-${Math.random().toString(36).slice(2,7)}`,role:'sire' as const,text:String(data.text||'').trim()||'I’m here. Tell me more.'};
+        persistChatMessage(chatId,reply);
+        writeJob(chatId,'complete');
+        setThinkingSince(null);
+        setProcessingChats(previous=>previous.filter(id=>id!==chatId));
+        setChatSessions(previous=>previous.map(chat=>chat.id===chatId?{...chat,messages:[...chat.messages,reply].slice(-200),updatedAt:Date.now()}:chat));
+        return;
+      }
       if (directGptTest) { const response = await api.post('/api/sire/agent/gpt', { query: actualQuery, symbol: activeSymbol, history, runtimeContext: buildRuntimeContext() }); const raw = response as unknown; const data = ((raw && typeof raw === 'object' && 'data' in raw && (raw as Record<string, unknown>).data !== undefined ? (raw as Record<string, unknown>).data : raw) || {}) as AgentResponse; if (data.error) throw new Error(String(data.error)); if (isCancelled()) return; applyActions(data.actions); const reply = { id: `m-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, role: 'sire' as const, text: String(data.text || '').trim() || 'I’m here. Tell me more.' };
         persistChatMessage(chatId, reply); writeJob(chatId, 'complete'); setProcessingChats(previous => previous.filter(id => id !== chatId)); setChatSessions(previous => previous.map(chat => chat.id === chatId ? { ...chat, messages: [...chat.messages, reply].slice(-200), updatedAt: Date.now() } : chat)); return; }
       const response = await fetch('/api/sire/agent/council/stream', { method: 'POST', headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream' }, signal: controller.signal, body: JSON.stringify({ query: actualQuery, symbol: activeSymbol, history, runtimeContext: buildRuntimeContext() }) }); if (!response.ok || !response.body) throw new Error(`SIRE council connection failed (${response.status})`);
