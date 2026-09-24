@@ -6,7 +6,7 @@ const MODEL = 'openai/gpt-oss-20b';
 const API_URL = 'https://openrouter.ai/api/v1/chat/completions';
 const REQUEST_TIMEOUT_MS = 45000;
 const MAX_OUTPUT_CHARS = 12000;
-const MAX_TOOL_TURNS = 6;
+const MAX_TOOL_TURNS = 16;
 
 function getApiKey() {
   const key = process.env.OPENROUTER_API_KEY?.trim();
@@ -173,7 +173,7 @@ function systemPrompt() {
     'GitHub access is full repository-level access through the configured GitHub credential, subject to the credential\'s actual GitHub permissions. You may read code and repository metadata, create/update/delete files, create branches and commits, open/update pull requests and issues, inspect workflows/runs, dispatch supported workflows, manage repository-scoped settings exposed by the credential, and perform other repository-scoped GitHub API operations. When a repository task requires it, inspect the repository first, then make the requested changes through GitHub and report the actual result. Do not claim an operation succeeded unless the GitHub tool actually returned success.',
     'Visible activity should contain only concise work summaries, never private chain-of-thought.',
     'If a simple message can be answered directly, answer it directly without unnecessary work.',
-    'If a difficult task needs deeper investigation, delegate a focused task, inspect the result, and integrate it into your own answer.',
+    'If a difficult task needs deeper investigation, delegate a focused task, inspect the result, and integrate it into your own answer. For repository/self-repair requests, work as an engineering agent: inspect the current branch and relevant files first, identify the root cause from evidence, make the smallest coherent fix, validate it, monitor deployment when Render access is configured, and if validation/deployment fails, inspect the failure and correct the code rather than stopping after the first attempt.',
   ].join('\n');
 }
 
@@ -188,6 +188,7 @@ export async function runGptHead(input: {
     webSearch?: (query: string) => Promise<string>;
     checkIntegrations?: () => Promise<string>;
     githubRequest?: (input: { method: string; path: string; body?: unknown; permission: string }) => Promise<string>;
+    renderRequest?: (input: { method: string; path: string; body?: unknown; permission: string }) => Promise<string>;
   };
 }) {
   const query = input.query.trim();
@@ -204,6 +205,24 @@ export async function runGptHead(input: {
     },
   });
 
+  if (input.tools?.renderRequest) toolDefs.push({
+    type: 'function',
+    function: {
+      name: 'render_request',
+      description: 'Inspect or operate the SIRE Render deployment through the configured Render API integration. Use this after code changes to monitor the exact deployment, confirm live/failed status, inspect service state, or trigger a deploy for the configured SIRE service. Never claim a deployment is live until Render returns live.',
+      parameters: {
+        type:'object',
+        properties: {
+          method:{ type:'string', enum:['GET','POST'] },
+          path:{ type:'string', description:'Render API path. Prefer /v1/services/{serviceId}/deploys, /v1/services/{serviceId}/deploys/{deployId}, or /v1/services/{serviceId}.' },
+          body:{ type:'object', additionalProperties:true },
+          permission:{ type:'string', enum:['read','execute'] }
+        },
+        required:['method','path','permission'],
+        additionalProperties:false
+      }
+    },
+  });
   if (input.tools?.checkIntegrations) toolDefs.push({
     type: 'function',
     function: {
