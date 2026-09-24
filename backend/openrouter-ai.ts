@@ -37,7 +37,13 @@ async function callOpenRouter(messages: ChatMessage[], tools?: any[], requestId 
   let timedOut = false;
   const timer = setTimeout(() => { timedOut = true; controller.abort(); }, REQUEST_TIMEOUT_MS);
   try {
-    const body: any = { model: MODEL, messages, max_tokens: 2048 };
+    // Keep the requested completion within the currently available OpenRouter
+    // credit budget. OpenRouter rejects the whole request when max_tokens is
+    // above the remaining affordable amount, even if the model would have
+    // answered with fewer tokens. Allow an env override, but default safely.
+    const configuredMaxTokens = Number(process.env.SIRE_GPT_MAX_TOKENS || 1400);
+    const maxTokens = Number.isFinite(configuredMaxTokens) ? Math.max(256, Math.min(1536, Math.floor(configuredMaxTokens))) : 1400;
+    const body: any = { model: MODEL, messages, max_tokens: maxTokens };
     if (tools?.length) { body.tools = tools; body.tool_choice = toolChoice; }
     let response: Response;
     try {
