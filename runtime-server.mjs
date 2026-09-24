@@ -433,49 +433,108 @@ async function requestDerivPublic(payload, timeoutMs = 12000) {
   });
 }
 
-async function checkDerivPublicMarketData() {
+async function checkDerivPublicMarketDataOnce(timeoutMs = 7000) {
   return await new Promise((resolve) => {
-    const ws = new WebSocket('wss://api.derivws.com/trading/v1/options/ws/public');
+    const endpoint = 'wss://api.derivws.com/trading/v1/options/ws/public';
+    const ws = new WebSocket(endpoint);
     let settled = false;
+    const reqId = 900001;
     const finish = (result) => {
       if (settled) return;
       settled = true;
+      clearTimeout(timer);
       try { ws.close(); } catch {}
       resolve(result);
     };
-    const timer = setTimeout(() => finish({ ok:false, stage:'connect', error:'Deriv public WebSocket connection timed out after 12 seconds.' }), 12000);
+    const timer = setTimeout(() => finish({
+      ok: false,
+      stage: 'connect',
+      error: `Deriv public WebSocket connection timed out after ${timeoutMs}ms.`,
+    }), timeoutMs);
+
     ws.on('open', () => {
-      ws.send(JSON.stringify({ active_symbols:'brief', req_id:900001 }));
+      console.log('[DERIV STARTUP] WebSocket connected; requesting active_symbols.');
+      try {
+        ws.send(JSON.stringify({ active_symbols: 'brief', req_id: reqId }));
+      } catch (error) {
+        finish({
+          ok: false,
+          stage: 'request',
+          error: `Deriv active_symbols request could not be sent: ${error instanceof Error ? error.message : String(error)}`,
+        });
+      }
     });
+
     ws.on('message', data => {
       try {
         const parsed = JSON.parse(String(data));
         if (parsed?.error) {
-          clearTimeout(timer);
-          finish({ ok:false, stage:'active_symbols', error:parsed.error.message || parsed.error.code || 'Deriv returned an unknown market-data error.', code:parsed.error.code || '' });
+          finish({
+            ok: false,
+            stage: Number(parsed?.req_id) === reqId ? 'active_symbols' : 'response',
+            error: parsed.error.message || parsed.error.code || 'Deriv returned an unknown market-data error.',
+            code: parsed.error.code || '',
+          });
           return;
         }
-        if (Number(parsed?.req_id) === 900001) {
-          clearTimeout(timer);
+        if (Number(parsed?.req_id) === reqId) {
           const count = Array.isArray(parsed?.active_symbols) ? parsed.active_symbols.length : 0;
-          finish(count ? { ok:true, stage:'active_symbols', symbolCount:count, activeSymbols: parsed.active_symbols } : { ok:false, stage:'active_symbols', error:'Deriv connected, but returned an empty active-symbol catalogue.' });
+          finish(count
+            ? { ok: true, stage: 'active_symbols', symbolCount: count, activeSymbols: parsed.active_symbols }
+            : { ok: false, stage: 'active_symbols', error: 'Deriv connected, but returned an empty active-symbol catalogue.' });
         }
       } catch (error) {
-        clearTimeout(timer);
-        finish({ ok:false, stage:'response', error:error instanceof Error ? error.message : String(error) });
+        finish({ ok: false, stage: 'response', error: error instanceof Error ? error.message : String(error) });
       }
     });
-    ws.on('error', error => {
-      clearTimeout(timer);
-      finish({ ok:false, stage:'connect', error:`Deriv public WebSocket error: ${error instanceof Error ? error.message : String(error)}` });
-    });
+
+    ws.on('error', error => finish({
+      ok: false,
+      stage: 'connect',
+      error: `Deriv public WebSocket error: ${error instanceof Error ? error.message : String(error)}`,
+    }));
+
     ws.on('close', (code, reason) => {
-      if (!settled) {
-        clearTimeout(timer);
-        finish({ ok:false, stage:'connect', error:`Deriv public WebSocket closed before startup completed (code ${code})${reason ? `: ${String(reason)}` : ''}.` });
-      }
+      if (!settled) finish({
+        ok: false,
+        stage: 'connect',
+        error: `Deriv public WebSocket closed before startup completed (code ${code})${reason ? `: ${String(reason)}` : ''}.`,
+      });
     });
   });
+}
+
+async function checkDerivPublicMarketData() {
+  const maxAttempts = 3;
+  const retryDelaysMs = [0, 1200, 2500];
+  let lastFailure = null;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    if (retryDelaysMs[attempt - 1] > 0) {
+      await new Promise(resolve => setTimeout(resolve, retryDelaysMs[attempt - 1]));
+    }
+
+    console.log('[DERIV STARTUP] health attempt', attempt, 'of', maxAttempts);
+    const result = await checkDerivPublicMarketDataOnce(7000);
+
+    if (result.ok) {
+      console.log('[DERIV STARTUP] health passed', JSON.stringify({ attempt, stage: result.stage, symbolCount: result.symbolCount }));
+      return { ...result, attempts: attempt };
+    }
+
+    lastFailure = result;
+    console.warn('[DERIV STARTUP] health attempt failed', JSON.stringify({ attempt, ...result }));
+
+    // A request/response failure is retryable too: Deriv documents the public
+    // endpoint as a no-auth market-data channel, so a transient connection or
+    // response failure should not permanently block SIRE startup.
+  }
+
+  return {
+    ...(lastFailure || { ok: false, stage: 'unknown', error: 'Deriv startup health check failed.' }),
+    ok: false,
+    attempts: maxAttempts,
+  };
 }
 
 const server = http.createServer(async (req,res) => {
