@@ -270,7 +270,7 @@ export default function ResearchLab({ symbol, instruments, onClose, onSelectInst
           events.forEach(event=>{
             let type='';
             let data='';
-            event.split('\\n').forEach(line=>{
+            event.split(/\r?\n/).forEach(line=>{
               if(line.startsWith('event:')) type=line.slice(6).trim();
               else if(line.startsWith('data:')) data+=line.slice(5).trim();
             });
@@ -283,7 +283,9 @@ export default function ResearchLab({ symbol, instruments, onClose, onSelectInst
             } else if(type==='gpt.done') {
               finalData=payload as AgentResponse;
             } else if(type==='gpt.error') {
-              throw new Error(String(payload.error||'Direct GPT failed'));
+              const detail = payload?.status ? ` (HTTP ${payload.status})` : '';
+              const requestId = payload?.requestId ? ` [${payload.requestId}]` : '';
+              throw new Error(`${String(payload.error||'Direct GPT failed')}${detail}${requestId}`);
             }
           });
         };
