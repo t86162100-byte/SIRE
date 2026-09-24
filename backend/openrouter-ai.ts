@@ -106,6 +106,7 @@ export async function runGptHead(input: {
     checkIntegrations?: () => Promise<string>;
     githubRequest?: (input: { method: string; path: string; body?: unknown; permission: string }) => Promise<string>;
     renderRequest?: (input: { method: string; path: string; body?: unknown; permission: string }) => Promise<string>;
+    marketDataRequest?: (input: { symbol: string; interval?: string; count?: number; from?: number; to?: number; dataType?: string }) => Promise<string>;
   };
 }) {
   const query = input.query.trim();
@@ -119,6 +120,7 @@ export async function runGptHead(input: {
   if (input.tools?.checkIntegrations) toolDefs.push({ type:'function', function:{ name:'check_integrations', description:'Verify configured GitHub and Render connectivity when the user asks about integrations or deployment access.', parameters:{type:'object',properties:{},additionalProperties:false} } });
   if (input.tools?.githubRequest) toolDefs.push({ type:'function', function:{ name:'github_request', description:'Repository-scoped GitHub access for SIRE. Use for repository inspection and code changes requested by the user.', parameters:{type:'object',properties:{method:{type:'string',enum:['GET','POST','PUT','PATCH','DELETE']},path:{type:'string'},permission:{type:'string',enum:['read','write','execute']},body:{type:['object','array','string','null']}},required:['method','path','permission'],additionalProperties:false} } });
   if (input.tools?.webSearch) toolDefs.push({ type:'function', function:{ name:'web_search', description:'Search the web when current or externally verifiable information is needed.', parameters:{type:'object',properties:{query:{type:'string'}},required:['query'],additionalProperties:false} } });
+  if (input.tools?.marketDataRequest) toolDefs.push({ type:'function', function:{ name:'request_market_data', description:'Read historical Deriv market data and return the actual data. Use for candles/bars/ticks beyond the chart snapshot, specific ranges, different timeframes, older history, OHLC, or volume where returned. dataType is candles or ticks. For candles, interval is required; for ticks, omit interval. Use count for recent points or from/to as Unix seconds for a range. Do not invent data.', parameters:{type:'object',properties:{symbol:{type:'string'},interval:{type:'string'},count:{type:'integer',minimum:1,maximum:1000},from:{type:'number'},to:{type:'number'},dataType:{type:'string',enum:['candles','ticks']}},required:['symbol','dataType'],additionalProperties:false} } });
 
   const history = cleanHistory(input.history);
   const chartSnapshotMessage = input.chartSnapshot
@@ -135,7 +137,7 @@ export async function runGptHead(input: {
   const toolCallHistory:Array<{turn:number;name:string}> = [];
   for (let turn=0; turn<MAX_TOOL_TURNS; turn++) {
     await emit('GPT','working',turn===0?'Reading your request…':'Reviewing the latest result…');
-    const availableTools = toolDefs.filter((tool:any) => { const name=String(tool?.function?.name||''); return name==='github_request' || !usedToolCalls.has(name); });
+    const availableTools = toolDefs.filter((tool:any) => { const name=String(tool?.function?.name||''); return name==='github_request' || name==='request_market_data' || !usedToolCalls.has(name); });
     const result=await callOpenRouter(messages,availableTools,requestId);
     const message=result.message;
     const toolCalls=Array.isArray(message.tool_calls)?message.tool_calls:[];
@@ -161,6 +163,10 @@ export async function runGptHead(input: {
         messages.push({role:'tool',tool_call_id:callId,content:output.slice(0,20000)});
       } else if(name==='check_integrations'&&input.tools?.checkIntegrations){
         await emit('SIRE integrations','checking','Checking connections…'); const output=await input.tools.checkIntegrations(); messages.push({role:'tool',tool_call_id:callId,content:output.slice(0,12000)});
+      } else if(name==='request_market_data'&&input.tools?.marketDataRequest){
+        await emit('Market Data','working','Requesting historical market data…');
+        const output=await input.tools.marketDataRequest({symbol:String(args.symbol||''),interval:args.interval?String(args.interval):undefined,count:Number.isFinite(Number(args.count))?Number(args.count):undefined,from:Number.isFinite(Number(args.from))?Number(args.from):undefined,to:Number.isFinite(Number(args.to))?Number(args.to):undefined,dataType:String(args.dataType||'candles')});
+        messages.push({role:'tool',tool_call_id:callId,content:output.slice(0,120000)});
       } else if(name==='web_search'&&input.tools?.webSearch){
         await emit('Web','research','Searching the web…'); const output=await input.tools.webSearch(String(args.query||query).slice(0,1000)); messages.push({role:'tool',tool_call_id:callId,content:output.slice(0,14000)});
       } else messages.push({role:'tool',tool_call_id:callId,content:'Tool unavailable. Continue without it.'});
