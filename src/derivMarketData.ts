@@ -270,6 +270,13 @@ export class DerivMarketDataClient {
     return this.opening;
   }
 
+  getConnectionStatus(): 'connected' | 'connecting' | 'disconnected' | 'closed' {
+    if (this.closed) return 'closed';
+    if (this.socket?.readyState === WebSocket.OPEN) return 'connected';
+    if (this.opening) return 'connecting';
+    return 'disconnected';
+  }
+
   async request(payload: Record<string, unknown>) {
     const socket = await this.ensureSocket();
     const req_id = nextRequestId();
