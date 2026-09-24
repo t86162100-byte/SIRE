@@ -55,7 +55,7 @@ async function callOpenRouter(messages: ChatMessage[], tools?: any[]) {
   } finally { clearTimeout(timer); }
 }
 
-function analyzeChartRuntime(runtimeContext: Record<string, unknown> = {}) {
+export function analyzeChartRuntime(runtimeContext: Record<string, unknown> = {}, focus?: string) {
   const raw = Array.isArray(runtimeContext.recentBars) ? runtimeContext.recentBars : [];
   const bars = raw.map((b: any) => ({
     time: Number(b?.time), open: Number(b?.open), high: Number(b?.high), low: Number(b?.low), close: Number(b?.close),
