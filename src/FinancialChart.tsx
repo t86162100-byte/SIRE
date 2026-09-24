@@ -1016,6 +1016,125 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
   }, [symbol]);
 
   useEffect(() => {
+    if (typeof window === 'undefined' || !isActive) return;
+    const controls = {
+      execute: async (operations: any[]) => {
+        const widget = widgetRef.current;
+        const chart: any = widget?.chart;
+        if (!widget || !chart || widget.isDestroyed) throw new Error('Active chart is not ready.');
+        const results: any[] = [];
+        const scale = () => getChartTimeScale(chart);
+        const logical = () => scale()?.getVisibleLogicalRange?.() || chart.getVisibleLogicalRange?.() || null;
+        const wait = (ms: number) => new Promise(resolve => window.setTimeout(resolve, ms));
+        const executeOne = async (op: any) => {
+          const action = String(op?.action || '');
+          if (action === 'switch_instrument') {
+            const query = String(op?.symbol || op?.name || '').trim().toLowerCase();
+            const instrument = instrumentsRef.current.find(item => item.symbol.toLowerCase() === query || item.name.toLowerCase() === query || item.name.toLowerCase().includes(query));
+            if (!instrument) throw new Error('Instrument not found in the active SIRE instrument catalogue: ' + String(op?.symbol || op?.name || ''));
+            widget.setSymbol(instrument.symbol, 'DERIV');
+            await wait(150);
+            if (widget.symbol() !== instrument.symbol) throw new Error('Chart did not accept instrument ' + instrument.symbol + '.');
+            return { action, ok: true, symbol: widget.symbol(), name: instrument.name };
+          }
+          if (action === 'switch_timeframe') {
+            const interval = String(op?.interval || '').trim();
+            if (!CHART_INTERVALS.includes(interval)) throw new Error('Unsupported timeframe: ' + interval);
+            widget.setInterval(interval);
+            await wait(100);
+            if (widget.interval() !== interval) throw new Error('Chart did not accept timeframe ' + interval + '.');
+            return { action, ok: true, interval: widget.interval() };
+          }
+          if (action === 'set_chart_type') {
+            const chartType = String(op?.chartType || '').trim();
+            if (!CHART_TYPES.some(item => item.id === chartType)) throw new Error('Unsupported chart type: ' + chartType);
+            widget.setChartType(chartType);
+            if (widget.chartType() !== chartType) throw new Error('Chart did not accept chart type ' + chartType + '.');
+            return { action, ok: true, chartType: widget.chartType() };
+          }
+          if (action === 'zoom') {
+            const range = logical();
+            if (!range || !Number.isFinite(range.from) || !Number.isFinite(range.to) || range.to <= range.from) throw new Error('Chart has no usable visible range to zoom.');
+            const factor = Math.max(1.05, Math.min(10, Number(op?.factor) || 2));
+            const center = (range.from + range.to) / 2;
+            const span = (range.to - range.from) / (String(op?.direction || 'in') === 'out' ? 1 / factor : factor);
+            chart.setVisibleLogicalRange({ from: center - span / 2, to: center + span / 2 });
+            return { action, ok: true, visibleRange: chart.getVisibleLogicalRange?.() || scale()?.getVisibleLogicalRange?.() || null };
+          }
+          if (action === 'pan') {
+            const range = logical();
+            if (!range || !Number.isFinite(range.from) || !Number.isFinite(range.to)) throw new Error('Chart has no usable visible range to pan.');
+            const bars = Math.max(1, Math.min(100000, Math.abs(Number(op?.bars) || 10)));
+            const direction = String(op?.direction || 'right') === 'left' ? -1 : 1;
+            chart.setVisibleLogicalRange({ from: range.from + direction * bars, to: range.to + direction * bars });
+            return { action, ok: true, visibleRange: chart.getVisibleLogicalRange?.() || scale()?.getVisibleLogicalRange?.() || null };
+          }
+          if (action === 'move_to_time') {
+            const time = Number(op?.time);
+            if (!Number.isFinite(time)) throw new Error('move_to_time requires a Unix timestamp in seconds.');
+            const dataLayer = chart.dataLayer;
+            const index = dataLayer?.timeToIndexFloat?.(time);
+            if (!Number.isFinite(index)) throw new Error('Requested time is outside the chart data coverage.');
+            const range = logical();
+            const span = range && Number.isFinite(range.to - range.from) && range.to > range.from ? range.to - range.from : 40;
+            chart.setVisibleLogicalRange({ from: index - span / 2, to: index + span / 2 });
+            return { action, ok: true, time, visibleRange: chart.getVisibleLogicalRange?.() || scale()?.getVisibleLogicalRange?.() || null };
+          }
+          if (action === 'reset_view') {
+            chart.resetScale?.();
+            return { action, ok: true };
+          }
+          if (action === 'fit_data') {
+            chart.fitContent?.();
+            return { action, ok: true };
+          }
+          if (action === 'open_pane') {
+            const paneIndex = Math.max(0, Math.floor(Number(op?.paneIndex) || 0));
+            const panes = chart.panes?.() || [];
+            if (paneIndex >= panes.length) throw new Error('Pane ' + paneIndex + ' does not exist.');
+            const ok = chart.maximizePane?.(paneIndex);
+            if (ok === false) throw new Error('Chart could not maximize pane ' + paneIndex + '.');
+            return { action, ok: true, paneIndex, maximizedPane: chart.maximizedPane?.() ?? null };
+          }
+          if (action === 'close_pane') {
+            const current = chart.maximizedPane?.();
+            if (current === null || current === undefined) return { action, ok: true, maximizedPane: null };
+            const ok = chart.maximizePane?.(current);
+            if (ok === false) throw new Error('Chart could not restore the maximized pane.');
+            return { action, ok: true, restoredPane: current, maximizedPane: chart.maximizedPane?.() ?? null };
+          }
+          if (action === 'open_settings') {
+            const opened = widget.openSettings?.();
+            if (opened === false) throw new Error('Chart settings dialog is not available.');
+            return { action, ok: true, opened: opened !== false };
+          }
+          throw new Error('Unsupported chart control action: ' + action);
+        };
+        for (const operation of Array.isArray(operations) ? operations.slice(0, 10) : []) results.push(await executeOne(operation));
+        const state = chart.getState?.() || {};
+        return {
+          ok: true,
+          results,
+          verification: {
+            symbol: widget.symbol(),
+            timeframe: widget.interval(),
+            chartType: widget.chartType(),
+            visibleRange: chart.getVisibleLogicalRange?.() || scale()?.getVisibleLogicalRange?.() || null,
+            paneCount: (chart.panes?.() || []).length,
+            maximizedPane: chart.maximizedPane?.() ?? null,
+            chartState: state,
+            verifiedAt: Date.now(),
+          },
+        };
+      },
+    };
+    (window as any).__sireChartControl = controls;
+    return () => {
+      if ((window as any).__sireChartControl === controls) delete (window as any).__sireChartControl;
+    };
+  }, [isActive]);
+
+  useEffect(() => {
     if (typeof window === 'undefined') return;
     const publish = () => {
       const widget = widgetRef.current;
