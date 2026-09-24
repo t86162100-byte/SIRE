@@ -55,6 +55,110 @@ async function callOpenRouter(messages: ChatMessage[], tools?: any[]) {
   } finally { clearTimeout(timer); }
 }
 
+function analyzeChartRuntime(runtimeContext: Record<string, unknown> = {}) {
+  const raw = Array.isArray(runtimeContext.recentBars) ? runtimeContext.recentBars : [];
+  const bars = raw.map((b: any) => ({
+    time: Number(b?.time), open: Number(b?.open), high: Number(b?.high), low: Number(b?.low), close: Number(b?.close),
+  })).filter((b: any) => Number.isFinite(b.time) && Number.isFinite(b.open) && Number.isFinite(b.high) && Number.isFinite(b.low) && Number.isFinite(b.close));
+  if (bars.length < 20) return { ok:false, reason:'Not enough OHLC bars for structural analysis.', bars:bars.length };
+
+  const closes = bars.map((b:any)=>b.close);
+  const ema = (period:number) => {
+    const k = 2 / (period + 1);
+    let value = closes[0];
+    for (let i=1;i<closes.length;i++) value = closes[i] * k + value * (1-k);
+    return value;
+  };
+  const atrPeriod = 14;
+  const trs = bars.map((b:any,i:number) => i===0 ? b.high-b.low : Math.max(b.high-b.low, Math.abs(b.high-bars[i-1].close), Math.abs(b.low-bars[i-1].close)));
+  const atr = trs.slice(-atrPeriod).reduce((a:number,b:number)=>a+b,0) / atrPeriod;
+  const lookback = bars.slice(-40);
+  const recent = bars.slice(-20);
+  const recentHigh = Math.max(...recent.map((b:any)=>b.high));
+  const recentLow = Math.min(...recent.map((b:any)=>b.low));
+  const mid = (recentHigh + recentLow) / 2;
+  const e20 = ema(20), e50 = ema(50);
+  const slope20 = e20 - (function(){ const p=20; const k=2/(p+1); let v=closes[0]; const cutoff=Math.max(0,closes.length-8); for(let i=1;i<cutoff;i++) v=closes[i]*k+v*(1-k); return v; })();
+  const trend = e20 > e50 && slope20 > 0 ? 'bullish' : e20 < e50 && slope20 < 0 ? 'bearish' : 'mixed/ranging';
+
+  const pivots:{index:number;kind:'high'|'low';price:number}[]=[];
+  for(let i=2;i<bars.length-2;i++){
+    const b=bars[i];
+    if(b.high>bars[i-1].high && b.high>bars[i-2].high && b.high>=bars[i+1].high && b.high>=bars[i+2].high) pivots.push({index:i,kind:'high',price:b.high});
+    if(b.low<bars[i-1].low && b.low<bars[i-2].low && b.low<=bars[i+1].low && b.low<=bars[i+2].low) pivots.push({index:i,kind:'low',price:b.low});
+  }
+  const last = bars[bars.length-1];
+  const lastHigh = [...pivots].reverse().find(p=>p.kind==='high' && p.index<bars.length-2);
+  const lastLow = [...pivots].reverse().find(p=>p.kind==='low' && p.index<bars.length-2);
+  const structure = last.close > (lastHigh?.price ?? Infinity) ? 'bullish BOS' : last.close < (lastLow?.price ?? -Infinity) ? 'bearish BOS' : trend;
+  const tolerance = Math.max(atr * 0.18, Math.abs(last.close)*0.00015);
+  const equalHighs = pivots.filter(p=>p.kind==='high' && Math.abs(p.price-recentHigh)<=tolerance).slice(-3);
+  const equalLows = pivots.filter(p=>p.kind==='low' && Math.abs(p.price-recentLow)<=tolerance).slice(-3);
+
+  const drawings:any[]=[];
+  if(lastHigh && lastLow) {
+    const from = bars[Math.min(lastLow.index,lastHigh.index)];
+    drawings.push({
+      tool:'trend-line',
+      points:[{time:from.time,price:trend==='bearish'?lastHigh.price:lastLow.price},{time:last.time,price:last.close}],
+      text: trend==='bullish'?'Market Structure ↑':'Market Structure ↓',
+      rationale:'Connects the most recent confirmed swing structure to current price; not an arbitrary chart-spanning line.'
+    });
+  }
+  if(lastHigh && lastLow) {
+    const obIndex = structure === 'bullish BOS' ? lastLow.index : structure === 'bearish BOS' ? lastHigh.index : -1;
+    if(obIndex >= 0 && obIndex < bars.length) {
+      const ob=bars[obIndex];
+      drawings.push({
+        tool:'rectangle',
+        points:[{time:ob.time,price:ob.low},{time:last.time,price:ob.high}],
+        text: structure === 'bullish BOS' ? 'Bullish Order Block' : 'Bearish Order Block',
+        rationale:'Uses the last confirmed opposite-side swing candle associated with the detected structural break.'
+      });
+    }
+  }
+  if(equalHighs.length>=2) drawings.push({
+    tool:'rectangle',
+    points:[{time:bars[Math.max(0,equalHighs[0].index-2)].time,price:recentHigh-tolerance},{time:last.time,price:recentHigh+tolerance}],
+    text:'Buy-side Liquidity',
+    rationale:'Repeated swing highs cluster within volatility-adjusted tolerance, creating a measurable liquidity pool.'
+  });
+  if(equalLows.length>=2) drawings.push({
+    tool:'rectangle',
+    points:[{time:bars[Math.max(0,equalLows[0].index-2)].time,price:recentLow-tolerance},{time:last.time,price:recentLow+tolerance}],
+    text:'Sell-side Liquidity',
+    rationale:'Repeated swing lows cluster within volatility-adjusted tolerance, creating a measurable liquidity pool.'
+  });
+  if(recent.length>=8) drawings.push({
+    tool:'rectangle',
+    points:[{time:recent[0].time,price:recentLow},{time:last.time,price:recentHigh}],
+    text:'Current Range',
+    rationale:'Recent 20-bar high/low defines the actual consolidation envelope used for range analysis.'
+  });
+
+  return {
+    ok:true,
+    symbol:runtimeContext.symbol,
+    timeframe:runtimeContext.timeframe,
+    price:last.close,
+    bars:bars.length,
+    atr14:atr,
+    ema20:e20,
+    ema50:e50,
+    trend,
+    structure,
+    recentHigh,
+    recentLow,
+    rangeSize:recentHigh-recentLow,
+    rangePosition:(last.close-recentLow)/Math.max(recentHigh-recentLow,Number.EPSILON),
+    swingHigh:lastHigh ? {time:bars[lastHigh.index].time,price:lastHigh.price} : null,
+    swingLow:lastLow ? {time:bars[lastLow.index].time,price:lastLow.price} : null,
+    liquidity:{buySide:equalHighs.map(p=>p.price),sellSide:equalLows.map(p=>p.price)},
+    drawings,
+    caveat:'This is a structured technical reading of the supplied OHLC window, not a guarantee of future price movement.'
+  };
+}
+
 function systemPrompt() {
   return [
     'You are SIRE, the user-facing AI assistant and the primary reasoning model.',
@@ -64,7 +168,7 @@ function systemPrompt() {
     'The CURRENT USER MESSAGE is the only task you are executing now. Previous conversation history is context only, not a pending task, instruction, or requirement. Never continue, repeat, or enforce an action from an earlier message unless the current user message explicitly asks for it.',
     'Do not let earlier requests for GitHub, Render, web search, deployments, repository edits, or other tools cause you to call those tools for a new unrelated request.',
     'You are above the available tools and decide when they are useful. You are not required to use a tool.',
-    'You have direct access to the active SIRE chart runtime context and direct chart-control actions. Treat that context as authoritative for the current chart. For EVERY request that asks you to change the chart (add/remove/configure an indicator, change timeframe or chart type, draw, replay, select an instrument, or otherwise operate the chart), you MUST call chart_control with the concrete action(s) before claiming the change was made. Never merely say a chart action was completed without issuing the chart_control action. For indicator requests, use __sireAction: add_indicator and indicatorId such as macd, rsi, ema, sma, bollinger, etc. For visual analysis, put the analysis on the chart with drawing actions when the user asks for it: use __sireAction: add_drawing with tool="trend-line" for trend lines and tool="rectangle" for boxes/zones; do not use tool="box" because the OpenAlgo drawing id is "rectangle". You may omit points for trend-line/rectangle when you want SIRE to resolve anchors from the current visible chart data. If the user asks for multiple visual annotations, send all concrete add_drawing actions in the same chart_control call. Include settings only when requested or needed. web_search for current external information; GitHub for repository inspection and repository changes when the user asks for them or they are materially needed.',
+    'You have direct access to the active SIRE chart runtime context and direct chart-control actions. For serious chart analysis, use chart_analyze first; do not invent zones or place generic lines/boxes. Every visual mark must correspond to a specific measured structure, price/time range, and named rationale from the analysis result. Treat that context as authoritative for the current chart. For EVERY request that asks you to change the chart (add/remove/configure an indicator, change timeframe or chart type, draw, replay, select an instrument, or otherwise operate the chart), you MUST call chart_control with the concrete action(s) before claiming the change was made. Never merely say a chart action was completed without issuing the chart_control action. For indicator requests, use __sireAction: add_indicator and indicatorId such as macd, rsi, ema, sma, bollinger, etc. For visual analysis, put the analysis on the chart with drawing actions when the user asks for it: use __sireAction: add_drawing with tool="trend-line" for trend lines and tool="rectangle" for boxes/zones; do not use tool="box" because the OpenAlgo drawing id is "rectangle". You may omit points for trend-line/rectangle when you want SIRE to resolve anchors from the current visible chart data. If the user asks for multiple visual annotations, send all concrete add_drawing actions in the same chart_control call. Include settings only when requested or needed. web_search for current external information; GitHub for repository inspection and repository changes when the user asks for them or they are materially needed.',
     'Use a helper only when it materially improves the answer. After a helper returns, evaluate its result yourself and continue reasoning.',
     'GitHub access is full repository-level access through the configured GitHub credential, subject to the credential\'s actual GitHub permissions. You may read code and repository metadata, create/update/delete files, create branches and commits, open/update pull requests and issues, inspect workflows/runs, dispatch supported workflows, manage repository-scoped settings exposed by the credential, and perform other repository-scoped GitHub API operations. When a repository task requires it, inspect the repository first, then make the requested changes through GitHub and report the actual result. Do not claim an operation succeeded unless the GitHub tool actually returned success.',
     'Visible activity should contain only concise work summaries, never private chain-of-thought.',
@@ -80,6 +184,7 @@ export async function runGptHead(input: {
   runtimeContext?: Record<string, unknown>;
   tools?: {
     chartControl?: (actions: any[]) => Promise<string>;
+    chartAnalyze?: (focus?: string) => Promise<string>;
     webSearch?: (query: string) => Promise<string>;
     checkIntegrations?: () => Promise<string>;
     githubRequest?: (input: { method: string; path: string; body?: unknown; permission: string }) => Promise<string>;
@@ -90,7 +195,14 @@ export async function runGptHead(input: {
   const emit = async (actor: string, phase: string, text: string) => { if (input.onEvent) await input.onEvent({ actor, phase, text }); };
 
   const toolDefs: any[] = [];
-  if (input.tools?.chartControl) toolDefs.push({ type: 'function', function: { name: 'chart_control', description: 'Directly operate the active SIRE chart using the authoritative live runtime context. Use for instrument selection, timeframe, chart type, indicators, drawings, replay, chart linking, multi-chart layout and supported chart actions. Do not ask for the current instrument when the context supplies it.', parameters: { type:'object', properties: { actions:{ type:'array', items:{type:'object', additionalProperties:true} } }, required:['actions'], additionalProperties:false } } });
+  if (input.tools?.chartControl) toolDefs.push({ type: 'function', function: { name: 'chart_control', description: 'Directly operate the active SIRE chart using the authoritative live runtime context. Use for instrument selection, timeframe, chart type, indicators, drawings, replay, chart linking, multi-chart layout and supported chart actions. Do not ask for the current instrument when the context supplies it.', parameters: { type:'object', properties: { actions:{ type:'array', items:{type:'object', additionalProperties:true} } }, required:['actions'], additionalProperties:false } } });  if (input.tools?.chartAnalyze) toolDefs.push({
+    type: 'function',
+    function: {
+      name: 'chart_analyze',
+      description: 'Run SIRE quantitative market-structure analysis on the authoritative live OHLC context before making chart-analysis claims. Returns trend, EMA/ATR context, confirmed swing structure, liquidity clusters, range boundaries, and concrete candidate drawing anchors with rationale. Use this for serious chart analysis requests.',
+      parameters: { type:'object', properties: { focus:{ type:'string', description:'Optional focus such as SMC, ICT, CRT, structure, liquidity, order blocks, or general analysis.' } }, additionalProperties:false },
+    },
+  });
 
   if (input.tools?.checkIntegrations) toolDefs.push({
     type: 'function',
