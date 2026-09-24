@@ -17,6 +17,7 @@ import { recordIssue, getRecentIssues } from './backend/sire-issue-tracker.ts';
 const PORT = Number(process.env.PORT || 10000);
 const HOST = '0.0.0.0';
 const DIST = join(process.cwd(), 'dist');
+const pendingChartControls = new Map();
 const MIME = { '.html':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.json':'application/json; charset=utf-8','.svg':'image/svg+xml','.png':'image/png','.jpg':'image/jpeg','.jpeg':'image/jpeg','.webp':'image/webp','.ico':'image/x-icon','.woff':'font/woff','.woff2':'font/woff2' };
 
 async function serveStatic(req, res) {
@@ -369,6 +370,34 @@ async function marketDataRequestForGpt(input) {
   });
 }
 
+async function requestChartControlForGpt(input, onEvent) {
+  const operations = Array.isArray(input?.operations) ? input.operations.slice(0, 10) : [];
+  if (!operations.length) throw new Error('Chart control requires at least one operation.');
+  const commandId = randomUUID();
+  const timeoutMs = 15000;
+  const promise = new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      pendingChartControls.delete(commandId);
+      reject(new Error('Chart control timed out waiting for the SIRE chart runtime to execute and verify the request.'));
+    }, timeoutMs);
+    pendingChartControls.set(commandId, { resolve: value => { clearTimeout(timer); pendingChartControls.delete(commandId); resolve(value); }, reject });
+  });
+  await onEvent?.({
+    actor: 'Chart',
+    phase: 'working',
+    text: 'Executing and verifying the requested chart operation…',
+    chartControl: { commandId, operations },
+  });
+  return await promise;
+}
+
+function resolveChartControl(commandId, result) {
+  const pending = pendingChartControls.get(String(commandId || ''));
+  if (!pending) return false;
+  pending.resolve(result);
+  return true;
+}
+
 async function handleDirectGptRequest(parsed, onEvent) {
   const query = String(parsed.query || '').trim();
   if (!query) throw new Error('query is required');
@@ -381,6 +410,7 @@ async function handleDirectGptRequest(parsed, onEvent) {
       githubRequest: githubRequestForGpt,
       renderRequest: renderRequestForGpt,
       marketDataRequest: marketDataRequestForGpt,
+      chartControl: input => requestChartControlForGpt(input, onEvent),
       checkIntegrations: async () => {
         const result = {
           github: { configured: false, repository: String(process.env.GITHUB_REPOSITORY || 't86162100-byte/SIRE') },
@@ -653,6 +683,11 @@ const server = http.createServer(async (req,res) => {
     }
     if (req.method === 'GET' && pathname === '/api/sire/deriv/health') { const result = await checkDerivPublicMarketData(); console.log('[DERIV HEALTH]', JSON.stringify(result)); return res.writeHead(result.ok ? 200 : 502,{ 'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8' }).end(JSON.stringify(result)); }
     if (req.method === 'POST' && pathname === '/api/sire/agent/chat') { const parsed = body ? JSON.parse(body) : {}; const response = await handleGeminiRequest(parsed); return res.writeHead(response.status,{ 'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8' }).end(JSON.stringify(response.body ?? {})); }
+    if (req.method === 'POST' && pathname === '/api/sire/chart/control-result') {
+      const parsed = body ? JSON.parse(body) : {};
+      const ok = resolveChartControl(parsed.commandId, parsed.result || { ok: false, error: 'Missing chart control result.' });
+      return res.writeHead(ok ? 200 : 404,{ 'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8' }).end(JSON.stringify({ ok }));
+    }
     if (req.method === 'POST' && pathname === '/api/sire/agent/gpt/stream') {
       const parsed = body ? JSON.parse(body) : {};
       if (!String(parsed.query || '').trim()) return res.writeHead(400,{ 'Access-Control-Allow-Origin':'*','Content-Type':'application/json; charset=utf-8' }).end(JSON.stringify({ error:'query is required' }));
