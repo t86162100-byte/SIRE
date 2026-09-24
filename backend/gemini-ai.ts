@@ -14,7 +14,6 @@ async function requestModel(model: string, body: unknown, apiKey: string) { cons
 
 export type GeminiHeadTools = {
   askGptOss?: (task: string) => Promise<string>;
-  askOpenAlgo?: (task: string) => Promise<string>;
   webSearch?: (query: string) => Promise<string>;
   onToolStart?: (name: string, task: string) => void | Promise<void>;
 };
@@ -22,7 +21,6 @@ export type GeminiHeadTools = {
 const HEAD_TOOLS = [
   { function_declarations: [
     { name: 'ask_gpt_oss', description: 'Ask GPT-OSS 20B to independently inspect, reason about, challenge, or solve a difficult part of the user task. Use only when another model materially helps.', parameters: { type: 'object', properties: { task: { type: 'string', description: 'The concrete problem GPT-OSS should investigate.' } }, required: ['task'] } },
-    { name: 'ask_openalgo', description: 'Ask the OpenAlgo Agent to inspect or act on SIRE chart, market, OpenAlgo, GitHub, Render, replay, indicators, or related technical capabilities. Use only when needed.', parameters: { type: 'object', properties: { task: { type: 'string', description: 'The concrete chart, code, deployment, or OpenAlgo work to investigate.' } }, required: ['task'] } },
     { name: 'web_search', description: 'Search the web when the answer genuinely requires current or external information.', parameters: { type: 'object', properties: { query: { type: 'string', description: 'Focused web search query.' } }, required: ['query'] } },
   ]},
 ];
@@ -62,15 +60,14 @@ export async function runGemini(input: { query: string; history?: Array<{ role: 
         contents.push({ role: 'model', parts });
         const results = await Promise.all(calls.map(async (part: any) => {
           const name = String(part.functionCall.name); const args = part.functionCall.args || {}; const task = String(args.task || args.query || '').trim();
-          await input.onEvent?.({ actor: 'Gemini', phase: 'delegating', text: name === 'ask_gpt_oss' ? 'Gemini asked GPT-OSS 20B to take a closer look at this.' : name === 'ask_openalgo' ? 'Gemini asked OpenAlgo Agent to inspect the relevant technical context.' : 'Gemini is checking current external information.' });
+          await input.onEvent?.({ actor: 'Gemini', phase: 'delegating', text: name === 'ask_gpt_oss' ? 'Gemini asked GPT-OSS 20B to take a closer look at this.' : 'Gemini is checking current external information.' });
           let result = '';
           try {
             if (name === 'ask_gpt_oss') result = input.tools?.askGptOss ? await input.tools.askGptOss(task) : 'GPT-OSS is not currently available.';
-            else if (name === 'ask_openalgo') result = input.tools?.askOpenAlgo ? await input.tools.askOpenAlgo(task) : 'OpenAlgo Agent is not currently available.';
             else if (name === 'web_search') result = input.tools?.webSearch ? await input.tools.webSearch(task) : 'Web search is not currently available.';
             else result = 'Unknown tool.';
           } catch (e) { result = `Tool ${name} failed: ${e instanceof Error ? e.message : String(e)}`; }
-          await input.onEvent?.({ actor: name === 'ask_gpt_oss' ? 'GPT-OSS 20B' : name === 'ask_openalgo' ? 'OpenAlgo Agent' : 'Web', phase: 'result', text: result.slice(0, 1600) });
+          await input.onEvent?.({ actor: name === 'ask_gpt_oss' ? 'GPT-OSS 20B' : 'Web', phase: 'result', text: result.slice(0, 1600) });
           return { functionResponse: { name, response: { result: result.slice(0, 12000) } } };
         }));
         contents.push({ role: 'user', parts: results });
