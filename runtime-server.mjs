@@ -91,14 +91,25 @@ async function githubRequestForGpt({ method, path, body, permission }) {
   const repoName = repoParts[1];
   let normalizedPath = String(path || '').trim();
 
+  // GPT/OpenAI tool calls may wrap paths in Markdown/code quotes or omit the
+  // leading slash/scheme. Strip presentation-only wrappers before parsing.
+  normalizedPath = normalizedPath
+    .replace(/^[\`'"\s]+|[\`'"\s]+$/g, '')
+    .replace(/[\r\n]+/g, '');
+
   // GPT/OpenAI tool calls can return API paths, absolute api.github.com URLs,
   // github.com browser URLs, API-v3 proxy URLs, or a repo-relative endpoint.
   // Canonicalize all of those to the same GitHub REST path before authorization.
   try {
-    if (/^https?:\/\/api\.github\.com/i.test(normalizedPath)) {
+    if (/^https?:\/\/(?:www\.)?api\.github\.com/i.test(normalizedPath)) {
       const parsedUrl = new URL(normalizedPath);
       normalizedPath = parsedUrl.pathname + parsedUrl.search;
-    } else if (/^https?:\/\/github\.com/i.test(normalizedPath)) {
+    } else if (/^(?:api\.github\.com|www\.github\.com|github\.com)\//i.test(normalizedPath)) {
+      const parsedUrl = new URL('https://' + normalizedPath.replace(/^www\./i, ''));
+      normalizedPath = parsedUrl.hostname.toLowerCase() === 'api.github.com'
+        ? parsedUrl.pathname + parsedUrl.search
+        : parsedUrl.pathname + parsedUrl.search;
+    } else if (/^https?:\/\/(?:www\.)?github\.com/i.test(normalizedPath)) {
       const parsedUrl = new URL(normalizedPath);
       const parts = parsedUrl.pathname.split('/').filter(Boolean);
       if (parts.length >= 2 && parts[0].toLowerCase() === owner.toLowerCase() && parts[1].toLowerCase() === repoName.toLowerCase()) {
@@ -131,6 +142,16 @@ async function githubRequestForGpt({ method, path, body, permission }) {
   }
   if (normalizedPath.toLowerCase().startsWith('/api/v3/')) normalizedPath = normalizedPath.slice(7);
   normalizedPath = normalizedPath.startsWith('/') ? normalizedPath : '/' + normalizedPath;
+
+  // Also accept the common repo-relative form:
+  //   t86162100-byte/SIRE/contents/...
+  // and canonicalize it to the REST form required by GitHub.
+  const ownerRepoPrefix = '/' + owner + '/' + repoName;
+  if (normalizedPath.toLowerCase() === ownerRepoPrefix.toLowerCase()) {
+    normalizedPath = '/repos/' + repo;
+  } else if (normalizedPath.toLowerCase().startsWith(ownerRepoPrefix.toLowerCase() + '/')) {
+    normalizedPath = '/repos/' + repo + normalizedPath.slice(ownerRepoPrefix.length);
+  }
 
   const repoPrefix = '/repos/' + repo;
   const lowerPath = normalizedPath.toLowerCase();
@@ -168,7 +189,7 @@ async function githubRequestForGpt({ method, path, body, permission }) {
       configuredRepository: repo,
       method,
     }));
-    throw new Error('GPT GitHub access is limited to the configured SIRE repository. Use paths under ' + repoPrefix + ' for repository inspection and changes.');
+    throw new Error('GPT GitHub access is limited to the configured SIRE repository. Requested path: ' + String(path || '') + '. Normalized path: ' + normalizedPath + '. Use paths under ' + repoPrefix + ' for repository inspection and changes.');
   }
 
   const verb = String(method || 'GET').toUpperCase();
