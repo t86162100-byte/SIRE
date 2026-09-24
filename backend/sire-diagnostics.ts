@@ -107,8 +107,8 @@ export async function runSireDiagnostics(){
     aiMonitor:monitor,
     connectors:connectorSummary,
     runtimeIssues,
-    routes:{chatRoute:'/api/sire/agent/council/stream',directAgentRoute:'/api/sire/agent/openalgo',directGptRoute:'/api/sire/agent/gpt',autonomousRoute:'/api/sire/autonomous',diagnosticsRoute:'/api/sire/diagnostics'},
-    capabilities:{webSearch:true,openAlgoAgent:true,gemini:true,gptOss20b:true,github:connectors.some(x=>x.id==='github'),render:connectors.some(x=>x.id==='render'),persistentState:Boolean(process.env.DATABASE_URL)},
+    routes:{chatRoute:'/api/sire/agent/council/stream',directGptRoute:'/api/sire/agent/gpt',autonomousRoute:'/api/sire/autonomous',diagnosticsRoute:'/api/sire/diagnostics'},
+    capabilities:{webSearch:true,gemini:true,gptOss20b:true,github:connectors.some(x=>x.id==='github'),render:connectors.some(x=>x.id==='render'),persistentState:Boolean(process.env.DATABASE_URL)},
     noSecrets:true
   };
 }
