@@ -292,6 +292,33 @@ export default function ResearchLab({ symbol, instruments, onClose, runtimeConte
             if(type==='gpt.status') {
               const item=payload as CouncilActivity;
               setActivity(previous=>[...previous,item]);
+              if (payload?.chartControl?.commandId) {
+                void (async () => {
+                  const commandId = String(payload.chartControl.commandId);
+                  try {
+                    const control = (window as any).__sireChartControl;
+                    if (!control?.execute) throw new Error('The active chart control bridge is not available.');
+                    const result = await control.execute(Array.isArray(payload.chartControl.operations) ? payload.chartControl.operations : []);
+                    const verification = await fetch('/api/sire/chart/control-result', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ commandId, result }),
+                    });
+                    if (!verification.ok) throw new Error('SIRE could not return the chart verification result to GPT.');
+                    setActivity(previous => [...previous, { actor: 'Chart', phase: 'working', text: 'Chart operation completed and verified.' }]);
+                  } catch (error) {
+                    const result = { ok: false, error: error instanceof Error ? error.message : String(error) };
+                    try {
+                      await fetch('/api/sire/chart/control-result', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ commandId, result }),
+                      });
+                    } catch {}
+                    setActivity(previous => [...previous, { actor: 'Chart', phase: 'error', text: result.error }]);
+                  }
+                })();
+              }
             } else if(type==='gpt.done') {
               finalData=payload as AgentResponse;
             } else if(type==='gpt.error') {
