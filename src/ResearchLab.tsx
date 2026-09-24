@@ -246,12 +246,26 @@ export default function ResearchLab({ symbol, instruments, onClose, runtimeConte
     setChatSessions(previous => previous.map(chat => chat.id === chatId ? { ...chat, title: chat.title === 'New chat' ? query.slice(0, 48) || 'New chat' : chat.title, messages: [...chat.messages, { id: `m-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, role: 'user', text: query }].slice(-200), updatedAt: Date.now() } : chat));
     const isCancelled = () => cancelledJobsRef.current.has(chatId);
     try { const lowerQuery = query.toLowerCase(); const directGptTest = true; const actualQuery = lowerQuery.startsWith('/gpt ') ? query.slice(5).trim() : query; if (!actualQuery) throw new Error(directGptTest ? 'Message is required.' : 'Message is required.'); const history = [...chatMessages.map(message => ({ role: message.role, text: message.text })), { role: 'user', text: actualQuery }];
+      const chartSnapshot = (() => {
+        try {
+          const contexts = (window as any).__sireChartContexts;
+          const snapshot = contexts?.[symbol];
+          if (!snapshot || typeof snapshot !== 'object') return undefined;
+          return {
+            ...snapshot,
+            snapshotSource: 'SIRE chart runtime',
+            capturedAt: new Date().toISOString(),
+          };
+        } catch {
+          return undefined;
+        }
+      })();
       if (directGptTest) {
         const response = await fetch('/api/sire/agent/gpt/stream', {
           method:'POST',
           headers:{'Content-Type':'application/json','Accept':'text/event-stream'},
           signal:controller.signal,
-          body:JSON.stringify({ query:actualQuery, history })
+          body:JSON.stringify({ query:actualQuery, history, chartSnapshot })
         });
         if (!response.ok || !response.body) {
           const fallback = await response.text().catch(()=>'');
