@@ -59,6 +59,38 @@ function sireAgentBridgeAuth(req) {
   return Boolean(expected && supplied && supplied===expected);
 }
 
+async function runOpenAlgoAgentSmokeTest() {
+  const url=String(process.env.SIRE_OPENALGO_AGENT_URL||'').trim().replace(/\/$/,'');
+  const token=String(process.env.SIRE_AGENT_BRIDGE_TOKEN||'').trim();
+  if(!url || !token){ console.error('[SIRE AGENT SMOKE] missing SIRE_OPENALGO_AGENT_URL or SIRE_AGENT_BRIDGE_TOKEN'); return false; }
+  for(let attempt=1; attempt<=3; attempt++){
+    try{
+      console.log('[SIRE AGENT SMOKE] starting attempt', attempt);
+      const response=await fetch(url+'/agent/api/sire/run',{
+        method:'POST',
+        headers:{'Accept':'application/json','Content-Type':'application/json','Authorization':'Bearer '+token},
+        body:JSON.stringify({
+          message:'Use the SIRE runtime market-data tool to fetch WLDAUD 1m candles with count 30. After the tool succeeds, reply with exactly SIRE_AGENT_SMOKE_OK.',
+          session_id:'sire-live-smoke',
+          user_id:'sire-smoke',
+          chart_context:{symbol:'WLDAUD',interval:'1m'},
+        }),
+        signal:AbortSignal.timeout(120000),
+      });
+      const raw=await response.text(); let data={}; try{data=raw?JSON.parse(raw):{};}catch{}
+      if(response.ok && data?.status==='success' && String(data?.text||'').includes('SIRE_AGENT_SMOKE_OK')){
+        console.log('[SIRE AGENT SMOKE PASSED]', JSON.stringify({attempt,runId:data?.run_id||'',sessionId:data?.session_id||''}));
+        return true;
+      }
+      console.error('[SIRE AGENT SMOKE FAILED]', JSON.stringify({attempt,status:response.status,data}));
+    }catch(error){
+      console.error('[SIRE AGENT SMOKE FAILED]', JSON.stringify({attempt,error:error instanceof Error?error.message:String(error)}));
+    }
+    await new Promise(resolve=>setTimeout(resolve,5000));
+  }
+  return false;
+}
+
 async function handleOpenAlgoAgentRequest(parsed, onEvent) {
   const url=String(process.env.SIRE_OPENALGO_AGENT_URL||'').trim().replace(/\/$/,'');
   if(!url) throw new Error('SIRE_OPENALGO_AGENT_URL is not configured.');
