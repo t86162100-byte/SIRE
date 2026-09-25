@@ -97,7 +97,7 @@ function analysisEma(v:number[],n:number){if(v.length<n)return null;const k=2/(n
 function analysisRsi(v:number[],n=14){if(v.length<n+1)return null;let g=0,l=0;for(let i=1;i<=n;i++){const d=v[i]-v[i-1];g+=Math.max(d,0);l+=Math.max(-d,0);}g/=n;l/=n;for(let i=n+1;i<v.length;i++){const d=v[i]-v[i-1];g=(g*(n-1)+Math.max(d,0))/n;l=(l*(n-1)+Math.max(-d,0))/n;}return l===0?(g===0?50:100):100-100/(1+g/l);}
 function analysisAtr(b:AnalysisBar[],n=14){if(b.length<n+1)return null;const tr=b.map((x,i)=>{const p=i?b[i-1].close:x.close;return Math.max(x.high-x.low,Math.abs(x.high-p),Math.abs(x.low-p));});let a=tr.slice(1,n+1).reduce((x,y)=>x+y,0)/n;for(let i=n+1;i<tr.length;i++)a=(a*(n-1)+tr[i])/n;return a;}
 function analysisPivots(b:AnalysisBar[],left=2,right=2){const h:any[]=[],l:any[]=[];for(let i=left;i<b.length-right;i++){let hi=true,lo=true;for(let j=i-left;j<=i+right;j++){if(j===i)continue;if(b[j].high>=b[i].high)hi=false;if(b[j].low<=b[i].low)lo=false;}if(hi)h.push({time:b[i].epoch,price:b[i].high});if(lo)l.push({time:b[i].epoch,price:b[i].low});}return{highs:h,lows:l};}
-function analyzeBars(barsInput:AnalysisBar[],lookback=200){
+export function analyzeBars(barsInput:AnalysisBar[],lookback=200){
   const b=barsInput.slice(-Math.max(30,Math.min(1000,lookback)));if(b.length<30)return{ok:false,error:'At least 30 actual candles are required.',barsUsed:b.length};
   const c=b.map(x=>x.close),last=b[b.length-1],p=analysisPivots(b),rh=p.highs.slice(-6),rl=p.lows.slice(-6);
   const hs=rh.map(x=>x.price),ls=rl.map(x=>x.price),ht=hs.length>1?hs[hs.length-1]-hs[0]:0,lt=ls.length>1?ls[ls.length-1]-ls[0]:0;
