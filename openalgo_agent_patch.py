@@ -82,6 +82,9 @@ def run():
             print("[SIRE AGENT SMOKE PASSED] "+json.dumps({"runId":data.get("run_id",""),"sessionId":data.get("session_id","")}),flush=True)
         else:
             print("[SIRE AGENT SMOKE FAILED] "+json.dumps({"status":getattr(res,"status",None),"data":data}),flush=True)
+    except urllib.error.HTTPError as exc:
+        detail=exc.read().decode("utf-8","replace")
+        print("[SIRE AGENT SMOKE FAILED] "+json.dumps({"status":exc.code,"body":detail[:4000]}),flush=True)
     except Exception as exc:
         print("[SIRE AGENT SMOKE FAILED] "+json.dumps({"error":str(exc)}),flush=True)
 threading.Thread(target=run,daemon=True).start()
