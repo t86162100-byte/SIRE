@@ -67,7 +67,7 @@ def run_sire_agent():
 
 
 smoke=ROOT/"sire_agent_smoke.py"
-smoke.write_text('''import json, os, threading, time, urllib.request
+smoke.write_text('''import json, os, threading, time, urllib.request, urllib.error
 def run():
     time.sleep(12)
     base=os.environ.get("HOST_SERVER","http://127.0.0.1:"+str(os.environ.get("PORT","10000"))).rstrip("/")
