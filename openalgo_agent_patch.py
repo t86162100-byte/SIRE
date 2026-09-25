@@ -70,6 +70,7 @@ seed.write_text('''import os
 from database import agent_db
 
 def ensure():
+    agent_db.init_db()
     base=os.environ.get("SIRE_BRIDGE_URL","").rstrip("/")
     token=os.environ.get("SIRE_AGENT_BRIDGE_TOKEN","").strip()
     model=os.environ.get("SIRE_AGENT_MODEL","gemini-3.6-flash").strip()
