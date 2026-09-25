@@ -69,7 +69,7 @@ def run_sire_agent():
 smoke=ROOT/"sire_agent_smoke.py"
 smoke.write_text('''import json, os, threading, time, urllib.request, urllib.error
 def run():
-    time.sleep(12)
+    time.sleep(60)
     base=os.environ.get("HOST_SERVER","http://127.0.0.1:"+str(os.environ.get("PORT","10000"))).rstrip("/")
     token=os.environ.get("SIRE_AGENT_BRIDGE_TOKEN","").strip()
     payload={"message":"Use the SIRE runtime market-data tool to fetch WLDAUD 1m candles with count 30. After the tool succeeds, reply with exactly SIRE_AGENT_SMOKE_OK.","session_id":"sire-live-smoke","user_id":"sire-smoke","chart_context":{"symbol":"WLDAUD","interval":"1m"}}
