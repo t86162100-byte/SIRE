@@ -7,7 +7,7 @@ import { WebSocket, WebSocketServer } from 'ws';
 const { handler } = await import('./backend/index.ts');
 import { handleGeminiRequest } from './backend/gemini-ai.ts';
 import { handleOpenAICompatibleGemini, writeOpenAICompatibleStream } from './backend/openai-compatible-gemini.ts';
-import { runGptHead } from './backend/openrouter-ai.ts';
+import { runGptHead, analyzeBars } from './backend/openrouter-ai.ts';
 import { ws, db } from './compat/appdeploy-sdk/index.js';
 import { realtime } from './backend/realtime.ts';
 import { getStoredHistory, persistHistoryBars, historyStoreStatus } from './backend/deriv-history-store.ts';
@@ -19,6 +19,7 @@ const PORT = Number(process.env.PORT || 10000);
 const HOST = '0.0.0.0';
 const DIST = join(process.cwd(), 'dist');
 const pendingChartControls = new Map();
+const activeAgentSinks = new Map();
 const MIME = { '.html':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.json':'application/json; charset=utf-8','.svg':'image/svg+xml','.png':'image/png','.jpg':'image/jpeg','.jpeg':'image/jpeg','.webp':'image/webp','.ico':'image/x-icon','.woff':'font/woff','.woff2':'font/woff2' };
 
 async function serveStatic(req, res) {
@@ -48,6 +49,75 @@ async function handleTeamRequest(parsed, onEvent) {
     onEvent
   });
   return { ...response, councilMode: 'shared-workspace-team', rounds: response.activity.length };
+}
+
+
+
+function sireAgentBridgeAuth(req) {
+  const expected=String(process.env.SIRE_AGENT_BRIDGE_TOKEN||'').trim();
+  const supplied=String(req.headers?.authorization||'').replace(/^Bearer\s+/i,'').trim();
+  return Boolean(expected && supplied && supplied===expected);
+}
+
+async function handleOpenAlgoAgentRequest(parsed, onEvent) {
+  const url=String(process.env.SIRE_OPENALGO_AGENT_URL||'').trim().replace(/\/$/,'');
+  if(!url) throw new Error('SIRE_OPENALGO_AGENT_URL is not configured.');
+  const token=String(process.env.SIRE_AGENT_BRIDGE_TOKEN||'').trim();
+  if(!token) throw new Error('SIRE_AGENT_BRIDGE_TOKEN is not configured.');
+  const sessionId=String(parsed.sessionId||parsed.workspaceId||parsed.workspace||'sire-default').trim() || 'sire-default';
+  const response=await fetch(url+'/agent/api/sire/run',{
+    method:'POST',
+    headers:{'Accept':'application/json','Content-Type':'application/json','Authorization':'Bearer '+token},
+    body:JSON.stringify({
+      message:String(parsed.query||'').trim(),
+      session_id:sessionId,
+      user_id:String(parsed.userId||'sire'),
+      chart_context:parsed.chartSnapshot||{},
+      reasoning_effort:parsed.reasoningEffort||null,
+    }),
+    signal:AbortSignal.timeout(120000),
+  });
+  const raw=await response.text(); let data={}; try{data=raw?JSON.parse(raw):{};}catch{data={};}
+  if(!response.ok || data?.status==='error') {
+    throw new Error(String(data?.message||`OpenAlgo Agent HTTP ${response.status}`));
+  }
+  return {text:String(data?.text||''),sessionId:String(data?.session_id||sessionId),runId:String(data?.run_id||''),provider:'OpenAlgo Agent (Agno)',mode:'openalgo-agent'};
+}
+
+async function sireAgentMarketData(req, parsed) {
+  if(!sireAgentBridgeAuth(req)) throw Object.assign(new Error('Unauthorized'),{status:401});
+  return JSON.parse(await marketDataRequestForGpt(parsed));
+}
+
+async function sireAgentAnalyze(req, parsed) {
+  if(!sireAgentBridgeAuth(req)) throw Object.assign(new Error('Unauthorized'),{status:401});
+  const symbol=String(parsed.symbol||'').trim();
+  const interval=String(parsed.interval||'1m').trim();
+  const count=Math.max(30,Math.min(1000,Math.floor(Number(parsed.count)||200)));
+  if(!symbol) throw new Error('symbol is required');
+  const raw=await marketDataRequestForGpt({symbol,interval,count,dataType:'candles'});
+  const data=JSON.parse(raw);
+  const bars=Array.isArray(data?.data)?data.data:[];
+  const analysis=analyzeBars(bars,count);
+  return {ok:true,symbol,interval,returned:data.returned,analysis};
+}
+
+async function sireAgentChartControl(req, parsed) {
+  if(!sireAgentBridgeAuth(req)) throw Object.assign(new Error('Unauthorized'),{status:401});
+  const sessionId=String(parsed.session_id||'sire-default');
+  const sink=activeAgentSinks.get(sessionId);
+  if(!sink) throw new Error('No active SIRE chart session is connected for this agent request.');
+  return await requestChartControlForGpt({operations:Array.isArray(parsed.operations)?parsed.operations:[]},sink);
+}
+
+async function sireAgentObserverStatus(req, parsed) {
+  if(!sireAgentBridgeAuth(req)) throw Object.assign(new Error('Unauthorized'),{status:401});
+  const ownerKey=String(parsed.user_id||'').trim();
+  if(!ownerKey) return {ok:true,mode:'market_observer_core',runtimeLoop:Boolean(observerTimer),states:[],recentEvents:[]};
+  const config=await getObserverConfig(ownerKey);
+  const states=(await db.list(OBSERVER_STATE_TABLE,{limit:5000})).items.filter(item=>String(item?.ownerKey||'')===ownerKey).slice(-100);
+  const recentEvents=(await db.list(OBSERVER_EVENT_TABLE,{limit:5000})).items.filter(item=>String(item?.ownerKey||'')===ownerKey).sort((a,b)=>Number(b?.observedAt||0)-Number(a?.observedAt||0)).slice(0,50);
+  return {ok:true,mode:'market_observer_core',runtimeLoop:Boolean(observerTimer),busy:observerBusy,config,states,recentEvents};
 }
 
 function githubRepoConfig() {
@@ -835,6 +905,22 @@ const server = http.createServer(async (req,res) => {
         return res.writeHead(status, {'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify({error:{message:cause instanceof Error?cause.message:String(cause),type:'sire_model_bridge_error'}}));
       }
     }
+    if (req.method === 'POST' && pathname === '/api/sire/agent/market-data') {
+      try { const parsed=body?JSON.parse(body):{}; const result=await sireAgentMarketData(req,parsed); return res.writeHead(200,{'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify(result)); }
+      catch(cause){const status=Number(cause?.status)||502;return res.writeHead(status,{'Access-Control-Allow-Origin':'*','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify({ok:false,error:cause instanceof Error?cause.message:String(cause)}));}
+    }
+    if (req.method === 'POST' && pathname === '/api/sire/agent/analyze') {
+      try { const parsed=body?JSON.parse(body):{}; const result=await sireAgentAnalyze(req,parsed); return res.writeHead(200,{'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify(result)); }
+      catch(cause){const status=Number(cause?.status)||502;return res.writeHead(status,{'Access-Control-Allow-Origin':'*','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify({ok:false,error:cause instanceof Error?cause.message:String(cause)}));}
+    }
+    if (req.method === 'POST' && pathname === '/api/sire/agent/chart-control') {
+      try { const parsed=body?JSON.parse(body):{}; const result=await sireAgentChartControl(req,parsed); return res.writeHead(200,{'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify(result)); }
+      catch(cause){const status=Number(cause?.status)||502;return res.writeHead(status,{'Access-Control-Allow-Origin':'*','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify({ok:false,error:cause instanceof Error?cause.message:String(cause)}));}
+    }
+    if (req.method === 'GET' && pathname === '/api/sire/agent/observer-status') {
+      try { const result=await sireAgentObserverStatus(req,{}); return res.writeHead(200,{'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify(result)); }
+      catch(cause){const status=Number(cause?.status)||502;return res.writeHead(status,{'Access-Control-Allow-Origin':'*','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify({ok:false,error:cause instanceof Error?cause.message:String(cause)}));}
+    }
     if (req.method === 'POST' && pathname === '/api/sire/agent/chat') { const parsed = body ? JSON.parse(body) : {}; const response = await handleGeminiRequest(parsed); return res.writeHead(response.status,{ 'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8' }).end(JSON.stringify(response.body ?? {})); }
     if (req.method === 'POST' && pathname === '/api/sire/chart/control-result') {
       const parsed = body ? JSON.parse(body) : {};
@@ -862,7 +948,11 @@ const server = http.createServer(async (req,res) => {
       }, 5000);
       sendEvent('gpt.status',{actor:'SIRE',phase:'starting',text:`SIRE connected. GPT request ${requestId} is starting.`,requestId});
       try {
-        const response = await handleDirectGptRequest({ ...parsed, requestId }, async event => sendEvent('gpt.status', { ...event, requestId }));
+        const sessionId=String(parsed.sessionId||parsed.workspaceId||parsed.workspace||'sire-default');
+        const sink=async event=>sendEvent('gpt.status',{...event,requestId});
+        activeAgentSinks.set(sessionId,sink);
+        let response;
+        try { response=await handleOpenAlgoAgentRequest({...parsed,requestId},sink); } finally { activeAgentSinks.delete(sessionId); }
         if (!res.writableEnded && !res.destroyed) {
           sendEvent('gpt.status',{actor:'SIRE',phase:'finishing',text:'GPT has completed the work. Sending the final response.',requestId});
           sendEvent('gpt.done', response);
@@ -878,7 +968,7 @@ const server = http.createServer(async (req,res) => {
       }
       return;
     }
-    if (req.method === 'POST' && pathname === '/api/sire/agent/gpt') { const parsed = body ? JSON.parse(body) : {}; if (!String(parsed.query || '').trim()) return res.writeHead(400,{ 'Access-Control-Allow-Origin':'*','Content-Type':'application/json; charset=utf-8' }).end(JSON.stringify({ error:'query is required' })); try { const response = await handleDirectGptRequest(parsed); return res.writeHead(200,{ 'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8' }).end(JSON.stringify(response)); } catch (cause) { const message = cause instanceof Error ? cause.message : String(cause); console.error('[DIRECT GPT]', message); return res.writeHead(502,{ 'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8' }).end(JSON.stringify({ error:`Direct GPT test failed: ${message}` })); } }
+    if (req.method === 'POST' && pathname === '/api/sire/agent/gpt') { const parsed = body ? JSON.parse(body) : {}; if (!String(parsed.query || '').trim()) return res.writeHead(400,{ 'Access-Control-Allow-Origin':'*','Content-Type':'application/json; charset=utf-8' }).end(JSON.stringify({ error:'query is required' })); try { const response = await handleOpenAlgoAgentRequest(parsed); return res.writeHead(200,{ 'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8' }).end(JSON.stringify(response)); } catch (cause) { const message = cause instanceof Error ? cause.message : String(cause); console.error('[DIRECT GPT]', message); return res.writeHead(502,{ 'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8' }).end(JSON.stringify({ error:`Direct GPT test failed: ${message}` })); } }
     const response=await handler(toEvent(req,body)); const statusCode=Number.isInteger(response?.statusCode)?response.statusCode:200; const rawBody=response?.body!==undefined?response.body:response; const isString=typeof rawBody==='string'; res.writeHead(statusCode,{ 'Access-Control-Allow-Origin':'*','Cache-Control':'no-store',...(isString?{}:{'Content-Type':'application/json; charset=utf-8'}),...(response?.headers||{}) }); res.end(isString?rawBody:JSON.stringify(rawBody??{}));
   } catch(cause) { const message=cause instanceof Error?cause.message:String(cause); console.error('[HTTP ERROR]',req.method,req.url,message); if (!res.headersSent) res.writeHead(500,{'Content-Type':'application/json','Access-Control-Allow-Origin':'*'}); res.end(JSON.stringify({error:message})); } });
 });
