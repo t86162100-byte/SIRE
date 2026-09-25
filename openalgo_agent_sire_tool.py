@@ -19,7 +19,10 @@ class SireToolkit(OpenAlgoToolkit):
         token=os.environ.get("SIRE_AGENT_BRIDGE_TOKEN","")
         if not base or not token:
             raise RuntimeError("SIRE bridge is not configured")
-        data=None if payload is None else json.dumps(payload).encode()
+        body=dict(payload or {})
+        body.setdefault("session_id", getattr(self.context,"session_id",None))
+        body.setdefault("user_id", getattr(self.context,"user_id",None))
+        data=json.dumps(body).encode()
         req=urllib.request.Request(
             base+path, data=data,
             method="POST" if payload is not None else "GET",
