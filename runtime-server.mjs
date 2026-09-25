@@ -6,7 +6,7 @@ import { WebSocket, WebSocketServer } from 'ws';
 
 const { handler } = await import('./backend/index.ts');
 import { handleGeminiRequest } from './backend/gemini-ai.ts';
-import { runGptHead, analyzeBars } from './backend/openrouter-ai.ts';
+import { runGptHead } from './backend/openrouter-ai.ts';
 import { ws, db } from './compat/appdeploy-sdk/index.js';
 import { realtime } from './backend/realtime.ts';
 import { getStoredHistory, persistHistoryBars, historyStoreStatus } from './backend/deriv-history-store.ts';
@@ -554,6 +554,22 @@ async function checkDerivPublicMarketDataOnce(timeoutMs = 7000) {
   });
 }
 
+function observerAnalyzeBars(barsInput, lookback=200) {
+  const bars=Array.isArray(barsInput)?barsInput.slice(-lookback).map(b=>({time:Number(b?.epoch??b?.time),open:Number(b?.open),high:Number(b?.high),low:Number(b?.low),close:Number(b?.close),volume:Number(b?.volume??0)})).filter(b=>[b.time,b.open,b.high,b.low,b.close].every(Number.isFinite)):[]; 
+  if(bars.length<30)return {ok:false,error:'At least 30 valid candles are required.'};
+  const closes=bars.map(b=>b.close);
+  const sma=n=>closes.length<n?null:closes.slice(-n).reduce((a,b)=>a+b,0)/n;
+  const tr=bars.map((b,i)=>i?Math.max(b.high-b.low,Math.abs(b.high-bars[i-1].close),Math.abs(b.low-bars[i-1].close)):b.high-b.low);
+  const atr=tr.slice(-14).reduce((a,b)=>a+b,0)/Math.min(14,tr.length);
+  const pivH=[],pivL=[];
+  for(let i=2;i<bars.length-2;i++){if(bars[i].high>=bars[i-1].high&&bars[i].high>=bars[i+1].high)pivH.push({time:bars[i].time,price:bars[i].high});if(bars[i].low<=bars[i-1].low&&bars[i].low<=bars[i+1].low)pivL.push({time:bars[i].time,price:bars[i].low});}
+  const slope=a=>{const x=a.slice(-Math.min(20,a.length));if(x.length<2)return 0;const y=x.map(v=>v.price),xm=(x.length-1)/2,ym=y.reduce((s,v)=>s+v,0)/y.length;return y.reduce((s,v,i)=>s+(i-xm)*(v-ym),0)/x.reduce((s,_,i)=>s+(i-xm)**2,0);};
+  const hs=slope(pivH),ls=slope(pivL);
+  const trend=hs<-1e-6&&ls<-1e-6?'downtrend':hs>1e-6&&ls>1e-6?'uptrend':'range_or_mixed';
+  const rsiBars=closes.slice(-15);let gains=0,losses=0;for(let i=1;i<rsiBars.length;i++){const d=rsiBars[i]-rsiBars[i-1];if(d>0)gains+=d;else losses-=d;}const rsi=losses===0?100:100-(100/(1+gains/losses));
+  const recentHigh=Math.max(...bars.slice(-21,-1).map(b=>b.high)),recentLow=Math.min(...bars.slice(-21,-1).map(b=>b.low)),last=bars[bars.length-1];
+  return {ok:true,range:{from:bars[0].time,to:last.time,count:bars.length},latest:last,trend:{label:trend,highSlope:hs,lowSlope:ls},highs:{highest:Math.max(...bars.map(b=>b.high)),lowest:Math.min(...bars.map(b=>b.low))},volatility:{atr14:atr},momentum:{rsi14:rsi},movingAverages:{sma20:sma(20),sma50:sma(50),sma200:sma(200)},breakout:{lookback:20,status:last.close>recentHigh?'up':last.close<recentLow?'down':'none',priorHigh:recentHigh,priorLow:recentLow},swings:{highs:pivH.slice(-6),lows:pivL.slice(-6)}};
+}
 const OBSERVER_CONFIG_TABLE = 'sire_market_observer_config_v1';
 const OBSERVER_STATE_TABLE = 'sire_market_observer_state_v1';
 const OBSERVER_EVENT_TABLE = 'sire_market_observer_events_v1';
@@ -623,7 +639,7 @@ async function observerTick() {
       try {
         const raw=await marketDataRequestForGpt({symbol,interval,count:config.lookback||200,dataType:'candles'});
         const parsed=JSON.parse(raw), bars=Array.isArray(parsed?.data)?parsed.data:[];
-        const analysis=analyzeBars(bars,config.lookback||200);
+        const analysis=observerAnalyzeBars(bars,config.lookback||200);
         if(!analysis?.ok) throw new Error(analysis?.error||'Observer analysis failed.');
         const previous=await observerState(config.ownerKey,symbol,interval);
         const detected=observerEventDiff(previous,analysis), now=Date.now();
