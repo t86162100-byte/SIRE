@@ -121,5 +121,8 @@ if '    app.register_blueprint(sire_agent_bp)' not in s:
     s=s.replace('    app.register_blueprint(agent_bp)  # Register Agent blueprint','    app.register_blueprint(agent_bp)  # Register Agent blueprint\n    app.register_blueprint(sire_agent_bp)')
 if '    import sire_agent_seed' not in s:
     s=s.replace('    app.register_blueprint(sire_agent_bp)','    app.register_blueprint(sire_agent_bp)\n    try:\n        import sire_agent_seed\n    except Exception as exc:\n        print(f"[SIRE AGENT SEED] {exc}")')
+if "import sire_agent_smoke" not in s:
+    s=s.replace("app.register_blueprint(sire_agent_bp)", "app.register_blueprint(sire_agent_bp)\n    try:\n        import sire_agent_smoke\n    except Exception as exc:\n        print("[SIRE AGENT SMOKE BOOT] "+type(exc).__name__+": "+str(exc), flush=True)
+")
 app.write_text(s,encoding="utf-8")
 print("OpenAlgo SIRE bridge patched")
