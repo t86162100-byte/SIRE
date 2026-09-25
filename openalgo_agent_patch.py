@@ -1,6 +1,6 @@
 from pathlib import Path
 ROOT=Path("openalgo")
-tool_src=Path("../openalgo_agent_sire_tool.py").resolve()
+tool_src=Path("openalgo_agent_sire_tool.py")
 (ROOT/"services/agent/tools/sire.py").write_text(tool_src.read_text(),encoding="utf-8")
 
 registry=ROOT/"services/agent/tools/__init__.py"
