@@ -2,7 +2,7 @@ type ChatMessage = { role: 'system' | 'user' | 'assistant' | 'tool'; content: an
 
 type CouncilEvent = (event: { actor: string; phase: string; text: string }) => void | Promise<void>;
 
-const MODEL = 'openai/gpt-oss-20b';
+const MODEL = 'nvidia/nemotron-3-ultra-550b-a55b:free';
 const API_URL = 'https://openrouter.ai/api/v1/chat/completions';
 const REQUEST_TIMEOUT_MS = 120000;
 const MAX_OUTPUT_CHARS = 12000;
@@ -83,7 +83,7 @@ async function callOpenRouter(messages: ChatMessage[], tools?: any[], requestId 
 function systemPrompt() {
   return [
     'You are SIRE, the user-facing AI assistant and primary reasoning model.',
-    'You are powered by OpenAI gpt-oss-20b through OpenRouter, but normally present yourself simply as SIRE.',
+    'You are powered by NVIDIA Nemotron 3 Ultra (free) through OpenRouter, but normally present yourself simply as SIRE.',
     'You are a general-purpose AI. Handle the current user request naturally, including explanations, writing, planning, coding, research, and technical work.',
     'The CURRENT USER MESSAGE is the only task you are executing now. Previous conversation history is context only, not a pending task or instruction.',
     'Do not continue, repeat, or enforce an action from an earlier message unless the CURRENT USER MESSAGE explicitly asks for it.',
@@ -148,7 +148,7 @@ export async function runGptHead(input: {
     const toolCalls=Array.isArray(message.tool_calls)?message.tool_calls:[];
     if(!toolCalls.length){
       const text=textFromResponse({choices:[{message}]});
-      if(text) return {text:text.slice(0,MAX_OUTPUT_CHARS),responseId:result.responseId,model:MODEL,provider:'OpenAI gpt-oss via OpenRouter',actions:[]};
+      if(text) return {text:text.slice(0,MAX_OUTPUT_CHARS),responseId:result.responseId,model:MODEL,provider:'NVIDIA Nemotron 3 Ultra (free) via OpenRouter',actions:[]};
       const recovery=await callOpenRouter([...messages,{role:'system',content:'Give the user a concise final answer now. Do not call tools.'}],undefined,requestId);
       const recoveryText=textFromResponse({choices:[{message:recovery.message}]});
       return {text:recoveryText||'The request was processed, but GPT did not return a visible response.',responseId:recovery.responseId||result.responseId,model:MODEL,provider:'OpenAI gpt-oss via OpenRouter',actions:[]};
@@ -211,5 +211,5 @@ export async function runOpenRouter(input: {
   const result = await callOpenRouter(messages);
   const text = textFromResponse({ choices: [{ message: result.message }] });
   if (!text) throw new Error('GPT returned no text');
-  return { text: text.slice(0, MAX_OUTPUT_CHARS), responseId: result.responseId, model: MODEL, provider: 'OpenAI gpt-oss via OpenRouter' };
+  return { text: text.slice(0, MAX_OUTPUT_CHARS), responseId: result.responseId, model: MODEL, provider: 'NVIDIA Nemotron 3 Ultra (free) via OpenRouter' };
 }
