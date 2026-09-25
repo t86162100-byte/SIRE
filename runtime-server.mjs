@@ -15,7 +15,7 @@ import { realtime } from './backend/realtime.ts';
 import { getStoredHistory, persistHistoryBars, historyStoreStatus } from './backend/deriv-history-store.ts';
 import { signup, login, logout, currentUser, googleStart, googleCallback } from './backend/auth.ts';
 import { runSireDiagnostics } from './backend/sire-diagnostics.ts';
-import { handleSireMcp, handleMcpOAuth, setChartContext } from './backend/sire-mcp.ts';
+import { handleSireMcp, handleMcpOAuth, setChartContext, getPendingSireAction, completeSireAction } from './backend/sire-mcp.ts';
 import { requireUser } from './backend/auth.ts';
 
 const PORT = Number(process.env.PORT || 10000);
@@ -146,6 +146,8 @@ const server = http.createServer(async (req,res) => {
   let body=''; req.on('data',chunk=>{body+=chunk;}); req.on('end',async()=>{ try {
     const pathname = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`).pathname;
     if (pathname.startsWith('/.well-known/') || pathname.startsWith('/oauth/')) { const handled = await handleMcpOAuth(req,res,pathname,body); if (handled !== false) return; }
+    if (req.method === 'GET' && pathname === '/api/sire/mcp/action') { try { const user = await requireUser(req); const action = getPendingSireAction(user.id); return res.writeHead(200,{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store','Access-Control-Allow-Origin':'*','Access-Control-Allow-Credentials':'true'}).end(JSON.stringify(action || null)); } catch (cause) { return res.writeHead(401,{'Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify({error:cause instanceof Error?cause.message:String(cause)})); } }
+    if (req.method === 'POST' && pathname === '/api/sire/mcp/action') { try { const user = await requireUser(req); const parsed = body ? JSON.parse(body) : {}; const ok = completeSireAction(user.id, String(parsed.actionId || ''), parsed.result, Boolean(parsed.failed)); return res.writeHead(ok?200:404,{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store','Access-Control-Allow-Origin':'*','Access-Control-Allow-Credentials':'true'}).end(JSON.stringify({ok})); } catch (cause) { return res.writeHead(400,{'Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify({error:cause instanceof Error?cause.message:String(cause)})); } }
     if (req.method === 'POST' && pathname === '/api/sire/mcp/context') { try { const user = await requireUser(req); const parsed = body ? JSON.parse(body) : {}; setChartContext(user.id, parsed); return res.writeHead(204,{'Cache-Control':'no-store','Access-Control-Allow-Origin':'*','Access-Control-Allow-Credentials':'true'}).end(); } catch (cause) { return res.writeHead(401,{'Content-Type':'application/json; charset=utf-8','Access-Control-Allow-Origin':'*','Access-Control-Allow-Credentials':'true'}).end(JSON.stringify({error:cause instanceof Error?cause.message:String(cause)})); } }
     if (pathname === '/mcp' && req.method === 'POST') { try { return await handleSireMcp(req,res); } catch (cause) { const message=cause instanceof Error?cause.message:String(cause); console.error('[SIRE MCP]',message); if(!res.headersSent) return res.writeHead(500,{'Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify({error:message})); return; } }
     if (pathname === '/api/auth/google' && req.method === 'GET') {
