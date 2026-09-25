@@ -1041,10 +1041,13 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
         chartState: chart?.getState?.() || null,
         capabilities: { tiers: ['base', 'indicators', 'draw', 'trade', 'transform', 'webgl', 'widget'], indicators: true, drawings: true, tradingVisualization: true, replay: true, transforms: true, screenshots: true, svgExport: true, sharedAiContext: true, verifiedActions: true },
         agentContract: { version: 2, sourceOfTruth: 'openalgo-runtime', read: ['symbol','timeframe','bars','recentBars','visibleRange','indicators','drawings','replay','chartState'], write: ['instrument','timeframe','chartType','indicator','drawing','priceLine','visibleRange','scale','timezone','theme','replay','screenshot','svg'], rule: 'agents request intent; chart runtime resolves real data and verifies the result' },
+        availableInstruments: instrumentsRef.current.map(item => ({ symbol:item.symbol, name:item.name })),
+        diagnostics: diagnosticsRef.current.slice(-50),
         publishedAt: Date.now(),
       };
       const store = ((window as any).__sireChartContexts ||= {});
       store[symbolRef.current] = context;
+      void fetch('/api/sire/mcp/context', { method:'POST', credentials:'include', headers:{'Content-Type':'application/json'}, body:JSON.stringify(context) }).catch(() => {});
     };
     publish();
     const timer = window.setInterval(publish, 1000);
