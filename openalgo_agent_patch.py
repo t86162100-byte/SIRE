@@ -65,6 +65,29 @@ def run_sire_agent():
         return {"status":"error","message":str(exc)},502
 ''',encoding="utf-8")
 
+
+smoke=ROOT/"sire_agent_smoke.py"
+smoke.write_text('''import json, os, threading, time, urllib.request
+def run():
+    time.sleep(12)
+    base="http://127.0.0.1:5000"
+    token=os.environ.get("SIRE_AGENT_BRIDGE_TOKEN","").strip()
+    payload={"message":"Use the SIRE runtime market-data tool to fetch WLDAUD 1m candles with count 30. After the tool succeeds, reply with exactly SIRE_AGENT_SMOKE_OK.","session_id":"sire-live-smoke","user_id":"sire-smoke","chart_context":{"symbol":"WLDAUD","interval":"1m"}}
+    try:
+        req=urllib.request.Request(base+"/agent/api/sire/run",data=json.dumps(payload).encode(),method="POST",headers={"Accept":"application/json","Content-Type":"application/json","Authorization":"Bearer "+token})
+        with urllib.request.urlopen(req,timeout=150) as res:
+            raw=res.read().decode()
+            data=json.loads(raw or "{}")
+        if res.status==200 and data.get("status")=="success" and "SIRE_AGENT_SMOKE_OK" in str(data.get("text","")):
+            print("[SIRE AGENT SMOKE PASSED] "+json.dumps({"runId":data.get("run_id",""),"sessionId":data.get("session_id","")}),flush=True)
+        else:
+            print("[SIRE AGENT SMOKE FAILED] "+json.dumps({"status":getattr(res,"status",None),"data":data}),flush=True)
+    except Exception as exc:
+        print("[SIRE AGENT SMOKE FAILED] "+json.dumps({"error":str(exc)}),flush=True)
+threading.Thread(target=run,daemon=True).start()
+''',encoding="utf-8")
+
+
 seed=ROOT/"sire_agent_seed.py"
 seed.write_text('''import os
 from database import agent_db
@@ -86,6 +109,7 @@ def ensure():
     if not stored: raise RuntimeError(err or "Could not store SIRE bridge token")
     ok,err=agent_db.record_model_test(model_id,True)
     if not ok: raise RuntimeError(err or "Could not mark SIRE model ready")
+    print("[SIRE AGENT SEED] model ready "+model+" via "+base, flush=True)
 ensure()
 ''',encoding="utf-8")
 
