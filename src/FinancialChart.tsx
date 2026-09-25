@@ -1235,7 +1235,7 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
             return { action, ok: true, interval: widget.interval() };
           }
           if (action === 'inspect_drawing_context') {
-            return drawingInspection(operation);
+            return drawingInspection(op);
           }
           if (action === 'read_drawings') {
             return { action, ok: true, drawings: drawingSnapshot(), selectedIds: typeof (widget as any).draw?.selection === 'function' ? (widget as any).draw.selection() : [] };
