@@ -1050,6 +1050,32 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
             createdAt: item.createdAt ?? null,
           }));
         };
+        const verifyDrawingRendered = (drawing: any) => {
+          const rect = host.getBoundingClientRect();
+          const paneIndex = Number.isInteger(Number(drawing?.paneIndex)) ? Number(drawing.paneIndex) : 0;
+          const points = Array.isArray(drawing?.points) ? drawing.points : [];
+          const mapped = points.map((point: any) => ({
+            time: Number(point.time),
+            price: Number(point.price),
+            x: Number(chart.timeToCoordinate?.(Number(point.time))),
+            y: Number(chart.priceToCoordinate?.(Number(point.price), paneIndex)),
+          }));
+          const coordinatesValid = mapped.length > 0 && mapped.every((point: any) =>
+            Number.isFinite(point.x) && Number.isFinite(point.y)
+          );
+          const coordinatesVisible = coordinatesValid && mapped.every((point: any) =>
+            point.x >= -2 && point.x <= rect.width + 2 &&
+            point.y >= -2 && point.y <= rect.height + 2
+          );
+          return {
+            coordinates: mapped,
+            coordinatesValid,
+            coordinatesVisible,
+            visible: drawing?.visible !== false,
+            zIndex: Number(drawing?.zIndex ?? 0),
+            paneIndex,
+          };
+        };
         const normalizeDrawingTool = (value: any) => {
           const raw = String(value || '').trim().toLowerCase().replace(/[_\s]+/g, '-');
           const aliases: Record<string, string> = {
@@ -1247,12 +1273,28 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
             if (op?.visible === false) input.visible = false;
             if (Number.isFinite(Number(op?.zIndex))) input.zIndex = Number(op.zIndex);
             const created = draw.add(input);
-            await wait(50);
+            // A drawing existing in the controller is not enough: the user must
+            // actually be able to see it on the active chart. Keep it above the
+            // series and give the renderer a couple of frames before verifying.
+            if (typeof draw.bringAboveSeries === 'function') draw.bringAboveSeries(created.id);
+            else if (typeof draw.setZIndex === 'function') draw.setZIndex(created.id, Math.max(1, Number(input.zIndex ?? 1)));
+            await wait(80);
+            await new Promise<void>(resolve => window.requestAnimationFrame(() => window.requestAnimationFrame(() => resolve())));
             const current = typeof draw.get === 'function' ? draw.get(created.id) : null;
             if (!current) throw new Error('Drawing was accepted but is not present in the DrawingController.');
             const snapshot = drawingSnapshot().find((item: any) => item.id === created.id);
             if (!snapshot) throw new Error('Drawing was created but could not be verified from the chart runtime.');
-            return { action, ok: true, drawing: snapshot, inspectionId: inspected.id };
+            const rendered = verifyDrawingRendered(snapshot);
+            if (!rendered.visible) {
+              if (typeof draw.update === 'function') draw.update(created.id, { visible: true });
+              await wait(30);
+            }
+            const finalSnapshot = drawingSnapshot().find((item: any) => item.id === created.id);
+            const finalRendered = verifyDrawingRendered(finalSnapshot);
+            if (!finalSnapshot || !finalRendered.coordinatesValid || !finalRendered.coordinatesVisible || finalSnapshot.visible === false) {
+              throw new Error('Drawing exists in the chart model but is not visibly rendered in the active chart viewport.');
+            }
+            return { action, ok: true, drawing: finalSnapshot, rendered: finalRendered, inspectionId: inspected.id };
           }
           if (action === 'remove_drawing') {
             const draw: any = (widget as any).draw;
