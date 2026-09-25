@@ -6,6 +6,7 @@ import { WebSocket, WebSocketServer } from 'ws';
 
 const { handler } = await import('./backend/index.ts');
 import { handleGeminiRequest } from './backend/gemini-ai.ts';
+import { handleOpenAICompatibleGemini, writeOpenAICompatibleStream } from './backend/openai-compatible-gemini.ts';
 import { runGptHead } from './backend/openrouter-ai.ts';
 import { ws, db } from './compat/appdeploy-sdk/index.js';
 import { realtime } from './backend/realtime.ts';
@@ -823,6 +824,17 @@ const server = http.createServer(async (req,res) => {
       return res.writeHead(200,{'Access-Control-Allow-Origin':'*','Content-Type':'application/json; charset=utf-8','Access-Control-Allow-Credentials':'true'}).end(JSON.stringify({ok:true,config}));
     }
     if (req.method === 'GET' && pathname === '/api/sire/deriv/health') { const result = await checkDerivPublicMarketData(); console.log('[DERIV HEALTH]', JSON.stringify(result)); return res.writeHead(result.ok ? 200 : 502,{ 'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8' }).end(JSON.stringify(result)); }
+    if (req.method === 'POST' && pathname === '/api/openai/v1/chat/completions') {
+      try {
+        const parsed = body ? JSON.parse(body) : {};
+        const payload = await handleOpenAICompatibleGemini(req, parsed);
+        if (parsed.stream) return writeOpenAICompatibleStream(res, payload);
+        return res.writeHead(200, {'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify(payload));
+      } catch (cause) {
+        const status = Number.isInteger(cause?.status) ? Number(cause.status) : 502;
+        return res.writeHead(status, {'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify({error:{message:cause instanceof Error?cause.message:String(cause),type:'sire_model_bridge_error'}}));
+      }
+    }
     if (req.method === 'POST' && pathname === '/api/sire/agent/chat') { const parsed = body ? JSON.parse(body) : {}; const response = await handleGeminiRequest(parsed); return res.writeHead(response.status,{ 'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8' }).end(JSON.stringify(response.body ?? {})); }
     if (req.method === 'POST' && pathname === '/api/sire/chart/control-result') {
       const parsed = body ? JSON.parse(body) : {};
