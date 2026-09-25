@@ -6,8 +6,8 @@ import { WebSocket, WebSocketServer } from 'ws';
 
 const { handler } = await import('./backend/index.ts');
 import { handleGeminiRequest } from './backend/gemini-ai.ts';
-import { runGptHead } from './backend/openrouter-ai.ts';
-import { ws } from './compat/appdeploy-sdk/index.js';
+import { runGptHead, analyzeBars } from './backend/openrouter-ai.ts';
+import { ws, db } from './compat/appdeploy-sdk/index.js';
 import { realtime } from './backend/realtime.ts';
 import { getStoredHistory, persistHistoryBars, historyStoreStatus } from './backend/deriv-history-store.ts';
 import { signup, login, logout, currentUser, googleStart, googleCallback } from './backend/auth.ts';
@@ -554,6 +554,104 @@ async function checkDerivPublicMarketDataOnce(timeoutMs = 7000) {
   });
 }
 
+const OBSERVER_CONFIG_TABLE = 'sire_market_observer_config_v1';
+const OBSERVER_STATE_TABLE = 'sire_market_observer_state_v1';
+const OBSERVER_EVENT_TABLE = 'sire_market_observer_events_v1';
+let observerTimer = null;
+let observerBusy = false;
+
+function observerUserKey(user) {
+  return String(user?.id || user?.email || user?.userId || '').trim();
+}
+function observerDefaults(userKey) {
+  return { ownerKey:userKey, enabled:false, symbols:['WLDAUD'], intervals:['1m','5m','15m'], lookback:200, pollSeconds:60, updatedAt:Date.now() };
+}
+async function getObserverConfig(userKey) {
+  const rows = await db.list(OBSERVER_CONFIG_TABLE,{limit:1000});
+  return rows.items.find(item=>String(item?.ownerKey||'')===userKey) || observerDefaults(userKey);
+}
+async function saveObserverConfig(userKey,patch) {
+  const rows=await db.list(OBSERVER_CONFIG_TABLE,{limit:1000});
+  const existing=rows.items.find(item=>String(item?.ownerKey||'')===userKey);
+  const base=existing||observerDefaults(userKey);
+  const config={...base,...patch,ownerKey:userKey,enabled:Boolean(patch?.enabled??base.enabled),
+    symbols:Array.from(new Set((Array.isArray(patch?.symbols)?patch.symbols:base.symbols).map(x=>String(x).trim().toUpperCase()).filter(Boolean))).slice(0,10),
+    intervals:Array.from(new Set((Array.isArray(patch?.intervals)?patch.intervals:base.intervals).map(x=>String(x).trim()).filter(x=>['1m','5m','15m','30m','1h'].includes(x)))).slice(0,5),
+    lookback:Math.max(30,Math.min(1000,Math.floor(Number(patch?.lookback??base.lookback)||200))),
+    pollSeconds:Math.max(30,Math.min(900,Math.floor(Number(patch?.pollSeconds??base.pollSeconds)||60))),updatedAt:Date.now()};
+  if(!config.symbols.length) config.symbols=['WLDAUD'];
+  if(!config.intervals.length) config.intervals=['1m'];
+  if(existing?.id) await db.update(OBSERVER_CONFIG_TABLE,[{id:existing.id,record:config}]);
+  else await db.add(OBSERVER_CONFIG_TABLE,[config]);
+  return config;
+}
+async function observerState(userKey,symbol,interval) {
+  const rows=await db.list(OBSERVER_STATE_TABLE,{limit:5000});
+  return rows.items.find(item=>String(item?.ownerKey||'')===userKey&&item.symbol===symbol&&item.interval===interval&&item.id);
+}
+function observerEventDiff(previous,analysis) {
+  if(!analysis?.ok) return [];
+  const events=[];
+  const trend=String(analysis.trend?.label||'');
+  const breakout=String(analysis.breakout?.status||'none');
+  const rsi=Number(analysis.momentum?.rsi14);
+  const close=Number(analysis.latest?.close);
+  const previousTrend=String(previous?.trend||'');
+  const previousBreakout=String(previous?.breakout||'none');
+  const previousRsi=Number(previous?.rsi);
+  if(previous&&trend&&previousTrend&&trend!==previousTrend) events.push({type:'trend_change',message:'Trend changed from '+previousTrend+' to '+trend+'.'});
+  if(breakout!==previousBreakout&&breakout!=='none') events.push({type:'breakout',message:'20-bar close breakout detected: '+breakout+'.'});
+  if(previous&&Number.isFinite(previousRsi)&&Number.isFinite(rsi)){
+    if(previousRsi>=30&&rsi<30) events.push({type:'rsi_oversold',message:'RSI crossed below 30: '+rsi.toFixed(2)+'.'});
+    if(previousRsi<=70&&rsi>70) events.push({type:'rsi_overbought',message:'RSI crossed above 70: '+rsi.toFixed(2)+'.'});
+  }
+  if(previous&&Number.isFinite(Number(previous.close))&&Number.isFinite(close)){
+    const sma20=Number(analysis.movingAverages?.sma20), prevSma20=Number(previous.sma20);
+    if(Number.isFinite(sma20)&&Number.isFinite(prevSma20)){
+      const wasBelow=Number(previous.close)<prevSma20, isBelow=close<sma20;
+      if(wasBelow!==isBelow) events.push({type:'ma20_cross',message:'Price crossed '+(isBelow?'below':'above')+' SMA20.'});
+    }
+  }
+  return events;
+}
+async function observerTick() {
+  if(observerBusy) return {ok:false,skipped:true,reason:'observer_tick_already_running'};
+  observerBusy=true; const startedAt=Date.now(); let observations=0,events=0,failures=0;
+  try {
+    const configs=(await db.list(OBSERVER_CONFIG_TABLE,{limit:1000})).items.filter(item=>item?.enabled&&item?.ownerKey);
+    for(const config of configs) for(const symbol of config.symbols||[]) for(const interval of config.intervals||[]) {
+      try {
+        const raw=await marketDataRequestForGpt({symbol,interval,count:config.lookback||200,dataType:'candles'});
+        const parsed=JSON.parse(raw), bars=Array.isArray(parsed?.data)?parsed.data:[];
+        const analysis=analyzeBars(bars,config.lookback||200);
+        if(!analysis?.ok) throw new Error(analysis?.error||'Observer analysis failed.');
+        const previous=await observerState(config.ownerKey,symbol,interval);
+        const detected=observerEventDiff(previous,analysis), now=Date.now();
+        const stateRecord={ownerKey:config.ownerKey,symbol,interval,observedAt:now,source:'controlled Deriv public candle data',range:analysis.range,latest:analysis.latest,trend:analysis.trend?.label||null,breakout:analysis.breakout?.status||'none',rsi:analysis.momentum?.rsi14??null,atr14:analysis.volatility?.atr14??null,sma20:analysis.movingAverages?.sma20??null,analysis,updatedAt:now};
+        if(previous?.id) await db.update(OBSERVER_STATE_TABLE,[{id:previous.id,record:stateRecord}]); else await db.add(OBSERVER_STATE_TABLE,[stateRecord]);
+        observations++;
+        for(const event of detected){await db.add(OBSERVER_EVENT_TABLE,[{ownerKey:config.ownerKey,symbol,interval,type:event.type,message:event.message,observedAt:now,evidence:{latest:analysis.latest,trend:analysis.trend,breakout:analysis.breakout,rsi:analysis.momentum?.rsi14,atr14:analysis.volatility?.atr14}}]);events++;}
+      } catch(error){failures++;console.warn('[SIRE OBSERVER] observation failed',JSON.stringify({ownerKey:config.ownerKey,symbol,interval,error:error instanceof Error?error.message:String(error)}));}
+    }
+    return {ok:true,observations,events,failures,durationMs:Date.now()-startedAt};
+  } finally {observerBusy=false;}
+}
+async function ensureObserverLoop() {
+  if(observerTimer) return;
+  const rows=await db.list(OBSERVER_CONFIG_TABLE,{limit:1000});
+  if(!rows.items.some(item=>item?.enabled)) return;
+  observerTimer=setInterval(()=>{void observerTick();},60000);
+  void observerTick();
+  console.log('[SIRE OBSERVER] loop started; interval=60s');
+}
+function stopObserverLoopIfIdle(){
+  if(!observerTimer)return;
+  void db.list(OBSERVER_CONFIG_TABLE,{limit:1000}).then(rows=>{
+    if(rows.items.some(item=>item?.enabled))return;
+    clearInterval(observerTimer);observerTimer=null;console.log('[SIRE OBSERVER] loop stopped; no enabled observers');
+  }).catch(()=>{});
+}
+
 async function checkDerivPublicMarketData() {
   const maxAttempts = 3;
   const retryDelaysMs = [0, 1200, 2500];
@@ -681,6 +779,33 @@ const server = http.createServer(async (req,res) => {
       const status = await historyStoreStatus();
       return res.writeHead(200,{ 'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8' }).end(JSON.stringify(status));
     }
+    if (pathname === '/api/sire/observer/status' && req.method === 'GET') {
+      const user=await currentUser(req), ownerKey=observerUserKey(user);
+      if(!ownerKey)return res.writeHead(401,{'Access-Control-Allow-Origin':'*','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify({ok:false,error:'Authentication required.'}));
+      const config=await getObserverConfig(ownerKey);
+      const states=(await db.list(OBSERVER_STATE_TABLE,{limit:5000})).items.filter(item=>String(item?.ownerKey||'')===ownerKey).slice(-100);
+      const recentEvents=(await db.list(OBSERVER_EVENT_TABLE,{limit:5000})).items.filter(item=>String(item?.ownerKey||'')===ownerKey).sort((a,b)=>Number(b?.observedAt||0)-Number(a?.observedAt||0)).slice(0,50);
+      return res.writeHead(200,{'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8','Access-Control-Allow-Credentials':'true'}).end(JSON.stringify({ok:true,mode:'market_observer_core',runtimeLoop:Boolean(observerTimer),busy:observerBusy,config,states,recentEvents}));
+    }
+    if (pathname === '/api/sire/observer/config' && req.method === 'POST') {
+      const user=await currentUser(req), ownerKey=observerUserKey(user);
+      if(!ownerKey)return res.writeHead(401,{'Access-Control-Allow-Origin':'*','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify({ok:false,error:'Authentication required.'}));
+      let parsed={};try{parsed=body?JSON.parse(body):{};}catch{return res.writeHead(400,{'Access-Control-Allow-Origin':'*','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify({ok:false,error:'Invalid JSON request.'}));}
+      const config=await saveObserverConfig(ownerKey,parsed);await ensureObserverLoop();
+      return res.writeHead(200,{'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8','Access-Control-Allow-Credentials':'true'}).end(JSON.stringify({ok:true,config}));
+    }
+    if (pathname === '/api/sire/observer/start' && req.method === 'POST') {
+      const user=await currentUser(req), ownerKey=observerUserKey(user);
+      if(!ownerKey)return res.writeHead(401,{'Access-Control-Allow-Origin':'*','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify({ok:false,error:'Authentication required.'}));
+      const config=await saveObserverConfig(ownerKey,{enabled:true});await ensureObserverLoop();
+      return res.writeHead(200,{'Access-Control-Allow-Origin':'*','Content-Type':'application/json; charset=utf-8','Access-Control-Allow-Credentials':'true'}).end(JSON.stringify({ok:true,config,mode:'opportunistic_web_service_loop'}));
+    }
+    if (pathname === '/api/sire/observer/stop' && req.method === 'POST') {
+      const user=await currentUser(req), ownerKey=observerUserKey(user);
+      if(!ownerKey)return res.writeHead(401,{'Access-Control-Allow-Origin':'*','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify({ok:false,error:'Authentication required.'}));
+      const config=await saveObserverConfig(ownerKey,{enabled:false});stopObserverLoopIfIdle();
+      return res.writeHead(200,{'Access-Control-Allow-Origin':'*','Content-Type':'application/json; charset=utf-8','Access-Control-Allow-Credentials':'true'}).end(JSON.stringify({ok:true,config}));
+    }
     if (req.method === 'GET' && pathname === '/api/sire/deriv/health') { const result = await checkDerivPublicMarketData(); console.log('[DERIV HEALTH]', JSON.stringify(result)); return res.writeHead(result.ok ? 200 : 502,{ 'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8' }).end(JSON.stringify(result)); }
     if (req.method === 'POST' && pathname === '/api/sire/agent/chat') { const parsed = body ? JSON.parse(body) : {}; const response = await handleGeminiRequest(parsed); return res.writeHead(response.status,{ 'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8' }).end(JSON.stringify(response.body ?? {})); }
     if (req.method === 'POST' && pathname === '/api/sire/chart/control-result') {
@@ -796,4 +921,4 @@ server.on('upgrade',(req,socket,head)=>{
   });
 });
 
-server.listen(PORT,HOST,async()=>{ console.log(`SIRE server listening on ${HOST}:${PORT}`); console.log('[DERIV HISTORY STORE]', JSON.stringify(await historyStoreStatus())); });
+server.listen(PORT,HOST,async()=>{ console.log(`SIRE server listening on ${HOST}:${PORT}`); console.log('[DERIV HISTORY STORE]', JSON.stringify(await historyStoreStatus())); try { await ensureObserverLoop(); } catch (error) { console.warn('[SIRE OBSERVER] startup check failed', error instanceof Error ? error.message : String(error)); } });
