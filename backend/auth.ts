@@ -37,6 +37,12 @@ async function findSession(id:string) {
   if (Date.parse(session.expiresAt) <= Date.now()) return null;
   return session;
 }
+export async function findUserById(id:string) {
+  if (!id || !process.env.DATABASE_URL) return null;
+  const result = await db.list<User>(USERS, { limit: 1000 });
+  const user = result.items.find(item => item.id === id);
+  return user ? { id:user.id, email:user.email, name:user.name, createdAt:user.createdAt } : null;
+}
 export async function currentUser(req:any) {
   const session = await findSession(headerSession(req));
   if (!session) return null;
