@@ -28,6 +28,8 @@ export function claimSireAction(userId:string) {
   }
   return null;
 }
+
+export function getPendingSireAction(userId:string) { return claimSireAction(userId); }
 export function completeSireAction(userId:string,id:string,result:any,failed=false) {
   const item=pendingActions.get(id);
   if (!item || item.userId!==userId) return false;
