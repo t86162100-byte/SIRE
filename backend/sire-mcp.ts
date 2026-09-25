@@ -14,6 +14,25 @@ const REFRESH_TTL_SEC = 30 * 24 * 60 * 60;
 type OAuthCode = { userId:string; clientId:string; redirectUri:string; codeChallenge:string; resource:string; scope:string; expiresAt:number };
 const codes = new Map<string, OAuthCode>();
 const chartContexts = new Map<string, any>();
+type PendingAction = { id:string; userId:string; action:any; createdAt:number; expiresAt:number; status:'pending'|'done'|'failed'; result?:any };
+const pendingActions = new Map<string, PendingAction>();
+function newAction(userId:string, action:any) {
+  const id=randomBytes(18).toString('base64url');
+  const item={id,userId,action,createdAt:Date.now(),expiresAt:Date.now()+60_000,status:'pending' as const};
+  pendingActions.set(id,item); return item;
+}
+export function claimSireAction(userId:string) {
+  const now=Date.now();
+  for (const item of pendingActions.values()) {
+    if (item.userId===userId && item.status==='pending' && item.expiresAt>now) return item;
+  }
+  return null;
+}
+export function completeSireAction(userId:string,id:string,result:any,failed=false) {
+  const item=pendingActions.get(id);
+  if (!item || item.userId!==userId) return false;
+  item.status=failed?'failed':'done'; item.result=result; return true;
+}
 
 function base64url(value: Buffer | string) {
   return Buffer.from(value).toString('base64url');
@@ -177,26 +196,35 @@ function createSireMcpServer(user:any) {
     { name:'sire-chart', version:'0.1.0' },
     { instructions:'SIRE is the user\'s trading-chart workspace. Read the live chart state before answering chart questions. Treat SIRE chart data as the source of truth for instrument, timeframe, price, candles, indicators, drawings and replay.' }
   );
-  const security=[{type:'oauth2',scopes:['sire.read']}];
+  const readSecurity=[{type:'oauth2',scopes:['sire.read']}];
+  const writeSecurity=[{type:'oauth2',scopes:['sire.write']}];
   server.registerTool('get_profile',{
     title:'Get SIRE profile', description:'Return the SIRE account connected to this ChatGPT session.', inputSchema:{}, outputSchema:profileSchema,
-    securitySchemes:security, annotations:{readOnlyHint:true,destructiveHint:false,openWorldHint:false}, _meta:{securitySchemes:security,'openai/profile':true}
+    securitySchemes:readSecurity, annotations:{readOnlyHint:true,destructiveHint:false,openWorldHint:false}, _meta:{securitySchemes:readSecurity,'openai/profile':true}
   },async()=>{ const value={id:user.id,name:user.name,email:user.email,nickname:`${user.name} — SIRE`}; return {structuredContent:value,content:[{type:'text',text:JSON.stringify(value)}]}; });
 
   server.registerTool('get_chart_state',{
     title:'Read current SIRE chart', description:'Read the current live SIRE chart state before explaining or analyzing the market. Includes instrument, timeframe, latest price, recent candles, visible range, indicators, drawings and replay state.',
-    inputSchema:{}, outputSchema:chartSchema, securitySchemes:security, annotations:{readOnlyHint:true,destructiveHint:false,openWorldHint:false}, _meta:{securitySchemes:security}
+    inputSchema:{}, outputSchema:chartSchema, securitySchemes:readSecurity, annotations:{readOnlyHint:true,destructiveHint:false,openWorldHint:false}, _meta:{securitySchemes:readSecurity}
   },async()=>{ const context=getChartContext(user.id); if(!context) return {content:[{type:'text',text:'SIRE is connected, but no live chart context has been synchronized from the user\'s browser yet.'}],isError:true}; return {structuredContent:context,content:[{type:'text',text:`Current chart: ${context.name || context.symbol} (${context.symbol}), ${context.timeframe}, latest price ${context.latestPrice ?? 'unavailable'}.`}]}; });
 
   server.registerTool('get_available_instruments',{
     title:'List SIRE instruments', description:'List instruments currently known by the connected SIRE chart workspace.',
-    inputSchema:{}, outputSchema:{instruments:z.array(z.object({symbol:z.string(),name:z.string()}))}, securitySchemes:security, annotations:{readOnlyHint:true,destructiveHint:false,openWorldHint:false}, _meta:{securitySchemes:security}
+    inputSchema:{}, outputSchema:{instruments:z.array(z.object({symbol:z.string(),name:z.string()}))}, securitySchemes:readSecurity, annotations:{readOnlyHint:true,destructiveHint:false,openWorldHint:false}, _meta:{securitySchemes:readSecurity}
   },async()=>{ const context=getChartContext(user.id); const instruments=Array.isArray(context?.availableInstruments)?context.availableInstruments:[]; return {structuredContent:{instruments},content:[{type:'text',text:`SIRE currently reports ${instruments.length} available instruments.`}]}; });
 
   server.registerTool('get_chart_diagnostics',{
     title:'Read SIRE chart diagnostics', description:'Read the latest SIRE chart and market-data diagnostics when investigating a chart problem.',
-    inputSchema:{}, outputSchema:{ok:z.boolean(),mainIssue:z.any(),checks:z.array(z.any()).optional()}, securitySchemes:security, annotations:{readOnlyHint:true,destructiveHint:false,openWorldHint:false}, _meta:{securitySchemes:security}
+    inputSchema:{}, outputSchema:{ok:z.boolean(),mainIssue:z.any(),checks:z.array(z.any()).optional()}, securitySchemes:readSecurity, annotations:{readOnlyHint:true,destructiveHint:false,openWorldHint:false}, _meta:{securitySchemes:readSecurity}
   },async()=>{ const context=getChartContext(user.id); const diagnostics=context?.diagnostics || []; const value={ok:!diagnostics.some((d:any)=>d?.level==='error'),mainIssue:diagnostics.find((d:any)=>d?.level==='error') || null,checks:diagnostics}; return {structuredContent:value,content:[{type:'text',text:value.ok?'No error-level browser chart diagnostics are currently synchronized.':'SIRE has one or more error-level chart diagnostics.'}]}; });
+
+  const actionInput = z.object({ action:z.enum(['switch_instrument','set_timeframe','add_indicator','remove_indicator','add_drawing','remove_drawing','start_replay','stop_replay','set_chart_type']), args:z.record(z.any()).optional() });
+  server.registerTool('control_chart',{
+    title:'Control SIRE chart', description:'Request a verified chart action in the connected SIRE browser. SIRE executes the action and reports the result; write actions require sire.write authorization.', inputSchema:actionInput, outputSchema:{actionId:z.string(),status:z.string(),action:z.any()}, securitySchemes:writeSecurity, annotations:{readOnlyHint:false,destructiveHint:false,openWorldHint:false}, _meta:{securitySchemes:writeSecurity,'openai/confirmation':{required:true}}
+  },async(input:any)=>{ const item=newAction(user.id,input); return {structuredContent:{actionId:item.id,status:item.status,action:input},content:[{type:'text',text:`Chart action ${item.id} queued. SIRE browser will execute and verify it.`}]}; });
+  server.registerTool('get_action_result',{
+    title:'Get chart action result', description:'Read the verified result of a previously queued SIRE chart action.', inputSchema:{actionId:z.string()}, outputSchema:{actionId:z.string(),status:z.string(),result:z.any().optional()}, securitySchemes:readSecurity, annotations:{readOnlyHint:true,destructiveHint:false,openWorldHint:false}, _meta:{securitySchemes:readSecurity}
+  },async(input:any)=>{ const item=pendingActions.get(input.actionId); if(!item || item.userId!==user.id) return {isError:true,content:[{type:'text',text:'Unknown chart action.'}]}; return {structuredContent:{actionId:item.id,status:item.status,result:item.result},content:[{type:'text',text:JSON.stringify({status:item.status,result:item.result})}]}; });
 
   return server;
 }
