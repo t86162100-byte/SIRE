@@ -179,7 +179,8 @@ export async function runGptHead(input: {
   for (let turn=0; turn<MAX_TOOL_TURNS; turn++) {
     await emit('GPT','working',turn===0?'Reading your request…':'Reviewing the latest result…');
     const availableTools = toolDefs.filter((tool:any) => { const name=String(tool?.function?.name||''); return name==='github_request' || name==='request_market_data' || name==='control_chart' || name==='analyze_chart_data' || !usedToolCalls.has(name); });
-    const analysisIntent = /\b(analy[sz]e|analysis|trend|support|resistance|highs?|lows?|structure|candle|candlestick|volatility|ATR|average true range|moving average|EMA|SMA|momentum|breakout|swings?|multi[- ]?timeframe)\b/i.test(query);\n    const forcedTool = turn === 0 && analysisIntent && input.chartSnapshot ? { type:'function', function:{ name:'analyze_chart_data' } } : (turn === 0 && chartIntent && input.tools?.chartControl ? { type:'function', function:{ name:'control_chart' } } : 'auto');
+    const analysisIntent = /\b(analy[sz]e|analysis|trend|support|resistance|highs?|lows?|structure|candle|candlestick|volatility|ATR|average true range|moving average|EMA|SMA|momentum|breakout|swings?|multi[- ]?timeframe)\b/i.test(query);
+    const forcedTool = turn === 0 && analysisIntent && input.chartSnapshot ? { type:'function', function:{ name:'analyze_chart_data' } } : (turn === 0 && chartIntent && input.tools?.chartControl ? { type:'function', function:{ name:'control_chart' } } : 'auto');
     let result: any;
     let lastError: any = null;
     for (let attempt = 0; attempt < FREE_MODELS.length; attempt++) {
