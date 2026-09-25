@@ -3,6 +3,7 @@ type ChatMessage = { role: 'system' | 'user' | 'assistant' | 'tool'; content: an
 type CouncilEvent = (event: { actor: string; phase: string; text: string }) => void | Promise<void>;
 
 const MODEL = 'nvidia/nemotron-3-ultra-550b-a55b:free';
+const MAX_TOKENS = 1536;
 const API_URL = 'https://openrouter.ai/api/v1/chat/completions';
 const REQUEST_TIMEOUT_MS = 120000;
 const MAX_OUTPUT_CHARS = 12000;
@@ -37,7 +38,7 @@ async function callOpenRouter(messages: ChatMessage[], tools?: any[], requestId 
   let timedOut = false;
   const timer = setTimeout(() => { timedOut = true; controller.abort(); }, REQUEST_TIMEOUT_MS);
   try {
-    const body: any = { model: MODEL, messages, max_tokens: 2048 };
+    const body: any = { model: MODEL, messages, max_tokens: MAX_TOKENS };
     if (tools?.length) { body.tools = tools; body.tool_choice = toolChoice; }
     let response: Response;
     try {
