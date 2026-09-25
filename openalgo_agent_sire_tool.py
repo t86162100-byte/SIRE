@@ -6,7 +6,7 @@ class SireToolkit(OpenAlgoToolkit):
     """Bridge OpenAlgo Agent reasoning into SIRE's real chart and Deriv runtime."""
     def __init__(self, context):
         self.context = context
-        super().__init__(name="sire_runtime", tools=[
+        super().__init__(context, name="sire_runtime", tools=[
             self.get_chart_context,
             self.get_market_data,
             self.analyze_chart,
@@ -37,14 +37,26 @@ class SireToolkit(OpenAlgoToolkit):
         return json.dumps(value or {}, separators=(",",":"))
 
     def get_market_data(self, symbol: str, interval: str="1m", count: int=200) -> str:
-        """Fetch actual Deriv OHLC candles through SIRE. Never invent market data."""
+        """Fetch actual Deriv OHLC candles through SIRE. Never invent market data.
+
+        Args:
+            symbol: SIRE instrument symbol.
+            interval: Candle interval such as 1m, 5m or 15m.
+            count: Number of candles to request, from 30 to 1000.
+        """
         return self._call("/api/sire/agent/market-data", {"symbol":symbol,"interval":interval,"count":max(30,min(1000,int(count)))})
 
     def analyze_chart(self, symbol: str="", interval: str="1m", count: int=200) -> str:
-        """Run SIRE deterministic analysis on actual OHLC candles."""
+        """Run SIRE deterministic analysis on actual OHLC candles.
+
+        Args:
+            symbol: SIRE instrument symbol. Leave empty to use the active chart instrument when available.
+            interval: Candle interval such as 1m, 5m or 15m.
+            count: Number of candles to analyze, from 30 to 1000.
+        """
         return self._call("/api/sire/agent/analyze", {"symbol":symbol,"interval":interval,"count":max(30,min(1000,int(count)))})
 
-    def control_chart(self, operations: list[dict]) -> str:
+    def control_chart(self, operations: list[dict[str, object]]) -> str:
         """Execute and verify chart operations in the user's active SIRE chart."""
         return self._call("/api/sire/agent/chart-control", {"operations":operations[:10]})
 
