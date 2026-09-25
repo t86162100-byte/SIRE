@@ -2,7 +2,7 @@ import { createHmac, randomBytes, timingSafeEqual, createHash } from 'node:crypt
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { z } from 'zod';
-import { currentUser, login } from './auth.ts';
+import { currentUser, findUserById, login } from './auth.ts';
 
 const ISSUER = () => process.env.SIRE_MCP_AUTH_ISSUER?.trim() || process.env.SIRE_MCP_PUBLIC_URL?.trim() || '';
 const SECRET = () => process.env.SIRE_MCP_SECRET?.trim() || '';
@@ -159,7 +159,7 @@ function authChallenge() {
 }
 function getAuthedUser(req:any) {
   const token=parseBearer(req);
-  return verifyToken(token,'access');
+  try { return verifyToken(token,'access'); } catch { return null; }
 }
 
 const profileSchema = {
@@ -206,10 +206,9 @@ export async function handleSireMcp(req:any,res:any) {
   if (!auth) {
     return json(res,401,{error:'unauthorized'}, {'WWW-Authenticate':authChallenge()});
   }
-  const result=await currentUser({headers:{cookie:''}}).catch(()=>null);
   // The bearer token is the source of identity; no browser cookie is required.
-  const user={id:auth.sub,name:'SIRE user',email:'',createdAt:''};
-  // Load the current profile from the auth database through a small authenticated lookup.
+  const user=await findUserById(auth.sub);
+  if (!user) return json(res,401,{error:'unauthorized'}, {'WWW-Authenticate':authChallenge()});
   const server=createSireMcpServer(user);
   const transport=new StreamableHTTPServerTransport({sessionIdGenerator:undefined,enableJsonResponse:true});
   res.on('close',()=>{ transport.close(); server.close(); });
