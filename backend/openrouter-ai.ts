@@ -3,6 +3,7 @@ type ChatMessage = { role: 'system' | 'user' | 'assistant' | 'tool'; content: an
 type CouncilEvent = (event: { actor: string; phase: string; text: string }) => void | Promise<void>;
 
 const MODEL = 'nvidia/nemotron-3-ultra-550b-a55b:free';
+const FREE_MODELS = ['nvidia/nemotron-3-ultra-550b-a55b:free','poolside/laguna-s-2.1:free','cohere/north-mini-code:free','poolside/laguna-xs-2.1:free','openrouter/free'] as const;
 const MAX_TOKENS = 1536;
 const API_URL = 'https://openrouter.ai/api/v1/chat/completions';
 const REQUEST_TIMEOUT_MS = 120000;
@@ -33,12 +34,12 @@ function textFromResponse(data: any): string {
   return '';
 }
 
-async function callOpenRouter(messages: ChatMessage[], tools?: any[], requestId = 'unknown', toolChoice: any = 'auto') {
+async function callOpenRouter(messages: ChatMessage[], tools?: any[], requestId = 'unknown', toolChoice: any = 'auto', model = MODEL) {
   const controller = new AbortController();
   let timedOut = false;
   const timer = setTimeout(() => { timedOut = true; controller.abort(); }, REQUEST_TIMEOUT_MS);
   try {
-    const body: any = { model: MODEL, messages, max_tokens: MAX_TOKENS };
+    const body: any = { model, messages, max_tokens: MAX_TOKENS };
     if (tools?.length) { body.tools = tools; body.tool_choice = toolChoice; }
     let response: Response;
     try {
@@ -52,7 +53,7 @@ async function callOpenRouter(messages: ChatMessage[], tools?: any[], requestId 
       const error = new Error(timedOut ? `OpenRouter request timed out after ${Math.round(REQUEST_TIMEOUT_MS / 1000)}s` : `OpenRouter network error: ${message}`);
       (error as any).code = timedOut ? 'OPENROUTER_TIMEOUT' : 'OPENROUTER_NETWORK_ERROR';
       (error as any).requestId = requestId;
-      console.error('[OpenRouter]', JSON.stringify({ requestId, model: MODEL, code: (error as any).code, message }));
+      console.error('[OpenRouter]', JSON.stringify({ requestId, model, code: (error as any).code, message }));
       throw error;
     }
     const raw = await response.text();
@@ -140,16 +141,41 @@ export async function runGptHead(input: {
   const chartIntent = (/\b(open|switch|change|set|show|load|go to|move|zoom|pan|reset|fit|add|remove|delete|modify|edit|change|put|draw|plot|mark|read|list|inspect)\b/i.test(query) && /\b(chart|instrument|market|timeframe|candle|candlestick|minute|hour|indicator|indicators|ema|sma|wma|rsi|macd|bollinger|adx|atr|vwap|stochastic|drawing|drawings|trendline|trend|horizontal|vertical|ray|channel|rectangle|fibonacci|fib|label|text|line|BOOM|CRASH)\b/i.test(query)) || /\b(BOOM|CRASH)\s*\d+\b/i.test(query);
   const usedToolCalls = new Set<string>();
   const toolCallHistory:Array<{turn:number;name:string}> = [];
+  let activeModel = MODEL;
+  const exhaustedModels = new Set<string>();
   for (let turn=0; turn<MAX_TOOL_TURNS; turn++) {
     await emit('GPT','working',turn===0?'Reading your request…':'Reviewing the latest result…');
     const availableTools = toolDefs.filter((tool:any) => { const name=String(tool?.function?.name||''); return name==='github_request' || name==='request_market_data' || name==='control_chart' || !usedToolCalls.has(name); });
     const forcedTool = turn === 0 && chartIntent && input.tools?.chartControl ? { type:'function', function:{ name:'control_chart' } } : 'auto';
-    const result=await callOpenRouter(messages,availableTools,requestId,forcedTool);
+    let result: any;
+    let lastError: any = null;
+    for (let attempt = 0; attempt < FREE_MODELS.length; attempt++) {
+      const candidate = [activeModel, ...FREE_MODELS.filter((m) => m !== activeModel && !exhaustedModels.has(m))][0];
+      if (!candidate) break;
+      try {
+        result = await callOpenRouter(messages, availableTools, requestId, forcedTool, candidate);
+        activeModel = candidate;
+        lastError = null;
+        break;
+      } catch (error) {
+        lastError = error;
+        const status = Number((error as any)?.status);
+        const code = String((error as any)?.code || '');
+        const retryable = [402,404,408,409,429].includes(status) || status >= 500 || ['OPENROUTER_TIMEOUT','OPENROUTER_NETWORK_ERROR'].includes(code);
+        if (!retryable) throw error;
+        exhaustedModels.add(candidate);
+        const next = FREE_MODELS.find((m) => !exhaustedModels.has(m));
+        if (!next) break;
+        activeModel = next;
+        await emit('GPT','working','Free model unavailable; switching to another free model…');
+      }
+    }
+    if (!result) throw new Error('SIRE free-model pool exhausted: ' + (lastError instanceof Error ? lastError.message : 'all free models unavailable'));
     const message=result.message;
     const toolCalls=Array.isArray(message.tool_calls)?message.tool_calls:[];
     if(!toolCalls.length){
       const text=textFromResponse({choices:[{message}]});
-      if(text) return {text:text.slice(0,MAX_OUTPUT_CHARS),responseId:result.responseId,model:MODEL,provider:'NVIDIA Nemotron 3 Ultra (free) via OpenRouter',actions:[]};
+      if(text) return {text:text.slice(0,MAX_OUTPUT_CHARS),responseId:result.responseId,model:activeModel,provider:activeModel + ' via OpenRouter (free pool)',actions:[]};
       const recovery=await callOpenRouter([...messages,{role:'system',content:'Give the user a concise final answer now. Do not call tools.'}],undefined,requestId);
       const recoveryText=textFromResponse({choices:[{message:recovery.message}]});
       return {text:recoveryText||'The request was processed, but GPT did not return a visible response.',responseId:recovery.responseId||result.responseId,model:MODEL,provider:'OpenAI gpt-oss via OpenRouter',actions:[]};
@@ -209,8 +235,20 @@ export async function runOpenRouter(input: {
     ...(input.councilContext ? [{ role: 'user', content: `TEAM CONTEXT:\n${input.councilContext}` } as ChatMessage] : []),
     { role: 'user', content: query },
   ];
-  const result = await callOpenRouter(messages);
+  let result: any;
+  let activeModel = MODEL;
+  let lastError: any = null;
+  for (const candidate of FREE_MODELS) {
+    try { result = await callOpenRouter(messages, undefined, 'run-openrouter', 'auto', candidate); activeModel = candidate; break; }
+    catch (error) {
+      lastError = error;
+      const status = Number((error as any)?.status);
+      const code = String((error as any)?.code || '');
+      if (!([402,404,408,409,429].includes(status) || status >= 500 || ['OPENROUTER_TIMEOUT','OPENROUTER_NETWORK_ERROR'].includes(code))) throw error;
+    }
+  }
+  if (!result) throw new Error('SIRE free-model pool exhausted: ' + (lastError instanceof Error ? lastError.message : 'all free models unavailable'));
   const text = textFromResponse({ choices: [{ message: result.message }] });
   if (!text) throw new Error('GPT returned no text');
-  return { text: text.slice(0, MAX_OUTPUT_CHARS), responseId: result.responseId, model: MODEL, provider: 'NVIDIA Nemotron 3 Ultra (free) via OpenRouter' };
+  return { text: text.slice(0, MAX_OUTPUT_CHARS), responseId: result.responseId, model: activeModel, provider: activeModel + ' via OpenRouter (free pool)' };
 }
