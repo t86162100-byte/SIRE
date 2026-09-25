@@ -1012,6 +1012,59 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
+    let stopped = false;
+    const execute = async () => {
+      try {
+        const response = await fetch('/api/sire/mcp/action', { credentials:'include', cache:'no-store' });
+        if (!response.ok) return;
+        const item = await response.json();
+        if (stopped || !item?.id || item.status !== 'pending') return;
+        const widget = widgetRef.current;
+        if (!widget) return;
+        const action = item.action || {};
+        let result:any;
+        try {
+          if (action.action === 'switch_instrument') {
+            const requested = String(action.args?.symbol || action.args?.instrument || '');
+            const target = instrumentsRef.current.find(item => item.symbol === requested || item.name.toLowerCase() === requested.toLowerCase());
+            if (!target) throw new Error('Instrument not found in SIRE instrument catalogue.');
+            onSelectInstrumentRef.current(target);
+            result = { ok:true, action:action.action, symbol:target.symbol };
+          } else if (action.action === 'set_timeframe') {
+            const interval = String(action.args?.timeframe || action.args?.interval || '');
+            if (!CHART_INTERVALS.includes(interval)) throw new Error('Unsupported SIRE timeframe: '+interval);
+            selectTimeframe(interval);
+            result = { ok:true, action:action.action, timeframe:interval };
+          } else if (action.action === 'set_chart_type') {
+            const type = String(action.args?.type || action.args?.chartType || '');
+            if (!CHART_TYPES.some(item => item.id === type)) throw new Error('Unsupported SIRE chart type: '+type);
+            widget.setChartType(type);
+            result = { ok:true, action:action.action, chartType:type };
+          } else if (action.action === 'start_replay') {
+            await startReplayFromInputs(Boolean(action.args?.fromBeginning), Boolean(action.args?.toLatest));
+            result = { ok:true, action:action.action, replay:replayRef.current?.state?.() || null };
+          } else if (action.action === 'stop_replay') {
+            stopReplay();
+            result = { ok:true, action:action.action, replay:null };
+          } else if (action.action === 'add_indicator') {
+            widget.openIndicatorPicker();
+            throw new Error('Indicator picker opened, but SIRE requires the user to choose the indicator; automatic selection is not yet exposed by the chart API.');
+          } else {
+            throw new Error('This chart action is not yet exposed by the SIRE browser bridge: '+action.action);
+          }
+          await fetch('/api/sire/mcp/action', { method:'POST', credentials:'include', headers:{'Content-Type':'application/json'}, body:JSON.stringify({actionId:item.id,result}) });
+        } catch (error) {
+          await fetch('/api/sire/mcp/action', { method:'POST', credentials:'include', headers:{'Content-Type':'application/json'}, body:JSON.stringify({actionId:item.id,failed:true,result:{ok:false,error:error instanceof Error ? error.message : String(error)}}) });
+        }
+      } catch { /* SIRE MCP is optional and must never break chart rendering. */ }
+    };
+    const timer = window.setInterval(execute, 700);
+    void execute();
+    return () => { stopped = true; window.clearInterval(timer); };
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
     const publish = () => {
       const widget = widgetRef.current;
       const chart = widget?.chart;
