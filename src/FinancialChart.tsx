@@ -285,6 +285,8 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
   const [replayStartMin, setReplayStartMin] = useState('');
   const [replayNow, setReplayNow] = useState('');
   const replaySpeedRef = useRef(1);
+  const replayStartInputRef = useRef('');
+  const replayEndInputRef = useRef('');
   const [rendererKind, setRendererKind] = useState<'canvas2d' | 'webgl2'>('canvas2d');
   const [tpoEnabled, setTpoEnabled] = useState(false);
   const [marketQuote, setMarketQuote] = useState<{ price: number; percent: number } | null>(null);
@@ -331,6 +333,8 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
   onSelectInstrumentRef.current = onSelectInstrument;
   symbolRef.current = symbol;
   timeframeRef.current = activeTimeframe;
+  replayStartInputRef.current = replayStartInput;
+  replayEndInputRef.current = replayEndInput;
 
   const marketInstrument = instruments.find(item => item.symbol === symbol);
   const marketInstrumentName = marketInstrument?.name || symbol;
@@ -683,14 +687,14 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
     const now = Math.floor(Date.now() / 1000);
     const latestAllowedTime = Math.min(now, latestLoadedTime);
 
-    const requestedStart = fromBeginning ? leftEdge : parseReplayTime(replayStartInput);
-    if (!fromBeginning && replayStartInput && requestedStart === null) {
+    const requestedStart = fromBeginning ? leftEdge : parseReplayTime(replayStartInputRef.current);
+    if (!fromBeginning && replayStartInputRef.current && requestedStart === null) {
       setReplayRangeError('Invalid replay start date/time.');
       return;
     }
 
-    const requestedEnd = parseReplayTime(replayEndInput) ?? latestAllowedTime;
-    if (replayEndInput && requestedEnd === null) {
+    const requestedEnd = parseReplayTime(replayEndInputRef.current) ?? latestAllowedTime;
+    if (replayEndInputRef.current && requestedEnd === null) {
       setReplayRangeError('Invalid replay end date/time.');
       return;
     }
@@ -1210,6 +1214,92 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
           if (!descriptor?.id) throw new Error('Indicator is not registered in OpenAlgo Charts: ' + query);
           return String(descriptor.id);
         };
+        const replaySnapshot = () => {
+          const replay = replayRef.current;
+          const state = replay?.state?.() || null;
+          const series = chart.primarySeries?.();
+          const bars = (series?.getData?.() || []) as any[];
+          const last = bars[bars.length - 1] || null;
+          const rect = host.getBoundingClientRect();
+          const lastX = last && Number.isFinite(Number(last.time)) ? Number(chart.timeToCoordinate?.(Number(last.time))) : NaN;
+          const lastY = last && Number.isFinite(Number(last.close)) ? Number(chart.priceToCoordinate?.(Number(last.close), 0)) : NaN;
+          return {
+            active: Boolean(replay),
+            state,
+            symbol: widget.symbol(),
+            timeframe: widget.interval(),
+            renderedBars: bars.length,
+            renderedLastBar: last ? {
+              time: Number(last.time),
+              open: Number(last.open),
+              high: Number(last.high),
+              low: Number(last.low),
+              close: Number(last.close),
+            } : null,
+            lastBarCoordinates: { x: lastX, y: lastY },
+            viewport: {
+              width: Math.round(rect.width),
+              height: Math.round(rect.height),
+              lastBarVisible: Number.isFinite(lastX) && Number.isFinite(lastY) &&
+                lastX >= -2 && lastX <= rect.width + 2 &&
+                lastY >= -2 && lastY <= rect.height + 2,
+            },
+            replayMode: replayModeRef.current,
+            dataPaused: widget.dataController?.getState?.()?.paused ?? null,
+            configuredStart: replayStartInputRef.current || null,
+            configuredEnd: replayEndInputRef.current || null,
+          };
+        };
+        const parseReplayCommandTime = (value: any) => {
+          if (typeof value === 'number' && Number.isFinite(value)) return Math.floor(value);
+          const text = String(value ?? '').trim();
+          if (!text) return null;
+          const numeric = Number(text);
+          if (Number.isFinite(numeric)) return Math.floor(numeric);
+          const ms = new Date(text).getTime();
+          return Number.isFinite(ms) ? Math.floor(ms / 1000) : null;
+        };
+        const setReplayInputTime = (which: 'start' | 'end', value: any) => {
+          const epoch = parseReplayCommandTime(value);
+          if (epoch === null) throw new Error('Replay ' + which + ' requires a Unix timestamp in seconds or a valid ISO date/time.');
+          const text = formatReplayInputTime(epoch);
+          if (which === 'start') {
+            replayStartInputRef.current = text;
+            setReplayStartInput(text);
+          } else {
+            replayEndInputRef.current = text;
+            setReplayEndInput(text);
+          }
+          return { epoch, input: text };
+        };
+        const replayRenderVerification = () => {
+          const snapshot = replaySnapshot();
+          const state = snapshot.state;
+          if (!snapshot.active || !state) {
+            return { ok: false, active: false, rendered: false, reason: 'Replay is not active.', snapshot };
+          }
+          const expectedCount = Number(state.index) + 1;
+          const renderedCount = Number(snapshot.renderedBars);
+          const expectedTime = state.bar ? Number((state.bar as any).time) : null;
+          const actualTime = snapshot.renderedLastBar?.time ?? null;
+          const countMatches = renderedCount === expectedCount;
+          const timeMatches = expectedTime === null || actualTime === expectedTime;
+          const visible = snapshot.viewport.lastBarVisible;
+          const rendered = countMatches && timeMatches && visible;
+          return {
+            ok: rendered,
+            active: true,
+            rendered,
+            countMatches,
+            timeMatches,
+            visible,
+            expectedCount,
+            renderedCount,
+            expectedTime,
+            actualTime,
+            snapshot,
+          };
+        };
         const executeOne = async (op: any) => {
           const rawAction = String(op?.action || '');
           // Accept the canonical SIRE action names plus the older drawing
@@ -1217,6 +1307,113 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
           // runtime always converts it to the verified DrawingController API.
           const action = rawAction === 'create' ? 'add_drawing' : rawAction;
           const legacyProps = op?.toolProperties && typeof op.toolProperties === 'object' ? op.toolProperties : {};
+          if (action === 'start_replay') {
+            const fromBeginning = op?.fromBeginning === true;
+            if (op?.startTime !== undefined || op?.start !== undefined) setReplayInputTime('start', op.startTime ?? op.start);
+            if (op?.endTime !== undefined || op?.end !== undefined) setReplayInputTime('end', op.endTime ?? op.end);
+            if (Number.isFinite(Number(op?.speed))) setReplaySpeed(Number(op.speed));
+            if (replayRef.current) stopReplay();
+            await startReplayFromInputs(fromBeginning, true);
+            const snapshot = replaySnapshot();
+            if (!snapshot.active || !snapshot.state) throw new Error('Replay did not become active after start.');
+            return { action, ok: true, ...snapshot, render: replayRenderVerification() };
+          }
+          if (action === 'stop_replay') {
+            if (!replayRef.current) return { action, ok: true, alreadyStopped: true, ...replaySnapshot() };
+            stopReplay();
+            await wait(40);
+            return { action, ok: true, ...replaySnapshot() };
+          }
+          if (action === 'pause_replay') {
+            const replay = replayRef.current;
+            if (!replay) throw new Error('Replay is not active.');
+            replay.pause();
+            syncReplayState();
+            return { action, ok: true, ...replaySnapshot(), render: replayRenderVerification() };
+          }
+          if (action === 'resume_replay') {
+            const replay = replayRef.current;
+            if (!replay) throw new Error('Replay is not active.');
+            replay.play({ speed: replaySpeedRef.current });
+            syncReplayState();
+            return { action, ok: true, ...replaySnapshot(), render: replayRenderVerification() };
+          }
+          if (action === 'set_replay_start' || action === 'set_replay_end') {
+            const which = action === 'set_replay_start' ? 'start' : 'end';
+            const value = op?.time ?? op?.timestamp ?? op?.value;
+            const changed = setReplayInputTime(which, value);
+            if (which === 'start' && replayEndInputRef.current) {
+              const end = parseReplayCommandTime(replayEndInputRef.current);
+              if (end !== null && changed.epoch > end) throw new Error('Replay start cannot be later than replay end.');
+            }
+            if (which === 'end' && replayStartInputRef.current) {
+              const start = parseReplayCommandTime(replayStartInputRef.current);
+              if (start !== null && changed.epoch < start) throw new Error('Replay end cannot be earlier than replay start.');
+            }
+            if (replayRef.current) {
+              stopReplay();
+              await startReplayFromInputs(false, true);
+            } else {
+              refreshReplayBounds();
+            }
+            return { action, ok: true, configured: changed, ...replaySnapshot() };
+          }
+          if (action === 'move_replay_position') {
+            const replay = replayRef.current;
+            if (!replay) throw new Error('Replay is not active.');
+            const current = replay.state();
+            let index: number;
+            if (op?.index !== undefined) {
+              index = Math.floor(Number(op.index));
+            } else if (op?.bars !== undefined) {
+              index = current.index + Math.floor(Number(op.bars));
+            } else {
+              const time = parseReplayCommandTime(op?.time ?? op?.timestamp ?? op?.position);
+              if (time === null) throw new Error('move_replay_position requires index, bars, or a timestamp.');
+              const bars = ((chart.primarySeries?.()?.getData?.() || []) as any[]);
+              const sessionTotal = current.total;
+              const session = bars.slice(0, sessionTotal);
+              let best = 0;
+              let bestDistance = Infinity;
+              session.forEach((bar: any, i: number) => {
+                const distance = Math.abs(Number(bar.time) - time);
+                if (distance < bestDistance) { best = i; bestDistance = distance; }
+              });
+              index = best;
+            }
+            if (!Number.isFinite(index)) throw new Error('Replay position must be a finite index, bar offset, or timestamp.');
+            replay.seek(index);
+            syncReplayState();
+            return { action, ok: true, ...replaySnapshot(), render: replayRenderVerification() };
+          }
+          if (action === 'set_replay_speed') {
+            const speed = Number(op?.speed ?? op?.value);
+            if (!Number.isFinite(speed) || speed <= 0 || speed > 100) throw new Error('Replay speed must be greater than 0 and no more than 100.');
+            setReplaySpeed(speed);
+            return { action, ok: true, speed: replaySpeedRef.current, ...replaySnapshot() };
+          }
+          if (action === 'read_replay_position') {
+            const snapshot = replaySnapshot();
+            return {
+              action, ok: true, active: snapshot.active,
+              position: snapshot.state ? {
+                index: snapshot.state.index,
+                total: snapshot.state.total,
+                time: snapshot.state.bar ? Number((snapshot.state.bar as any).time) : null,
+                bar: snapshot.state.bar || null,
+              } : null,
+              renderedLastBar: snapshot.renderedLastBar,
+              render: snapshot.active ? replayRenderVerification() : null,
+            };
+          }
+          if (action === 'read_replay_state') {
+            return { action, ok: true, ...replaySnapshot() };
+          }
+          if (action === 'verify_replay_rendered') {
+            const verification = replayRenderVerification();
+            if (!verification.ok) throw new Error('Replay candle rendering verification failed: ' + JSON.stringify(verification));
+            return { action, ok: true, ...verification };
+          }
           if (action === 'switch_instrument') {
             const query = String(op?.symbol || op?.name || '').trim().toLowerCase();
             const instrument = instrumentsRef.current.find(item => item.symbol.toLowerCase() === query || item.name.toLowerCase() === query || item.name.toLowerCase().includes(query));
