@@ -193,7 +193,7 @@ const chartSchema = {
   capabilities:z.any(), agentContract:z.any(), publishedAt:z.number(), syncedAt:z.number(),
 };
 
-function createSireMcpServer(user:any) {
+function createSireMcpServer(user:any, scopes:string[]) {
   const server = new McpServer(
     { name:'sire-chart', version:'0.1.0' },
     { instructions:'SIRE is the user\'s trading-chart workspace. Read the live chart state before answering chart questions. Treat SIRE chart data as the source of truth for instrument, timeframe, price, candles, indicators, drawings and replay.' }
@@ -223,7 +223,7 @@ function createSireMcpServer(user:any) {
   const actionInput = z.object({ action:z.enum(['switch_instrument','set_timeframe','add_indicator','remove_indicator','add_drawing','remove_drawing','start_replay','stop_replay','set_chart_type']), args:z.record(z.any()).optional() });
   server.registerTool('control_chart',{
     title:'Control SIRE chart', description:'Request a verified chart action in the connected SIRE browser. SIRE executes the action and reports the result; write actions require sire.write authorization.', inputSchema:actionInput, outputSchema:{actionId:z.string(),status:z.string(),action:z.any()}, securitySchemes:writeSecurity, annotations:{readOnlyHint:false,destructiveHint:false,openWorldHint:false}, _meta:{securitySchemes:writeSecurity,'openai/confirmation':{required:true}}
-  },async(input:any)=>{ const item=newAction(user.id,input); return {structuredContent:{actionId:item.id,status:item.status,action:input},content:[{type:'text',text:`Chart action ${item.id} queued. SIRE browser will execute and verify it.`}]}; });
+  },async(input:any)=>{ if (!scopes.includes('sire.write')) return {isError:true,content:[{type:'text',text:'sire.write authorization is required for chart changes.'}]}; const item=newAction(user.id,input); return {structuredContent:{actionId:item.id,status:item.status,action:input},content:[{type:'text',text:`Chart action ${item.id} queued. SIRE browser will execute and verify it.`}]}; });
   server.registerTool('get_action_result',{
     title:'Get chart action result', description:'Read the verified result of a previously queued SIRE chart action.', inputSchema:{actionId:z.string()}, outputSchema:{actionId:z.string(),status:z.string(),result:z.any().optional()}, securitySchemes:readSecurity, annotations:{readOnlyHint:true,destructiveHint:false,openWorldHint:false}, _meta:{securitySchemes:readSecurity}
   },async(input:any)=>{ const item=pendingActions.get(input.actionId); if(!item || item.userId!==user.id) return {isError:true,content:[{type:'text',text:'Unknown chart action.'}]}; return {structuredContent:{actionId:item.id,status:item.status,result:item.result},content:[{type:'text',text:JSON.stringify({status:item.status,result:item.result})}]}; });
@@ -239,7 +239,7 @@ export async function handleSireMcp(req:any,res:any) {
   // The bearer token is the source of identity; no browser cookie is required.
   const user=await findUserById(auth.sub);
   if (!user) return json(res,401,{error:'unauthorized'}, {'WWW-Authenticate':authChallenge()});
-  const server=createSireMcpServer(user);
+  const server=createSireMcpServer(user, String(auth.scope || '').split(/\s+/).filter(Boolean));
   const transport=new StreamableHTTPServerTransport({sessionIdGenerator:undefined,enableJsonResponse:true});
   res.on('close',()=>{ transport.close(); server.close(); });
   await server.connect(transport);
