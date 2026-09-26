@@ -174,8 +174,8 @@ function installStyles() {
       .sire-tab-quote .symbol-list .symbol-row {
         grid-template-columns:68px minmax(0,1fr) 88px!important;
         gap:0 10px!important;
-        min-height:86px!important;
-        height:86px!important;
+        min-height:88px!important;
+        height:88px!important;
         padding:7px 8px!important;
       }
       .sire-tab-quote .quote-asset-logo-wrap,
