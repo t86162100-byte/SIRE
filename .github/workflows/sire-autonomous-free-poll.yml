@@ -1,0 +1,42 @@
+name: SIRE Autonomous Free Market Poll
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: sire-autonomous-free-poll
+  cancel-in-progress: true
+
+jobs:
+  observe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Checkout autonomous engine
+        uses: actions/checkout@v4
+        with:
+          ref: render-migration
+          fetch-depth: 1
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --ignore-scripts
+
+      - name: Poll Deriv and persist state
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          AUTONOMOUS_STATE_ISSUE_NUMBER: "10"
+          SIRE_AUTONOMOUS_SYMBOLS: WLDAUD
+        run: npm run autonomous:free-poll
