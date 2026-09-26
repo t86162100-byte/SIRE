@@ -37,6 +37,76 @@ const makeProviderLogoFallback = (item: Instrument) =>
     item.provider === 'DERIV' ? 'deriv.com' : item.provider.toLowerCase() + '.com'
   ) + '&sz=128';
 
+const augmentBinanceDerivativesInBrowser = async (items: Instrument[]): Promise<Instrument[]> => {
+  const existing = new Set(items.map(item => item.id));
+  const additions: Instrument[] = [];
+  const sources: Array<{ marketType: string; urls: string[]; rows: (payload: any) => any[] }> = [
+    {
+      marketType: 'USD-M Futures',
+      urls: ['https://fapi.binance.com/fapi/v1/exchangeInfo'],
+      rows: payload => Array.isArray(payload?.symbols) ? payload.symbols : [],
+    },
+    {
+      marketType: 'COIN-M Futures',
+      urls: ['https://dapi.binance.com/dapi/v1/exchangeInfo'],
+      rows: payload => Array.isArray(payload?.symbols) ? payload.symbols : [],
+    },
+    {
+      marketType: 'Options',
+      urls: ['https://eapi.binance.com/eapi/v1/exchangeInfo'],
+      rows: payload => Array.isArray(payload?.optionSymbols) ? payload.optionSymbols : [],
+    },
+  ];
+
+  const toInstrument = (marketType: string, raw: any): Instrument | null => {
+    const symbol = String(raw?.symbol || '').trim();
+    if (!symbol) return null;
+    const status = String(raw?.status || raw?.contractStatus || '').toUpperCase();
+    if (status && status !== 'TRADING') return null;
+    const underlying = String(raw?.underlying || '').trim();
+    const base = String(raw?.baseAsset || (underlying.replace(/USDT$|USDC$|USD$/i, '')) || '').trim() || undefined;
+    const quote = String(raw?.quoteAsset || '').trim() || undefined;
+    const id = 'BINANCE:' + marketType + ':' + symbol;
+    return {
+      ...(raw as any),
+      id,
+      provider: 'BINANCE',
+      providerLabel: 'Binance',
+      marketType,
+      category: 'Crypto',
+      symbol,
+      displaySymbol: symbol,
+      name: base ? base + (quote ? ' / ' + quote : '') : symbol,
+      base,
+      quote,
+      exchangeOpen: 1,
+      status: status || 'TRADING',
+      logoUrl: base ? 'https://cdn.jsdelivr.net/gh/spothq/cryptocurrency-icons@master/128/color/' + encodeURIComponent(base.toLowerCase()) + '.png' : '',
+      providerLogoUrl: 'https://cdn.simpleicons.org/binance',
+    };
+  };
+
+  await Promise.all(sources.map(async source => {
+    try {
+      const response = await fetch(source.urls[0], { cache: 'no-store', headers: { Accept: 'application/json' } });
+      if (!response.ok) throw new Error('HTTP ' + response.status);
+      const payload = await response.json();
+      for (const raw of source.rows(payload)) {
+        const item = toInstrument(source.marketType, raw);
+        if (item && !existing.has(item.id)) {
+          existing.add(item.id);
+          additions.push(item);
+        }
+      }
+      console.info('[SIRE BINANCE BROWSER] ' + source.marketType + ': ' + additions.filter(item => item.marketType === source.marketType).length);
+    } catch (error) {
+      console.warn('[SIRE BINANCE BROWSER] ' + source.marketType + ' unavailable:', error);
+    }
+  }));
+
+  return additions.length ? items.concat(additions) : items;
+};
+
 const chooseInitialDerivInstrument = (items: Instrument[]) =>
   items.find(item => item.provider === 'DERIV' && item.exchangeOpen !== 0 && item.tradingSuspended !== 1) ||
   items.find(item => item.provider === 'DERIV') || items[0] || null;
@@ -113,7 +183,8 @@ export default function App() {
 
     startup().then(items => {
       if (cancelled) return;
-      const next = items;
+      const next = await augmentBinanceDerivativesInBrowser(items);
+      console.info('[SIRE MARKET STARTUP] unified catalogue after Binance browser augmentation', { total: next.length, binance: next.filter(item => item.provider === 'BINANCE').length, binanceMarketTypes: Array.from(new Set(next.filter(item => item.provider === 'BINANCE').map(item => item.marketType))) });
       const initial = chooseInitialDerivInstrument(next);
       if (!initial) throw new Error('Deriv returned an empty active-symbol catalogue.');
       setDerivError('');
