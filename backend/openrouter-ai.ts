@@ -1,3 +1,4 @@
+import { analyzeMarketIntelligence, type MarketBar } from '../autonomous/market-intelligence.ts';
 type ChatMessage = { role: 'system' | 'user' | 'assistant' | 'tool'; content: any; tool_call_id?: string; tool_calls?: any[] };
 
 type CouncilEvent = (event: { actor: string; phase: string; text: string }) => void | Promise<void>;
@@ -121,22 +122,7 @@ function analysisEma(v:number[],n:number){if(v.length<n)return null;const k=2/(n
 function analysisRsi(v:number[],n=14){if(v.length<n+1)return null;let g=0,l=0;for(let i=1;i<=n;i++){const d=v[i]-v[i-1];g+=Math.max(d,0);l+=Math.max(-d,0);}g/=n;l/=n;for(let i=n+1;i<v.length;i++){const d=v[i]-v[i-1];g=(g*(n-1)+Math.max(d,0))/n;l=(l*(n-1)+Math.max(-d,0))/n;}return l===0?(g===0?50:100):100-100/(1+g/l);}
 function analysisAtr(b:AnalysisBar[],n=14){if(b.length<n+1)return null;const tr=b.map((x,i)=>{const p=i?b[i-1].close:x.close;return Math.max(x.high-x.low,Math.abs(x.high-p),Math.abs(x.low-p));});let a=tr.slice(1,n+1).reduce((x,y)=>x+y,0)/n;for(let i=n+1;i<tr.length;i++)a=(a*(n-1)+tr[i])/n;return a;}
 function analysisPivots(b:AnalysisBar[],left=2,right=2){const h:any[]=[],l:any[]=[];for(let i=left;i<b.length-right;i++){let hi=true,lo=true;for(let j=i-left;j<=i+right;j++){if(j===i)continue;if(b[j].high>=b[i].high)hi=false;if(b[j].low<=b[i].low)lo=false;}if(hi)h.push({time:b[i].epoch,price:b[i].high});if(lo)l.push({time:b[i].epoch,price:b[i].low});}return{highs:h,lows:l};}
-function analyzeBars(barsInput:AnalysisBar[],lookback=200){
-  const b=barsInput.slice(-Math.max(30,Math.min(1000,lookback)));if(b.length<30)return{ok:false,error:'At least 30 actual candles are required.',barsUsed:b.length};
-  const c=b.map(x=>x.close),last=b[b.length-1],p=analysisPivots(b),rh=p.highs.slice(-6),rl=p.lows.slice(-6);
-  const hs=rh.map(x=>x.price),ls=rl.map(x=>x.price),ht=hs.length>1?hs[hs.length-1]-hs[0]:0,lt=ls.length>1?ls[ls.length-1]-ls[0]:0;
-  const trend=ht>0&&lt>0?'uptrend':ht<0&&lt<0?'downtrend':'range_or_mixed';
-  const a=analysisAtr(b,14),highest=Math.max(...b.map(x=>x.high)),lowest=Math.min(...b.map(x=>x.low));
-  const prev=b.slice(0,-1).slice(-20),ph=Math.max(...prev.map(x=>x.high)),pl=Math.min(...prev.map(x=>x.low));
-  const body=Math.abs(last.close-last.open),range=last.high-last.low,upper=last.high-Math.max(last.open,last.close),lower=Math.min(last.open,last.close)-last.low;
-  const patterns:string[]=[];if(range>0&&body<=range*.1)patterns.push('doji');if(range>0&&lower>=body*2&&upper<=Math.max(body,range*.15))patterns.push('hammer');if(range>0&&upper>=body*2&&lower<=Math.max(body,range*.15))patterns.push('shooting_star');
-  const prevBar=b[b.length-2];if(prevBar){if(last.open<=prevBar.close&&last.close>=prevBar.open&&last.close>last.open&&prevBar.close<prevBar.open)patterns.push('bullish_engulfing');if(last.open>=prevBar.close&&last.close<=prevBar.open&&last.close<last.open&&prevBar.close>prevBar.open)patterns.push('bearish_engulfing');if(last.high<=prevBar.high&&last.low>=prevBar.low)patterns.push('inside_bar');}
-  const rets=c.slice(1).map((v,i)=>Math.log(v/c[i])).filter(Number.isFinite),mean=rets.reduce((x,y)=>x+y,0)/(rets.length||1),vol=Math.sqrt(rets.reduce((x,y)=>x+(y-mean)**2,0)/(rets.length||1));
-  const levels=[...rh.map(x=>x.price),...rl.map(x=>x.price)],tol=(a??range)*.5,clusters:number[][]=[];for(const price of levels){const q=clusters.find(z=>Math.abs(z.reduce((x,y)=>x+y,0)/z.length-price)<=tol);if(q)q.push(price);else clusters.push([price]);}
-  const sr=clusters.map(x=>({price:x.reduce((a,b)=>a+b,0)/x.length,touches:x.length})).sort((x,y)=>y.touches-x.touches).slice(0,10);
-  const structure=[...rh.slice(-3).map((x,i)=>({type:'high',time:x.time,price:x.price,classification:i?x.price>rh[rh.length-3+i-1]?.price?'HH':'LH':null})),...rl.slice(-3).map((x,i)=>({type:'low',time:x.time,price:x.price,classification:i?x.price>rl[rl.length-3+i-1]?.price?'HL':'LL':null}))].sort((x,y)=>x.time-y.time);
-  return{ok:true,source:'actual OHLC candles',barsUsed:b.length,range:{from:b[0].epoch,to:last.epoch},latest:{time:last.epoch,open:last.open,high:last.high,low:last.low,close:last.close},trend:{label:trend,highSlope:ht,lowSlope:lt},supportResistance:sr,highLow:{highest,lowest},priceStructure:{swings:structure},candlePatterns:patterns,volatility:{atr14:a,realizedLogReturnStd:vol},movingAverages:{sma20:analysisSma(c,20),sma50:analysisSma(c,50),sma200:analysisSma(c,200),ema20:analysisEma(c,20),ema50:analysisEma(c,50),ema200:analysisEma(c,200)},momentum:{rsi14:analysisRsi(c,14),roc10Percent:c.length>=11?(last.close/c[c.length-11]-1)*100:null},breakout:{lookbackBars:20,status:last.close>ph?'upside_breakout':last.close<pl?'downside_breakout':'none',priorHigh:ph,priorLow:pl},swings:{highs:rh,lows:rl}};
-}
+function analyzeBars(barsInput: MarketBar[], lookback=200){ return analyzeMarketIntelligence(barsInput, lookback); }
 
 function systemPrompt() {
   return [
