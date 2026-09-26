@@ -17,8 +17,8 @@ function installStyles() {
   style.id = STYLE_ID;
   style.textContent = `
     .sire-tab-quote .symbol-list .symbol-row {
-      position:relative!important;display:grid!important;grid-template-columns:minmax(0,1fr) auto!important;grid-template-rows:auto auto!important;
-      align-items:start!important;gap:5px 10px!important;min-height:72px!important;height:72px!important;padding:10px 12px!important;border-radius:16px!important;
+      position:relative!important;display:grid!important;grid-template-columns:minmax(0,1fr) auto!important;grid-template-rows:auto 18px!important;
+      align-items:start!important;gap:0 10px!important;min-height:72px!important;height:72px!important;padding:9px 12px!important;border-radius:16px!important;
       border:1px solid rgba(255,255,255,.09)!important;background:rgba(15,17,22,.46)!important;
       -webkit-backdrop-filter:blur(18px) saturate(135%)!important;backdrop-filter:blur(18px) saturate(135%)!important;
       box-shadow:inset 0 1px 0 rgba(255,255,255,.06),0 10px 28px rgba(0,0,0,.18)!important;overflow:hidden!important;
@@ -35,9 +35,9 @@ function installStyles() {
     .sire-tab-quote .symbol-list .symbol-row[data-price-state="up"] .sire-quote-price{color:#52f39a!important}
     .sire-tab-quote .symbol-list .symbol-row[data-price-state="down"] .sire-quote-price{color:#ff6674!important}
     .sire-tab-quote .symbol-list .symbol-row[data-price-state="flat"] .sire-quote-price{color:rgba(245,249,255,.92)!important}
-    .sire-tab-quote .symbol-list .symbol-row .sire-quote-details{grid-column:1/-1;grid-row:2;display:flex;flex-wrap:wrap;gap:5px 12px;min-height:14px;color:rgba(235,240,250,.58);font-size:9px;font-weight:650;letter-spacing:.02em;font-variant-numeric:tabular-nums}
+    .sire-tab-quote .symbol-list .symbol-row .sire-quote-details{position:absolute!important;left:12px!important;right:12px!important;bottom:7px!important;display:flex;align-items:center;gap:10px;min-height:12px!important;color:rgba(235,240,250,.58);font-size:9px;font-weight:650;letter-spacing:.02em;font-variant-numeric:tabular-nums;line-height:12px!important;white-space:nowrap}
     .sire-tab-quote .symbol-list .symbol-row .sire-quote-details b{color:rgba(235,240,250,.9);font-weight:800}
-    .sire-tab-quote .symbol-list .symbol-row>em{position:absolute!important;right:11px;bottom:8px;z-index:2;font-style:normal!important;font-size:8px!important;opacity:.45!important}
+    .sire-tab-quote .symbol-list .symbol-row>em{display:none!important}
     .sire-tab-quote .symbol-list{flex:1 1 0!important;min-height:0!important;overflow-y:auto!important;overflow-x:hidden!important;-webkit-overflow-scrolling:touch!important;touch-action:pan-y!important}
     .sire-tab-quote .symbol-list .symbol-row{touch-action:pan-y!important}
     .sire-tab-quote .quote-instrument-name{display:flex!important;flex-direction:row!important;align-items:center!important;gap:6px!important}
@@ -55,7 +55,7 @@ function ensureCardParts(row:HTMLButtonElement){
   let price=row.querySelector<HTMLElement>('.sire-quote-price');
   let details=row.querySelector<HTMLElement>('.sire-quote-details');
   if(!price){price=document.createElement('strong');price.className='sire-quote-price';price.textContent='—';row.appendChild(price)}
-  if(!details){details=document.createElement('div');details.className='sire-quote-details';details.innerHTML='<span>Bid <b>—</b></span><span>Ask <b>—</b></span><span>Live <b>—</b></span>';row.appendChild(details)}
+  if(!details){details=document.createElement('div');details.className='sire-quote-details';details.innerHTML='<span>Bid <b>—</b></span><span>Ask <b>—</b></span>';row.appendChild(details)}
   return {price,details};
 }
 function decorateRows(){
@@ -64,7 +64,7 @@ function decorateRows(){
     if(!state){if(price.textContent!=='—')price.textContent='—';row.removeAttribute('data-price-state');return}
     const nextPrice=formatPrice(state.quote);if(price.textContent!==nextPrice)price.textContent=nextPrice;
     const delta=state.previous===undefined?0:state.quote-state.previous;const nextState=delta>0?'up':delta<0?'down':'flat';if(row.dataset.priceState!==nextState)row.dataset.priceState=nextState;
-    const nextDetails=`<span>Bid <b>${formatPrice(state.bid??state.quote)}</b></span><span>Ask <b>${formatPrice(state.ask??state.quote)}</b></span><span>Live <b>${state.epoch?new Date(state.epoch*1000).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit',second:'2-digit'}):'—'}</b></span>`;
+    const nextDetails=`<span>Bid <b>${formatPrice(state.bid??state.quote)}</b></span><span>Ask <b>${formatPrice(state.ask??state.quote)}</b></span>`;
     if(details.innerHTML!==nextDetails)details.innerHTML=nextDetails;
   });
 }
