@@ -854,7 +854,7 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
       const positionOverlayIndicatorLegends = () => {
         const legendStack = (widget.chart as any)?._legendStack;
         if (!legendStack?._legendOffset) return;
-        legendStack._legendOffset.top = 54;
+        legendStack._legendOffset.top = 540;
         legendStack._restackLegends?.();
       };
       positionOverlayIndicatorLegends();
