@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import { createLinkGroup, type LinkGroup } from 'openalgo-charts';
 import { Search } from 'lucide-react';
 import ResearchLab from './ResearchLab';
@@ -33,6 +33,8 @@ export default function App() {
   const [derivError, setDerivError] = useState('');
   const [search, setSearch] = useState('');
   const [providerFilter, setProviderFilter] = useState<'ALL' | MarketProvider>('ALL');
+  const [quoteScrollTop, setQuoteScrollTop] = useState(0);
+  const deferredSearch = useDeferredValue(search);
   const [instrumentSearchOpen, setInstrumentSearchOpen] = useState(false);
   const [instrumentSearchMode, setInstrumentSearchMode] = useState<'main' | 'multi'>('main');
   const [researchLabOpen, setResearchLabOpen] = useState(false);
@@ -181,7 +183,7 @@ export default function App() {
   }, [instruments, selected?.symbol]);
 
   const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase();
+    const q = deferredSearch.trim().toLowerCase();
     return instruments.filter(item => {
       const providerMatch = providerFilter === 'ALL' || item.provider === providerFilter;
       const searchMatch = !q || `${item.name} ${item.symbol} ${item.providerLabel} ${item.marketType}`.toLowerCase().includes(q);
@@ -190,6 +192,13 @@ export default function App() {
   }, [instruments, search, providerFilter]);
 
   const chartableInstruments = useMemo(() => instruments.filter(item => item.provider === 'DERIV'), [instruments]);
+  const quoteWindow = useMemo(() => {
+    const rowHeight = 88;
+    const buffer = 18;
+    const start = Math.max(0, Math.floor(quoteScrollTop / rowHeight) - buffer);
+    const end = Math.min(filtered.length, Math.ceil((quoteScrollTop + window.innerHeight) / rowHeight) + buffer);
+    return { start, end, items: filtered.slice(start, end), top: start * rowHeight, bottom: Math.max(0, (filtered.length - end) * rowHeight) };
+  }, [filtered, quoteScrollTop]);
 
   const selectInstrument = (item: Instrument) => {
     setSelected(item);
@@ -265,7 +274,7 @@ export default function App() {
           {(['ALL','DERIV','BINANCE','BITGET','BYBIT','OKX'] as const).map(provider => (
             <button key={provider} type="button" className={providerFilter === provider ? 'active' : ''} onClick={() => setProviderFilter(provider)}>{provider === 'ALL' ? 'All' : provider[0] + provider.slice(1).toLowerCase()}</button>
           ))}
-        </div>{derivError && <div className="sire-deriv-error">{derivError}</div>}<div className="native-symbol-list symbol-list">{filtered.map(item => <button key={item.id} className={`symbol-row ${selected?.id === item.id ? 'active' : ''}`} data-provider={item.provider} data-price={Number.isFinite(item.price) ? String(item.price) : ''} data-bid={Number.isFinite(item.bid) ? String(item.bid) : ''} data-ask={Number.isFinite(item.ask) ? String(item.ask) : ''} onClick={() => selectInstrument(item)}><span className="quote-asset-logo-wrap"><img className="quote-asset-logo" src={item.logoUrl || item.providerLogoUrl} alt="" onError={event => { const image = event.currentTarget; image.src = item.providerLogoUrl; }} /></span><span className="quote-instrument-name"><b>{item.displaySymbol || item.symbol}</b><small>{item.name}</small></span><span className="quote-broker"><img className="quote-broker-logo" src={item.providerLogoUrl} alt="" /><b>{item.providerLabel}</b><small>{item.category === 'Crypto' && item.marketType !== 'Spot' ? item.marketType.toLowerCase() : item.category === 'Crypto' && item.marketType === 'Spot' ? 'spot crypto' : String(item.marketType || item.category).toLowerCase()}</small></span></button>)}</div></aside>
+        </div>{derivError && <div className="sire-deriv-error">{derivError}</div>}<div className="native-symbol-list symbol-list" onScroll={event => setQuoteScrollTop(event.currentTarget.scrollTop)}><div style={{height: quoteWindow.top}} aria-hidden="true" /><div className="sire-quote-window">{quoteWindow.items.map(item => <button key={item.id} className={`symbol-row ${selected?.id === item.id ? 'active' : ''}`} data-provider={item.provider} onClick={() => selectInstrument(item)}><span className="quote-asset-logo-wrap"><img className="quote-asset-logo" src={item.logoUrl || item.providerLogoUrl} alt="" loading="lazy" decoding="async" onError={event => { const image = event.currentTarget; image.style.display='none'; }} /></span><span className="quote-instrument-name"><b>{item.displaySymbol || item.symbol}</b><small>{item.name}</small></span><span className="quote-broker"><img className="quote-broker-logo" src={item.providerLogoUrl} alt="" loading="lazy" decoding="async" onError={event => { event.currentTarget.style.display='none'; }} /><b>{item.providerLabel}</b><small>{item.category === 'Crypto' && item.marketType !== 'Spot' ? item.marketType.toLowerCase() : item.category === 'Crypto' && item.marketType === 'Spot' ? 'spot crypto' : String(item.marketType || item.category).toLowerCase()}</small></span></button>)}</div><div style={{height: quoteWindow.bottom}} aria-hidden="true" /></div></aside>
       <section className="native-chart-panel">
         <div className={`sire-chart-grid sire-chart-grid--${chartLayout}${chartLayout === 2 ? ` sire-chart-grid--${multiChartPosition}` : ''}`} onContextMenu={event => event.preventDefault()}>
           {chartItems.map((chartSymbol, index) => <div className={`sire-chart-cell${activeChartIndex === index ? ' sire-chart-cell--active' : ''}`} key={index} onPointerDown={() => setActiveChartIndex(index)}>{chartSymbol && <FinancialChart
@@ -308,7 +317,7 @@ export default function App() {
               <input autoFocus value={search} onChange={event => setSearch(event.target.value)} placeholder="Search instruments" />
             </div>
             <div className="sire-instrument-search-list">
-              {filtered.map(item => <button key={item.symbol} type="button" onClick={() => { if (instrumentSearchMode === 'multi') { setMultiChartInstrument(item.symbol); setSearch(''); setInstrumentSearchOpen(false); } else { selectInstrument(item); setInstrumentSearchOpen(false); } }}>
+              {filtered.slice(0, 120).map(item => <button key={item.id} type="button" onClick={() => { if (instrumentSearchMode === 'multi') { setMultiChartInstrument(item.symbol); setSearch(''); setInstrumentSearchOpen(false); } else { selectInstrument(item); setInstrumentSearchOpen(false); } }}>
                 <span className="quote-asset-logo-wrap"><img className="quote-asset-logo" src={item.logoUrl || item.providerLogoUrl} alt="" onError={event => { const image = event.currentTarget; image.src = item.providerLogoUrl; }} /></span><span className="quote-instrument-name"><b>{item.displaySymbol || item.symbol}</b><small>{item.name}</small></span><span className="quote-broker"><img className="quote-broker-logo" src={item.providerLogoUrl} alt="" /><b>{item.providerLabel}</b><small>{item.category === 'Crypto' && item.marketType !== 'Spot' ? item.marketType.toLowerCase() : item.category === 'Crypto' && item.marketType === 'Spot' ? 'spot crypto' : String(item.marketType || item.category).toLowerCase()}</small></span>
               </button>)}
             </div>
