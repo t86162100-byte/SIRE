@@ -49,6 +49,14 @@ async function getJson(url: string, timeoutMs = 12000) {
   }
 }
 
+async function getJsonAny(urls: string[], timeoutMs = 10000) {
+  let last: unknown;
+  for (const url of urls) {
+    try { return await getJson(url, timeoutMs); } catch (error) { last = error; }
+  }
+  throw last || new Error('All market endpoints failed');
+}
+
 function cryptoItem(provider: MarketProvider, marketType: string, category: string, raw: any, price?: any): UnifiedInstrument | null {
   const symbol = String(raw?.symbol || raw?.instId || '').trim();
   if (!symbol) return null;
@@ -82,8 +90,8 @@ function cryptoItem(provider: MarketProvider, marketType: string, category: stri
 
 async function binance(): Promise<UnifiedInstrument[]> {
   const [spot, futures] = await Promise.all([
-    getJson('https://api.binance.com/api/v3/exchangeInfo'),
-    getJson('https://fapi.binance.com/fapi/v1/exchangeInfo'),
+    getJsonAny(['https://api.binance.com/api/v3/exchangeInfo','https://api1.binance.com/api/v3/exchangeInfo','https://api2.binance.com/api/v3/exchangeInfo']),
+    getJsonAny(['https://fapi.binance.com/fapi/v1/exchangeInfo','https://fapi1.binance.com/fapi/v1/exchangeInfo','https://fapi2.binance.com/fapi/v1/exchangeInfo']),
   ]);
   // Quote cards no longer display prices, so do not download thousands of 24h ticker rows.
   // This keeps catalogue startup light and leaves live quotes to the market-data layer.
@@ -95,7 +103,10 @@ async function binance(): Promise<UnifiedInstrument[]> {
 
 async function bitget(): Promise<UnifiedInstrument[]> {
   const categories = ['SPOT', 'USDT-FUTURES', 'COIN-FUTURES', 'USDC-FUTURES'];
-  const responses = await Promise.all(categories.map(category => getJson('https://api.bitget.com/api/v3/market/instruments?category=' + category)));
+  const responses = await Promise.all(categories.map(category => getJsonAny([
+    'https://api.bitget.com/api/v3/market/instruments?category=' + category,
+    'https://api.bitget.com/api/v2/spot/public/symbols'
+  ])));
   const out: UnifiedInstrument[] = [];
   for (let i = 0; i < categories.length; i++) {
     const category = categories[i];
@@ -116,7 +127,7 @@ async function bybit(): Promise<UnifiedInstrument[]> {
     let cursor = '';
     for (let page = 0; page < 12; page++) {
       const url = 'https://api.bybit.com/v5/market/instruments-info?category=' + category + '&limit=1000' + (cursor ? '&cursor=' + encodeURIComponent(cursor) : '');
-      const response = await getJson(url);
+      const response = await getJsonAny([url, url.replace('https://api.bybit.com/', 'https://api.bytick.com/')]);
       const items = Array.isArray(response?.result?.list) ? response.result.list : [];
       for (const raw of items) {
         if (String(raw.status || '').toLowerCase() !== 'trading') continue;
@@ -134,7 +145,10 @@ async function okx(): Promise<UnifiedInstrument[]> {
   const types = ['SPOT', 'SWAP', 'FUTURES', 'OPTION'];
   const out: UnifiedInstrument[] = [];
   for (const instType of types) {
-    const response = await getJson('https://www.okx.com/api/v5/public/instruments?instType=' + instType);
+    const response = await getJsonAny([
+      'https://www.okx.com/api/v5/public/instruments?instType=' + instType,
+      'https://www.okx.com/api/v5/public/instruments?instType=' + instType + '&instFamily=USDT'
+    ]);
     const items = Array.isArray(response?.data) ? response.data : [];
     for (const raw of items) {
       if (String(raw.state || '').toLowerCase() !== 'live') continue;
@@ -175,13 +189,17 @@ export async function getUnifiedMarketCatalogue(fetchDeriv: () => Promise<any[]>
   if (cached && Date.now() - cached.at < CACHE_MS) return cached.instruments;
   if (loading) return loading;
   loading = (async () => {
-    const results = await Promise.allSettled([
-      fetchDeriv().then(items => items.map(derivItem).filter(Boolean) as UnifiedInstrument[]),
-      binance(),
-      bitget(),
-      bybit(),
-      okx(),
-    ]);
+    const providers: Array<[MarketProvider, Promise<UnifiedInstrument[]>]> = [
+      ['DERIV', fetchDeriv().then(items => items.map(derivItem).filter(Boolean) as UnifiedInstrument[])],
+      ['BINANCE', binance()],
+      ['BITGET', bitget()],
+      ['BYBIT', bybit()],
+      ['OKX', okx()],
+    ];
+    const results = await Promise.allSettled(providers.map(([, promise]) => promise));
+    results.forEach((result, index) => {
+      if (result.status === 'rejected') console.warn('[SIRE MARKET CATALOG] provider failed:', providers[index][0], result.reason);
+    });
     const instruments = results.flatMap(result => result.status === 'fulfilled' ? result.value : []);
     const seen = new Set<string>();
     const unique = instruments.filter(item => {
