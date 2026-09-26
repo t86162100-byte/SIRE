@@ -156,7 +156,7 @@ function systemPrompt() {
 
 
 export async function runFreeAutonomousGpt(input: { query: string; chartSnapshot?: unknown }) {
-  const baseUrl = String(process.env.GPT4FREE_TS_BASE_URL || '').trim().replace(/\\/$/, '');
+  const baseUrl = String(process.env.GPT4FREE_TS_BASE_URL || '').trim().replace(/\/$/, '');
   if (!baseUrl) throw new Error('GPT4Free autonomous provider is not configured: GPT4FREE_TS_BASE_URL is missing');
   const model = String(process.env.GPT4FREE_TS_MODEL || 'gpt-3.5-turbo').trim();
   const site = String(process.env.GPT4FREE_TS_SITE || 'you').trim();
