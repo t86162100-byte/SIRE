@@ -9,7 +9,6 @@ import 'openalgo-charts/trade';
 import 'openalgo-charts/transform';
 import 'openalgo-charts/profile';
 import 'openalgo-charts/webgl';
-import { PaneLegend } from 'openalgo-charts';
 import { createWidget, type Widget } from 'openalgo-charts/widget';
 import './financialChart.css';
 
@@ -847,10 +846,18 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
           .slice(0, 50)
           .map(item => ({ symbol: item.symbol, name: item.name })),
       });
-      // Reserve the chart engine's first legend row for SIRE's DOM instrument/price header.
-      // Overlay indicators then stack underneath it instead of painting through the header.
-      const sirePriceHeaderSpacer = new PaneLegend({ id: 'sire-price-header-spacer', title: '', params: '', actions: [] });
-      widget.chart.addPrimitive(sirePriceHeaderSpacer, 0);
+      // SIRE owns the instrument/price readout in the chart's top-left corner.
+      // OpenAlgo's on-chart indicator legends use the same corner, so move their
+      // legend stack below that readout. This is the engine's actual legend offset
+      // (a spacer primitive cannot move indicator legends because they are stacked
+      // by ChartLegends itself).
+      const positionOverlayIndicatorLegends = () => {
+        const legendStack = (widget.chart as any)?._legendStack;
+        if (!legendStack?._legendOffset) return;
+        legendStack._legendOffset.top = 54;
+        legendStack._restackLegends?.();
+      };
+      positionOverlayIndicatorLegends();
       const pitchBlackTheme = { ...widget.chart.theme(), background: '#000000' };
       widget.setTheme(pitchBlackTheme);
       widget.chart.applyOptions({ canvas: { background: '#000000' } });
@@ -929,6 +936,7 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
         setSelectedIndicatorPosition({ left: Math.max(8, Math.min(rect.width - 92, 8 + Math.max(46, indicator.name.length * 6.5 + 8))), top: 14 });
       };
       const offIndicatorObjects = widget.objects.subscribe(objects => {
+        positionOverlayIndicatorLegends();
         const current = selectedIndicatorRef.current;
         if (!current) return;
         const item = objects.find(object => object.kind === 'indicator' && object.id === current.id);
@@ -957,7 +965,6 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
       });
       onWidgetReady?.(widget);
       return () => {
-        try { widget.chart.removePrimitive(sirePriceHeaderSpacer); } catch {}
         replayRef.current?.stop();
         clearReplayListeners();
         replayRef.current = null;
