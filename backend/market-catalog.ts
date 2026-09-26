@@ -90,8 +90,8 @@ function cryptoItem(provider: MarketProvider, marketType: string, category: stri
 
 async function binance(): Promise<UnifiedInstrument[]> {
   const [spot, futures] = await Promise.all([
-    getJsonAny(['https://api.binance.com/api/v3/exchangeInfo','https://api1.binance.com/api/v3/exchangeInfo','https://api2.binance.com/api/v3/exchangeInfo']),
-    getJsonAny(['https://fapi.binance.com/fapi/v1/exchangeInfo','https://fapi1.binance.com/fapi/v1/exchangeInfo','https://fapi2.binance.com/fapi/v1/exchangeInfo']),
+    getJsonAny(['https://api.binance.com/api/v3/exchangeInfo','https://api-gcp.binance.com/api/v3/exchangeInfo','https://api1.binance.com/api/v3/exchangeInfo','https://api2.binance.com/api/v3/exchangeInfo','https://api3.binance.com/api/v3/exchangeInfo','https://api4.binance.com/api/v3/exchangeInfo']),
+    getJsonAny(['https://fapi.binance.com/fapi/v1/exchangeInfo','https://fapi1.binance.com/fapi/v1/exchangeInfo','https://fapi2.binance.com/fapi/v1/exchangeInfo','https://fapi3.binance.com/fapi/v1/exchangeInfo','https://fapi4.binance.com/fapi/v1/exchangeInfo']),
   ]);
   // Quote cards no longer display prices, so do not download thousands of 24h ticker rows.
   // This keeps catalogue startup light and leaves live quotes to the market-data layer.
@@ -147,7 +147,8 @@ async function okx(): Promise<UnifiedInstrument[]> {
   for (const instType of types) {
     const response = await getJsonAny([
       'https://www.okx.com/api/v5/public/instruments?instType=' + instType,
-      'https://www.okx.com/api/v5/public/instruments?instType=' + instType + '&instFamily=USDT'
+      'https://app.okx.com/api/v5/public/instruments?instType=' + instType,
+      'https://my.okx.com/api/v5/public/instruments?instType=' + instType
     ]);
     const items = Array.isArray(response?.data) ? response.data : [];
     for (const raw of items) {
@@ -161,9 +162,9 @@ async function okx(): Promise<UnifiedInstrument[]> {
 }
 
 function derivItem(raw: any): UnifiedInstrument | null {
-  const symbol = String(raw?.symbol || '').trim();
+  const symbol = String(raw?.symbol || raw?.underlying_symbol || '').trim();
   if (!symbol) return null;
-  const name = String(raw?.display_name || raw?.name || symbol);
+  const name = String(raw?.display_name || raw?.underlying_symbol_name || raw?.name || symbol);
   return {
     id: 'DERIV:Market:' + symbol,
     provider: 'DERIV',
@@ -178,8 +179,8 @@ function derivItem(raw: any): UnifiedInstrument | null {
     price: undefined,
     bid: undefined,
     ask: undefined,
-    exchangeOpen: Number(raw?.exchangeOpen ?? raw?.exchange_open ?? 1),
-    status: Number(raw?.tradingSuspended ?? raw?.trading_suspended ?? 0) === 1 ? 'suspended' : 'online',
+    exchangeOpen: Number(raw?.exchangeOpen ?? raw?.exchange_open ?? raw?.exchange_is_open ?? 1),
+    status: Number(raw?.tradingSuspended ?? raw?.trading_suspended ?? raw?.is_trading_suspended ?? 0) === 1 ? 'suspended' : 'online',
     logoUrl: providerLogo('deriv'),
     providerLogoUrl: providerLogo('deriv'),
   };
@@ -210,6 +211,8 @@ export async function getUnifiedMarketCatalogue(fetchDeriv: () => Promise<any[]>
     // Deliberately mix providers/market types. The UI is one TradingView-style
     // searchable catalogue rather than provider/category sections.
     unique.sort((a, b) => (a.name + a.symbol).localeCompare(b.name + b.symbol));
+    const counts = unique.reduce<Record<string, number>>((acc, item) => { acc[item.provider] = (acc[item.provider] || 0) + 1; return acc; }, {});
+    console.log('[SIRE MARKET CATALOG] provider counts:', JSON.stringify(counts));
     cached = { at: Date.now(), instruments: unique };
     return unique;
   })().finally(() => { loading = null; });
