@@ -18,7 +18,7 @@ function installStyles() {
   style.textContent = `
     .sire-tab-quote .symbol-list .symbol-row {
       position:relative!important;display:grid!important;grid-template-columns:minmax(0,1fr) auto!important;grid-template-rows:auto 18px!important;
-      align-items:start!important;gap:0 10px!important;min-height:72px!important;height:72px!important;padding:9px 12px!important;border-radius:16px!important;
+      align-items:start!important;gap:0 10px!important;min-height:80px!important;height:80px!important;padding:10px 12px!important;border-radius:16px!important;
       border:1px solid rgba(255,255,255,.09)!important;background:rgba(15,17,22,.46)!important;
       -webkit-backdrop-filter:blur(18px) saturate(135%)!important;backdrop-filter:blur(18px) saturate(135%)!important;
       box-shadow:inset 0 1px 0 rgba(255,255,255,.06),0 10px 28px rgba(0,0,0,.18)!important;overflow:hidden!important;
