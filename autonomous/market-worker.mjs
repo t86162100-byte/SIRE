@@ -196,12 +196,78 @@ function handleActiveSymbols(message) {
 
   for (const symbol of requestedSymbols) {
     ensureSymbolState(symbol);
+
+    // Warm the in-memory state with recent 1-minute candles before live ticks.
+    // Deriv documents ticks_history as the public historical-data endpoint;
+    // subscribe: 0 makes this a one-time request.
+    send({
+      ticks_history: symbol,
+      end: 'latest',
+      count: 100,
+      style: 'candles',
+      granularity: CANDLE_SECONDS,
+      subscribe: 0,
+      req_id: ++requestId,
+    });
+
     send({
       ticks: symbol,
       subscribe: 1,
       req_id: ++requestId,
     });
   }
+}
+
+function handleCandles(message) {
+  const symbol = String(message?.echo_req?.ticks_history || '').trim();
+  const candles = Array.isArray(message?.candles) ? message.candles : [];
+
+  if (!symbol || !requestedSymbols.includes(symbol) || !candles.length) {
+    log('market.history_rejected', { reason: 'invalid_or_unrequested_candles' });
+    return;
+  }
+
+  const s = ensureSymbolState(symbol);
+  const normalized = candles
+    .map(candle => ({
+      epoch: Number(candle?.epoch),
+      open: Number(candle?.open),
+      high: Number(candle?.high),
+      low: Number(candle?.low),
+      close: Number(candle?.close),
+    }))
+    .filter(candle =>
+      Number.isFinite(candle.epoch) &&
+      Number.isFinite(candle.open) &&
+      Number.isFinite(candle.high) &&
+      Number.isFinite(candle.low) &&
+      Number.isFinite(candle.close),
+    )
+    .sort((a, b) => a.epoch - b.epoch);
+
+  if (!normalized.length) {
+    log('market.history_rejected', { symbol, reason: 'no_valid_candles' });
+    return;
+  }
+
+  const last = normalized[normalized.length - 1];
+  s.candles = normalized.slice(-200);
+  s.currentCandle = {
+    epoch: last.epoch,
+    open: last.open,
+    high: last.high,
+    low: last.low,
+    close: last.close,
+    ticks: 0,
+  };
+
+  log('market.history_warmed', {
+    symbol,
+    timeframe: '1m',
+    candles: normalized.length,
+    oldestEpoch: normalized[0].epoch,
+    newestEpoch: last.epoch,
+  });
 }
 
 function handleTick(message) {
@@ -255,6 +321,10 @@ function handleMessage(raw) {
         });
         ws?.close(1008, 'Configured symbol validation failed');
       }
+      break;
+
+    case 'candles':
+      handleCandles(message);
       break;
 
     case 'tick':
