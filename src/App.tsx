@@ -7,10 +7,24 @@ import { normalizeDerivInstrument, sortDerivInstruments, type DerivInstrument } 
 import { SireErrorScreen } from './SireErrorBoundary';
 import './nativeTerminal.css';
 
-type Instrument = DerivInstrument;
+type MarketProvider = 'DERIV' | 'BINANCE' | 'BITGET' | 'BYBIT' | 'OKX';
+type Instrument = DerivInstrument & {
+  id: string;
+  provider: MarketProvider;
+  providerLabel: string;
+  marketType: string;
+  category: string;
+  displaySymbol: string;
+  price?: number;
+  bid?: number;
+  ask?: number;
+  logoUrl: string;
+  providerLogoUrl: string;
+};
 
-const chooseInitialDerivInstrument = (items: DerivInstrument[]) =>
-  items.find(item => item.exchangeOpen !== 0 && item.tradingSuspended !== 1) || items[0] || null;
+const chooseInitialDerivInstrument = (items: Instrument[]) =>
+  items.find(item => item.provider === 'DERIV' && item.exchangeOpen !== 0 && item.tradingSuspended !== 1) ||
+  items.find(item => item.provider === 'DERIV') || items[0] || null;
 
 export default function App() {
   const [instruments, setInstruments] = useState<Instrument[]>([]);
@@ -18,6 +32,7 @@ export default function App() {
   const [derivLoading, setDerivLoading] = useState(true);
   const [derivError, setDerivError] = useState('');
   const [search, setSearch] = useState('');
+  const [providerFilter, setProviderFilter] = useState<'ALL' | MarketProvider>('ALL');
   const [instrumentSearchOpen, setInstrumentSearchOpen] = useState(false);
   const [instrumentSearchMode, setInstrumentSearchMode] = useState<'main' | 'multi'>('main');
   const [researchLabOpen, setResearchLabOpen] = useState(false);
@@ -35,11 +50,11 @@ export default function App() {
     let cancelled = false;
     let retryTimer: number | null = null;
 
-    const startup = async (): Promise<DerivInstrument[]> => {
+    const startup = async (): Promise<Instrument[]> => {
       const maxAttempts = 3;
       const retryDelaysMs = [0, 2500, 5000];
 
-      let lastError = 'Deriv market catalogue failed to load.';
+      let lastError = 'SIRE market catalogue failed to load.';
       for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
         if (cancelled) throw new Error('SIRE startup cancelled.');
         if (retryDelaysMs[attempt - 1] > 0) {
@@ -52,34 +67,24 @@ export default function App() {
         }
 
         try {
-          console.info('[DERIV STARTUP] requesting market-data health', { attempt, maxAttempts });
-          const healthResponse = await fetch('/api/sire/deriv/health', {
+          console.info('[SIRE MARKET STARTUP] requesting unified market catalogue', { attempt, maxAttempts });
+          const response = await fetch('/api/sire/markets/catalog', {
             cache: 'no-store',
             headers: { 'Cache-Control': 'no-cache' },
           });
-          let health: any = null;
-          try { health = await healthResponse.json(); } catch {}
-          if (!healthResponse.ok || !health?.ok) {
-            lastError = `Deriv startup health check failed at ${health?.stage || 'unknown stage'}: ${health?.error || `HTTP ${healthResponse.status}`}`;
-            console.warn('[DERIV STARTUP] health attempt failed', { attempt, maxAttempts, error: lastError, health });
+          let payload: any = null;
+          try { payload = await response.json(); } catch {}
+          if (!response.ok || !payload?.ok || !Array.isArray(payload?.instruments)) {
+            lastError = payload?.error || `SIRE market catalogue returned HTTP ${response.status}`;
+            console.warn('[SIRE MARKET STARTUP] attempt failed', { attempt, maxAttempts, error: lastError });
             continue;
           }
-          if (!Array.isArray(health?.activeSymbols)) {
-            lastError = 'Deriv startup health check connected successfully but did not return the active instrument catalogue.';
-            console.warn('[DERIV STARTUP] active-symbol catalogue missing', { attempt, maxAttempts });
-            continue;
-          }
-
-          const items = health.activeSymbols
-            .map((item: any) => normalizeDerivInstrument(item))
-            .filter(Boolean) as DerivInstrument[];
+          const items = payload.instruments as Instrument[];
           if (!items.length) {
-            lastError = 'Deriv returned an empty active-symbol catalogue.';
-            console.warn('[DERIV STARTUP] active-symbol catalogue empty', { attempt, maxAttempts });
+            lastError = 'SIRE market catalogue returned no instruments.';
             continue;
           }
-
-          return sortDerivInstruments(items);
+          return items;
         } catch (error) {
           lastError = error instanceof Error ? error.message : 'Deriv market catalogue failed to load.';
           console.warn('[DERIV STARTUP] health request failed', { attempt, maxAttempts, error: lastError });
@@ -121,7 +126,7 @@ export default function App() {
       { length: chartLayout },
       (_, index) => current[index] || (index === 0
         ? (selected?.symbol || chooseInitialDerivInstrument(instruments)?.symbol || instruments[0].symbol)
-        : instruments[index % instruments.length].symbol),
+        : chartableInstruments[index % Math.max(1, chartableInstruments.length)]?.symbol || ''),
     ));
   }, [chartLayout, selected?.symbol]);
 
@@ -177,22 +182,29 @@ export default function App() {
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
-    return q
-      ? instruments.filter(item => `${item.name} ${item.symbol}`.toLowerCase().includes(q))
-      : instruments;
-  }, [instruments, search]);
+    return instruments.filter(item => {
+      const providerMatch = providerFilter === 'ALL' || item.provider === providerFilter;
+      const searchMatch = !q || `${item.name} ${item.symbol} ${item.providerLabel} ${item.marketType}`.toLowerCase().includes(q);
+      return providerMatch && searchMatch;
+    });
+  }, [instruments, search, providerFilter]);
+
+  const chartableInstruments = useMemo(() => instruments.filter(item => item.provider === 'DERIV'), [instruments]);
 
   const selectInstrument = (item: Instrument) => {
     setSelected(item);
     setSearch('');
-    setChartSymbols(current => current.length
-      ? current.map((value, index) => index === 0 ? item.symbol : value)
-      : [item.symbol]);
+    if (item.provider === 'DERIV') {
+      setChartSymbols(current => current.length
+        ? current.map((value, index) => index === 0 ? item.symbol : value)
+        : [item.symbol]);
+    }
   };
 
   const openInstrumentPicker = (mode: 'main' | 'multi') => {
     setInstrumentSearchMode(mode);
     setSearch('');
+    setProviderFilter('ALL');
     setInstrumentSearchOpen(true);
   };
 
@@ -220,41 +232,46 @@ export default function App() {
 
   const chartItems = chartSymbols.slice(0, chartLayout);
   const openMultiChartManager = () => {
-    setMultiChartInstrument(chartSymbols[1] || instruments[1]?.symbol || instruments[0]?.symbol || '');
+    setMultiChartInstrument(chartSymbols[1] || chartableInstruments[1]?.symbol || chartableInstruments[0]?.symbol || '');
     setMultiChartOpen(true);
   };
   const confirmMultiChart = () => {
     if (!multiChartInstrument) return;
-    setChartSymbols(current => [current[0] || selected?.symbol || instruments[0]?.symbol || multiChartInstrument, multiChartInstrument]);
+    setChartSymbols(current => [current[0] || selected?.symbol || chartableInstruments[0]?.symbol || multiChartInstrument, multiChartInstrument]);
     setChartLayout(2);
     setMultiChartOpen(false);
   };
   const removeSelectedChart = () => {
     if (chartLayout !== 2) return;
     const selectedIndex = Math.min(activeChartIndex, 1);
-    const remainingSymbol = chartSymbols[selectedIndex === 0 ? 1 : 0] || selected?.symbol || instruments[0]?.symbol || '';
+    const remainingSymbol = chartSymbols[selectedIndex === 0 ? 1 : 0] || selected?.symbol || chartableInstruments[0]?.symbol || '';
     setChartSymbols([remainingSymbol]);
     setChartLayout(1);
     setActiveChartIndex(0);
-    setSelected(instruments.find(item => item.symbol === remainingSymbol) || selected);
+    setSelected(chartableInstruments.find(item => item.symbol === remainingSymbol) || selected);
     setMultiChartOpen(false);
   };
   const makeSecondMainChart = () => {
     if (!chartSymbols[1]) return;
     setChartSymbols(current => [current[1], current[0] || current[1]]);
     setActiveChartIndex(0);
-    setSelected(instruments.find(item => item.symbol === chartSymbols[1]) || selected);
+    setSelected(chartableInstruments.find(item => item.symbol === chartSymbols[1]) || selected);
     setMultiChartOpen(false);
   };
   return <main className={`native-terminal-shell${researchLabOpen ? ' sire-research-open' : ''}`}>
     <div className="native-terminal-body">
-      <aside className="native-symbol-sidebar symbol-sidebar"><div className="sidebar-search"><Search size={15} /><input value={search} onChange={event => setSearch(event.target.value)} placeholder="Search" /></div><div className="sidebar-meta"><span>{derivLoading ? "LOADING DERIV" : derivError ? "DERIV ERROR" : "INSTRUMENTS"}</span><b>{instruments.length}</b></div>{derivError && <div className="sire-deriv-error">{derivError}</div>}<div className="native-symbol-list symbol-list">{filtered.map(item => <button key={item.symbol} className={`symbol-row ${selected?.symbol === item.symbol ? 'active' : ''}`} onClick={() => selectInstrument(item)}><span className="quote-instrument-name"><span className={item.exchangeOpen === 0 ? 'quote-status-dot quote-status-dot--off' : 'quote-status-dot quote-status-dot--live'} aria-label={item.exchangeOpen === 0 ? 'Off' : 'Live'}></span><b>{item.name}</b><small>{item.symbol}</small></span></button>)}</div></aside>
+      <aside className="native-symbol-sidebar symbol-sidebar"><div className="sidebar-search"><Search size={15} /><input value={search} onChange={event => setSearch(event.target.value)} placeholder="Search" /></div><div className="sidebar-meta"><span>{derivLoading ? "LOADING MARKETS" : derivError ? "MARKET ERROR" : "ALL MARKETS"}</span><b>{instruments.length}</b></div>
+        <div className="sire-market-providers">
+          {(['ALL','DERIV','BINANCE','BITGET','BYBIT','OKX'] as const).map(provider => (
+            <button key={provider} type="button" className={providerFilter === provider ? 'active' : ''} onClick={() => setProviderFilter(provider)}>{provider === 'ALL' ? 'All' : provider[0] + provider.slice(1).toLowerCase()}</button>
+          ))}
+        </div>{derivError && <div className="sire-deriv-error">{derivError}</div>}<div className="native-symbol-list symbol-list">{filtered.map(item => <button key={item.id} className={`symbol-row ${selected?.id === item.id ? 'active' : ''}`} data-provider={item.provider} data-price={Number.isFinite(item.price) ? String(item.price) : ''} data-bid={Number.isFinite(item.bid) ? String(item.bid) : ''} data-ask={Number.isFinite(item.ask) ? String(item.ask) : ''} onClick={() => selectInstrument(item)}><span className="quote-instrument-name"><img className="quote-asset-logo" src={item.logoUrl || item.providerLogoUrl} alt="" onError={event => { const image = event.currentTarget; image.src = item.providerLogoUrl; }} /><span className={item.exchangeOpen === 0 ? 'quote-status-dot quote-status-dot--off' : 'quote-status-dot quote-status-dot--live'} aria-label={item.exchangeOpen === 0 ? 'Off' : 'Live'}></span><b>{item.name}</b><small>{item.symbol} · {item.providerLabel} · {item.marketType}</small></span></button>)}</div></aside>
       <section className="native-chart-panel">
         <div className={`sire-chart-grid sire-chart-grid--${chartLayout}${chartLayout === 2 ? ` sire-chart-grid--${multiChartPosition}` : ''}`} onContextMenu={event => event.preventDefault()}>
           {chartItems.map((chartSymbol, index) => <div className={`sire-chart-cell${activeChartIndex === index ? ' sire-chart-cell--active' : ''}`} key={index} onPointerDown={() => setActiveChartIndex(index)}>{chartSymbol && <FinancialChart
             symbol={chartSymbol}
             isActive={activeChartIndex === index}
-            instruments={instruments.map(item => ({ symbol: item.symbol, name: item.name, pipSize: item.pipSize }))}
+            instruments={chartableInstruments.map(item => ({ symbol: item.symbol, name: item.name, pipSize: item.pipSize }))}
             onInstrumentTap={() => openInstrumentPicker('main')}
             onSelectInstrument={item => {
               setChartSymbols(current => current.map((value, slot) => slot === index ? item.symbol : value));
@@ -292,7 +309,7 @@ export default function App() {
             </div>
             <div className="sire-instrument-search-list">
               {filtered.map(item => <button key={item.symbol} type="button" onClick={() => { if (instrumentSearchMode === 'multi') { setMultiChartInstrument(item.symbol); setSearch(''); setInstrumentSearchOpen(false); } else { selectInstrument(item); setInstrumentSearchOpen(false); } }}>
-                <span className="quote-instrument-name"><span className={item.exchangeOpen === 0 ? 'quote-status-dot quote-status-dot--off' : 'quote-status-dot quote-status-dot--live'} aria-label={item.exchangeOpen === 0 ? 'Off' : 'Live'}></span><b>{item.name}</b><small>{item.symbol}</small></span>
+                <span className="quote-instrument-name"><img className="quote-asset-logo" src={item.logoUrl || item.providerLogoUrl} alt="" onError={event => { const image = event.currentTarget; image.src = item.providerLogoUrl; }} /><span className={item.exchangeOpen === 0 ? 'quote-status-dot quote-status-dot--off' : 'quote-status-dot quote-status-dot--live'} aria-label={item.exchangeOpen === 0 ? 'Off' : 'Live'}></span><b>{item.name}</b><small>{item.symbol} · {item.providerLabel} · {item.marketType}</small></span>
               </button>)}
             </div>
           </div>
