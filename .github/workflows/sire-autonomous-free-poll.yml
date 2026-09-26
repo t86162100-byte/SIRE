@@ -37,11 +37,10 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_REPOSITORY: ${{ github.repository }}
-          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
           AUTONOMOUS_STATE_ISSUE_NUMBER: "10"
           SIRE_AUTONOMOUS_SYMBOL: "WLDAUD"
           SIRE_AUTONOMOUS_INTERVAL: "1m"
           SIRE_AUTONOMOUS_CANDLE_COUNT: "100"
-          SIRE_AUTONOMOUS_SAMPLES: "5"
+          SIRE_AUTONOMOUS_SAMPLES: "1"
           SIRE_AUTONOMOUS_SAMPLE_INTERVAL_SECONDS: "60"
         run: npm run autonomous:sire-cycle
