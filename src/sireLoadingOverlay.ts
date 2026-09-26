@@ -59,7 +59,7 @@ function shouldAutoLoad() {
     const chartStatus = root.querySelector('.sire-chart-status:not(.error)');
     return Boolean(chartStatus) || text.includes('no instrument') || text.includes('waiting for genuine deriv ticks') || text.includes('connecting to deriv');
   }
-  if (root.classList.contains('sire-tab-quote')) return !root.querySelector('.symbol-list .symbol-row');
+  if (root.classList.contains('sire-tab-quote')) return !root.querySelector('.native-symbol-list > button');
   return false;
 }
 
