@@ -9,6 +9,7 @@ import 'openalgo-charts/trade';
 import 'openalgo-charts/transform';
 import 'openalgo-charts/profile';
 import 'openalgo-charts/webgl';
+import { PaneLegend } from 'openalgo-charts';
 import { createWidget, type Widget } from 'openalgo-charts/widget';
 import './financialChart.css';
 
@@ -846,6 +847,10 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
           .slice(0, 50)
           .map(item => ({ symbol: item.symbol, name: item.name })),
       });
+      // Reserve the chart engine's first legend row for SIRE's DOM instrument/price header.
+      // Overlay indicators then stack underneath it instead of painting through the header.
+      const sirePriceHeaderSpacer = new PaneLegend({ id: 'sire-price-header-spacer', title: '', params: '', actions: [] });
+      widget.chart.addPrimitive(sirePriceHeaderSpacer, 0);
       const pitchBlackTheme = { ...widget.chart.theme(), background: '#000000' };
       widget.setTheme(pitchBlackTheme);
       widget.chart.applyOptions({ canvas: { background: '#000000' } });
@@ -952,6 +957,7 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
       });
       onWidgetReady?.(widget);
       return () => {
+        try { widget.chart.removePrimitive(sirePriceHeaderSpacer); } catch {}
         replayRef.current?.stop();
         clearReplayListeners();
         replayRef.current = null;
