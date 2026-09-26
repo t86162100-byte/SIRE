@@ -260,8 +260,9 @@ export default function App() {
 
     startup().then(async items => {
       if (cancelled) return;
-      const next = await augmentBinanceDerivativesInBrowser(items);
-      console.info('[SIRE MARKET STARTUP] unified catalogue after Binance browser augmentation', { total: next.length, binance: next.filter(item => item.provider === 'BINANCE').length, binanceMarketTypes: Array.from(new Set(next.filter(item => item.provider === 'BINANCE').map(item => item.marketType))) });
+      const withBinance = await augmentBinanceDerivativesInBrowser(items);
+      const next = await augmentBybitInstrumentsInBrowser(withBinance);
+      console.info('[SIRE MARKET STARTUP] unified catalogue after Binance + Bybit browser augmentation', { total: next.length, binance: next.filter(item => item.provider === 'BINANCE').length, binanceMarketTypes: Array.from(new Set(next.filter(item => item.provider === 'BINANCE').map(item => item.marketType))), bybit: next.filter(item => item.provider === 'BYBIT').length, bybitMarketTypes: Array.from(new Set(next.filter(item => item.provider === 'BYBIT').map(item => item.marketType))) });
       const initial = chooseInitialDerivInstrument(next);
       if (!initial) throw new Error('Deriv returned an empty active-symbol catalogue.');
       setDerivError('');
