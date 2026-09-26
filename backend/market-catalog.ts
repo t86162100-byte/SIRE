@@ -24,7 +24,7 @@ const CACHE_MS = 5 * 60 * 1000;
 let cached: { at: number; instruments: UnifiedInstrument[] } | null = null;
 let loading: Promise<UnifiedInstrument[]> | null = null;
 
-const providerLogo = (name: string) => 'https://cdn.simpleicons.org/' + name.toLowerCase();
+const providerLogo = (name: string) => name === 'deriv' ? 'https://deriv.com/favicon.ico' : 'https://cdn.simpleicons.org/' + name.toLowerCase();
 const assetLogo = (base?: string) => {
   const value = String(base || '').trim().toLowerCase();
   return value ? 'https://cdn.jsdelivr.net/gh/vadimmalykhin/binance-icons/crypto/' + encodeURIComponent(value) + '.svg' : '';
