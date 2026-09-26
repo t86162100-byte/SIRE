@@ -124,7 +124,12 @@ function install() {
   ensureOverlay();
   scheduleSync();
   const observer = new MutationObserver(scheduleSync);
-  observer.observe(document.documentElement, { childList: true, subtree: true, attributes: true, attributeFilter: ['class'] });
+  observer.observe(document.documentElement, { childList: true, subtree: true });
+  const root = document.getElementById('root');
+  if (root) {
+    const rootClassObserver = new MutationObserver(scheduleSync);
+    rootClassObserver.observe(root, { attributes: true, attributeFilter: ['class'] });
+  }
 }
 
 if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', install, { once: true });
