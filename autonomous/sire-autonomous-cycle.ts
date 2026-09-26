@@ -8,6 +8,8 @@ const ISSUE_NUMBER = Number(process.env.AUTONOMOUS_STATE_ISSUE_NUMBER || '10');
 const SYMBOL = String(process.env.SIRE_AUTONOMOUS_SYMBOL || 'WLDAUD').trim();
 const INTERVAL = String(process.env.SIRE_AUTONOMOUS_INTERVAL || '1m').trim();
 const COUNT = Math.max(30, Math.min(200, Number(process.env.SIRE_AUTONOMOUS_CANDLE_COUNT || '100')));
+const SAMPLE_COUNT = Math.max(1, Math.min(5, Number(process.env.SIRE_AUTONOMOUS_SAMPLES || '5')));
+const SAMPLE_INTERVAL_SECONDS = Math.max(60, Number(process.env.SIRE_AUTONOMOUS_SAMPLE_INTERVAL_SECONDS || '60'));
 
 if (!TOKEN) throw new Error('GITHUB_TOKEN is required for autonomous SIRE memory.');
 if (!ISSUE_NUMBER) throw new Error('AUTONOMOUS_STATE_ISSUE_NUMBER is required.');
@@ -126,7 +128,12 @@ async function updateMemory(state:any) {
 
 async function run() {
   const cycleId = `sire-auto-${Date.now()}`;
-  const market = await getMarketObservation();
+  const samples:any[] = [];
+  for (let i = 0; i < SAMPLE_COUNT; i += 1) {
+    samples.push(await getMarketObservation());
+    if (i + 1 < SAMPLE_COUNT) await sleep(SAMPLE_INTERVAL_SECONDS * 1000);
+  }
+  const market = samples[samples.length - 1];
 
   const prompt = [
     'Run one autonomous SIRE observation cycle.',
@@ -139,7 +146,9 @@ async function run() {
     `Latest candle: ${JSON.stringify(market.latestCandle)}`,
     `Previous candle: ${JSON.stringify(market.previousCandle)}`,
     `Candle count: ${market.candleCount}`,
-    'Return a short observation that can be read later by the same SIRE chat agent.'
+    `Autonomous observation samples collected: ${samples.length} at ${SAMPLE_INTERVAL_SECONDS}-second intervals.`,
+    `Sample timeline: ${JSON.stringify(samples.map((s:any) => ({ observedAt:s.observedAt, latestCandle:s.latestCandle })))}`,
+    'Return a short factual observation that can be read later by the same SIRE chat agent. Mention changes across the samples when they are directly visible.',
   ].join('\\n');
 
   const ai = await runGptHead({
@@ -151,6 +160,7 @@ async function run() {
       symbol:market.symbol,
       timeframe:market.timeframe,
       recentBars:market.candles,
+      autonomousSamples:samples.map((s:any) => ({ observedAt:s.observedAt, latestCandle:s.latestCandle })),
       liveMarketData:{
         connectionStatus:'connected',
         subscriptionStatus:'historical_snapshot',
@@ -167,6 +177,7 @@ async function run() {
     cycleId,
     observedAt:market.observedAt,
     market,
+    autonomousSamples:samples.map((s:any) => ({ observedAt:s.observedAt, latestCandle:s.latestCandle })),
     aiObservation:ai.text,
     model:ai.model,
     provider:ai.provider
