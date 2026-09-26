@@ -7,6 +7,8 @@ const TOKEN = process.env.GITHUB_TOKEN;
 const ISSUE_NUMBER = Number(process.env.AUTONOMOUS_STATE_ISSUE_NUMBER || '10');
 const SYMBOLS = [...new Set(String(process.env.SIRE_AUTONOMOUS_SYMBOLS || 'WLDAUD')
   .split(',').map(s => s.trim()).filter(Boolean))].slice(0, 10);
+const INTERVAL_SECONDS = Math.max(60, Number(process.env.SIRE_AUTONOMOUS_INTERVAL_SECONDS || '60'));
+const RUNS_PER_JOB = Math.max(1, Number(process.env.SIRE_AUTONOMOUS_RUNS_PER_JOB || '5'));
 
 if (!TOKEN) throw new Error('GITHUB_TOKEN is required.');
 if (!ISSUE_NUMBER) throw new Error('AUTONOMOUS_STATE_ISSUE_NUMBER is required.');
@@ -87,7 +89,7 @@ async function getSnapshot() {
     return {
       status: 'healthy',
       mode: 'free-periodic-observer',
-      limitation: 'GitHub Actions scheduled runs are periodic (minimum 5 minutes), not a continuous tick stream.',
+      limitation: 'Free mode observes on a 60-second interval inside each scheduled job; GitHub Actions itself can only start scheduled jobs at a minimum 5-minute interval and may delay runs.',
       observedAt: new Date().toISOString(),
       symbols,
     };
@@ -127,16 +129,27 @@ async function updateIssue(state) {
   }
 }
 
+const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
+
 try {
-  const state = await getSnapshot();
-  await updateIssue(state);
-  console.log(JSON.stringify({
-    service: 'sire-free-autonomous-market-observer',
-    event: 'state.updated',
-    issue: ISSUE_NUMBER,
-    observedAt: state.observedAt,
-    symbols: SYMBOLS,
-  }));
+  for (let run = 0; run < RUNS_PER_JOB; run += 1) {
+    const state = await getSnapshot();
+    state.observationIntervalSeconds = INTERVAL_SECONDS;
+    state.runInJob = run + 1;
+    state.runsPerJob = RUNS_PER_JOB;
+    await updateIssue(state);
+    console.log(JSON.stringify({
+      service: 'sire-free-autonomous-market-observer',
+      event: 'state.updated',
+      issue: ISSUE_NUMBER,
+      observedAt: state.observedAt,
+      intervalSeconds: INTERVAL_SECONDS,
+      runInJob: run + 1,
+      runsPerJob: RUNS_PER_JOB,
+      symbols: SYMBOLS,
+    }));
+    if (run + 1 < RUNS_PER_JOB) await sleep(INTERVAL_SECONDS * 1000);
+  }
 } catch (error) {
   const failure = {
     status: 'degraded',
