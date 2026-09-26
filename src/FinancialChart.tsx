@@ -842,7 +842,7 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
         timezone: 'Africa/Lagos',
         axisChrome: { sessionClock: true, barCountdown: true },
         // OpenAlgo's public chart option controls the actual canvas indicator legend stack.
-        legendOffset: { top: 540, left: 8 },
+        legendOffset: { top: 48, left: 8 },
         symbolSearch: async (query: string) => instrumentsRef.current
           .filter(item => `${item.name} ${item.symbol}`.toLowerCase().includes(query.trim().toLowerCase()))
           .slice(0, 50)
