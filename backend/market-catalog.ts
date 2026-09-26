@@ -89,18 +89,32 @@ function cryptoItem(provider: MarketProvider, marketType: string, category: stri
 }
 
 async function binance(): Promise<UnifiedInstrument[]> {
-  const [spot, futures] = await Promise.all([
-    getJsonAny(['https://api.binance.com/api/v3/exchangeInfo','https://api-gcp.binance.com/api/v3/exchangeInfo','https://api1.binance.com/api/v3/exchangeInfo','https://api2.binance.com/api/v3/exchangeInfo','https://api3.binance.com/api/v3/exchangeInfo','https://api4.binance.com/api/v3/exchangeInfo']),
-    getJsonAny(['https://fapi.binance.com/fapi/v1/exchangeInfo','https://fapi1.binance.com/fapi/v1/exchangeInfo','https://fapi2.binance.com/fapi/v1/exchangeInfo','https://fapi3.binance.com/fapi/v1/exchangeInfo','https://fapi4.binance.com/fapi/v1/exchangeInfo']),
-  ]);
-  // Quote cards no longer display prices, so do not download thousands of 24h ticker rows.
-  // This keeps catalogue startup light and leaves live quotes to the market-data layer.
-  return [
-    ...(spot?.symbols || []).filter((x: any) => x.status === 'TRADING').map((x: any) => cryptoItem('BINANCE', 'Spot', 'Crypto', x)).filter(Boolean),
-    ...(futures?.symbols || []).filter((x: any) => x.status === 'TRADING').map((x: any) => cryptoItem('BINANCE', 'Futures', 'Crypto', x)).filter(Boolean),
-  ] as UnifiedInstrument[];
+  const families: Array<[string, string[]]> = [
+    ['Spot', ['https://data-api.binance.vision/api/v3/exchangeInfo','https://api.binance.com/api/v3/exchangeInfo','https://api-gcp.binance.com/api/v3/exchangeInfo','https://api1.binance.com/api/v3/exchangeInfo','https://api2.binance.com/api/v3/exchangeInfo']],
+    ['USD-M Futures', ['https://fapi.binance.com/fapi/v1/exchangeInfo','https://fapi1.binance.com/fapi/v1/exchangeInfo','https://fapi2.binance.com/fapi/v1/exchangeInfo']],
+    ['COIN-M Futures', ['https://dapi.binance.com/dapi/v1/exchangeInfo']],
+    ['Options', ['https://eapi.binance.com/eapi/v1/exchangeInfo']]
+  ];
+  const out: UnifiedInstrument[] = [];
+  for (const [family, urls] of families) {
+    try {
+      const response = await getJsonAny(urls);
+      const rows = family === 'Options' ? (Array.isArray(response?.optionSymbols) ? response.optionSymbols : []) : (Array.isArray(response?.symbols) ? response.symbols : []);
+      for (const raw of rows) {
+        if (String(raw?.status || raw?.contractStatus || '').toUpperCase() !== 'TRADING') continue;
+        const normalized = family === 'Options'
+          ? { ...raw, baseAsset: String(raw?.underlying || '').replace(/USDT$|USDC$|USD$/i, ''), quoteAsset: raw?.quoteAsset || 'USDT' }
+          : raw;
+        const item = cryptoItem('BINANCE', family, 'Crypto', normalized);
+        if (item) out.push(item);
+      }
+      console.log('[SIRE BINANCE] ' + family + ': ' + out.filter(x => x.marketType === family).length);
+    } catch (error) {
+      console.warn('[SIRE BINANCE] ' + family + ' failed:', error);
+    }
+  }
+  return out;
 }
-
 async function bitget(): Promise<UnifiedInstrument[]> {
   const categories = ['SPOT', 'USDT-FUTURES', 'COIN-FUTURES', 'USDC-FUTURES'];
   const responses = await Promise.all(categories.map(category => getJsonAny([
