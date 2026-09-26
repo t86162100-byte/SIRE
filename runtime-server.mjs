@@ -14,6 +14,7 @@ import { signup, login, logout, currentUser, googleStart, googleCallback } from 
 import { runSireDiagnostics } from './backend/sire-diagnostics.ts';
 import { runAutonomousCycle } from './autonomous/sire-autonomous-cycle.ts';
 import { recordIssue, getRecentIssues } from './backend/sire-issue-tracker.ts';
+import { getUnifiedMarketCatalogue } from './backend/market-catalog.ts';
 
 const PORT = Number(process.env.PORT || 10000);
 const HOST = '0.0.0.0';
@@ -692,6 +693,25 @@ const server = http.createServer(async (req,res) => {
         symbol, granularity, count, end,
         sireHistoryStore: { enabled: stored.enabled, chunks: stored.chunks },
       }));
+    }
+    if (req.method === 'GET' && pathname === '/api/sire/markets/catalog') {
+      try {
+        const result = await getUnifiedMarketCatalogue(async () => {
+          const health = await checkDerivPublicMarketData();
+          if (!health.ok || !Array.isArray(health.activeSymbols)) throw new Error(health.error || 'Deriv catalogue unavailable.');
+          return health.activeSymbols;
+        });
+        return res.writeHead(200,{ 'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8' }).end(JSON.stringify({
+          ok:true,
+          count:result.length,
+          providers:[...new Set(result.map(item => item.provider))],
+          instruments:result,
+        }));
+      } catch (cause) {
+        const message=cause instanceof Error?cause.message:String(cause);
+        console.error('[SIRE MARKET CATALOG]', message);
+        return res.writeHead(502,{ 'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8' }).end(JSON.stringify({ ok:false,error:message }));
+      }
     }
     if (req.method === 'GET' && pathname === '/api/sire/deriv/history/status') {
       const status = await historyStoreStatus();
