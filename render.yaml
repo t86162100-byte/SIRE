@@ -1,0 +1,13 @@
+services:
+  - type: worker
+    name: sire-autonomous-market-worker
+    runtime: node
+    region: oregon
+    plan: 0.5c-512mb
+    branch: render-migration
+    buildCommand: npm ci
+    startCommand: npm run autonomous:market-worker
+    autoDeployTrigger: commit
+    envVars:
+      - key: SIRE_AUTONOMOUS_SYMBOLS
+        value: WLDAUD
