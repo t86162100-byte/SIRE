@@ -181,7 +181,7 @@ export default function App() {
       throw new Error(lastError);
     };
 
-    startup().then(items => {
+    startup().then(async items => {
       if (cancelled) return;
       const next = await augmentBinanceDerivativesInBrowser(items);
       console.info('[SIRE MARKET STARTUP] unified catalogue after Binance browser augmentation', { total: next.length, binance: next.filter(item => item.provider === 'BINANCE').length, binanceMarketTypes: Array.from(new Set(next.filter(item => item.provider === 'BINANCE').map(item => item.marketType))) });
