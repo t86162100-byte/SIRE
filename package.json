@@ -9,7 +9,8 @@
     "preview": "vite preview",
     "start": "tsx runtime-server.mjs",
     "postinstall": "puppeteer browsers install chrome",
-    "autonomous:market-worker": "node autonomous/market-worker.mjs"
+    "autonomous:market-worker": "node autonomous/market-worker.mjs",
+    "autonomous:free-poll": "node autonomous/free-market-poll.mjs"
   },
   "dependencies": {
     "@appdeploy/client": "file:./compat/appdeploy-client",
@@ -37,4 +38,4 @@
     "typescript": "^5.7.0",
     "vite": "^6.0.0"
   }
-}\n
+}
