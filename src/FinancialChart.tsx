@@ -841,23 +841,13 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
         mobile: 'never',
         timezone: 'Africa/Lagos',
         axisChrome: { sessionClock: true, barCountdown: true },
+        // OpenAlgo's public chart option controls the actual canvas indicator legend stack.
+        legendOffset: { top: 540, left: 8 },
         symbolSearch: async (query: string) => instrumentsRef.current
           .filter(item => `${item.name} ${item.symbol}`.toLowerCase().includes(query.trim().toLowerCase()))
           .slice(0, 50)
           .map(item => ({ symbol: item.symbol, name: item.name })),
       });
-      // SIRE owns the instrument/price readout in the chart's top-left corner.
-      // OpenAlgo's on-chart indicator legends use the same corner, so move their
-      // legend stack below that readout. This is the engine's actual legend offset
-      // (a spacer primitive cannot move indicator legends because they are stacked
-      // by ChartLegends itself).
-      const positionOverlayIndicatorLegends = () => {
-        const legendStack = (widget.chart as any)?._legendStack;
-        if (!legendStack?._legendOffset) return;
-        legendStack._legendOffset.top = 540;
-        legendStack._restackLegends?.();
-      };
-      positionOverlayIndicatorLegends();
       const pitchBlackTheme = { ...widget.chart.theme(), background: '#000000' };
       widget.setTheme(pitchBlackTheme);
       widget.chart.applyOptions({ canvas: { background: '#000000' } });
