@@ -47,7 +47,6 @@ function cryptoItem(provider: MarketProvider, marketType: string, category: stri
   if (!symbol) return null;
   const base = String(raw?.baseCoin || raw?.baseAsset || raw?.baseCcy || '').trim() || undefined;
   const quote = String(raw?.quoteCoin || raw?.quoteAsset || raw?.quoteCcy || '').trim() || undefined;
-  const clean = symbol.replace(/[-_]/g, '');
   const display = symbol;
   const name = String(raw?.fullName || raw?.displayName || (base ? base + (quote ? ' / ' + quote : '') : symbol));
   const p = Number(price?.last ?? price?.lastPrice ?? price?.close ?? price?.price);
@@ -79,15 +78,11 @@ async function binance(): Promise<UnifiedInstrument[]> {
     getJson('https://api.binance.com/api/v3/exchangeInfo'),
     getJson('https://fapi.binance.com/fapi/v1/exchangeInfo'),
   ]);
-  const [spotTickers, futureTickers] = await Promise.all([
-    getJson('https://api.binance.com/api/v3/ticker/24hr'),
-    getJson('https://fapi.binance.com/fapi/v1/ticker/24hr'),
-  ]);
-  const sm = new Map((Array.isArray(spotTickers) ? spotTickers : []).map((x: any) => [String(x.symbol), x]));
-  const fm = new Map((Array.isArray(futureTickers) ? futureTickers : []).map((x: any) => [String(x.symbol), x]));
+  // Quote cards no longer display prices, so do not download thousands of 24h ticker rows.
+  // This keeps catalogue startup light and leaves live quotes to the market-data layer.
   return [
-    ...(spot?.symbols || []).filter((x: any) => x.status === 'TRADING').map((x: any) => cryptoItem('BINANCE', 'Spot', 'Crypto', x, sm.get(x.symbol))).filter(Boolean),
-    ...(futures?.symbols || []).filter((x: any) => x.status === 'TRADING').map((x: any) => cryptoItem('BINANCE', 'Futures', 'Crypto', x, fm.get(x.symbol))).filter(Boolean),
+    ...(spot?.symbols || []).filter((x: any) => x.status === 'TRADING').map((x: any) => cryptoItem('BINANCE', 'Spot', 'Crypto', x)).filter(Boolean),
+    ...(futures?.symbols || []).filter((x: any) => x.status === 'TRADING').map((x: any) => cryptoItem('BINANCE', 'Futures', 'Crypto', x)).filter(Boolean),
   ] as UnifiedInstrument[];
 }
 
@@ -98,15 +93,9 @@ async function bitget(): Promise<UnifiedInstrument[]> {
   for (let i = 0; i < categories.length; i++) {
     const category = categories[i];
     const items = Array.isArray(responses[i]?.data) ? responses[i].data : [];
-    let tickers: any[] = [];
-    try {
-      const ticker = await getJson('https://api.bitget.com/api/v3/market/tickers?category=' + category);
-      tickers = Array.isArray(ticker?.data) ? ticker.data : [];
-    } catch {}
-    const tm = new Map(tickers.map(x => [String(x.symbol), x]));
     for (const raw of items) {
       if (String(raw.status || '').toLowerCase() !== 'online') continue;
-      const item = cryptoItem('BITGET', category === 'SPOT' ? 'Spot' : category.replace('-FUTURES', ' Futures'), 'Crypto', raw, tm.get(raw.symbol));
+      const item = cryptoItem('BITGET', category === 'SPOT' ? 'Spot' : category.replace('-FUTURES', ' Futures'), 'Crypto', raw);
       if (item) out.push(item);
     }
   }
@@ -118,19 +107,13 @@ async function bybit(): Promise<UnifiedInstrument[]> {
   const out: UnifiedInstrument[] = [];
   for (const category of categories) {
     let cursor = '';
-    let tickers: any[] = [];
-    try {
-      const ticker = await getJson('https://api.bybit.com/v5/market/tickers?category=' + category);
-      tickers = Array.isArray(ticker?.result?.list) ? ticker.result.list : [];
-    } catch {}
-    const tm = new Map(tickers.map(x => [String(x.symbol), x]));
     for (let page = 0; page < 12; page++) {
       const url = 'https://api.bybit.com/v5/market/instruments-info?category=' + category + '&limit=1000' + (cursor ? '&cursor=' + encodeURIComponent(cursor) : '');
       const response = await getJson(url);
       const items = Array.isArray(response?.result?.list) ? response.result.list : [];
       for (const raw of items) {
         if (String(raw.status || '').toLowerCase() !== 'trading') continue;
-        const item = cryptoItem('BYBIT', category === 'spot' ? 'Spot' : category === 'linear' ? 'Perpetuals' : category === 'inverse' ? 'Inverse Futures' : 'Options', 'Crypto', raw, tm.get(raw.symbol));
+        const item = cryptoItem('BYBIT', category === 'spot' ? 'Spot' : category === 'linear' ? 'Perpetuals' : category === 'inverse' ? 'Inverse Futures' : 'Options', 'Crypto', raw);
         if (item) out.push(item);
       }
       cursor = String(response?.result?.nextPageCursor || '');
@@ -146,16 +129,10 @@ async function okx(): Promise<UnifiedInstrument[]> {
   for (const instType of types) {
     const response = await getJson('https://www.okx.com/api/v5/public/instruments?instType=' + instType);
     const items = Array.isArray(response?.data) ? response.data : [];
-    let tickerData: any[] = [];
-    try {
-      const tickers = await getJson('https://www.okx.com/api/v5/market/tickers?instType=' + instType);
-      tickerData = Array.isArray(tickers?.data) ? tickers.data : [];
-    } catch {}
-    const tm = new Map(tickerData.map(x => [String(x.instId), x]));
     for (const raw of items) {
       if (String(raw.state || '').toLowerCase() !== 'live') continue;
       const marketType = instType === 'SPOT' ? 'Spot' : instType === 'SWAP' ? 'Perpetuals' : instType === 'FUTURES' ? 'Futures' : 'Options';
-      const item = cryptoItem('OKX', marketType, raw.instCategory === '3' ? 'Stocks' : raw.instCategory === '4' ? 'Metals' : raw.instCategory === '5' ? 'Commodities' : raw.instCategory === '6' ? 'Forex' : 'Crypto', raw, tm.get(raw.instId));
+      const item = cryptoItem('OKX', marketType, raw.instCategory === '3' ? 'Stocks' : raw.instCategory === '4' ? 'Metals' : raw.instCategory === '5' ? 'Commodities' : raw.instCategory === '6' ? 'Forex' : 'Crypto', raw);
       if (item) out.push(item);
     }
   }
