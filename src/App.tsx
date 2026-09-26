@@ -3,7 +3,7 @@ import { createLinkGroup, type LinkGroup } from 'openalgo-charts';
 import { Search } from 'lucide-react';
 import ResearchLab from './ResearchLab';
 import FinancialChart from './FinancialChart';
-import { normalizeDerivInstrument, sortDerivInstruments, type DerivInstrument } from './derivMarketData';
+import type { DerivInstrument } from './derivMarketData';
 import { SireErrorScreen } from './SireErrorBoundary';
 import './nativeTerminal.css';
 
@@ -102,7 +102,7 @@ export default function App() {
       setDerivError('');
       setDerivLoading(false);
       setInstruments(next);
-      setSelected(current => current && next.some(item => item.symbol === current.symbol) ? current : initial);
+      setSelected(current => current && next.some(item => item.id === current.id) ? current : initial);
       setChartSymbols(current => current.length ? current : [initial.symbol]);
     }).catch(error => {
       if (cancelled || error?.message === 'SIRE startup cancelled.') return;
@@ -125,7 +125,7 @@ export default function App() {
     setChartSymbols(current => Array.from(
       { length: chartLayout },
       (_, index) => current[index] || (index === 0
-        ? (selected?.symbol || chooseInitialDerivInstrument(instruments)?.symbol || instruments[0].symbol)
+        ? (selected?.provider === 'DERIV' ? selected.symbol : (chooseInitialDerivInstrument(instruments)?.symbol || chartableInstruments[0]?.symbol || instruments[0].symbol))
         : chartableInstruments[index % Math.max(1, chartableInstruments.length)]?.symbol || ''),
     ));
   }, [chartLayout, selected?.symbol]);
