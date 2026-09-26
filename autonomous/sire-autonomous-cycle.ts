@@ -126,7 +126,7 @@ async function updateMemory(state:any) {
   if (!response.ok) throw new Error('GitHub autonomous memory update failed: ' + response.status + ' ' + (await response.text()).slice(0,500));
 }
 
-async function run() {
+export async function runAutonomousCycle() {
   const cycleId = `sire-auto-${Date.now()}`;
   const samples:any[] = [];
   for (let i = 0; i < SAMPLE_COUNT; i += 1) {
@@ -196,7 +196,8 @@ async function run() {
   }));
 }
 
-run().catch(async error => {
+if (process.argv[1] && process.argv[1].endsWith('sire-autonomous-cycle.ts')) {
+  runAutonomousCycle().catch(async error => {
   const failure = {
     status:'degraded',
     cycleId:`sire-auto-${Date.now()}`,
@@ -208,4 +209,5 @@ run().catch(async error => {
   try { await updateMemory(failure); } catch {}
   console.error(JSON.stringify({service:'sire-autonomous-agent',event:'autonomous.cycle.failed',...failure}));
   process.exit(1);
-});
+  });
+}
