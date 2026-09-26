@@ -40,7 +40,11 @@ function installStyles() {
     .sire-tab-quote .symbol-list .symbol-row>em{display:none!important}
     .sire-tab-quote .symbol-list{flex:1 1 0!important;min-height:0!important;overflow-y:auto!important;overflow-x:hidden!important;-webkit-overflow-scrolling:touch!important;touch-action:pan-y!important}
     .sire-tab-quote .symbol-list .symbol-row{touch-action:pan-y!important}
+    .sire-tab-quote .sire-market-providers{max-width:760px;width:100%;margin:0 auto 8px;display:flex;gap:5px;overflow-x:auto;scrollbar-width:none;touch-action:pan-x}.sire-tab-quote .sire-market-providers::-webkit-scrollbar{display:none}
+    .sire-tab-quote .sire-market-providers button{border:1px solid rgba(255,255,255,.08);background:rgba(255,255,255,.035);color:rgba(235,240,250,.62);border-radius:999px;padding:5px 9px;font-size:10px;font-weight:750;white-space:nowrap}
+    .sire-tab-quote .sire-market-providers button.active{background:rgba(255,255,255,.10);color:#fff;border-color:rgba(255,255,255,.18)}
     .sire-tab-quote .quote-instrument-name{display:flex!important;flex-direction:row!important;align-items:center!important;gap:6px!important}
+    .sire-tab-quote .quote-asset-logo{width:24px!important;height:24px!important;flex:0 0 24px!important;object-fit:contain!important;border-radius:50%!important;background:rgba(255,255,255,.05)!important;padding:3px!important;box-sizing:border-box!important}
     .sire-tab-quote .quote-instrument-name b{min-width:0}
     .sire-tab-quote .quote-status-dot{display:inline-block!important;flex:0 0 auto;width:7px!important;height:7px!important;border-radius:50%!important}
     .sire-tab-quote .quote-status-dot--live{background:#28e36f!important;box-shadow:0 0 7px rgba(40,227,111,.65)!important}
@@ -50,7 +54,7 @@ function installStyles() {
 }
 
 function formatPrice(value:number|undefined){return Number.isFinite(value)?Number(value).toLocaleString(undefined,{maximumFractionDigits:8}):'—'}
-function symbolsFromRows(){return Array.from(document.querySelectorAll('.sire-tab-quote .symbol-list .symbol-row')).map(row=>(row.querySelector('small')?.textContent||'').trim()).filter(Boolean)}
+function symbolsFromRows(){return Array.from(document.querySelectorAll<HTMLButtonElement>('.sire-tab-quote .symbol-list .symbol-row[data-provider="DERIV"]')).map(row=>(row.querySelector('small')?.textContent||'').trim().split(' · ')[0]).filter(Boolean)}
 function ensureCardParts(row:HTMLButtonElement){
   let price=row.querySelector<HTMLElement>('.sire-quote-price');
   let details=row.querySelector<HTMLElement>('.sire-quote-details');
@@ -60,8 +64,23 @@ function ensureCardParts(row:HTMLButtonElement){
 }
 function decorateRows(){
   document.querySelectorAll<HTMLButtonElement>('.sire-tab-quote .symbol-list .symbol-row').forEach(row=>{
-    const {price,details}=ensureCardParts(row); const symbol=(row.querySelector('small')?.textContent||'').trim(); const state=symbol?quotes.get(symbol):undefined;
-    if(!state){if(price.textContent!=='—')price.textContent='—';row.removeAttribute('data-price-state');return}
+    const {price,details}=ensureCardParts(row); const symbol=(row.querySelector('small')?.textContent||'').trim().split(' · ')[0]; const state=symbol?quotes.get(symbol):undefined;
+    if(!state){
+      const staticPrice=Number(row.dataset.price);
+      const staticBid=Number(row.dataset.bid);
+      const staticAsk=Number(row.dataset.ask);
+      if(Number.isFinite(staticPrice)){
+        const nextPrice=formatPrice(staticPrice);
+        if(price.textContent!==nextPrice)price.textContent=nextPrice;
+        row.dataset.priceState='flat';
+        const nextDetails=`<span>Bid <b>${formatPrice(staticBid||staticPrice)}</b></span><span>Ask <b>${formatPrice(staticAsk||staticPrice)}</b></span>`;
+        if(details.innerHTML!==nextDetails)details.innerHTML=nextDetails;
+      } else {
+        if(price.textContent!=='—')price.textContent='—';
+        row.removeAttribute('data-price-state');
+      }
+      return
+    }
     const nextPrice=formatPrice(state.quote);if(price.textContent!==nextPrice)price.textContent=nextPrice;
     const delta=state.previous===undefined?0:state.quote-state.previous;const nextState=delta>0?'up':delta<0?'down':'flat';if(row.dataset.priceState!==nextState)row.dataset.priceState=nextState;
     const nextDetails=`<span>Bid <b>${formatPrice(state.bid??state.quote)}</b></span><span>Ask <b>${formatPrice(state.ask??state.quote)}</b></span>`;
