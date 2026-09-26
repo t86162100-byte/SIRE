@@ -248,7 +248,7 @@ export default function App() {
   };
   return <main className={`native-terminal-shell${researchLabOpen ? ' sire-research-open' : ''}`}>
     <div className="native-terminal-body">
-      <aside className="native-symbol-sidebar symbol-sidebar"><div className="sidebar-search"><Search size={15} /><input value={search} onChange={event => setSearch(event.target.value)} placeholder="Search" /></div><div className="sidebar-meta"><span>{derivLoading ? "LOADING DERIV" : derivError ? "DERIV ERROR" : "INSTRUMENTS"}</span><b>{instruments.length}</b></div>{derivError && <div className="sire-deriv-error">{derivError}</div>}<div className="native-symbol-list symbol-list">{filtered.map(item => <button key={item.symbol} className={`symbol-row ${selected?.symbol === item.symbol ? 'active' : ''}`} onClick={() => selectInstrument(item)}><span><b>{item.name}</b><small>{item.symbol}</small></span><i>{item.exchangeOpen === 0 ? 'OFF' : 'LIVE'}</i></button>)}</div></aside>
+      <aside className="native-symbol-sidebar symbol-sidebar"><div className="sidebar-search"><Search size={15} /><input value={search} onChange={event => setSearch(event.target.value)} placeholder="Search" /></div><div className="sidebar-meta"><span>{derivLoading ? "LOADING DERIV" : derivError ? "DERIV ERROR" : "INSTRUMENTS"}</span><b>{instruments.length}</b></div>{derivError && <div className="sire-deriv-error">{derivError}</div>}<div className="native-symbol-list symbol-list">{filtered.map(item => <button key={item.symbol} className={`symbol-row ${selected?.symbol === item.symbol ? 'active' : ''}`} onClick={() => selectInstrument(item)}><span className="quote-instrument-name"><span className={item.exchangeOpen === 0 ? 'quote-status-dot quote-status-dot--off' : 'quote-status-dot quote-status-dot--live'} aria-label={item.exchangeOpen === 0 ? 'Off' : 'Live'}></span><b>{item.name}</b><small>{item.symbol}</small></span></button>)}</div></aside>
       <section className="native-chart-panel">
         <div className={`sire-chart-grid sire-chart-grid--${chartLayout}${chartLayout === 2 ? ` sire-chart-grid--${multiChartPosition}` : ''}`} onContextMenu={event => event.preventDefault()}>
           {chartItems.map((chartSymbol, index) => <div className={`sire-chart-cell${activeChartIndex === index ? ' sire-chart-cell--active' : ''}`} key={index} onPointerDown={() => setActiveChartIndex(index)}>{chartSymbol && <FinancialChart
@@ -292,7 +292,7 @@ export default function App() {
             </div>
             <div className="sire-instrument-search-list">
               {filtered.map(item => <button key={item.symbol} type="button" onClick={() => { if (instrumentSearchMode === 'multi') { setMultiChartInstrument(item.symbol); setSearch(''); setInstrumentSearchOpen(false); } else { selectInstrument(item); setInstrumentSearchOpen(false); } }}>
-                <span><b>{item.name}</b><small>{item.symbol}</small></span><i>{item.exchangeOpen === 0 ? 'OFF' : 'LIVE'}</i>
+                <span className="quote-instrument-name"><span className={item.exchangeOpen === 0 ? 'quote-status-dot quote-status-dot--off' : 'quote-status-dot quote-status-dot--live'} aria-label={item.exchangeOpen === 0 ? 'Off' : 'Live'}></span><b>{item.name}</b><small>{item.symbol}</small></span>
               </button>)}
             </div>
           </div>
