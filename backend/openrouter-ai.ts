@@ -154,6 +154,36 @@ function systemPrompt() {
   ].join('\\n');
 }
 
+
+export async function runFreeAutonomousGpt(input: { query: string; chartSnapshot?: unknown }) {
+  const baseUrl = String(process.env.GPT4FREE_TS_BASE_URL || '').trim().replace(/\\/$/, '');
+  if (!baseUrl) throw new Error('GPT4Free autonomous provider is not configured: GPT4FREE_TS_BASE_URL is missing');
+  const model = String(process.env.GPT4FREE_TS_MODEL || 'gpt-3.5-turbo').trim();
+  const site = String(process.env.GPT4FREE_TS_SITE || 'you').trim();
+  const messages = [
+    { role: 'system', content: systemPrompt() },
+    { role: 'system', content: 'AUTONOMOUS SIRE MODE: You are the same SIRE AI used by chat. Produce only a concise factual market observation from the supplied evidence. Do not invent data, create a strategy, or make a trade recommendation.' },
+    ...(input.chartSnapshot ? [{ role: 'system', content: 'AUTONOMOUS MARKET EVIDENCE:\\n' + JSON.stringify(input.chartSnapshot) }] : []),
+    { role: 'user', content: input.query }
+  ];
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 90000);
+  try {
+    const response = await fetch(baseUrl + '/v1/chat/completions?site=' + encodeURIComponent(site), {
+      method: 'POST', signal: controller.signal,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model, messages, stream: false })
+    });
+    const raw = await response.text();
+    let data:any = {};
+    try { data = raw ? JSON.parse(raw) : {}; } catch { data = { error: raw }; }
+    if (!response.ok) throw new Error('GPT4Free HTTP ' + response.status + ': ' + String(data?.error?.message || data?.error || raw).slice(0,500));
+    const text = textFromResponse(data);
+    if (!text) throw new Error('GPT4Free returned no text');
+    return { text: text.slice(0, MAX_OUTPUT_CHARS), model, provider: 'GPT4Free' };
+  } finally { clearTimeout(timer); }
+}
+
 export async function runGptHead(input: {
   query: string;
   history?: Array<{ role: string; text?: string; content?: string }>;
