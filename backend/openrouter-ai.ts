@@ -12,12 +12,10 @@ const MEMORY_ISSUE_NUMBER = Number(process.env.AUTONOMOUS_STATE_ISSUE_NUMBER || 
 const MEMORY_REPO = process.env.GITHUB_REPOSITORY || 't86162100-byte/SIRE';
 
 async function readAutonomousMemory(): Promise<string> {
-  const token = String(process.env.GITHUB_TOKEN || '').trim();
-  if (!token || !MEMORY_ISSUE_NUMBER) return '';
+  if (!MEMORY_ISSUE_NUMBER) return '';
   try {
     const response = await fetch(`${GITHUB_API}/repos/${MEMORY_REPO}/issues/${MEMORY_ISSUE_NUMBER}`, {
       headers: {
-        Authorization: `Bearer ${token}`,
         Accept: 'application/vnd.github+json',
         'X-GitHub-Api-Version': '2022-11-28',
         'User-Agent': 'SIRE-chat-memory'
