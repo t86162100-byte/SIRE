@@ -16,7 +16,7 @@ concurrency:
 jobs:
   observe:
     runs-on: ubuntu-latest
-    timeout-minutes: 2
+    timeout-minutes: 6
     steps:
       - name: Checkout autonomous engine
         uses: actions/checkout@v4
@@ -39,4 +39,6 @@ jobs:
           GITHUB_REPOSITORY: ${{ github.repository }}
           AUTONOMOUS_STATE_ISSUE_NUMBER: "10"
           SIRE_AUTONOMOUS_SYMBOLS: WLDAUD
+          SIRE_AUTONOMOUS_INTERVAL_SECONDS: "60"
+          SIRE_AUTONOMOUS_RUNS_PER_JOB: "5"
         run: npm run autonomous:free-poll
