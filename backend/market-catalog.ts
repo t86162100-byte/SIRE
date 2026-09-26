@@ -24,11 +24,18 @@ const CACHE_MS = 5 * 60 * 1000;
 let cached: { at: number; instruments: UnifiedInstrument[] } | null = null;
 let loading: Promise<UnifiedInstrument[]> | null = null;
 
-const providerLogo = (name: string) => name === 'deriv' ? 'https://deriv.com/favicon.ico' : 'https://cdn.simpleicons.org/' + name.toLowerCase();
+const providerLogo = (name: string) => {
+  const value = String(name || '').trim().toLowerCase();
+  if (value === 'deriv') return 'https://deriv.com/favicon.ico';
+  return 'https://cdn.simpleicons.org/' + value;
+};
 const assetLogo = (base?: string) => {
   const value = String(base || '').trim().toLowerCase();
-  return value ? 'https://cdn.jsdelivr.net/gh/vadimmalykhin/binance-icons/crypto/' + encodeURIComponent(value) + '.svg' : '';
+  // Primary source: stable PNG crypto icon set. Keep the older SVG set as the
+  // browser-side fallback when a symbol is missing from the primary set.
+  return value ? 'https://cdn.jsdelivr.net/gh/spothq/cryptocurrency-icons@master/128/color/' + encodeURIComponent(value) + '.png' : '';
 };
+
 
 async function getJson(url: string, timeoutMs = 12000) {
   const controller = new AbortController();
