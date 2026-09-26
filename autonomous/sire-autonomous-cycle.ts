@@ -1,4 +1,4 @@
-import { runGptHead } from '../backend/openrouter-ai.ts';
+import { runFreeAutonomousGpt } from '../backend/openrouter-ai.ts';
 
 const DERIV_PUBLIC_WS = 'wss://api.derivws.com/trading/v1/options/ws/public';
 const GITHUB_API = 'https://api.github.com';
@@ -8,7 +8,7 @@ const ISSUE_NUMBER = Number(process.env.AUTONOMOUS_STATE_ISSUE_NUMBER || '10');
 const SYMBOL = String(process.env.SIRE_AUTONOMOUS_SYMBOL || 'WLDAUD').trim();
 const INTERVAL = String(process.env.SIRE_AUTONOMOUS_INTERVAL || '1m').trim();
 const COUNT = Math.max(30, Math.min(200, Number(process.env.SIRE_AUTONOMOUS_CANDLE_COUNT || '100')));
-const SAMPLE_COUNT = Math.max(1, Math.min(5, Number(process.env.SIRE_AUTONOMOUS_SAMPLES || '5')));
+const SAMPLE_COUNT = Math.max(1, Math.min(1, Number(process.env.SIRE_AUTONOMOUS_SAMPLES || '1')));
 const SAMPLE_INTERVAL_SECONDS = Math.max(60, Number(process.env.SIRE_AUTONOMOUS_SAMPLE_INTERVAL_SECONDS || '60'));
 
 if (!TOKEN) throw new Error('GITHUB_TOKEN is required for autonomous SIRE memory.');
@@ -151,7 +151,7 @@ export async function runAutonomousCycle() {
     'Return a short factual observation that can be read later by the same SIRE chat agent. Mention changes across the samples when they are directly visible.',
   ].join('\\n');
 
-  const ai = await runGptHead({
+  const ai = await runFreeAutonomousGpt({
     query:prompt,
     history:[],
     chartSnapshot:{
