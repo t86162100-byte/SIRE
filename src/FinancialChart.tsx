@@ -974,6 +974,46 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
   }, []);
 
   useEffect(() => {
+    const widget = widgetRef.current;
+    if (!widget || widget.isDestroyed || !symbol) return;
+    if (widget.symbol() === symbol) return;
+
+    if (replayRef.current) {
+      replayRef.current.stop();
+      replayRef.current = null;
+      replayModeRef.current = false;
+      clearReplayListeners();
+      widget.dataController?.setPaused(false);
+      setReplayActive(false);
+      setReplayState(null);
+    }
+
+    initialViewportContextRef.current = '';
+    setMarketQuote(null);
+    lastTickAtRef.current = null;
+    lastLiveQuoteRef.current = null;
+
+    try {
+      widget.setSymbol(symbol, 'DERIV');
+      if (widget.symbol() !== symbol) {
+        reportDiagnostic({
+          level: 'error',
+          code: 'CHART_SYMBOL_CHANGE_FAILED',
+          message: 'Chart did not accept instrument change to ' + symbol + '.',
+          detail: 'The SIRE instrument selector changed state, but the OpenAlgo chart widget did not switch its primary market-data symbol.',
+        });
+      }
+    } catch (error) {
+      reportDiagnostic({
+        level: 'error',
+        code: 'CHART_SYMBOL_CHANGE_FAILED',
+        message: 'Chart instrument change failed: ' + (error instanceof Error ? error.message : String(error)),
+        detail: 'The OpenAlgo chart widget threw while switching its primary market-data symbol.',
+      });
+    }
+  }, [symbol]);
+
+  useEffect(() => {
     const host = containerRef.current;
     if (!host) return;
     const onWindowError = (event: ErrorEvent) => {
