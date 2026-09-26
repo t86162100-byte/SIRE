@@ -1,8 +1,6 @@
 name: SIRE Free Autonomous Market Observer
 
 on:
-  schedule:
-    - cron: "*/5 * * * *"
   workflow_dispatch:
 
 permissions:
