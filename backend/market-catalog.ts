@@ -118,16 +118,16 @@ async function bybit(): Promise<UnifiedInstrument[]> {
   const out: UnifiedInstrument[] = [];
   for (const category of categories) {
     let cursor = '';
+    let tickers: any[] = [];
+    try {
+      const ticker = await getJson('https://api.bybit.com/v5/market/tickers?category=' + category);
+      tickers = Array.isArray(ticker?.result?.list) ? ticker.result.list : [];
+    } catch {}
+    const tm = new Map(tickers.map(x => [String(x.symbol), x]));
     for (let page = 0; page < 12; page++) {
       const url = 'https://api.bybit.com/v5/market/instruments-info?category=' + category + '&limit=1000' + (cursor ? '&cursor=' + encodeURIComponent(cursor) : '');
       const response = await getJson(url);
       const items = Array.isArray(response?.result?.list) ? response.result.list : [];
-      let tickers: any[] = [];
-      try {
-        const ticker = await getJson('https://api.bybit.com/v5/market/tickers?category=' + category);
-        tickers = Array.isArray(ticker?.result?.list) ? ticker.result.list : [];
-      } catch {}
-      const tm = new Map(tickers.map(x => [String(x.symbol), x]));
       for (const raw of items) {
         if (String(raw.status || '').toLowerCase() !== 'trading') continue;
         const item = cryptoItem('BYBIT', category === 'spot' ? 'Spot' : category === 'linear' ? 'Perpetuals' : category === 'inverse' ? 'Inverse Futures' : 'Options', 'Crypto', raw, tm.get(raw.symbol));
