@@ -1,6 +1,6 @@
 import { runGptHead } from '../backend/openrouter-ai.ts';
 
-const DIRECT_DERIV_WS = ['wss://api.derivws.com/trading/v1/options/ws/public','wss://ws.binaryws.com/websockets/v3'];
+const DIRECT_DERIV_WS = ['wss://api.derivws.com/trading/v1/options/ws/public','wss://ws.derivws.com/websockets/v3?app_id=1089'];
 const SIRE_PUBLIC_URL = String(process.env.SIRE_PUBLIC_URL || 'https://sire-amfv.onrender.com').replace(/\/$/,'');
 const GITHUB_API = 'https://api.github.com';
 const REPO = process.env.GITHUB_REPOSITORY || 't86162100-byte/SIRE';
