@@ -1,4 +1,4 @@
-import { runFreeAutonomousGpt } from '../backend/openrouter-ai.ts';
+import { runGptHead } from '../backend/openrouter-ai.ts';
 
 const DERIV_PUBLIC_WS = 'wss://api.derivws.com/trading/v1/options/ws/public';
 const GITHUB_API = 'https://api.github.com';
@@ -151,7 +151,7 @@ export async function runAutonomousCycle() {
     'Return a short factual observation that can be read later by the same SIRE chat agent. Mention changes across the samples when they are directly visible.',
   ].join('\\n');
 
-  const ai = await runFreeAutonomousGpt({
+  const ai = await runGptHead({
     query:prompt,
     history:[],
     chartSnapshot:{
