@@ -107,6 +107,83 @@ const augmentBinanceDerivativesInBrowser = async (items: Instrument[]): Promise<
   return additions.length ? items.concat(additions) : items;
 };
 
+const augmentBybitInstrumentsInBrowser = async (items: Instrument[]): Promise<Instrument[]> => {
+  const existing = new Set(items.map(item => item.id));
+  const additions: Instrument[] = [];
+  const sources: Array<{ marketType: string; category: string; paginate: boolean }> = [
+    { marketType: 'Spot', category: 'spot', paginate: false },
+    { marketType: 'Linear', category: 'linear', paginate: true },
+    { marketType: 'Inverse', category: 'inverse', paginate: true },
+    { marketType: 'Options', category: 'option', paginate: true },
+  ];
+
+  const toInstrument = (marketType: string, raw: any): Instrument | null => {
+    const symbol = String(raw?.symbol || '').trim();
+    if (!symbol) return null;
+    const status = String(raw?.status || '').trim();
+    const normalizedStatus = status.toUpperCase();
+    if (normalizedStatus && normalizedStatus !== 'TRADING') return null;
+    const base = String(raw?.baseCoin || '').trim() || undefined;
+    const quote = String(raw?.quoteCoin || '').trim() || undefined;
+    const id = 'BYBIT:' + marketType + ':' + symbol;
+    return {
+      ...(raw as any),
+      id,
+      provider: 'BYBIT',
+      providerLabel: 'Bybit',
+      marketType,
+      category: 'Crypto',
+      symbol,
+      displaySymbol: symbol,
+      name: base ? base + (quote ? ' / ' + quote : '') : symbol,
+      base,
+      quote,
+      exchangeOpen: 1,
+      status: status || 'Trading',
+      logoUrl: base ? 'https://cdn.jsdelivr.net/gh/spothq/cryptocurrency-icons@master/128/color/' + encodeURIComponent(base.toLowerCase()) + '.png' : '',
+      providerLogoUrl: 'https://cdn.simpleicons.org/bybit',
+    };
+  };
+
+  const fetchCategory = async (source: typeof sources[number]) => {
+    let cursor = '';
+    let page = 0;
+    const maxPages = 100;
+    while (page < maxPages) {
+      const params = new URLSearchParams({ category: source.category, limit: '1000' });
+      if (source.category === 'option') params.set('baseCoin', 'All');
+      if (source.paginate && cursor) params.set('cursor', cursor);
+      const response = await fetch('https://api.bybit.com/v5/market/instruments-info?' + params.toString(), {
+        cache: 'no-store',
+        headers: { Accept: 'application/json' },
+      });
+      if (!response.ok) throw new Error('HTTP ' + response.status);
+      const payload = await response.json();
+      if (Number(payload?.retCode) !== 0) throw new Error(String(payload?.retMsg || 'Bybit API error'));
+      const rows = Array.isArray(payload?.result?.list) ? payload.result.list : [];
+      for (const raw of rows) {
+        const item = toInstrument(source.marketType, raw);
+        if (item && !existing.has(item.id)) {
+          existing.add(item.id);
+          additions.push(item);
+        }
+      }
+      const nextCursor = String(payload?.result?.nextPageCursor || '');
+      page += 1;
+      if (!source.paginate || !nextCursor || nextCursor === cursor || rows.length === 0) break;
+      cursor = nextCursor;
+    }
+    if (page >= maxPages) throw new Error('pagination safety limit reached');
+    console.info('[SIRE BYBIT BROWSER] ' + source.marketType + ': ' + additions.filter(item => item.marketType === source.marketType).length);
+  };
+
+  await Promise.all(sources.map(source => fetchCategory(source).catch(error => {
+    console.warn('[SIRE BYBIT BROWSER] ' + source.marketType + ' unavailable:', error);
+  })));
+
+  return additions.length ? items.concat(additions) : items;
+};
+
 const chooseInitialDerivInstrument = (items: Instrument[]) =>
   items.find(item => item.provider === 'DERIV' && item.exchangeOpen !== 0 && item.tradingSuspended !== 1) ||
   items.find(item => item.provider === 'DERIV') || items[0] || null;
