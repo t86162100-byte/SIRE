@@ -38,14 +38,15 @@ async function getHttpHistory(){
 
 async function getJinaHistory(){
   const target='https://api.deriv.com/api/v1/ticks_history?symbol='+encodeURIComponent(SYMBOL)+'&end=latest&count='+COUNT+'&style=candles&granularity=60';
-  const response=await fetch('https://r.jina.ai/'+target,{headers:{Accept:'application/json','X-Engine':'direct','X-No-Cache':'true'}});
-  if(!response.ok)throw new Error('Jina proxy HTTP '+response.status);
-  const raw=await response.text(); let outer:any={}; try{outer=JSON.parse(raw);}catch{}
+  const response=await fetch('https://r.jina.ai/',{method:'POST',headers:{Accept:'application/json','Content-Type':'application/json','X-Engine':'direct','X-No-Cache':'true'},body:JSON.stringify({url:target})});
+  const raw=await response.text();
+  if(!response.ok)throw new Error('Jina proxy HTTP '+response.status+' '+raw.slice(0,300));
+  let outer:any={};try{outer=JSON.parse(raw);}catch{throw new Error('Jina proxy returned invalid JSON: '+raw.slice(0,300));}
   const candidate=typeof outer?.content==='string'?outer.content:raw;
-  let data:any={}; try{data=JSON.parse(candidate);}catch{throw new Error('Jina proxy returned non-JSON Deriv data.');}
+  let data:any={};try{data=JSON.parse(candidate);}catch{throw new Error('Jina proxy returned non-JSON Deriv data: '+String(candidate).slice(0,300));}
   const rawCandles=data?.candles||data?.history?.candles||data?.data?.candles||[];
   const candles=Array.isArray(rawCandles)?rawCandles.map((c:any)=>({epoch:Number(c.epoch),open:Number(c.open),high:Number(c.high),low:Number(c.low),close:Number(c.close)})).filter((c:any)=>Object.values(c).every(Number.isFinite)):[];
-  if(candles.length<30)throw new Error('Jina proxy returned fewer than 30 valid candles.');
+  if(candles.length<30)throw new Error('Jina proxy returned fewer than 30 valid candles: '+candles.length);
   return {source:'Deriv public market data via Jina Reader proxy',endpoint:target,symbol:SYMBOL,timeframe:INTERVAL,candleCount:candles.length,latestCandle:candles.at(-1),previousCandle:candles.at(-2),observedAt:new Date().toISOString(),candles};
 }
 
