@@ -172,26 +172,24 @@
   width: 26px;
   height: 26px;
   min-width: 26px;
+  flex: 0 0 26px;
   display: grid;
   place-items: center;
   overflow: hidden;
   border-radius: 50%;
   background: #171b20;
   border: 0;
-  transform: translateY(-1px);
 }
 .quote-broker-logo {
-  width: 20px !important;
-  height: 20px !important;
-  min-width: 0 !important;
-  min-height: 0 !important;
-  max-width: 100% !important;
-  max-height: 100% !important;
+  width: 100%;
+  height: 100%;
+  min-width: 100%;
+  min-height: 100%;
+  max-width: none;
+  max-height: none;
   display: block;
   border-radius: 50%;
-  object-fit: contain !important;
-  object-position: center;
-  margin: -1px auto 0;
+  object-fit: cover;
 }
 .quote-broker small {
   grid-column: 1;
@@ -221,12 +219,21 @@
 .sire-instrument-search-list .quote-instrument-name b { font-size: 13px !important; }
 .sire-instrument-search-list .quote-instrument-name small { font-size: 10px !important; }
 .sire-instrument-search-list .quote-broker { min-width: 78px; grid-template-columns:auto 22px; }
-.sire-instrument-search-list .quote-broker-logo-wrap { width:22px;height:22px;min-width:22px; transform:translateY(-1px); }
+.sire-instrument-search-list .quote-broker-logo-wrap {
+  width: 22px;
+  height: 22px;
+  min-width: 22px;
+  flex: 0 0 22px;
+}
 .sire-instrument-search-list .quote-broker-logo {
-  width: 17px !important;
-  height: 17px !important;
-  object-fit: contain !important;
-  padding: 1px;
+  width: 100% !important;
+  height: 100% !important;
+  min-width: 100% !important;
+  min-height: 100% !important;
+  max-width: none !important;
+  max-height: none !important;
+  object-fit: cover !important;
+  padding: 0;
   box-sizing: border-box;
 }
 .sire-instrument-search-list .quote-broker b { font-size: 10px !important; }
