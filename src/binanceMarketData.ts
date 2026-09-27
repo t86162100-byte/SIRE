@@ -14,8 +14,8 @@ async function directJson(urls:string[],params:Record<string,string>={}){
 }
 function browserItem(raw:any,marketType:string):any|null{
   const symbol=String(raw?.symbol||'').trim();if(!symbol)return null;
-  const base=String(raw?.baseAsset||raw?.baseCoin||'').trim()||undefined;
-  const quote=String(raw?.quoteAsset||raw?.quoteCoin||'').trim()||undefined;
+  const base=String(raw?.baseAsset||raw?.baseCoin||raw?.base||'').trim()||undefined;
+  const quote=String(raw?.quoteAsset||raw?.quoteCoin||raw?.quote||'').trim()||undefined;
   const status=String(raw?.status||raw?.contractStatus||'TRADING').toUpperCase();if(!['TRADING','PENDING_TRADING'].includes(status))return null;
   return {id:'BINANCE:'+marketType+':'+symbol,provider:'BINANCE',providerLabel:'Binance',marketType,category:'Crypto',symbol,displaySymbol:symbol,name:base&&quote?base+' / '+quote:symbol,base,quote,exchangeOpen:1,status:'online',logoUrl:base?'https://cdn.jsdelivr.net/gh/vadimmalykhin/binance-icons/crypto/'+encodeURIComponent(base.toLowerCase())+'.svg':'https://www.binance.com/favicon.ico',providerLogoUrl:'https://www.binance.com/favicon.ico',instrumentType:marketType,contractType:raw?.contractType||undefined,settlement:raw?.marginAsset||raw?.settleAsset||raw?.settleCoin||undefined,expiry:Number.isFinite(Number(raw?.deliveryDate??raw?.expiryDate))?Number(raw?.deliveryDate??raw?.expiryDate):undefined,strike:Number.isFinite(Number(raw?.strikePrice))?Number(raw.strikePrice):undefined,optionType:['CALL','PUT'].includes(String(raw?.side||'').toUpperCase())?String(raw.side).toUpperCase():undefined};
 }
@@ -23,6 +23,8 @@ export async function fetchBinanceBrowserCatalogue():Promise<any[]>{
   const out:any[]=[];
   const add=(rows:any[],mt:string)=>{for(const r of rows||[]){const x=browserItem(r,mt);if(x)out.push(x)}};
   const spot=await directJson(SPOT_BASES.map(x=>x+'/api/v3/exchangeInfo'));add(spot?.symbols,'Spot');
+  try{const margin=await directJson(SPOT_BASES.map(x=>x+'/sapi/v1/margin/allPairs'));add(margin,'Margin')}catch(e){console.warn('[SIRE BINANCE BROWSER] Cross Margin unavailable:',e)}
+  try{const isolated=await directJson(SPOT_BASES.map(x=>x+'/sapi/v1/margin/isolated/allPairs'));add(isolated,'Isolated Margin')}catch(e){console.warn('[SIRE BINANCE BROWSER] Isolated Margin unavailable:',e)}
   try{const usd=await directJson(['https://fapi.binance.com/fapi/v1/exchangeInfo']);for(const r of usd?.symbols||[]){const x=browserItem(r,String(r?.contractType||'')==='PERPETUAL'?'Perpetuals':'Futures');if(x)out.push(x)}}catch(e){console.warn('[SIRE BINANCE BROWSER] USD-M unavailable:',e)}
   try{const coin=await directJson(['https://dapi.binance.com/dapi/v1/exchangeInfo']);for(const r of coin?.symbols||[]){const x=browserItem(r,String(r?.contractType||'')==='PERPETUAL'?'Perpetuals':'Futures');if(x){x.id='BINANCE:COIN-M:'+x.marketType+':'+x.symbol;x.name=(x.base&&x.quote)?x.base+' / '+x.quote+' (COIN-M)':x.symbol;out.push(x)}}}catch(e){console.warn('[SIRE BINANCE BROWSER] COIN-M unavailable:',e)}
   try{const options=await directJson(['https://eapi.binance.com/eapi/v1/exchangeInfo']);for(const r of options?.optionSymbols||[]){const x=browserItem(r,'Options');if(x){x.name=String(r?.symbol||x.symbol);x.base=String(r?.underlying||'').replace(/USDT$|USDC$|BUSD$/,'')||x.base;x.quote=String(r?.quoteAsset||'').trim()||x.quote;x.optionType=String(r?.side||'').toUpperCase();out.push(x)}}}catch(e){console.warn('[SIRE BINANCE BROWSER] Options unavailable:',e)}
