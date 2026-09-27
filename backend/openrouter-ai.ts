@@ -32,7 +32,7 @@ async function readAutonomousMemory(): Promise<string> {
   }
 }
 
-const REQUEST_TIMEOUT_MS = 120000;
+// Do not abort a healthy GPT request after a short fixed window. Render supports HTTP requests up to 100 minutes; keep this safety ceiling below that platform limit so a genuinely stuck upstream call can still be released without imposing the old 120-second cancellation.\nconst REQUEST_TIMEOUT_MS = 95 * 60 * 1000;
 const MAX_OUTPUT_CHARS = 12000;
 const MAX_TOOL_TURNS = 16;
 
