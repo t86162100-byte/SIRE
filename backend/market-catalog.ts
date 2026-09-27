@@ -710,105 +710,6 @@ async function getJsonAuth(url: string, headers: Record<string, string>, timeout
   }
 }
 
-async function ig(): Promise<UnifiedInstrument[]> {
-  const apiKey = String(process.env.IG_API_KEY || '').trim();
-  const identifier = String(process.env.IG_IDENTIFIER || '').trim();
-  const password = String(process.env.IG_PASSWORD || '').trim();
-  if (!apiKey || !identifier || !password) {
-    console.warn('[SIRE IG] credentials not configured; skipping optional broker catalogue.');
-    return [];
-  }
-
-  const envs = ['https://api.ig.com/gateway/deal', 'https://demo-api.ig.com/gateway/deal'];
-  let session: any = null;
-  for (const base of envs) {
-    try {
-      const response = await fetch(base + '/session', {
-        method: 'POST',
-        headers: { 'X-IG-API-KEY': apiKey, 'Content-Type': 'application/json', Accept: 'application/json', VERSION: '3' },
-        body: JSON.stringify({ identifier, password })
-      });
-      if (!response.ok) continue;
-      const payload = await response.json();
-      const accessToken = String(payload?.oauthToken?.access_token || '').trim();
-      const accountId = String(payload?.currentAccountId || '').trim();
-      if (accessToken && accountId) { session = { base, accessToken, accountId }; break; }
-    } catch {}
-  }
-  if (!session) {
-    console.warn('[SIRE IG] authenticated session could not be established.');
-    return [];
-  }
-
-  const headers = {
-    'X-IG-API-KEY': apiKey,
-    Authorization: 'Bearer ' + session.accessToken,
-    'IG-ACCOUNT-ID': session.accountId,
-    Accept: 'application/json',
-    VERSION: '1'
-  };
-  const out: UnifiedInstrument[] = [];
-  const seen = new Set<string>();
-  const visited = new Set<string>();
-  const queue: string[] = [''];
-  let nodes = 0;
-
-  const addMarkets = (rows: any[]) => {
-    for (const raw of rows) {
-      const epic = String(raw?.epic || raw?.instrumentId || raw?.marketId || '').trim();
-      if (!epic || seen.has(epic)) continue;
-      seen.add(epic);
-      const type = String(raw?.instrumentType || raw?.type || '').toUpperCase();
-      const category =
-        type.includes('CURRENC') ? 'Forex' :
-        type.includes('COMMOD') ? 'Commodities' :
-        type.includes('SHARE') ? 'Stocks' :
-        type.includes('INDIC') ? 'Indices' :
-        type.includes('SECTOR') ? 'Sectors' :
-        type.includes('RATE') ? 'Rates' :
-        type.includes('BINARY') ? 'Binaries' :
-        type.includes('OPTION') ? 'Options' : 'CFD';
-      const item = cryptoItem('IG', 'CFD', category, {
-        symbol: epic,
-        fullName: String(raw?.instrumentName || raw?.name || raw?.instrumentName || epic),
-        status: String(raw?.marketStatus || raw?.status || 'online')
-      });
-      if (!item) continue;
-      item.name = String(raw?.instrumentName || raw?.name || epic);
-      item.category = category;
-      item.marketType = 'CFD';
-      item.logoUrl = providerLogo('IG');
-      item.providerLogoUrl = providerLogo('IG');
-      item.status = String(raw?.marketStatus || raw?.status || 'online');
-      out.push(item);
-    }
-  };
-
-  while (queue.length && nodes < 500) {
-    const nodeId = queue.shift()!;
-    if (visited.has(nodeId)) continue;
-    visited.add(nodeId);
-    try {
-      const url = session.base + '/marketnavigation' + (nodeId ? '/' + encodeURIComponent(nodeId) : '');
-      const response = await fetch(url, { headers });
-      if (!response.ok) continue;
-      const payload = await response.json();
-      const markets = Array.isArray(payload?.markets) ? payload.markets : [];
-      const children = Array.isArray(payload?.nodes) ? payload.nodes : [];
-      addMarkets(markets);
-      for (const child of children) {
-        const childId = String(child?.id || child?.nodeId || '').trim();
-        if (childId && !visited.has(childId)) queue.push(childId);
-      }
-      nodes += 1;
-    } catch (error) {
-      console.warn('[SIRE IG] navigation node failed:', nodeId, error);
-    }
-  }
-
-  console.log('[SIRE IG] Navigation nodes: ' + nodes + ', instruments: ' + out.length);
-  return out;
-}
 async function oanda(): Promise<UnifiedInstrument[]> {
   const token = String(process.env.OANDA_API_TOKEN || '').trim();
   const accountId = String(process.env.OANDA_ACCOUNT_ID || '').trim();
@@ -952,6 +853,7 @@ async function finnhub(): Promise<UnifiedInstrument[]> {
 
   const out: UnifiedInstrument[] = [];
   const seen = new Set<string>();
+
   const addRows = (rows: any[], category: string, marketType: string) => {
     for (const raw of rows) {
       const symbol = String(raw?.symbol || raw?.displaySymbol || '').trim();
@@ -961,10 +863,10 @@ async function finnhub(): Promise<UnifiedInstrument[]> {
       seen.add(id);
       const item = cryptoItem('FINNHUB', marketType, category, {
         symbol,
-        baseAsset: String(raw?.baseCurrency || raw?.base || symbol),
-        quoteAsset: String(raw?.quoteCurrency || raw?.quote || ''),
-        fullName: String(raw?.description || raw?.displaySymbol || symbol),
-        status: 'online'
+        baseAsset: raw?.baseCurrency || raw?.base || '',
+        quoteAsset: raw?.quoteCurrency || raw?.quote || '',
+        fullName: raw?.description || raw?.displaySymbol || symbol,
+        status: raw?.status || 'online'
       });
       if (!item) continue;
       item.name = String(raw?.description || raw?.displaySymbol || symbol);
@@ -976,51 +878,91 @@ async function finnhub(): Promise<UnifiedInstrument[]> {
     }
   };
 
-  // Finnhub exposes stock, forex and crypto symbol catalogues. Pull the
-  // complete public symbol lists for every exchange returned by its exchange
-  // metadata instead of hard-coding only a few countries.
+  // Finnhub publishes exchange metadata plus symbol catalogues. Discover
+  // every exchange/venue returned by the API; do not hard-code a short list.
   try {
     const exchangesPayload = await getJsonAny([
       'https://finnhub.io/api/v1/stock/exchange?token=' + encodeURIComponent(apiKey)
     ], 15000);
     const exchanges = Array.isArray(exchangesPayload) ? exchangesPayload : [];
+
     for (const exchange of exchanges) {
       const code = String(exchange?.code || exchange?.mic || '').trim();
       if (!code) continue;
       try {
         const rows = await getJsonAny([
-          'https://finnhub.io/api/v1/stock/symbol?exchange=' + encodeURIComponent(code) + '&token=' + encodeURIComponent(apiKey)
+          'https://finnhub.io/api/v1/stock/symbol?exchange=' +
+          encodeURIComponent(code) + '&token=' + encodeURIComponent(apiKey)
         ], 15000);
-        addRows(Array.isArray(rows) ? rows : [], 'Stocks', code);
+        for (const raw of Array.isArray(rows) ? rows : []) {
+          const type = String(raw?.type || raw?.instrumentType || '').toUpperCase();
+          const category =
+            type.includes('ETF') ? 'Funds' :
+            type.includes('MUTUAL') || type.includes('FUND') ? 'Funds' :
+            type.includes('INDEX') ? 'Indices' :
+            type.includes('BOND') || type.includes('FIXED') ? 'Bonds' :
+            'Stocks';
+          addRows([raw], category, code);
+        }
       } catch (error) {
         console.warn('[SIRE FINNHUB] stock exchange failed:', code, error);
       }
     }
   } catch (error) {
-    console.warn('[SIRE FINNHUB] exchange discovery failed:', error);
+    console.warn('[SIRE FINNHUB] stock exchange discovery failed:', error);
   }
 
-  for (const exchange of ['oanda', 'fxcm', 'fxcm2', 'forexcom']) {
-    try {
-      const rows = await getJsonAny([
-        'https://finnhub.io/api/v1/forex/symbol?exchange=' + encodeURIComponent(exchange) + '&token=' + encodeURIComponent(apiKey)
-      ], 15000);
-      addRows(Array.isArray(rows) ? rows : [], 'Forex', exchange);
-    } catch (error) {
-      console.warn('[SIRE FINNHUB] forex exchange failed:', exchange, error);
-    }
-  }
-
+  // Discover all forex venues exposed by Finnhub, then load each venue's
+  // complete symbol catalogue. Finnhub documents 10+ forex brokers.
   try {
-    const rows = await getJsonAny([
-      'https://finnhub.io/api/v1/crypto/symbol?exchange=binance&token=' + encodeURIComponent(apiKey)
+    const forexExchanges = await getJsonAny([
+      'https://finnhub.io/api/v1/forex/exchange?token=' + encodeURIComponent(apiKey)
     ], 15000);
-    addRows(Array.isArray(rows) ? rows : [], 'Crypto', 'binance');
+    for (const venueRaw of Array.isArray(forexExchanges) ? forexExchanges : []) {
+      const venue = typeof venueRaw === 'string'
+        ? venueRaw
+        : String(venueRaw?.code || venueRaw?.name || venueRaw?.exchange || '').trim();
+      if (!venue) continue;
+      try {
+        const rows = await getJsonAny([
+          'https://finnhub.io/api/v1/forex/symbol?exchange=' +
+          encodeURIComponent(venue) + '&token=' + encodeURIComponent(apiKey)
+        ], 15000);
+        addRows(Array.isArray(rows) ? rows : [], 'Forex', venue);
+      } catch (error) {
+        console.warn('[SIRE FINNHUB] forex venue failed:', venue, error);
+      }
+    }
   } catch (error) {
-    console.warn('[SIRE FINNHUB] crypto catalogue failed:', error);
+    console.warn('[SIRE FINNHUB] forex exchange discovery failed:', error);
   }
 
-  console.log('[SIRE FINNHUB] Complete available catalogue: ' + out.length);
+  // Discover all crypto venues instead of assuming Binance is the whole
+  // catalogue. Finnhub documents 15+ crypto brokers/exchanges.
+  try {
+    const cryptoExchanges = await getJsonAny([
+      'https://finnhub.io/api/v1/crypto/exchange?token=' + encodeURIComponent(apiKey)
+    ], 15000);
+    for (const venueRaw of Array.isArray(cryptoExchanges) ? cryptoExchanges : []) {
+      const venue = typeof venueRaw === 'string'
+        ? venueRaw
+        : String(venueRaw?.code || venueRaw?.name || venueRaw?.exchange || '').trim();
+      if (!venue) continue;
+      try {
+        const rows = await getJsonAny([
+          'https://finnhub.io/api/v1/crypto/symbol?exchange=' +
+          encodeURIComponent(venue) + '&token=' + encodeURIComponent(apiKey)
+        ], 15000);
+        addRows(Array.isArray(rows) ? rows : [], 'Crypto', venue);
+      } catch (error) {
+        console.warn('[SIRE FINNHUB] crypto venue failed:', venue, error);
+      }
+    }
+  } catch (error) {
+    console.warn('[SIRE FINNHUB] crypto exchange discovery failed:', error);
+  }
+
+  console.log('[SIRE FINNHUB] Complete discovered catalogue: ' + out.length);
   return out;
 }
 async function okx(): Promise<UnifiedInstrument[]> {
