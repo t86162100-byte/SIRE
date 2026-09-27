@@ -6,10 +6,6 @@ import FinancialChart from './FinancialChart';
 import type { DerivInstrument } from './derivMarketData';
 import { SireErrorScreen } from './SireErrorBoundary';
 import './nativeTerminal.css';
-import { loadBinanceCatalogue } from './providers/binance';
-import { loadKucoinCatalogue } from './providers/kucoin';
-import { loadGateioCatalogue } from './providers/gateio';
-import { loadHyperliquidCatalogue } from './providers/hyperliquid';
 
 type MarketProvider = 'DERIV' | 'HYPERLIQUID' | 'GLOBALCRYPTO' | 'BINANCE' | 'BITGET' | 'BYBIT' | 'OKX' | 'KRAKEN' | 'COINBASE' | 'GATEIO' | 'KUCOIN' | 'GEMINI' | 'BITSO' | 'BITFINEX' | 'BITVAVO' | 'COINEX' | 'LBANK' | 'WOOX' | 'CRYPTOCOM' | 'HTX' | 'BITKUB' | 'UPBIT' | 'PIONEX' | 'POLONIEX' | 'BITHUMB' | 'MEXC' | 'PHEMEX' | 'WHITEBIT' | 'TWELVEDATA' | 'NASDAQTRADER' | 'NSE' | 'BITSTAMP' | 'OANDA' | 'TRADINGVIEW' | 'FOREXCOM' | 'INTERACTIVEBROKERS' | 'TRADESTATION' | 'WEBULL' | 'MOOMOO' | 'NINJATRADER' | 'TRADOVATE' | 'AMPFUTURES' | 'TASTYTRADE' | 'TASTYFX' | 'CRYPTOCOMEXCHANGE' | 'COINBASEADVANCED' | 'ALPACA' | 'TRADIERBROKERAGE' | 'TRADEZERO' | 'COBRATRADING' | 'CLEARSTREET' | 'INVESTRADE' | 'PUBLIC' | 'PLUS500US' | 'OPTIMUSFUTURES' | 'EDGECLEAR' | 'IRONBEAM' | 'STONEX' | 'DORMANTRADING' | 'TRADIERFUTURES';
 type Instrument = DerivInstrument & {
@@ -41,186 +37,6 @@ const makeProviderLogoFallback = (item: Instrument) =>
     item.provider === 'DERIV' ? 'deriv.com' : item.provider.toLowerCase() + '.com'
   ) + '&sz=128';
 
-const augmentBybitInstrumentsInBrowser = async (items: Instrument[]): Promise<Instrument[]> => {
-  const existing = new Set(items.map(item => item.id));
-  const additions: Instrument[] = [];
-  const sources: Array<{ marketType: string; category: string; paginate: boolean }> = [
-    { marketType: 'Spot', category: 'spot', paginate: false },
-    { marketType: 'Linear', category: 'linear', paginate: true },
-    { marketType: 'Inverse', category: 'inverse', paginate: true },
-    { marketType: 'Options', category: 'option', paginate: true },
-  ];
-
-  const toInstrument = (marketType: string, raw: any): Instrument | null => {
-    const symbol = String(raw?.symbol || '').trim();
-    if (!symbol) return null;
-    const status = String(raw?.status || '').trim();
-    const normalizedStatus = status.toUpperCase();
-    if (normalizedStatus && normalizedStatus !== 'TRADING') return null;
-    const base = String(raw?.baseCoin || '').trim() || undefined;
-    const quote = String(raw?.quoteCoin || '').trim() || undefined;
-    const id = 'BYBIT:' + marketType + ':' + symbol;
-    return {
-      ...(raw as any),
-      id,
-      provider: 'BYBIT',
-      providerLabel: 'Bybit',
-      marketType,
-      category: 'Crypto',
-      symbol,
-      displaySymbol: symbol,
-      name: base ? base + (quote ? ' / ' + quote : '') : symbol,
-      base,
-      quote,
-      exchangeOpen: 1,
-      status: status || 'Trading',
-      logoUrl: base ? 'https://cdn.jsdelivr.net/gh/spothq/cryptocurrency-icons@master/128/color/' + encodeURIComponent(base.toLowerCase()) + '.png' : '',
-      providerLogoUrl: 'https://cdn.simpleicons.org/bybit',
-    };
-  };
-
-  const fetchCategory = async (source: typeof sources[number]) => {
-    let cursor = '';
-    let page = 0;
-    const maxPages = 100;
-    while (page < maxPages) {
-      const params = new URLSearchParams({ category: source.category, limit: '1000' });
-      if (source.category === 'option') params.set('baseCoin', 'All');
-      if (source.paginate && cursor) params.set('cursor', cursor);
-      const query = params.toString();
-      const endpoints = [
-        'https://api.bybit.com/v5/market/instruments-info?' + query,
-        'https://api.bybit.tr/v5/market/instruments-info?' + query,
-        'https://api.bybit.ae/v5/market/instruments-info?' + query,
-        'https://api.bybit.eu/v5/market/instruments-info?' + query,
-        'https://api.bybit.kz/v5/market/instruments-info?' + query,
-        'https://api.bybitgeorgia.ge/v5/market/instruments-info?' + query,
-        'https://api.bybit.id/v5/market/instruments-info?' + query,
-        'https://api.spark-fintech.com/v5/market/instruments-info?' + query,
-        'https://api.bytick.com/v5/market/instruments-info?' + query,
-      ];
-      let payload: any = null;
-      let lastError: unknown = null;
-      for (const endpoint of endpoints) {
-        try {
-          const response = await fetch(endpoint, {
-            cache: 'no-store',
-            headers: { Accept: 'application/json' },
-          });
-          if (!response.ok) {
-            lastError = new Error('HTTP ' + response.status);
-            continue;
-          }
-          const candidate = await response.json();
-          if (Number(candidate?.retCode) !== 0) {
-            lastError = new Error(String(candidate?.retMsg || 'Bybit API error'));
-            continue;
-          }
-          payload = candidate;
-          break;
-        } catch (error) {
-          lastError = error;
-        }
-      }
-      if (!payload) throw lastError || new Error('All Bybit endpoints failed');
-      const rows = Array.isArray(payload?.result?.list) ? payload.result.list : [];
-      for (const raw of rows) {
-        const item = toInstrument(source.marketType, raw);
-        if (item && !existing.has(item.id)) {
-          existing.add(item.id);
-          additions.push(item);
-        }
-      }
-      const nextCursor = String(payload?.result?.nextPageCursor || '');
-      page += 1;
-      if (!source.paginate || !nextCursor || nextCursor === cursor || rows.length === 0) break;
-      cursor = nextCursor;
-    }
-    if (page >= maxPages) throw new Error('pagination safety limit reached');
-    console.info('[SIRE BYBIT BROWSER] ' + source.marketType + ': ' + additions.filter(item => item.marketType === source.marketType).length);
-  };
-
-  await Promise.all(sources.map(source => fetchCategory(source).catch(error => {
-    console.warn('[SIRE BYBIT BROWSER] ' + source.marketType + ' unavailable:', error);
-  })));
-
-  return additions.length ? items.concat(additions) : items;
-};
-
-const augmentMajorCryptoProvidersInBrowser = async (items: Instrument[]): Promise<Instrument[]> => {
-  const existing = new Set(items.map(item => item.id));
-  const additions: Instrument[] = [];
-  const add = (provider: MarketProvider, marketType: string, raw: any) => {
-    const symbol = String(raw?.symbol || raw?.instId || raw?.market || '').trim();
-    if (!symbol) return;
-    const status = String(raw?.status || raw?.state || raw?.tradeStatus || '').toUpperCase();
-    if (status && ['OFFLINE','SUSPENDED','BREAK','HALT'].includes(status)) return;
-    const base = String(raw?.baseCoin || raw?.baseAsset || raw?.baseCcy || raw?.base_currency || '').trim() || undefined;
-    const quote = String(raw?.quoteCoin || raw?.quoteAsset || raw?.quoteCcy || raw?.quote_currency || '').trim() || undefined;
-    const id = provider + ':' + marketType + ':' + symbol;
-    if (existing.has(id)) return;
-    existing.add(id);
-    additions.push({
-      ...(raw as any),
-      id,
-      provider,
-      providerLabel: provider === 'BITGET' ? 'Bitget' : provider === 'OKX' ? 'OKX' : 'MEXC',
-      marketType,
-      category: 'Crypto',
-      symbol,
-      displaySymbol: symbol,
-      name: base ? base + (quote ? ' / ' + quote : '') : symbol,
-      base,
-      quote,
-      exchangeOpen: 1,
-      status: status || 'online',
-      logoUrl: base ? 'https://cdn.jsdelivr.net/gh/spothq/cryptocurrency-icons@master/128/color/' + encodeURIComponent(base.toLowerCase()) + '.png' : '',
-      providerLogoUrl: provider === 'BITGET' ? 'https://cdn.simpleicons.org/bitget' : provider === 'OKX' ? 'https://cdn.simpleicons.org/okx' : 'https://cdn.simpleicons.org/mexc',
-      instrumentType: marketType,
-    } as Instrument);
-  };
-  const fetchJson = async (urls: string[]) => {
-    let last: unknown = null;
-    for (const url of urls) {
-      try {
-        const response = await fetch(url, { cache: 'no-store', headers: { Accept: 'application/json' } });
-        if (!response.ok) { last = new Error('HTTP ' + response.status); continue; }
-        return await response.json();
-      } catch (error) { last = error; }
-    }
-    throw last || new Error('All browser endpoints failed');
-  };
-
-  try {
-    const r = await fetchJson(['https://api.bitget.com/api/v2/spot/public/symbols']);
-    for (const raw of Array.isArray(r?.data) ? r.data : []) {
-      if (String(raw?.status || '').toLowerCase() !== 'online') continue;
-      add('BITGET','Spot',{...raw,symbol:raw?.symbol,baseCoin:raw?.baseCoin,quoteCoin:raw?.quoteCoin});
-    }
-    console.info('[SIRE BITGET BROWSER] Spot:', additions.filter(x=>x.provider==='BITGET').length);
-  } catch (error) { console.warn('[SIRE BITGET BROWSER] Spot unavailable:', error); }
-
-  try {
-    const r = await fetchJson(['https://www.okx.com/api/v5/public/instruments?instType=SPOT','https://app.okx.com/api/v5/public/instruments?instType=SPOT']);
-    for (const raw of Array.isArray(r?.data) ? r.data : []) {
-      if (String(raw?.state || '').toLowerCase() !== 'live') continue;
-      add('OKX','Spot',raw);
-    }
-    console.info('[SIRE OKX BROWSER] Spot:', additions.filter(x=>x.provider==='OKX').length);
-  } catch (error) { console.warn('[SIRE OKX BROWSER] Spot unavailable:', error); }
-
-  try {
-    const r = await fetchJson(['https://api.mexc.com/api/v3/exchangeInfo']);
-    for (const raw of Array.isArray(r?.symbols) ? r.symbols : []) {
-      if (String(raw?.status || '').toUpperCase() !== 'ENABLED') continue;
-      add('MEXC','Spot',raw);
-    }
-    console.info('[SIRE MEXC BROWSER] Spot:', additions.filter(x=>x.provider==='MEXC').length);
-  } catch (error) { console.warn('[SIRE MEXC BROWSER] Spot unavailable:', error); }
-
-  return additions.length ? items.concat(additions) : items;
-};
-
 const chooseInitialDerivInstrument = (items: Instrument[]) =>
   items.find(item => item.provider === 'DERIV' && item.exchangeOpen !== 0 && item.tradingSuspended !== 1) ||
   items.find(item => item.provider === 'DERIV') || items[0] || null;
@@ -251,6 +67,7 @@ export default function App() {
   useEffect(() => {
     let cancelled = false;
     let retryTimer: number | null = null;
+    let globalCryptoRefresh: number | null = null;
 
     const startup = async (): Promise<Instrument[]> => {
       const maxAttempts = 3;
@@ -341,7 +158,7 @@ export default function App() {
 
       // CCXT expands the global universe in the backend after the fast first response.
       // Keep polling so newly loaded exchanges/market types appear without requiring a reload.
-      const globalCryptoRefresh = window.setInterval(async () => {
+      globalCryptoRefresh = window.setInterval(async () => {
         try {
           const response = await fetch('/api/sire/markets/global-crypto', { cache: 'no-store' });
           const payload = await response.json().catch(() => null);
@@ -364,106 +181,6 @@ export default function App() {
         }
       }, 3000);
 
-            try {
-        const binanceItems = await loadBinanceCatalogue();
-        if (cancelled) return;
-        setInstruments(current => {
-          const existing = new Set(current.map(item => item.id));
-          const additions = binanceItems.filter(item => !existing.has(item.id));
-          return additions.length ? current.concat(additions) : current;
-        });
-        console.info('[SIRE MARKET STARTUP] Binance catalogue loaded', {
-          total: binanceItems.length,
-          marketTypes: Array.from(new Set(binanceItems.map(item => item.marketType))),
-        });
-      } catch (error) {
-        console.warn('[SIRE MARKET STARTUP] Binance catalogue unavailable:', error);
-      }
-
-      try {
-        const kucoinItems = await loadKucoinCatalogue();
-        if (cancelled) return;
-        setInstruments(current => {
-          const existing = new Set(current.map(item => item.id));
-          const additions = kucoinItems.filter(item => !existing.has(item.id));
-          return additions.length ? current.concat(additions) : current;
-        });
-        console.info('[SIRE MARKET STARTUP] KuCoin catalogue loaded', {
-          total: kucoinItems.length,
-          marketTypes: Array.from(new Set(kucoinItems.map(item => item.marketType))),
-        });
-      } catch (error) {
-        console.warn('[SIRE MARKET STARTUP] KuCoin catalogue unavailable:', error);
-      }
-
-      try {
-        const gateioItems = await loadGateioCatalogue();
-        if (cancelled) return;
-        setInstruments(current => {
-          const existing = new Set(current.map(item => item.id));
-          const additions = gateioItems.filter(item => !existing.has(item.id));
-          return additions.length ? current.concat(additions) : current;
-        });
-        console.info('[SIRE MARKET STARTUP] Gate.io catalogue loaded', {
-          total: gateioItems.length,
-          marketTypes: Array.from(new Set(gateioItems.map(item => item.marketType))),
-        });
-      } catch (error) {
-        console.warn('[SIRE MARKET STARTUP] Gate.io catalogue unavailable:', error);
-      }
-
-      try {
-        const hyperliquidItems = await loadHyperliquidCatalogue();
-        if (cancelled) return;
-        setInstruments(current => {
-          const existing = new Set(current.map(item => item.id));
-          const additions = hyperliquidItems.filter(item => !existing.has(item.id));
-          return additions.length ? current.concat(additions) : current;
-        });
-        console.info('[SIRE MARKET STARTUP] Hyperliquid catalogue loaded', {
-          total: hyperliquidItems.length,
-          marketTypes: Array.from(new Set(hyperliquidItems.map(item => item.marketType))),
-        });
-      } catch (error) {
-        console.warn('[SIRE MARKET STARTUP] Hyperliquid catalogue unavailable:', error);
-      }
-
-      try {
-        const currentItems = items;
-        const next = await augmentBybitInstrumentsInBrowser(currentItems);
-        if (cancelled) return;
-        setInstruments(current => {
-          const existing = new Set(current.map(item => item.id));
-          const additions = next.filter(item => !existing.has(item.id));
-          return additions.length ? current.concat(additions) : current;
-        });
-        console.info('[SIRE MARKET STARTUP] catalogue after Bybit browser augmentation', {
-          total: next.length,
-          bybit: next.filter(item => item.provider === 'BYBIT').length,
-          bybitMarketTypes: Array.from(new Set(next.filter(item => item.provider === 'BYBIT').map(item => item.marketType)))
-        });
-      } catch (error) {
-        console.warn('[SIRE MARKET STARTUP] Bybit browser augmentation skipped:', error);
-      }
-
-      try {
-        const currentItems = items;
-        const next = await augmentMajorCryptoProvidersInBrowser(currentItems);
-        if (cancelled) return;
-        setInstruments(current => {
-          const existing = new Set(current.map(item => item.id));
-          const additions = next.filter(item => !existing.has(item.id));
-          return additions.length ? current.concat(additions) : current;
-        });
-        console.info('[SIRE MARKET STARTUP] catalogue after major crypto browser augmentation', {
-          total: next.length,
-          bitget: next.filter(item => item.provider === 'BITGET').length,
-          okx: next.filter(item => item.provider === 'OKX').length,
-          mexc: next.filter(item => item.provider === 'MEXC').length
-        });
-      } catch (error) {
-        console.warn('[SIRE MARKET STARTUP] major crypto browser augmentation skipped:', error);
-      }
     }).catch(error => {
       if (cancelled || error?.message === 'SIRE startup cancelled.') return;
       console.error('[DERIV MARKET DATA] active symbol discovery failed', error);
@@ -477,7 +194,7 @@ export default function App() {
     return () => {
       cancelled = true;
       if (retryTimer !== null) window.clearTimeout(retryTimer);
-      window.clearInterval(globalCryptoRefresh);
+      if (globalCryptoRefresh !== null) window.clearInterval(globalCryptoRefresh);
     };
   }, []);
 
@@ -628,9 +345,9 @@ export default function App() {
   };
   return <main className={`native-terminal-shell${researchLabOpen ? ' sire-research-open' : ''}`}>
     <div className="native-terminal-body">
-      <aside className="native-symbol-sidebar symbol-sidebar"><button type="button" className={`sire-global-crypto-button${providerFilter === 'GLOBALCRYPTO' ? ' active' : ''}`} onClick={() => { setProviderFilter('GLOBALCRYPTO'); setCategoryFilter('ALL'); setSearch(''); }}><span>GLOBAL CRYPTO</span><small>{instruments.filter(item => item.provider === 'GLOBALCRYPTO').length} markets</small></button><div className="sidebar-search"><Search size={15} /><input value={search} onChange={event => setSearch(event.target.value)} placeholder="Search" /></div><div className="sidebar-meta"><span>{derivLoading ? "LOADING MARKETS" : derivError ? "MARKET ERROR" : "ALL MARKETS"}</span><b>{instruments.length}</b></div>
+      <aside className="native-symbol-sidebar symbol-sidebar"><div className="sidebar-search"><Search size={15} /><input value={search} onChange={event => setSearch(event.target.value)} placeholder="Search" /></div><div className="sidebar-meta"><span>{derivLoading ? "LOADING MARKETS" : derivError ? "MARKET ERROR" : "ALL MARKETS"}</span><b>{instruments.length}</b></div>
         <div className="sire-market-providers">
-          {(['ALL','DERIV','HYPERLIQUID','GLOBALCRYPTO','BINANCE','BITGET','BYBIT','OKX','KRAKEN','COINBASE','GATEIO','KUCOIN','GEMINI','BITSO','BITFINEX','BITVAVO','COINEX','LBANK','WOOX','CRYPTOCOM','HTX','BITKUB','UPBIT','PIONEX','POLONIEX','BITHUMB','MEXC','PHEMEX','WHITEBIT','TWELVEDATA','NASDAQTRADER','XETR','XFRA','EUREX','ASX','TWSE','PSX','IDX','HKEX','BSE','TSE','NSE','BITSTAMP','OANDA','FOREXCOM','INTERACTIVEBROKERS','TRADESTATION','WEBULL','MOOMOO','NINJATRADER','TRADOVATE','AMPFUTURES','TASTYTRADE','TASTYFX','CRYPTOCOMEXCHANGE','COINBASEADVANCED','ALPACA','TRADIERBROKERAGE','TRADEZERO','COBRATRADING','CLEARSTREET','INVESTRADE','PUBLIC','PLUS500US','OPTIMUSFUTURES','EDGECLEAR','IRONBEAM','STONEX','DORMANTRADING','TRADIERFUTURES','TRADINGVIEW'] as const).map(provider => (
+          {(['ALL','DERIV','TWELVEDATA','NASDAQTRADER','XETR','XFRA','EUREX','ASX','TWSE','PSX','IDX','HKEX','BSE','TSE','NSE','BITSTAMP','OANDA','FOREXCOM','INTERACTIVEBROKERS','TRADESTATION','WEBULL','MOOMOO','NINJATRADER','TRADOVATE','AMPFUTURES','TASTYTRADE','TASTYFX','ALPACA','TRADIERBROKERAGE','TRADEZERO','COBRATRADING','CLEARSTREET','INVESTRADE','PUBLIC','PLUS500US','OPTIMUSFUTURES','EDGECLEAR','IRONBEAM','STONEX','DORMANTRADING','TRADIERFUTURES','TRADINGVIEW' as const).map(provider => (
             <button key={provider} type="button" className={providerFilter === provider ? 'active' : ''} onClick={() => setProviderFilter(provider)}>{provider === 'ALL' ? 'All' : provider[0] + provider.slice(1).toLowerCase()}</button>
           ))}
         </div><div className="sire-market-providers sire-market-categories">
