@@ -1,4 +1,4 @@
-export type MarketProvider = 'YFINANCE' | 'SP' | 'DERIV' | 'BINANCE' | 'BITGET' | 'BYBIT' | 'OKX' | 'KRAKEN' | 'COINBASE' | 'GATEIO' | 'KUCOIN' | 'GEMINI' | 'BITSO' | 'BITFINEX' | 'BITVAVO' | 'COINEX' | 'LBANK' | 'WOOX' | 'CRYPTOCOM' | 'HTX' | 'BITKUB' | 'UPBIT' | 'PIONEX' | 'POLONIEX' | 'BITHUMB' | 'MEXC' | 'PHEMEX' | 'WHITEBIT' | 'TWELVEDATA' | 'NASDAQTRADER' | 'CME' | 'CBOT' | 'NYMEX' | 'COMEX' | 'NYSEAMERICAN' | 'XETR' | 'HKEX' | 'BSE' | 'TSE' | 'XFRA' | 'EUREX' | 'ASX' | 'TWSE' | 'PSX' | 'IDX' | 'NSE' | 'BITSTAMP' | 'OANDA' | 'TRADINGVIEW' | 'FOREXCOM' | 'INTERACTIVEBROKERS' | 'TRADESTATION' | 'WEBULL' | 'MOOMOO' | 'NINJATRADER' | 'TRADOVATE' | 'AMPFUTURES' | 'TASTYTRADE' | 'TASTYFX' | 'CRYPTOCOMEXCHANGE' | 'COINBASEADVANCED' | 'ALPACA' | 'TRADIERBROKERAGE' | 'TRADEZERO' | 'COBRATRADING' | 'CLEARSTREET' | 'INVESTRADE' | 'PUBLIC' | 'PLUS500US' | 'OPTIMUSFUTURES' | 'EDGECLEAR' | 'IRONBEAM' | 'STONEX' | 'DORMANTRADING' | 'TRADIERFUTURES';
+export type MarketProvider = 'FXCM' | 'YFINANCE' | 'SP' | 'DERIV' | 'BINANCE' | 'BITGET' | 'BYBIT' | 'OKX' | 'KRAKEN' | 'COINBASE' | 'GATEIO' | 'KUCOIN' | 'GEMINI' | 'BITSO' | 'BITFINEX' | 'BITVAVO' | 'COINEX' | 'LBANK' | 'WOOX' | 'CRYPTOCOM' | 'HTX' | 'BITKUB' | 'UPBIT' | 'PIONEX' | 'POLONIEX' | 'BITHUMB' | 'MEXC' | 'PHEMEX' | 'WHITEBIT' | 'TWELVEDATA' | 'NASDAQTRADER' | 'CME' | 'CBOT' | 'NYMEX' | 'COMEX' | 'NYSEAMERICAN' | 'XETR' | 'HKEX' | 'BSE' | 'TSE' | 'XFRA' | 'EUREX' | 'ASX' | 'TWSE' | 'PSX' | 'IDX' | 'NSE' | 'BITSTAMP' | 'OANDA' | 'TRADINGVIEW' | 'FOREXCOM' | 'INTERACTIVEBROKERS' | 'TRADESTATION' | 'WEBULL' | 'MOOMOO' | 'NINJATRADER' | 'TRADOVATE' | 'AMPFUTURES' | 'TASTYTRADE' | 'TASTYFX' | 'CRYPTOCOMEXCHANGE' | 'COINBASEADVANCED' | 'ALPACA' | 'TRADIERBROKERAGE' | 'TRADEZERO' | 'COBRATRADING' | 'CLEARSTREET' | 'INVESTRADE' | 'PUBLIC' | 'PLUS500US' | 'OPTIMUSFUTURES' | 'EDGECLEAR' | 'IRONBEAM' | 'STONEX' | 'DORMANTRADING' | 'TRADIERFUTURES';
 
 export interface UnifiedInstrument {
   id: string;
@@ -1673,6 +1673,22 @@ async function tse(): Promise<UnifiedInstrument[]> {
   } catch (error) { console.warn('[SIRE TSE] failed:', error); return []; }
 }
 
+async function fxcm(): Promise<UnifiedInstrument[]> {
+  const token=String(process.env.FXCM_ACCESS_TOKEN||'').trim();
+  if(!token){console.warn('[SIRE FXCM] FXCM_ACCESS_TOKEN is not configured');return [];}
+  const host=String(process.env.FXCM_ENV||'demo').toLowerCase()==='real'?'https://api.fxcm.com':'https://api-demo.fxcm.com';
+  try{
+    const r=await fetch(host+'/trading/get_instruments',{headers:{Accept:'application/json',Authorization:'Bearer '+token},signal:AbortSignal.timeout(15000)});
+    if(!r.ok)throw new Error('HTTP '+r.status);
+    const p=await r.json(); const rows=Array.isArray(p?.data?.instrument)?p.data.instrument:[];
+    const out:UnifiedInstrument[]=[];
+    for(const raw of rows){const symbol=String(raw?.symbol||'').trim();if(!symbol||raw?.visible===false)continue;const u=symbol.toUpperCase();
+      const category=u.includes('/')?((u.startsWith('XAU/')||u.startsWith('XAG/'))?'Commodities':'Forex'):/^(US30|SPX500|NAS100|US2000|UK100|GER30|ESP35|FRA40|HKG33|JPN225|AUS200|EUSTX50|CHN50|VOLX)$/.test(u)?'Indices':/OIL|NGAS|COPPER|SOYF|WHEAT|CORNF|BUND/.test(u)?'Commodities':'CFDs';
+      out.push({id:'FXCM:'+symbol,provider:'FXCM',providerLabel:'FXCM',marketType:category,category,symbol,displaySymbol:symbol,name:symbol,quote:u.includes('/')?u.split('/')[1]:'USD',status:'Active',logoUrl:'https://cdn.simpleicons.org/fxcm',providerLogoUrl:'https://cdn.simpleicons.org/fxcm',instrumentType:category});
+    } console.log('[SIRE FXCM] Instruments: '+out.length);return out;
+  }catch(e){console.warn('[SIRE FXCM] failed:',e);return [];}
+}
+
 async function yfinance(): Promise<UnifiedInstrument[]> {
   try {
     const { stdout } = await execFileAsync(
@@ -1823,6 +1839,7 @@ export async function getUnifiedMarketCatalogue(fetchDeriv: () => Promise<any[]>
     const providers: Array<[MarketProvider, Promise<UnifiedInstrument[]>]> = [
       // Deriv remains on its dedicated implementation and is intentionally untouched.
       ['DERIV', fetchDeriv().then(items => items.map(derivItem).filter(Boolean) as UnifiedInstrument[])],
+      ['FXCM', fxcm()],
       // Nasdaq Trader supplies the public instrument master for Nasdaq-listed,
       // other U.S.-listed, bonds, NOM options, mutual funds and additional
       // Nasdaq-published derivatives directories.
