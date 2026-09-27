@@ -15,9 +15,6 @@ import { runSireDiagnostics } from './backend/sire-diagnostics.ts';
 import { runAutonomousCycle } from './autonomous/sire-autonomous-cycle.ts';
 import { recordIssue, getRecentIssues } from './backend/sire-issue-tracker.ts';
 import { getUnifiedMarketCatalogue, getCmeCatalogueForDiagnostics, getNyseAmericanCatalogueForDiagnostics } from './backend/market-catalog.ts';
-import { loadGlobalCryptoUniverse } from './backend/ccxt-universe-loader.ts';
-import { ccxtMarketHistory, ccxtMarketQuote, ccxtMarketCapabilities } from './backend/ccxt-market-data.ts';
-import { getCcxtLiveQuote, getCcxtLiveStatus } from './backend/ccxt-live-market-data-v2.ts';
 
 const PORT = Number(process.env.PORT || 10000);
 const HOST = '0.0.0.0';
@@ -774,45 +771,6 @@ const server = http.createServer(async (req,res) => {
       try { const u=new URL(req.url||'/',`http://${req.headers.host||'localhost'}`); const symbol=String(u.searchParams.get('symbol')||'').trim(); if(!symbol) throw new Error('symbol is required'); const quote=await fxcmQuote(symbol); return res.writeHead(200,{'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify({ok:true,quote})); }
       catch(e){ return res.writeHead(502,{'Access-Control-Allow-Origin':'*','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify({ok:false,error:e instanceof Error?e.message:String(e)})); }
     }
-    if (req.method === 'GET' && pathname === '/api/sire/ccxt/capabilities') {
-      try {
-        const u=new URL(req.url||'/',`http://${req.headers.host||'localhost'}`);
-        const result=await ccxtMarketCapabilities(u.searchParams.get('exchange')||'',u.searchParams.get('symbol')||'');
-        return res.writeHead(200,{'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify({ok:true,...result}));
-      } catch(e) { return res.writeHead(502,{'Access-Control-Allow-Origin':'*','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify({ok:false,error:e instanceof Error?e.message:String(e)})); }
-    }
-    if (req.method === 'GET' && pathname === '/api/sire/ccxt/history') {
-      try {
-        const u=new URL(req.url||'/',`http://${req.headers.host||'localhost'}`);
-        const result=await ccxtMarketHistory({
-          exchangeId:u.searchParams.get('exchange')||'',
-          symbol:u.searchParams.get('symbol')||'',
-          timeframe:u.searchParams.get('timeframe')||'1m',
-          limit:Number(u.searchParams.get('limit')||500),
-          until:Number(u.searchParams.get('until')),
-        });
-        return res.writeHead(200,{'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify({ok:true,...result}));
-      } catch(e) { return res.writeHead(502,{'Access-Control-Allow-Origin':'*','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify({ok:false,error:e instanceof Error?e.message:String(e)})); }
-    }
-    if (req.method === 'GET' && pathname === '/api/sire/ccxt/quote') {
-      try {
-        const u=new URL(req.url||'/',`http://${req.headers.host||'localhost'}`);
-        const result=await getCcxtLiveQuote(u.searchParams.get('exchange')||'',u.searchParams.get('symbol')||'');
-        return res.writeHead(200,{'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify({ok:true,quote:result}));
-      } catch(e) {
-        try {
-          const u=new URL(req.url||'/',`http://${req.headers.host||'localhost'}`);
-          const result=await ccxtMarketQuote(u.searchParams.get('exchange')||'',u.searchParams.get('symbol')||'');
-          return res.writeHead(200,{'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify({ok:true,quote:result,liveFallback:true,error:e instanceof Error?e.message:String(e)}));
-        } catch(fallback) {
-          return res.writeHead(502,{'Access-Control-Allow-Origin':'*','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify({ok:false,error:fallback instanceof Error?fallback.message:String(fallback)}));
-        }
-      }
-    }
-    if (req.method === 'GET' && pathname === '/api/sire/ccxt/live-status') {
-      const u=new URL(req.url||'/',`http://${req.headers.host||'localhost'}`);
-      return res.writeHead(200,{'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify({ok:true,...getCcxtLiveStatus(u.searchParams.get('exchange')||undefined,u.searchParams.get('symbol')||undefined)}));
-    }
     if (req.method === 'GET' && pathname === '/api/sire/market-data/history') {
       try {
         const u=new URL(req.url||'/',`http://${req.headers.host||'localhost'}`);
@@ -832,16 +790,6 @@ const server = http.createServer(async (req,res) => {
         return res.writeHead(200,{'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify({ok:true,quote}));
       } catch(e) { return res.writeHead(502,{'Access-Control-Allow-Origin':'*','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify({ok:false,error:e instanceof Error?e.message:String(e)})); }
     }
-    if (pathname === '/api/sire/markets/global-crypto' && req.method === 'GET') {
-      try {
-        const instruments = await loadGlobalCryptoUniverse();
-        return res.writeHead(200,{ 'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store','Access-Control-Allow-Origin':'*' }).end(JSON.stringify({ok:true,source:'ccxt',count:instruments.length,instruments}));
-      } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        return res.writeHead(503,{ 'Content-Type':'application/json; charset=utf-8','Access-Control-Allow-Origin':'*' }).end(JSON.stringify({ok:false,error:message}));
-      }
-    }
-
     if (pathname === '/api/auth/google' && req.method === 'GET') {
       try { const result = await googleStart(req); return res.writeHead(302,{Location:result.url,'Set-Cookie':result.setCookie,'Cache-Control':'no-store'}).end(); }
       catch (cause) { const message=cause instanceof Error?cause.message:String(cause); return res.writeHead(503,{'Content-Type':'text/plain; charset=utf-8'}).end(message); }
