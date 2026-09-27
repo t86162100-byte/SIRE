@@ -1102,7 +1102,7 @@ async function nyseAmerican(): Promise<UnifiedInstrument[]> {
         const exchange=String(raw?.exchange||raw?.exchangeName||raw?.listingExchange||raw?.market||raw?.marketName||raw?.exchangeCode||'').trim();
         const listingUrl=String(raw?.url||'').trim();
         if(!/NYSE\s*AMERICAN|AMEX|NYSE\s*MKT/i.test(exchange) && !/\/XASE(?:[:\/]|$)|\/AMEX(?:[:\/]|$)|NYSE\s*AMERICAN/i.test(listingUrl)) continue;
-        const symbol=String(raw?.symbolTicker||raw?.symbol||raw?.ticker||'').trim();
+        const symbol=String(raw?.symbolTicker||raw?.normalizedTicker||raw?.symbol||raw?.ticker||'').trim();
         const name=String(raw?.instrumentName||raw?.securityName||raw?.name||raw?.companyName||symbol).trim();
         if(!symbol||seen.has(symbol)) continue;
         const textType=String(raw?.instrumentType||raw?.securityType||raw?.type||'').toLowerCase();
