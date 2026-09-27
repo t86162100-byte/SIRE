@@ -57,6 +57,20 @@ async function getJsonAny(urls: string[], timeoutMs = 10000) {
   throw last || new Error('All market endpoints failed');
 }
 
+async function withProviderTimeout<T>(provider: string, promise: Promise<T>, timeoutMs = 8000): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<T>((_, reject) => {
+        timer = setTimeout(() => reject(new Error(provider + ' catalogue timed out after ' + timeoutMs + 'ms')), timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
 function cryptoItem(provider: MarketProvider, marketType: string, category: string, raw: any, price?: any): UnifiedInstrument | null {
   const symbol = String(raw?.symbol || raw?.instId || '').trim();
   if (!symbol) return null;
@@ -852,18 +866,23 @@ async function nasdaqTrader(): Promise<UnifiedInstrument[]> {
     { file: 'options.txt', category: 'Options', marketType: 'US Options' },
     { file: 'mfundslist.txt', category: 'Funds', marketType: 'US Mutual Funds' },
   ];
-  const out: UnifiedInstrument[] = [];
-  const seen = new Set<string>();
-  for (const source of sources) {
+
+  const parseSource = async (source: typeof sources[number]): Promise<UnifiedInstrument[]> => {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 7000);
     try {
       const response = await fetch('https://www.nasdaqtrader.com/dynamic/SymDir/' + source.file, {
+        signal: controller.signal,
         headers: { Accept: 'text/plain,text/csv,*/*' }
       });
       if (!response.ok) throw new Error('HTTP ' + response.status);
       const text = await response.text();
       const rows = text.split(/\r?\n/).filter(Boolean);
-      if (!rows.length) continue;
+      if (!rows.length) return [];
       const headers = rows[0].split('|').map(v => v.trim());
+      const out: UnifiedInstrument[] = [];
+      const seen = new Set<string>();
+
       for (const line of rows.slice(1)) {
         if (!line || line.startsWith('File Creation Time')) continue;
         const values = line.split('|');
@@ -872,15 +891,18 @@ async function nasdaqTrader(): Promise<UnifiedInstrument[]> {
         const symbol = String(raw['Symbol'] || raw['ACT Symbol'] || raw['Option Symbol'] || raw['Underlying'] || '').trim();
         const name = String(raw['Security Name'] || raw['Company Name'] || raw['Underlying Security Name'] || symbol).trim();
         if (!symbol || !name) continue;
+
         let category = source.category;
         if (source.file === 'nasdaqlisted.txt' || source.file === 'otherlisted.txt') {
           const isEtf = String(raw['ETF'] || '').toUpperCase() === 'Y' || /\bETF\b|EXCHANGE[- ]TRADED FUND/i.test(name);
           category = isEtf ? 'Funds' : 'Stocks';
         }
+
         const exchange = String(raw['Exchange'] || raw['Market Category'] || source.marketType).trim();
         const key = 'NASDAQTRADER:' + source.file + ':' + exchange + ':' + symbol;
         if (seen.has(key)) continue;
         seen.add(key);
+
         const item = cryptoItem('NASDAQTRADER', source.marketType, category, { symbol, fullName: name, status: 'online' });
         if (!item) continue;
         item.name = name;
@@ -890,11 +912,21 @@ async function nasdaqTrader(): Promise<UnifiedInstrument[]> {
         item.providerLogoUrl = providerLogo('NASDAQTRADER');
         out.push(item);
       }
+
       console.log('[SIRE NASDAQTRADER] ' + source.file + ': ' + rows.length);
-    } catch (error) {
-      console.warn('[SIRE NASDAQTRADER] ' + source.file + ' failed:', error);
+      return out;
+    } finally {
+      clearTimeout(timer);
     }
-  }
+  };
+
+  const results = await Promise.allSettled(sources.map(parseSource));
+  const out = results.flatMap((result, index) => {
+    if (result.status === 'fulfilled') return result.value;
+    console.warn('[SIRE NASDAQTRADER] ' + sources[index].file + ' failed:', result.reason);
+    return [];
+  });
+
   console.log('[SIRE NASDAQTRADER] Total catalogue: ' + out.length);
   return out;
 }
@@ -979,7 +1011,9 @@ export async function getUnifiedMarketCatalogue(fetchDeriv: () => Promise<any[]>
       ['NASDAQTRADER', nasdaqTrader()],
       ['OANDA', oanda()],
     ];
-    const results = await Promise.allSettled(providers.map(([, promise]) => promise));
+    const results = await Promise.allSettled(
+      providers.map(([provider, promise]) => withProviderTimeout(provider, promise, provider === 'DERIV' || provider === 'NASDAQTRADER' ? 8000 : 7000))
+    );
     results.forEach((result, index) => {
       if (result.status === 'rejected') console.warn('[SIRE MARKET CATALOG] provider failed:', providers[index][0], result.reason);
     });
