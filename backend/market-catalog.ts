@@ -84,7 +84,11 @@ function cryptoItem(provider: MarketProvider, marketType: string, category: stri
     exchangeOpen: 1,
     status: String(raw?.status || raw?.state || 'online'),
     logoUrl: assetLogo(base) || providerLogo(provider),
-    providerLogoUrl: providerLogo(proviasync function coinbase(): Promise<UnifiedInstrument[]> {
+    providerLogoUrl: providerLogo(provider),
+  };
+}
+
+async function coinbase(): Promise<UnifiedInstrument[]> {
   try {
     const response = await getJson('https://api.exchange.coinbase.com/products', 15000);
     const rows = Array.isArray(response) ? response : [];
@@ -92,7 +96,7 @@ function cryptoItem(provider: MarketProvider, marketType: string, category: stri
     for (const raw of rows) {
       const id = String(raw?.id || '').trim();
       const status = String(raw?.status || '').toLowerCase();
-      if (!id || (status && !['online','active'].includes(status))) continue;
+      if (!id || (status && !['online', 'active'].includes(status))) continue;
       const [base, quote] = id.split('-');
       const item = cryptoItem('COINBASE', 'Spot', 'Crypto', {
         symbol: id,
@@ -110,10 +114,6 @@ function cryptoItem(provider: MarketProvider, marketType: string, category: stri
     return [];
   }
 }
-der),
-  };
-}
-
 async function binance(): Promise<UnifiedInstrument[]> {
   const families: Array<[string, string[]]> = [
     ['Spot', ['https://data-api.binance.vision/api/v3/exchangeInfo','https://api.binance.com/api/v3/exchangeInfo','https://api-gcp.binance.com/api/v3/exchangeInfo','https://api1.binance.com/api/v3/exchangeInfo','https://api2.binance.com/api/v3/exchangeInfo']],
