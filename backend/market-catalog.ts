@@ -1130,6 +1130,7 @@ async function nasdaqTrader(): Promise<UnifiedInstrument[]> {
     console.warn('[SIRE NASDAQTRADER] ' + sources[index].file + ' failed:', result.reason);
     return [];
   });
+  out.push(...extraResults.flatMap(result => result.status === 'fulfilled' ? result.value : []));
 
   console.log('[SIRE NASDAQTRADER] Total catalogue: ' + out.length);
   return out;
