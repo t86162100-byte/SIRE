@@ -57,16 +57,17 @@ const providerDomains: Record<string, string> = {
   HYPERLIQUID: 'hyperliquid.xyz',
 };
 
-const makeProviderLogoFallback = (item: Instrument) => {
-  const provider = String(item.provider || '').toUpperCase();
-  const label = String(item.providerLabel || provider).toUpperCase();
-  const domain = providerDomains[provider] || provider.toLowerCase().replace(/_/g, '') + '.com';
-  // Google's favicon endpoint is only the fallback. Provider-specific domains above
-  // prevent generic "NP" placeholders from being used for known exchanges.
-  return 'https://www.google.com/s2/favicons?domain=' + encodeURIComponent(domain) + '&sz=64';
+const exchangeDomains: Record<string, string> = {
+  binance: 'binance.com', bitget: 'bitget.com', bybit: 'bybit.com', okx: 'okx.com', kraken: 'kraken.com', coinbase: 'coinbase.com',
+  gate: 'gate.io', gateio: 'gate.io', kucoin: 'kucoin.com', mexc: 'mexc.com', gemini: 'gemini.com', bitfinex: 'bitfinex.com', bitstamp: 'bitstamp.net',
+  bitvavo: 'bitvavo.com', coinex: 'coinex.com', lbank: 'lbank.com', woox: 'woo.org', cryptocom: 'crypto.com', htx: 'htx.com', upbit: 'upbit.com',
+  poloniex: 'poloniex.com', bithumb: 'bithumb.com', phemex: 'phemex.com', whitebit: 'whitebit.com', bitso: 'bitso.com', bitkub: 'bitkub.com', pionex: 'pionex.com', oanda: 'oanda.com',
 };
-
-const makeProviderInitialFallback = (item: Instrument) => makeLogoFallback(String(item.providerLabel || item.provider).toUpperCase());
+const makeProviderLogoFallback = (item: Instrument) => {
+  const key = String(item.exchange || item.providerLabel || item.provider || '').trim().toLowerCase();
+  const domain = item.provider === 'DERIV' ? 'deriv.com' : (exchangeDomains[key] || (key.replace(/\\s+/g, '').replace(/\\.com$/,'') + '.com'));
+  return 'https://www.google.com/s2/favicons?domain=' + encodeURIComponent(domain) + '&sz=128';
+};
 
 const chooseInitialDerivInstrument = (items: Instrument[]) =>
   items.find(item => item.provider === 'DERIV' && item.exchangeOpen !== 0 && item.tradingSuspended !== 1) ||
