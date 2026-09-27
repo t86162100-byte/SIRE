@@ -1335,7 +1335,7 @@ async function xetra(): Promise<UnifiedInstrument[]> {
 }
 
 async function xfra(): Promise<UnifiedInstrument[]> {
-  const url = 'https://www.cashmarket.deutsche-boerse.com/resource/blob/2289108/83a7c4e6eaa467595e3199d9ddb69ebd/data/t7-xfra-BF-allTradableInstruments.csv';
+  const url = 'https://www.cashmarket.deutsche-boerse.com/resource/blob/2289108/908619b62b8e0962ae4fdd87b7317250/data/t7-xfra-BF-allTradableInstruments.csv';
   try {
     const text = await getText(url, 12000);
     const lines = text.replace(/^\uFEFF/, '').split(/\r?\n/).filter(Boolean);
