@@ -32,10 +32,41 @@ const makeAssetLogoFallback = (item: Instrument) => {
   const base = String(item.base || '').trim().toLowerCase();
   return base ? 'https://cdn.jsdelivr.net/gh/vadimmalykhin/binance-icons/crypto/' + encodeURIComponent(base) + '.svg' : makeLogoFallback(item.displaySymbol || item.symbol);
 };
-const makeProviderLogoFallback = (item: Instrument) =>
-  'https://www.google.com/s2/favicons?domain=' + encodeURIComponent(
-    item.provider === 'DERIV' ? 'deriv.com' : item.provider.toLowerCase() + '.com'
-  ) + '&sz=128';
+const providerDomains: Record<string, string> = {
+  DERIV: 'deriv.com',
+  OANDA: 'oanda.com',
+  COINBASE: 'coinbase.com',
+  KRAKEN: 'kraken.com',
+  BINANCE: 'binance.com',
+  BITGET: 'bitget.com',
+  BYBIT: 'bybit.com',
+  OKX: 'okx.com',
+  KUCOIN: 'kucoin.com',
+  MEXC: 'mexc.com',
+  GATEIO: 'gate.io',
+  GEMINI: 'gemini.com',
+  BITFINEX: 'bitfinex.com',
+  BITSTAMP: 'bitstamp.net',
+  HTX: 'htx.com',
+  CRYPTOCOM: 'crypto.com',
+  BITSO: 'bitso.com',
+  BITVAVO: 'bitvavo.com',
+  COINEX: 'coinex.com',
+  PHEMEX: 'phemex.com',
+  WHITEBIT: 'whitebit.com',
+  HYPERLIQUID: 'hyperliquid.xyz',
+};
+
+const makeProviderLogoFallback = (item: Instrument) => {
+  const provider = String(item.provider || '').toUpperCase();
+  const label = String(item.providerLabel || provider).toUpperCase();
+  const domain = providerDomains[provider] || provider.toLowerCase().replace(/_/g, '') + '.com';
+  // Google's favicon endpoint is only the fallback. Provider-specific domains above
+  // prevent generic "NP" placeholders from being used for known exchanges.
+  return 'https://www.google.com/s2/favicons?domain=' + encodeURIComponent(domain) + '&sz=64';
+};
+
+const makeProviderInitialFallback = (item: Instrument) => makeLogoFallback(String(item.providerLabel || item.provider).toUpperCase());
 
 const chooseInitialDerivInstrument = (items: Instrument[]) =>
   items.find(item => item.provider === 'DERIV' && item.exchangeOpen !== 0 && item.tradingSuspended !== 1) ||
@@ -371,14 +402,14 @@ export default function App() {
           {(['ALL','Forex','Stocks','Funds','Commodities','Indices','Bonds','Options','Futures','Crypto','Synthetic Indices','Baskets'] as const).map(category => (
             <button key={category} type="button" className={categoryFilter === category ? 'active' : ''} onClick={() => setCategoryFilter(category)}>{category}</button>
           ))}
-        </div>{derivError && <div className="sire-deriv-error">{derivError}</div>}<div className="native-symbol-list symbol-list" onScroll={event => setQuoteScrollTop(event.currentTarget.scrollTop)}><div style={{height: quoteWindow.top}} aria-hidden="true" /><div className="sire-quote-window">{quoteWindow.items.map(item => <button key={item.id} className={`symbol-row ${selected?.id === item.id ? 'active' : ''}`} data-provider={item.provider} onClick={() => selectInstrument(item)}><span className="quote-asset-logo-wrap"><img className="quote-asset-logo" src={item.logoUrl || item.providerLogoUrl} alt="" decoding="async" onError={event => { const image = event.currentTarget; image.style.display='none'; }} /></span><span className="quote-instrument-name"><b>{item.displaySymbol || item.symbol}</b><small>{item.name}</small></span><span className="quote-broker"><img className="quote-broker-logo" src={item.providerLogoUrl} alt="" decoding="async" onError={event => {
+        </div>{derivError && <div className="sire-deriv-error">{derivError}</div>}<div className="native-symbol-list symbol-list" onScroll={event => setQuoteScrollTop(event.currentTarget.scrollTop)}><div style={{height: quoteWindow.top}} aria-hidden="true" /><div className="sire-quote-window">{quoteWindow.items.map(item => <button key={item.id} className={`symbol-row ${selected?.id === item.id ? 'active' : ''}`} data-provider={item.provider} onClick={() => selectInstrument(item)}><span className="quote-asset-logo-wrap"><img className="quote-asset-logo" src={item.logoUrl || makeAssetLogoFallback(item)} alt="" decoding="async" onError={event => { const image = event.currentTarget; image.onerror = null; image.src = makeLogoFallback(item.displaySymbol || item.symbol); }} /></span><span className="quote-instrument-name"><b>{String(item.displaySymbol || item.symbol).toUpperCase()}</b><small>{String(item.name || item.displaySymbol || item.symbol).toUpperCase()}</small></span><span className="quote-broker"><img className="quote-broker-logo" src={item.providerLogoUrl || makeProviderLogoFallback(item)} alt="" decoding="async" onError={event => {
   const image=event.currentTarget;
   const stage=image.dataset.logoStage || '0';
   image.dataset.logoStage=stage === '0' ? '1' : '2';
   image.onerror=null;
   if(stage === '0'){ image.onerror=event2 => { const next=event2.currentTarget; next.onerror=null; next.src=makeLogoFallback(item.providerLabel); }; image.src=makeProviderLogoFallback(item); }
-  else image.src=makeLogoFallback(item.providerLabel);
-}} /><b>{item.providerLabel}</b><small>{item.category === 'Crypto' && item.marketType !== 'Spot' ? item.marketType.toLowerCase() : item.category === 'Crypto' && item.marketType === 'Spot' ? 'spot crypto' : String(item.marketType || item.category).toLowerCase()}</small></span></button>)}</div><div style={{height: quoteWindow.bottom}} aria-hidden="true" /></div></aside>
+  else image.src=makeProviderInitialFallback(item);
+}} /><b>{String(item.providerLabel || item.provider).toUpperCase()}</b><small>{item.category === 'Crypto' && item.marketType !== 'Spot' ? item.marketType.toLowerCase() : item.category === 'Crypto' && item.marketType === 'Spot' ? 'spot crypto' : String(item.marketType || item.category).toLowerCase()}</small></span></button>)}</div><div style={{height: quoteWindow.bottom}} aria-hidden="true" /></div></aside>
       <section className="native-chart-panel">
         <div className={`sire-chart-grid sire-chart-grid--${chartLayout}${chartLayout === 2 ? ` sire-chart-grid--${multiChartPosition}` : ''}`} onContextMenu={event => event.preventDefault()}>
           {chartItems.map((chartSymbol, index) => <div className={`sire-chart-cell${activeChartIndex === index ? ' sire-chart-cell--active' : ''}`} key={index} onPointerDown={() => setActiveChartIndex(index)}>{chartSymbol && <FinancialChart
@@ -422,14 +453,7 @@ export default function App() {
             </div>
             <div className="sire-instrument-search-list">
               {filtered.slice(0, 120).map(item => <button key={item.id} type="button" onClick={() => { if (instrumentSearchMode === 'multi') { setMultiChartInstrument(item.symbol); setSearch(''); setInstrumentSearchOpen(false); } else { selectInstrument(item); setInstrumentSearchOpen(false); } }}>
-                <span className="quote-asset-logo-wrap"><img className="quote-asset-logo" src={item.logoUrl || item.providerLogoUrl} alt="" onError={event => {
-  const image=event.currentTarget;
-  const stage=image.dataset.logoStage || '0';
-  image.dataset.logoStage=stage === '0' ? '1' : '2';
-  image.onerror=null;
-  if(stage === '0'){ image.onerror=event2 => { const next=event2.currentTarget; next.onerror=null; next.src=makeLogoFallback(item.displaySymbol || item.symbol); }; image.src=makeAssetLogoFallback(item); }
-  else image.src=makeLogoFallback(item.displaySymbol || item.symbol);
-}} /></span><span className="quote-instrument-name"><b>{item.displaySymbol || item.symbol}</b><small>{item.name}</small></span><span className="quote-broker"><img className="quote-broker-logo" src={item.providerLogoUrl} alt="" /><b>{item.providerLabel}</b><small>{item.category === 'Crypto' && item.marketType !== 'Spot' ? item.marketType.toLowerCase() : item.category === 'Crypto' && item.marketType === 'Spot' ? 'spot crypto' : String(item.marketType || item.category).toLowerCase()}</small></span>
+                <span className="quote-asset-logo-wrap"><img className="quote-asset-logo" src={item.logoUrl || makeAssetLogoFallback(item)} alt="" onError={event => { const image=event.currentTarget; image.onerror=null; image.src=makeLogoFallback(item.displaySymbol || item.symbol); }} /></span><span className="quote-instrument-name"><b>{String(item.displaySymbol || item.symbol).toUpperCase()}</b><small>{String(item.name || item.displaySymbol || item.symbol).toUpperCase()}</small></span><span className="quote-broker"><img className="quote-broker-logo" src={item.providerLogoUrl || makeProviderLogoFallback(item)} alt="" onError={event => { const image=event.currentTarget; image.onerror=null; image.src=makeProviderInitialFallback(item); }} /><b>{String(item.providerLabel || item.provider).toUpperCase()}</b><small>{item.category === 'Crypto' && item.marketType !== 'Spot' ? item.marketType.toLowerCase() : item.category === 'Crypto' && item.marketType === 'Spot' ? 'spot crypto' : String(item.marketType || item.category).toLowerCase()}</small></span>
               </button>)}
             </div>
           </div>
