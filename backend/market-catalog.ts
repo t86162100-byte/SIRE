@@ -1508,22 +1508,48 @@ async function okx(): Promise<UnifiedInstrument[]> { const out:UnifiedInstrument
 
 
 function derivItem(raw: any): UnifiedInstrument | null {
-  const symbol = String(raw?.symbol || '').trim();
+  const symbol = String(raw?.underlying_symbol ?? raw?.symbol ?? '').trim();
   if (!symbol) return null;
+
+  const market = String(raw?.market ?? '').trim().toLowerCase();
+  const symbolType = String(raw?.underlying_symbol_type ?? raw?.symbol_type ?? '').trim().toLowerCase();
+  const explicitCategory = String(raw?.category ?? '').trim().toLowerCase();
+  const categoryKey = explicitCategory || symbolType || market;
+
   const categoryMap: Record<string,string> = {
     synthetic: 'Synthetic Indices',
+    synthetic_indices: 'Synthetic Indices',
+    syntheticindex: 'Synthetic Indices',
     forex: 'Forex',
+    currency: 'Forex',
     commodities: 'Commodities',
+    commodity: 'Commodities',
     indices: 'Indices',
+    index: 'Indices',
     stocks: 'Stocks',
+    stock: 'Stocks',
+    shares: 'Stocks',
     crypto: 'Crypto',
+    cryptocurrency: 'Crypto',
     other: 'Other',
   };
-  const categoryKey = String(raw?.category || '').toLowerCase();
-  const category = categoryMap[categoryKey] || 'Other';
+
+  const category =
+    categoryMap[categoryKey] ||
+    (market.includes('synthetic') || symbolType.includes('synthetic') ? 'Synthetic Indices' :
+      market.includes('forex') || symbolType.includes('forex') ? 'Forex' :
+      market.includes('commodit') || symbolType.includes('commodit') ? 'Commodities' :
+      market.includes('index') || symbolType.includes('index') ? 'Indices' :
+      market.includes('stock') || symbolType.includes('stock') ? 'Stocks' :
+      market.includes('crypto') || symbolType.includes('crypto') ? 'Crypto' :
+      'Other');
+
   const marketType = category === 'Synthetic Indices' ? 'Synthetic Indices' : category;
-  const base = String(raw?.base || '').trim() || undefined;
-  const quote = String(raw?.quote || '').trim() || undefined;
+  const base = String(raw?.base ?? '').trim() || undefined;
+  const quote = String(raw?.quote ?? '').trim() || undefined;
+  const displayName = String(raw?.underlying_symbol_name ?? raw?.display_name ?? raw?.name ?? symbol).trim() || symbol;
+  const suspended = Number(raw?.is_trading_suspended ?? raw?.tradingSuspended);
+
   return {
     id: 'DERIV:' + symbol,
     provider: 'DERIV',
@@ -1531,15 +1557,15 @@ function derivItem(raw: any): UnifiedInstrument | null {
     marketType,
     category,
     symbol,
-    displaySymbol: symbol,
-    name: String(raw?.name || symbol).trim() || symbol,
+    displaySymbol: displayName || symbol,
+    name: displayName,
     base,
     quote,
-    exchangeOpen: Number.isFinite(Number(raw?.exchangeOpen)) ? Number(raw.exchangeOpen) : undefined,
-    status: Number(raw?.tradingSuspended) === 1 ? 'suspended' : 'online',
+    exchangeOpen: Number.isFinite(Number(raw?.exchange_is_open ?? raw?.exchangeOpen)) ? Number(raw?.exchange_is_open ?? raw?.exchangeOpen) : undefined,
+    status: suspended === 1 ? 'suspended' : 'online',
     logoUrl: assetLogo(base) || providerLogo('DERIV'),
     providerLogoUrl: providerLogo('DERIV'),
-    instrumentType: String(raw?.symbolType || marketType),
+    instrumentType: String(raw?.underlying_symbol_type ?? raw?.symbol_type ?? marketType),
   };
 }
 
