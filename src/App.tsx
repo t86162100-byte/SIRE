@@ -224,6 +224,7 @@ export default function App() {
   const [derivError, setDerivError] = useState('');
   const [search, setSearch] = useState('');
   const [providerFilter, setProviderFilter] = useState<'ALL' | MarketProvider>('ALL');
+  const [categoryFilter, setCategoryFilter] = useState<string>('ALL');
   const [quoteScrollTop, setQuoteScrollTop] = useState(0);
   const deferredSearch = useDeferredValue(search);
   const [instrumentSearchOpen, setInstrumentSearchOpen] = useState(false);
@@ -417,10 +418,11 @@ export default function App() {
     const q = deferredSearch.trim().toLowerCase();
     return instruments.filter(item => {
       const providerMatch = providerFilter === 'ALL' || item.provider === providerFilter;
-      const searchMatch = !q || `${item.name} ${item.symbol} ${item.providerLabel} ${item.marketType}`.toLowerCase().includes(q);
-      return providerMatch && searchMatch;
+      const categoryMatch = categoryFilter === 'ALL' || item.category === categoryFilter;
+      const searchMatch = !q || `${item.name} ${item.symbol} ${item.providerLabel} ${item.marketType} ${item.category}`.toLowerCase().includes(q);
+      return providerMatch && categoryMatch && searchMatch;
     });
-  }, [instruments, search, providerFilter]);
+  }, [instruments, search, providerFilter, categoryFilter]);
 
   const chartableInstruments = useMemo(() => instruments.filter(item => item.provider === 'DERIV'), [instruments]);
   const quoteWindow = useMemo(() => {
@@ -502,8 +504,12 @@ export default function App() {
     <div className="native-terminal-body">
       <aside className="native-symbol-sidebar symbol-sidebar"><div className="sidebar-search"><Search size={15} /><input value={search} onChange={event => setSearch(event.target.value)} placeholder="Search" /></div><div className="sidebar-meta"><span>{derivLoading ? "LOADING MARKETS" : derivError ? "MARKET ERROR" : "ALL MARKETS"}</span><b>{instruments.length}</b></div>
         <div className="sire-market-providers">
-          {(['ALL','DERIV','BINANCE','BITGET','BYBIT','OKX','KRAKEN','TWELVEDATA','FINNHUB','OANDA','IG'] as const).map(provider => (
+          {(['ALL','DERIV','BINANCE','BITGET','BYBIT','OKX','KRAKEN','COINBASE','GATEIO','KUCOIN','GEMINI','BITSO','BITFINEX','BITVAVO','COINEX','LBANK','WOOX','CRYPTOCOM','HTX','BITKUB','UPBIT','PIONEX','POLONIEX','BITHUMB','MEXC','PHEMEX','WHITEBIT','TWELVEDATA','FINNHUB','OANDA','IG'] as const).map(provider => (
             <button key={provider} type="button" className={providerFilter === provider ? 'active' : ''} onClick={() => setProviderFilter(provider)}>{provider === 'ALL' ? 'All' : provider[0] + provider.slice(1).toLowerCase()}</button>
+          ))}
+        </div><div className="sire-market-providers sire-market-categories">
+          {(['ALL','Forex','Stocks','Funds','Commodities','Indices','Bonds','Options','Futures','Crypto','Synthetic Indices','Baskets'] as const).map(category => (
+            <button key={category} type="button" className={categoryFilter === category ? 'active' : ''} onClick={() => setCategoryFilter(category)}>{category}</button>
           ))}
         </div>{derivError && <div className="sire-deriv-error">{derivError}</div>}<div className="native-symbol-list symbol-list" onScroll={event => setQuoteScrollTop(event.currentTarget.scrollTop)}><div style={{height: quoteWindow.top}} aria-hidden="true" /><div className="sire-quote-window">{quoteWindow.items.map(item => <button key={item.id} className={`symbol-row ${selected?.id === item.id ? 'active' : ''}`} data-provider={item.provider} onClick={() => selectInstrument(item)}><span className="quote-asset-logo-wrap"><img className="quote-asset-logo" src={item.logoUrl || item.providerLogoUrl} alt="" decoding="async" onError={event => { const image = event.currentTarget; image.style.display='none'; }} /></span><span className="quote-instrument-name"><b>{item.displaySymbol || item.symbol}</b><small>{item.name}</small></span><span className="quote-broker"><img className="quote-broker-logo" src={item.providerLogoUrl} alt="" decoding="async" onError={event => {
   const image=event.currentTarget;
