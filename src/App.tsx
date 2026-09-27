@@ -1,3 +1,6 @@
+import { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
+import { createLinkGroup, type LinkGroup } from 'openalgo-charts';
+import { Search } from 'lucide-react';
 import ResearchLab from './ResearchLab';
 import FinancialChart from './FinancialChart';
 import type { DerivInstrument } from './derivMarketData';
