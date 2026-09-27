@@ -5,6 +5,34 @@ const SEC:Record<string,number>={'1m':60,'3m':180,'5m':300,'15m':900,'30m':1800,
 const INTERVAL:Record<string,string>={'1m':'1min','3m':'3min','5m':'5min','15m':'15min','30m':'30min','1h':'1h','2h':'2h','4h':'4h','6h':'6h','8h':'8h','12h':'12h','1d':'1day','1w':'1week','1M':'1month'};
 
 const SPOT_BASES=['https://api.binance.com','https://api-gcp.binance.com','https://api1.binance.com','https://api2.binance.com','https://api3.binance.com','https://api4.binance.com'];
+const SPOT_MARKET_DATA_BASE='https://data-api.binance.vision';
+const SPOT_WS_API='wss://ws-api.binance.com:443/ws-api/v3';
+
+async function spotExchangeInfoViaWebSocket():Promise<any>{
+  return await new Promise((resolve,reject)=>{
+    let settled=false;
+    let socket:any=null;
+    const finish=(fn:(v:any)=>void,v:any)=>{if(settled)return;settled=true;try{socket?.close();}catch{}fn(v);};
+    const timeout=window.setTimeout(()=>finish(reject,new Error('Spot WebSocket exchangeInfo timed out.')),10000);
+    try{
+      socket=new WebSocket(SPOT_WS_API);
+      socket.onopen=()=>{
+        try{socket.send(JSON.stringify({id:'sire-binance-exchange-info-'+Date.now(),method:'exchangeInfo',params:{symbolStatus:'TRADING'}}));}
+        catch(e){window.clearTimeout(timeout);finish(reject,e);}
+      };
+      socket.onmessage=(event:any)=>{
+        try{
+          const data=JSON.parse(String(event.data));
+          if(Number(data?.status)===200&&data?.result){window.clearTimeout(timeout);finish(resolve,data.result);}
+          else if(data?.status&&Number(data.status)!==200){window.clearTimeout(timeout);finish(reject,new Error(String(data?.error?.msg||'Spot WebSocket exchangeInfo failed.')));}
+        }catch(e){window.clearTimeout(timeout);finish(reject,e);}
+      };
+      socket.onerror=()=>{window.clearTimeout(timeout);finish(reject,new Error('Spot WebSocket API connection failed.'));};
+      socket.onclose=()=>{if(!settled){window.clearTimeout(timeout);finish(reject,new Error('Spot WebSocket API closed before exchangeInfo response.'));}};
+    }catch(e){window.clearTimeout(timeout);finish(reject,e);}
+  });
+}
+
 async function directJson(urls:string[],params:Record<string,string>={}){
   let last:any;
   for(const base of urls){
@@ -39,7 +67,19 @@ export async function fetchBinanceBrowserCatalogue():Promise<any[]>{
       return false;
     }
   };
-  await load('spot exchangeInfo',SPOT_BASES.map(x=>x+'/api/v3/exchangeInfo').join('|'),'Spot');
+  try{
+    console.info('[SIRE BINANCE BROWSER] request','spot exchangeInfo via official WebSocket API',SPOT_WS_API);
+    const data=await spotExchangeInfoViaWebSocket();
+    const rows=Array.isArray(data?.symbols)?data.symbols:[];
+    add(rows,'Spot');
+    console.info('[SIRE BINANCE BROWSER] success','spot exchangeInfo via WebSocket API',{count:rows.length,accepted:counts.Spot||0});
+  }catch(e){
+    const message=e instanceof Error?e.message:String(e);
+    failures['spot exchangeInfo websocket']=message;
+    console.warn('[SIRE BINANCE BROWSER] failed','spot exchangeInfo via WebSocket API',message);
+    await load('spot exchangeInfo via market-data-only domain',SPOT_MARKET_DATA_BASE+'/api/v3/exchangeInfo','Spot');
+    if(!counts.Spot) await load('spot exchangeInfo REST fallback',SPOT_BASES.map(x=>x+'/api/v3/exchangeInfo').join('|'),'Spot');
+  }
   await load('cross margin allPairs',SPOT_BASES.map(x=>x+'/sapi/v1/margin/allPairs').join('|'),'Margin');
   await load('isolated margin allPairs',SPOT_BASES.map(x=>x+'/sapi/v1/margin/isolated/allPairs').join('|'),'Isolated Margin');
   try{
