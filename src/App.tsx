@@ -7,7 +7,7 @@ import type { DerivInstrument } from './derivMarketData';
 import { SireErrorScreen } from './SireErrorBoundary';
 import './nativeTerminal.css';
 
-type MarketProvider = 'DERIV' | 'BINANCE' | 'BITGET' | 'BYBIT' | 'OKX';
+type MarketProvider = 'DERIV' | 'BINANCE' | 'BITGET' | 'BYBIT' | 'OKX' | 'KRAKEN';
 type Instrument = DerivInstrument & {
   id: string;
   provider: MarketProvider;
@@ -502,7 +502,7 @@ export default function App() {
     <div className="native-terminal-body">
       <aside className="native-symbol-sidebar symbol-sidebar"><div className="sidebar-search"><Search size={15} /><input value={search} onChange={event => setSearch(event.target.value)} placeholder="Search" /></div><div className="sidebar-meta"><span>{derivLoading ? "LOADING MARKETS" : derivError ? "MARKET ERROR" : "ALL MARKETS"}</span><b>{instruments.length}</b></div>
         <div className="sire-market-providers">
-          {(['ALL','DERIV','BINANCE','BITGET','BYBIT','OKX'] as const).map(provider => (
+          {(['ALL','DERIV','BINANCE','BITGET','BYBIT','OKX','KRAKEN'] as const).map(provider => (
             <button key={provider} type="button" className={providerFilter === provider ? 'active' : ''} onClick={() => setProviderFilter(provider)}>{provider === 'ALL' ? 'All' : provider[0] + provider.slice(1).toLowerCase()}</button>
           ))}
         </div>{derivError && <div className="sire-deriv-error">{derivError}</div>}<div className="native-symbol-list symbol-list" onScroll={event => setQuoteScrollTop(event.currentTarget.scrollTop)}><div style={{height: quoteWindow.top}} aria-hidden="true" /><div className="sire-quote-window">{quoteWindow.items.map(item => <button key={item.id} className={`symbol-row ${selected?.id === item.id ? 'active' : ''}`} data-provider={item.provider} onClick={() => selectInstrument(item)}><span className="quote-asset-logo-wrap"><img className="quote-asset-logo" src={item.logoUrl || item.providerLogoUrl} alt="" decoding="async" onError={event => { const image = event.currentTarget; image.style.display='none'; }} /></span><span className="quote-instrument-name"><b>{item.displaySymbol || item.symbol}</b><small>{item.name}</small></span><span className="quote-broker"><img className="quote-broker-logo" src={item.providerLogoUrl} alt="" decoding="async" onError={event => {
