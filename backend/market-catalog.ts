@@ -1,4 +1,4 @@
-export type MarketProvider = 'DERIV' | 'BINANCE' | 'BITGET' | 'BYBIT' | 'OKX' | 'KRAKEN' | 'COINBASE' | 'GATEIO' | 'KUCOIN' | 'GEMINI' | 'BITSO' | 'BITFINEX' | 'BITVAVO' | 'COINEX' | 'LBANK' | 'WOOX' | 'CRYPTOCOM' | 'HTX' | 'BITKUB' | 'UPBIT' | 'PIONEX' | 'POLONIEX' | 'BITHUMB' | 'MEXC' | 'PHEMEX' | 'WHITEBIT' | 'TWELVEDATA' | 'NASDAQTRADER' | 'CME' | 'CBOT' | 'NYMEX' | 'COMEX' | 'XETR' | 'HKEX' | 'BSE' | 'TSE' | 'XFRA' | 'EUREX' | 'ASX' | 'TWSE' | 'PSX' | 'IDX' | 'NSE' | 'BITSTAMP' | 'OANDA' | 'TRADINGVIEW' | 'FOREXCOM' | 'INTERACTIVEBROKERS' | 'TRADESTATION' | 'WEBULL' | 'MOOMOO' | 'NINJATRADER' | 'TRADOVATE' | 'AMPFUTURES' | 'TASTYTRADE' | 'TASTYFX' | 'CRYPTOCOMEXCHANGE' | 'COINBASEADVANCED' | 'ALPACA' | 'TRADIERBROKERAGE' | 'TRADEZERO' | 'COBRATRADING' | 'CLEARSTREET' | 'INVESTRADE' | 'PUBLIC' | 'PLUS500US' | 'OPTIMUSFUTURES' | 'EDGECLEAR' | 'IRONBEAM' | 'STONEX' | 'DORMANTRADING' | 'TRADIERFUTURES';
+export type MarketProvider = 'DERIV' | 'BINANCE' | 'BITGET' | 'BYBIT' | 'OKX' | 'KRAKEN' | 'COINBASE' | 'GATEIO' | 'KUCOIN' | 'GEMINI' | 'BITSO' | 'BITFINEX' | 'BITVAVO' | 'COINEX' | 'LBANK' | 'WOOX' | 'CRYPTOCOM' | 'HTX' | 'BITKUB' | 'UPBIT' | 'PIONEX' | 'POLONIEX' | 'BITHUMB' | 'MEXC' | 'PHEMEX' | 'WHITEBIT' | 'TWELVEDATA' | 'NASDAQTRADER' | 'CME' | 'CBOT' | 'NYMEX' | 'COMEX' | 'NYSEAMERICAN' | 'XETR' | 'HKEX' | 'BSE' | 'TSE' | 'XFRA' | 'EUREX' | 'ASX' | 'TWSE' | 'PSX' | 'IDX' | 'NSE' | 'BITSTAMP' | 'OANDA' | 'TRADINGVIEW' | 'FOREXCOM' | 'INTERACTIVEBROKERS' | 'TRADESTATION' | 'WEBULL' | 'MOOMOO' | 'NINJATRADER' | 'TRADOVATE' | 'AMPFUTURES' | 'TASTYTRADE' | 'TASTYFX' | 'CRYPTOCOMEXCHANGE' | 'COINBASEADVANCED' | 'ALPACA' | 'TRADIERBROKERAGE' | 'TRADEZERO' | 'COBRATRADING' | 'CLEARSTREET' | 'INVESTRADE' | 'PUBLIC' | 'PLUS500US' | 'OPTIMUSFUTURES' | 'EDGECLEAR' | 'IRONBEAM' | 'STONEX' | 'DORMANTRADING' | 'TRADIERFUTURES';
 
 export interface UnifiedInstrument {
   id: string;
@@ -1086,6 +1086,39 @@ async function cme(): Promise<UnifiedInstrument[]> {
 }
 export async function getCmeCatalogueForDiagnostics(): Promise<UnifiedInstrument[]> { return cme(); }
 
+async function nyseAmerican(): Promise<UnifiedInstrument[]> {
+  // Official NYSE Listings Directory API used by the NYSE listings page.
+  const url='https://www.nyse.com/api/quotes/filter';
+  try {
+    const out:UnifiedInstrument[]=[]; const seen=new Set<string>();
+    for(let page=1; page<=20; page++){
+      const response=await fetch(url,{method:'POST',headers:{Accept:'application/json','Content-Type':'application/json',Origin:'https://www.nyse.com',Referer:'https://www.nyse.com/listings_directory/stock','User-Agent':'SIRE-market-catalog/1.0'},body:JSON.stringify({instrumentType:'EQUITY',pageNumber:page,sortColumn:'NORMALIZED_TICKER',sortOrder:'ASC',maxResultsPerPage:5000,filterToken:''}),signal:AbortSignal.timeout(30000)});
+      if(!response.ok) throw new Error('NYSE listings HTTP '+response.status);
+      const payload=await response.json();
+      const rows=Array.isArray(payload)?payload:(Array.isArray(payload?.data?.rows)?payload.data.rows:Array.isArray(payload?.data)?payload.data:[]);
+      if(!rows.length) break;
+      let added=0;
+      for(const raw of rows){
+        const exchange=String(raw?.exchange||raw?.exchangeName||raw?.listingExchange||raw?.market||raw?.marketName||raw?.exchangeCode||'').trim();
+        if(!/NYSE\s*AMERICAN|AMEX|NYSE\s*MKT/i.test(exchange)) continue;
+        const symbol=String(raw?.symbolTicker||raw?.symbol||raw?.ticker||'').trim();
+        const name=String(raw?.instrumentName||raw?.securityName||raw?.name||raw?.companyName||symbol).trim();
+        if(!symbol||seen.has(symbol)) continue;
+        const textType=String(raw?.instrumentType||raw?.securityType||raw?.type||'').toLowerCase();
+        const category=/etf|fund|etn|etv/i.test(textType+' '+name)?'Funds':/preferred/i.test(textType+' '+name)?'Preferred':/warrant|right|unit/i.test(textType+' '+name)?'Derivatives':'Stocks';
+        const item=cryptoItem('NYSEAMERICAN','NYSE American',category,{symbol,fullName:name,status:'online'});
+        if(!item) continue;
+        item.id='NYSEAMERICAN:'+symbol; item.symbol=symbol; item.displaySymbol=symbol; item.name=name; item.providerLabel='NYSE American'; item.marketType='NYSE American'; item.category=category; item.status='Active'; item.logoUrl='https://cdn.simpleicons.org/nyse'; item.providerLogoUrl='https://cdn.simpleicons.org/nyse';
+        out.push(item); seen.add(symbol); added++;
+      }
+      console.log('[SIRE NYSE AMERICAN] page '+page+': rows='+rows.length+' added='+added);
+      if(rows.length<5000) break;
+    }
+    console.log('[SIRE NYSE AMERICAN] Total catalogue: '+out.length);
+    return out;
+  } catch(error){ console.warn('[SIRE NYSE AMERICAN] failed:',error); return []; }
+}
+
 async function nasdaqTrader(): Promise<UnifiedInstrument[]> {
   // Nasdaq Trader is the official public symbol-directory/discovery layer for the
   // Nasdaq universe. These are the published directories, not synthetic symbols.
@@ -1715,6 +1748,8 @@ export async function getUnifiedMarketCatalogue(fetchDeriv: () => Promise<any[]>
       // other U.S.-listed, bonds, NOM options, mutual funds and additional
       // Nasdaq-published derivatives directories.
       ['NASDAQTRADER', nasdaqTrader()],
+      // NYSE American (formerly NYSE Amex) is a separate exchange universe.
+      ['NYSEAMERICAN', nyseAmerican()],
       // CME Group's official public product catalogue.
       ['CME', cme()],
       // Crypto market discovery is owned exclusively by the CCXT global universe.
@@ -1722,7 +1757,7 @@ export async function getUnifiedMarketCatalogue(fetchDeriv: () => Promise<any[]>
     ];
     const results = await Promise.allSettled(
       providers.map(([provider, promise]) =>
-        withProviderTimeout(provider, promise, provider === 'DERIV' ? 10000 : provider === 'CME' ? 120000 : 20000)
+        withProviderTimeout(provider, promise, provider === 'DERIV' ? 10000 : provider === 'CME' || provider === 'NYSEAMERICAN' ? 120000 : 20000)
       )
     );
     results.forEach((result, index) => {
