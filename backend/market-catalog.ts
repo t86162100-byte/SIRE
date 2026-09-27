@@ -1507,6 +1507,35 @@ async function bse(): Promise<UnifiedInstrument[]> {
   return out;
 }
 
+async function ngx(): Promise<UnifiedInstrument[]> {
+  const urls = [
+    'https://ngxgroup.com/exchange/data/data-library/',
+  ];
+  try {
+    const html = await getText(urls[0], 12000);
+    const links = [...html.matchAll(/href=["']([^"']+)["'][^>]*>([^<]*Daily Official List[^<]*)/gi)].map(m => m[1]);
+    const out: UnifiedInstrument[] = [];
+    for (const href of links) {
+      try {
+        const absolute = new URL(href, urls[0]).toString();
+        const text = await getText(absolute, 12000);
+        const lines = text.split(/\r?\n/).map(x => x.trim()).filter(Boolean);
+        for (const line of lines) {
+          const m = line.match(/\b([A-Z]{2,6})\b\s{1,}(.*)/);
+          if (!m) continue;
+          const symbol = m[1].trim(), name = m[2].replace(/<[^>]+>/g,' ').replace(/\s+/g,' ').trim();
+          if (!name || /daily official list/i.test(name)) continue;
+          const item = cryptoItem('NSE','Nigeria Exchange','Stocks',{symbol,fullName:name,quoteAsset:'NGN',status:'online'});
+          if (item) { item.id='NSE:NSE:'+symbol; item.displaySymbol=symbol; item.name=name; item.marketType='NSE'; item.category='Stocks'; item.quote='NGN'; item.status='Active'; out.push(item); }
+        }
+      } catch {}
+    }
+    const seen=new Set<string>(); const unique=out.filter(x=>!seen.has(x.id)&&seen.add(x.id));
+    console.log('[SIRE NGX] public catalogue candidates: '+unique.length);
+    return unique;
+  } catch (error) { console.warn('[SIRE NGX] failed:', error); return []; }
+}
+
 async function tse(): Promise<UnifiedInstrument[]> {
   const url = 'https://www.jpx.co.jp/markets/statistics-equities/misc/tvdivq0000001vg2-att/data_j.xls';
   try {
@@ -1637,6 +1666,7 @@ export async function getUnifiedMarketCatalogue(fetchDeriv: () => Promise<any[]>
       ['BSE', bse()],
       ['TSE', tse()],
       ['NSE', nseIndia()],
+      ['NSE', ngx()],
       ['BITSTAMP', bitstamp()],
       ['FOREXCOM', brokerCatalogue('FOREXCOM')],
       ['INTERACTIVEBROKERS', brokerCatalogue('INTERACTIVEBROKERS')],
