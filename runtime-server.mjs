@@ -403,6 +403,14 @@ function resolveChartControl(commandId, result) {
   return true;
 }
 
+async function instrumentAuditForGpt(input) {
+  const action=String(input?.action||'status');
+  if(action==='start') return JSON.stringify({ok:true,...startInstrumentAudit()});
+  if(action==='status') return JSON.stringify({ok:true,...getInstrumentAuditStatus()});
+  if(action==='results') return JSON.stringify({ok:true,results:getInstrumentAuditResults({failedOnly:Boolean(input?.failedOnly),exchange:input?.exchange?String(input.exchange):undefined})});
+  throw new Error('Instrument audit action must be start, status, or results.');
+}
+
 async function handleDirectGptRequest(parsed, onEvent) {
   const query = String(parsed.query || '').trim();
   if (!query) throw new Error('query is required');
@@ -415,6 +423,7 @@ async function handleDirectGptRequest(parsed, onEvent) {
       githubRequest: githubRequestForGpt,
       renderRequest: renderRequestForGpt,
       marketDataRequest: marketDataRequestForGpt,
+      instrumentAudit: instrumentAuditForGpt,
       chartControl: input => requestChartControlForGpt(input, onEvent),
       checkIntegrations: async () => {
         const result = {
