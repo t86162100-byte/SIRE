@@ -59,3 +59,30 @@
 .sire-global-crypto-button{width:100%;display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 12px;margin:0 0 8px;border:1px solid #2a3440;border-radius:8px;background:#11161d;color:#fff;font:inherit;font-weight:800;cursor:pointer;text-align:left}
 .sire-global-crypto-button small{font-size:10px;font-weight:600;opacity:.65;white-space:nowrap}
 .sire-global-crypto-button:hover,.sire-global-crypto-button.active{border-color:#596575;background:#202731}
+
+/* Compact, TradingView-style instrument rows */
+.quote-asset-logo-wrap {
+  width: 28px;
+  height: 28px;
+  min-width: 28px;
+  border-radius: 50%;
+  overflow: hidden;
+}
+.quote-asset-logo { width: 28px; height: 28px; border-radius: 50%; object-fit: contain; }
+.quote-broker {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  white-space: nowrap;
+}
+.quote-broker-logo {
+  width: 18px;
+  height: 18px;
+  min-width: 18px;
+  border-radius: 50%;
+  object-fit: contain;
+}
+.quote-broker b { order: -1; }
+.quote-instrument-name b,
+.quote-broker b { text-transform: uppercase; }
