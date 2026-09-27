@@ -7,7 +7,7 @@ export function createBinanceDataFeed(instrument:Instrument,onQuote?:(q:SireMark
   let stopped=false,timer:any,last:any=null,current:any=null;
   const request=async(path:string,params:Record<string,string>)=>{const u=new URL(path,window.location.origin);for(const [k,v] of Object.entries(params))u.searchParams.set(k,v);const r=await fetch(u.toString(),{cache:'no-store'});const p=await r.json();if(!r.ok||!p?.ok)throw new Error(p?.error||'Binance market-data request failed.');return p;};
   const getBars=async({symbol,interval,countBack=500,from,to}:{symbol:string;interval:string;countBack?:number;from?:number;to?:number})=>{
-    const p=await request('/api/sire/binance/history',{symbol,marketType:String(instrument.marketType||'Spot'),interval:INTERVAL[interval]||interval,count:String(Math.min(1500,Math.max(2,countBack))),...(Number.isFinite(from)?{from:String(from)}:{}),...(Number.isFinite(to)?{to:String(to))}:{}});
+    const p=await request('/api/sire/binance/history',{symbol,marketType:String(instrument.marketType||'Spot'),interval:INTERVAL[interval]||interval,count:String(Math.min(1500,Math.max(2,countBack))),...(Number.isFinite(from)?{from:String(from)}:{}),...(Number.isFinite(to)?{to:String(to)}:{});
     const bars=(p.bars||[]).filter((b:any)=>[b.time,b.open,b.high,b.low,b.close].every(Number.isFinite)).sort((a:any,b:any)=>a.time-b.time);
     if(!bars.length)throw new Error('No Binance historical candles returned for '+symbol+'.'); return bars;
   };
