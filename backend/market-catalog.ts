@@ -1058,7 +1058,12 @@ async function cme(): Promise<UnifiedInstrument[]> {
         if(!response.ok) throw new Error('Product Slate HTTP '+response.status+' ('+cleared+' page '+page+')');
         const payload=await response.json();
         const rows=collectCandidates(payload);
-        if(!rows.length) break;
+        if(!rows.length) {
+          const top=payload && typeof payload==='object' ? Object.keys(payload).slice(0,40) : [];
+          const sample=payload && typeof payload==='object' ? JSON.stringify(payload).slice(0,5000) : String(payload).slice(0,5000);
+          console.warn('[SIRE CME RAW SHAPE]', cleared, 'page='+page, 'keys='+JSON.stringify(top), 'sample='+sample);
+          break;
+        }
         let added=0;
         for(const row of rows){
           const exchange=normExchange(scalar(row,['exchange','exchangeName','exchangeCode','dcm','venue','venueName','market','marketName']));
