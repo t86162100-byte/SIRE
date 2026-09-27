@@ -1097,11 +1097,11 @@ async function nyseAmerican(): Promise<UnifiedInstrument[]> {
       const payload=await response.json();
       const rows=Array.isArray(payload)?payload:(Array.isArray(payload?.data?.rows)?payload.data.rows:Array.isArray(payload?.data)?payload.data:[]);
       if(!rows.length) break;
-      if(page===1) console.log('[SIRE NYSE AMERICAN RAW ROW]', JSON.stringify(rows[0]).slice(0,8000));
       let added=0;
       for(const raw of rows){
         const exchange=String(raw?.exchange||raw?.exchangeName||raw?.listingExchange||raw?.market||raw?.marketName||raw?.exchangeCode||'').trim();
-        if(!/NYSE\s*AMERICAN|AMEX|NYSE\s*MKT/i.test(exchange)) continue;
+        const listingUrl=String(raw?.url||'').trim();
+        if(!/NYSE\s*AMERICAN|AMEX|NYSE\s*MKT/i.test(exchange) && !/XNYSAMERICAN:|XASE:|AMEX:/i.test(listingUrl)) continue;
         const symbol=String(raw?.symbolTicker||raw?.symbol||raw?.ticker||'').trim();
         const name=String(raw?.instrumentName||raw?.securityName||raw?.name||raw?.companyName||symbol).trim();
         if(!symbol||seen.has(symbol)) continue;
