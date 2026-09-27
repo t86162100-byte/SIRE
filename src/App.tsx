@@ -156,10 +156,13 @@ const augmentBybitInstrumentsInBrowser = async (items: Instrument[]): Promise<In
       const query = params.toString();
       const endpoints = [
         'https://api.bybit.com/v5/market/instruments-info?' + query,
+        'https://api.bybit.tr/v5/market/instruments-info?' + query,
         'https://api.bybit.ae/v5/market/instruments-info?' + query,
         'https://api.bybit.eu/v5/market/instruments-info?' + query,
         'https://api.bybit.kz/v5/market/instruments-info?' + query,
+        'https://api.bybitgeorgia.ge/v5/market/instruments-info?' + query,
         'https://api.bybit.id/v5/market/instruments-info?' + query,
+        'https://api.spark-fintech.com/v5/market/instruments-info?' + query,
         'https://api.bytick.com/v5/market/instruments-info?' + query,
       ];
       let payload: any = null;
