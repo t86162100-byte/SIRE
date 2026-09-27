@@ -12,10 +12,35 @@ let cachedMarkets: GlobalCryptoMarket[] = [];
 let fullLoad: Promise<GlobalCryptoMarket[]> | null = null;
 let backgroundLoad: Promise<void> | null = null;
 
+function mixMarkets(markets: GlobalCryptoMarket[]): GlobalCryptoMarket[] {
+  const byExchange = new Map<string, GlobalCryptoMarket[]>();
+
+  for (const market of markets) {
+    const bucket = byExchange.get(market.exchange) || [];
+    bucket.push(market);
+    byExchange.set(market.exchange, bucket);
+  }
+
+  // Keep each exchange internally stable, but interleave exchanges so the
+  // catalogue reads like a unified market list instead of exchange blocks.
+  const exchanges = [...byExchange.keys()].sort();
+  const mixed: GlobalCryptoMarket[] = [];
+  const maxLength = Math.max(0, ...exchanges.map(exchange => byExchange.get(exchange)!.length));
+
+  for (let index = 0; index < maxLength; index++) {
+    for (const exchange of exchanges) {
+      const market = byExchange.get(exchange)![index];
+      if (market) mixed.push(market);
+    }
+  }
+
+  return mixed;
+}
+
 function mergeMarkets(markets: GlobalCryptoMarket[]) {
   const byId = new Map(cachedMarkets.map(m => [m.id, m]));
   for (const market of markets) byId.set(market.id, market);
-  cachedMarkets = [...byId.values()];
+  cachedMarkets = mixMarkets([...byId.values()]);
 }
 
 async function loadExchange(id: string): Promise<GlobalCryptoMarket[]> {
