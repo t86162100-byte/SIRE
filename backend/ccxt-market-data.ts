@@ -19,25 +19,45 @@ function timeframeMs(exchange:any,timeframe:string) {
 export async function ccxtMarketCapabilities(exchangeId:string,symbol:string) {
   const exchange=await readyExchange(exchangeId); const market=exchange.market(symbol);
   if(!market) throw new Error('CCXT market "'+symbol+'" was not found on '+exchange.id+'.');
-  return {exchange:exchange.id,exchangeName:exchange.name||exchange.id,symbol:market.symbol,marketId:market.id,type:market.type,active:market.active!==false,fetchOHLCV:Boolean(exchange.has?.fetchOHLCV),fetchTicker:Boolean(exchange.has?.fetchTicker),watchOHLCV:Boolean(exchange.has?.watchOHLCV),watchTicker:Boolean(exchange.has?.watchTicker),timeframes:exchange.timeframes||{}};
+  return {exchange:exchange.id,exchangeName:exchange.name||exchange.id,symbol:market.symbol,marketId:market.id,type:market.type,active:market.active!==false,fetchOHLCV:Boolean(exchange.has?.fetchOHLCV),fetchTicker:Boolean(exchange.has?.fetchTicker),watchOHLCV:Boolean(exchange.has?.watchOHLCV),watchTicker:Boolean(exchange.has?.watchTicker),fetchTrades:Boolean(exchange.has?.fetchTrades),timeframes:exchange.timeframes||{}};
 }
 export async function ccxtMarketHistory(input:{exchangeId:string;symbol:string;timeframe:string;limit?:number;since?:number;until?:number}) {
   const exchange=await readyExchange(input.exchangeId); const symbol=String(input.symbol||'').trim(); const market=exchange.market(symbol);
   if(!market) throw new Error('CCXT market "'+symbol+'" was not found on '+exchange.id+'.');
-  if(!exchange.has?.fetchOHLCV) throw new Error(exchange.name+' does not expose fetchOHLCV for chart history through CCXT.');
+  const canOHLCV=Boolean(exchange.has?.fetchOHLCV);
+  const canTrades=Boolean(exchange.has?.fetchTrades);
+  if(!canOHLCV && !canTrades) throw new Error(exchange.name+' exposes neither fetchOHLCV nor fetchTrades for '+symbol+'.');
   const timeframe=String(input.timeframe||'1m');
-  if(exchange.timeframes&&!exchange.timeframes[timeframe]) throw new Error(exchange.name+' does not support the '+timeframe+' candle timeframe for '+symbol+'.');
+  if(canOHLCV && exchange.timeframes&&!exchange.timeframes[timeframe]) throw new Error(exchange.name+' does not support the '+timeframe+' candle timeframe for '+symbol+'.');
   const limit=Math.max(2,Math.min(1000,Math.floor(Number(input.limit)||500))); const intervalMs=timeframeMs(exchange,timeframe);
   let since=Number.isFinite(Number(input.since))?Math.floor(Number(input.since)):undefined;
   const until=Number.isFinite(Number(input.until))?Math.floor(Number(input.until)):undefined;
   if(until!==undefined&&since===undefined) since=Math.max(0,until-intervalMs*Math.max(limit,2));
-  const rows=await exchange.fetchOHLCV(symbol,timeframe,since,limit);
+  let rows:any[]=[];
+  if(canOHLCV){
+    rows=await exchange.fetchOHLCV(symbol,timeframe,since,limit);
+  } else {
+    const tradeSince=since===undefined?undefined:Math.max(0,since-intervalMs);
+    const trades=await exchange.fetchTrades(symbol,tradeSince,Math.min(1000,Math.max(100,limit*4)));
+    const buckets=new Map<number,any>();
+    for(const t of Array.isArray(trades)?trades:[]){
+      const ts=Number(t?.timestamp), price=Number(t?.price), amount=Number(t?.amount)||0;
+      if(!Number.isFinite(ts)||!Number.isFinite(price)||price<=0) continue;
+      const bucket=Math.floor(ts/intervalMs)*intervalMs;
+      if(since!==undefined&&bucket<since) continue;
+      if(until!==undefined&&bucket>=until) continue;
+      const old=buckets.get(bucket);
+      if(!old) buckets.set(bucket,{0:bucket,1:price,2:price,3:price,4:price,5:amount});
+      else {old[2]=Math.max(old[2],price);old[3]=Math.min(old[3],price);old[4]=price;old[5]+=amount;}
+    }
+    rows=[...buckets.values()].sort((a,b)=>a[0]-b[0]).slice(-limit);
+  }
   const bars=(Array.isArray(rows)?rows:[]).map((r:any[])=>({time:Number(r?.[0])/1000,open:Number(r?.[1]),high:Number(r?.[2]),low:Number(r?.[3]),close:Number(r?.[4]),volume:Number(r?.[5])||0}))
     .filter((b:any)=>[b.time,b.open,b.high,b.low,b.close].every(Number.isFinite))
     .filter((b:any)=>since===undefined||b.time*1000>=since).filter((b:any)=>until===undefined||b.time*1000<until).sort((a:any,b:any)=>a.time-b.time);
   const unique=new Map<number,any>(); for(const bar of bars) unique.set(bar.time,bar); const cleanBars=[...unique.values()].sort((a,b)=>a.time-b.time);
   if(!cleanBars.length) throw new Error('CCXT returned no candles for '+exchange.name+' '+symbol+' '+timeframe+' in the requested history range.');
-  return {exchange:exchange.id,exchangeName:exchange.name||exchange.id,symbol,timeframe,bars:cleanBars,requested:{limit,since:since??null,until:until??null}};
+  return {exchange:exchange.id,exchangeName:exchange.name||exchange.id,symbol,timeframe,bars:cleanBars,requested:{limit,since:since??null,until:until??null},source:canOHLCV?'ohlcv':'trade-aggregation'};
 }
 export async function ccxtMarketQuote(exchangeId:string,symbol:string) {
   const exchange=await readyExchange(exchangeId); const market=exchange.market(symbol);
