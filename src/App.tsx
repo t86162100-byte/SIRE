@@ -7,7 +7,7 @@ import type { DerivInstrument } from './derivMarketData';
 import { SireErrorScreen } from './SireErrorBoundary';
 import './nativeTerminal.css';
 
-type MarketProvider = 'DERIV' | 'BINANCE' | 'BITGET' | 'BYBIT' | 'OKX' | 'KRAKEN' | 'TWELVEDATA' | 'FINNHUB' | 'OANDA' | 'IG';
+type MarketProvider = 'DERIV' | 'BINANCE' | 'BITGET' | 'BYBIT' | 'OKX' | 'KRAKEN' | 'COINBASE' | 'GATEIO' | 'KUCOIN' | 'GEMINI' | 'BITSO' | 'TWELVEDATA' | 'FINNHUB' | 'OANDA' | 'IG';
 type Instrument = DerivInstrument & {
   id: string;
   provider: MarketProvider;
