@@ -99,3 +99,16 @@
 .quote-broker b{font-size:8px!important;line-height:1;text-transform:uppercase;white-space:nowrap;max-width:74px;overflow:hidden;text-overflow:ellipsis;}
 .quote-broker small{display:none!important;}
 @media(max-width:640px){.native-symbol-list .symbol-row,.sire-instrument-search-list button{min-height:52px;padding:6px 7px;gap:7px}.quote-asset-logo-wrap{width:24px;height:24px;min-width:24px}.quote-asset-logo{width:17px;height:17px;max-width:17px;max-height:17px}.quote-broker-logo{width:15px!important;height:15px!important;min-width:15px;max-width:15px}.quote-broker b{font-size:7px!important;max-width:62px}}
+
+/* TradingView-inspired symbol/exchange row treatment: circular logos are filled by the image itself. */
+.quote-asset-logo-wrap{width:30px;height:30px;min-width:30px;display:grid;place-items:center;border-radius:50%;overflow:hidden;background:#151a21;border:1px solid #252d38;}
+.quote-asset-logo{width:100%;height:100%;max-width:none;max-height:none;object-fit:cover;border-radius:50%;display:block;}
+.quote-instrument-name{display:flex!important;flex:1 1 auto;min-width:0;align-items:flex-start;justify-content:center;flex-direction:column!important;}
+.quote-instrument-name b{font-size:11px!important;line-height:1.1;text-transform:uppercase;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.quote-instrument-name small{display:none;}
+.quote-broker{display:flex!important;flex:0 0 auto;flex-direction:row!important;align-items:center;gap:6px;min-width:0;}
+.quote-broker b{font-size:8px!important;font-weight:800!important;line-height:1;text-transform:uppercase;white-space:nowrap;max-width:74px;overflow:hidden;text-overflow:ellipsis;}
+.quote-broker-logo-wrap{width:20px;height:20px;min-width:20px;display:grid;place-items:center;border-radius:50%;overflow:hidden;background:#151a21;border:1px solid #303844;}
+.quote-broker-logo{width:100%!important;height:100%!important;min-width:0!important;max-width:none!important;object-fit:cover;border-radius:50%;display:block;}
+.quote-broker small{display:none!important;}
+@media(max-width:640px){.quote-asset-logo-wrap{width:27px;height:27px;min-width:27px}.quote-broker{gap:5px}.quote-broker-logo-wrap{width:19px;height:19px;min-width:19px}.quote-broker b{font-size:7px!important;max-width:62px}}
