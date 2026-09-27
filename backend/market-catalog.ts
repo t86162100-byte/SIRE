@@ -1119,6 +1119,7 @@ async function nyseAmerican(): Promise<UnifiedInstrument[]> {
   } catch(error){ console.warn('[SIRE NYSE AMERICAN] failed:',error); return []; }
 }
 
+export async function getNyseAmericanCatalogueForDiagnostics(): Promise<UnifiedInstrument[]> { return nyseAmerican(); }
 async function nasdaqTrader(): Promise<UnifiedInstrument[]> {
   // Nasdaq Trader is the official public symbol-directory/discovery layer for the
   // Nasdaq universe. These are the published directories, not synthetic symbols.
