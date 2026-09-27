@@ -42,6 +42,28 @@ const augmentBinanceDerivativesInBrowser = async (items: Instrument[]): Promise<
   const additions: Instrument[] = [];
   const sources: Array<{ marketType: string; urls: string[]; rows: (payload: any) => any[] }> = [
     {
+      marketType: 'Spot',
+      urls: [
+        'https://data-api.binance.vision/api/v3/exchangeInfo',
+        'https://api-gcp.binance.com/api/v3/exchangeInfo',
+        'https://api1.binance.com/api/v3/exchangeInfo',
+        'https://api2.binance.com/api/v3/exchangeInfo',
+        'https://api3.binance.com/api/v3/exchangeInfo',
+        'https://api4.binance.com/api/v3/exchangeInfo',
+        'https://api.binance.com/api/v3/exchangeInfo',
+      ],
+      rows: payload => Array.isArray(payload?.symbols) ? payload.symbols : [],
+    },
+    {
+      marketType: 'Margin',
+      urls: [
+        'https://api-gcp.binance.com/sapi/v1/margin/allPairs',
+        'https://api1.binance.com/sapi/v1/margin/allPairs',
+        'https://api.binance.com/sapi/v1/margin/allPairs',
+      ],
+      rows: payload => Array.isArray(payload) ? payload : [],
+    },
+    {
       marketType: 'USD-M Futures',
       urls: ['https://fapi.binance.com/fapi/v1/exchangeInfo'],
       rows: payload => Array.isArray(payload?.symbols) ? payload.symbols : [],
@@ -61,18 +83,23 @@ const augmentBinanceDerivativesInBrowser = async (items: Instrument[]): Promise<
   const toInstrument = (marketType: string, raw: any): Instrument | null => {
     const symbol = String(raw?.symbol || '').trim();
     if (!symbol) return null;
-    const status = String(raw?.status || raw?.contractStatus || '').toUpperCase();
-    if (status && status !== 'TRADING') return null;
+    const status = String(raw?.status || raw?.contractStatus || raw?.state || '').toUpperCase();
+    if (status && !['TRADING', 'ONLINE', 'ENABLED', 'LIVE'].includes(status)) return null;
     const underlying = String(raw?.underlying || '').trim();
-    const base = String(raw?.baseAsset || (underlying.replace(/USDT$|USDC$|USD$/i, '')) || '').trim() || undefined;
-    const quote = String(raw?.quoteAsset || '').trim() || undefined;
+    const base = String(raw?.baseAsset || raw?.baseCoin || (underlying.replace(/USDT$|USDC$|USD$/i, '')) || '').trim() || undefined;
+    const quote = String(raw?.quoteAsset || raw?.quoteCoin || '').trim() || undefined;
     const id = 'BINANCE:' + marketType + ':' + symbol;
+    const normalizedMarketType = marketType === 'USD-M Futures'
+      ? (String(raw?.contractType || '').toUpperCase().includes('PERPETUAL') ? 'USD-M Perpetuals' : 'USD-M Futures')
+      : marketType === 'COIN-M Futures'
+        ? (String(raw?.contractType || '').toUpperCase().includes('PERPETUAL') ? 'COIN-M Perpetuals' : 'COIN-M Futures')
+        : marketType;
     return {
       ...(raw as any),
-      id,
+      id: 'BINANCE:' + normalizedMarketType + ':' + symbol,
       provider: 'BINANCE',
       providerLabel: 'Binance',
-      marketType,
+      marketType: normalizedMarketType,
       category: 'Crypto',
       symbol,
       displaySymbol: symbol,
@@ -83,14 +110,36 @@ const augmentBinanceDerivativesInBrowser = async (items: Instrument[]): Promise<
       status: status || 'TRADING',
       logoUrl: base ? 'https://cdn.jsdelivr.net/gh/spothq/cryptocurrency-icons@master/128/color/' + encodeURIComponent(base.toLowerCase()) + '.png' : '',
       providerLogoUrl: 'https://cdn.simpleicons.org/binance',
-    };
+      instrumentType: normalizedMarketType,
+      contractType: raw?.contractType || raw?.type || undefined,
+      settlement: raw?.marginAsset || raw?.settleAsset || raw?.settleCoin || undefined,
+      expiry: raw?.deliveryDate || raw?.deliveryTime || raw?.expirationTime || undefined,
+      strike: Number.isFinite(Number(raw?.strikePrice)) ? Number(raw.strikePrice) : undefined,
+      optionType: raw?.side || raw?.optionType || undefined,
+      supportsMargin: marketType === 'Margin',
+    } as Instrument;
+  };
+
+  const fetchFirstReachable = async (urls: string[]) => {
+    let lastError: unknown = null;
+    for (const url of urls) {
+      try {
+        const response = await fetch(url, { cache: 'no-store', headers: { Accept: 'application/json' } });
+        if (!response.ok) {
+          lastError = new Error('HTTP ' + response.status);
+          continue;
+        }
+        return await response.json();
+      } catch (error) {
+        lastError = error;
+      }
+    }
+    throw lastError || new Error('All Binance browser endpoints failed');
   };
 
   await Promise.all(sources.map(async source => {
     try {
-      const response = await fetch(source.urls[0], { cache: 'no-store', headers: { Accept: 'application/json' } });
-      if (!response.ok) throw new Error('HTTP ' + response.status);
-      const payload = await response.json();
+      const payload = await fetchFirstReachable(source.urls);
       for (const raw of source.rows(payload)) {
         const item = toInstrument(source.marketType, raw);
         if (item && !existing.has(item.id)) {
@@ -98,7 +147,7 @@ const augmentBinanceDerivativesInBrowser = async (items: Instrument[]): Promise<
           additions.push(item);
         }
       }
-      console.info('[SIRE BINANCE BROWSER] ' + source.marketType + ': ' + additions.filter(item => item.marketType === source.marketType).length);
+      console.info('[SIRE BINANCE BROWSER] ' + source.marketType + ': ' + source.rows(payload).length);
     } catch (error) {
       console.warn('[SIRE BINANCE BROWSER] ' + source.marketType + ' unavailable:', error);
     }
@@ -106,7 +155,6 @@ const augmentBinanceDerivativesInBrowser = async (items: Instrument[]): Promise<
 
   return additions.length ? items.concat(additions) : items;
 };
-
 const augmentBybitInstrumentsInBrowser = async (items: Instrument[]): Promise<Instrument[]> => {
   const existing = new Set(items.map(item => item.id));
   const additions: Instrument[] = [];
