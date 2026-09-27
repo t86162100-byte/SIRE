@@ -4,6 +4,7 @@ import { Search } from 'lucide-react';
 import ResearchLab from './ResearchLab';
 import FinancialChart from './FinancialChart';
 import type { DerivInstrument } from './derivMarketData';
+import { fetchBinanceBrowserCatalogue } from './binanceMarketData';
 import { SireErrorScreen } from './SireErrorBoundary';
 import './nativeTerminal.css';
 
@@ -168,6 +169,27 @@ export default function App() {
       setInstruments(items);
       setSelected(current => current && items.some(item => item.id === current.id) ? current : initial);
       setChartSymbols(current => current.length ? current : [initial.symbol]);
+      // Binance public APIs can be geo-restricted from a server region even when
+      // the end user's browser is eligible. Discover Binance directly from the
+      // browser using Binance's documented public market-data endpoints.
+      try {
+        const binanceItems = await fetchBinanceBrowserCatalogue();
+        if (!cancelled && binanceItems.length) {
+          setInstruments(current => {
+            const existing = new Set(current.map(item => item.id));
+            return current.concat(binanceItems.filter((item:any) => !existing.has(item.id)) as Instrument[]);
+          });
+          console.info('[SIRE BINANCE BROWSER] official catalogue loaded', {
+            total: binanceItems.length,
+            spot: binanceItems.filter((x:any)=>x.marketType==='Spot').length,
+            perpetuals: binanceItems.filter((x:any)=>x.marketType==='Perpetuals').length,
+            futures: binanceItems.filter((x:any)=>x.marketType==='Futures').length,
+            options: binanceItems.filter((x:any)=>x.marketType==='Options').length,
+          });
+        }
+      } catch (error) {
+        console.warn('[SIRE BINANCE BROWSER] official catalogue unavailable:', error);
+      }
 
       try {
         const response = await fetch('/api/sire/markets/global-crypto', { cache: 'no-store', headers: { 'Cache-Control': 'no-cache' } });
