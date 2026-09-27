@@ -1,4 +1,4 @@
-export type MarketProvider = 'DERIV' | 'BINANCE' | 'BITGET' | 'BYBIT' | 'OKX' | 'KRAKEN' | 'COINBASE' | 'GATEIO' | 'KUCOIN' | 'GEMINI' | 'BITSO' | 'BITFINEX' | 'BITVAVO' | 'COINEX' | 'LBANK' | 'WOOX' | 'CRYPTOCOM' | 'HTX' | 'BITKUB' | 'UPBIT' | 'PIONEX' | 'POLONIEX' | 'BITHUMB' | 'MEXC' | 'PHEMEX' | 'WHITEBIT' | 'TWELVEDATA' | 'NASDAQTRADER' | 'XETR' | 'HKEX' | 'BSE' | 'TSE' | 'XFRA' | 'EUREX' | 'ASX' | 'TWSE' | 'PSX' | 'IDX' | 'NSE' | 'BITSTAMP' | 'OANDA' | 'TRADINGVIEW' | 'FOREXCOM' | 'INTERACTIVEBROKERS' | 'TRADESTATION' | 'WEBULL' | 'MOOMOO' | 'NINJATRADER' | 'TRADOVATE' | 'AMPFUTURES' | 'TASTYTRADE' | 'TASTYFX' | 'CRYPTOCOMEXCHANGE' | 'COINBASEADVANCED' | 'ALPACA' | 'TRADIERBROKERAGE' | 'TRADEZERO' | 'COBRATRADING' | 'CLEARSTREET' | 'INVESTRADE' | 'PUBLIC' | 'PLUS500US' | 'OPTIMUSFUTURES' | 'EDGECLEAR' | 'IRONBEAM' | 'STONEX' | 'DORMANTRADING' | 'TRADIERFUTURES';
+export type MarketProvider = 'DERIV' | 'BINANCE' | 'BITGET' | 'BYBIT' | 'OKX' | 'KRAKEN' | 'COINBASE' | 'GATEIO' | 'KUCOIN' | 'GEMINI' | 'BITSO' | 'BITFINEX' | 'BITVAVO' | 'COINEX' | 'LBANK' | 'WOOX' | 'CRYPTOCOM' | 'HTX' | 'BITKUB' | 'UPBIT' | 'PIONEX' | 'POLONIEX' | 'BITHUMB' | 'MEXC' | 'PHEMEX' | 'WHITEBIT' | 'TWELVEDATA' | 'NASDAQTRADER' | 'CME' | 'XETR' | 'HKEX' | 'BSE' | 'TSE' | 'XFRA' | 'EUREX' | 'ASX' | 'TWSE' | 'PSX' | 'IDX' | 'NSE' | 'BITSTAMP' | 'OANDA' | 'TRADINGVIEW' | 'FOREXCOM' | 'INTERACTIVEBROKERS' | 'TRADESTATION' | 'WEBULL' | 'MOOMOO' | 'NINJATRADER' | 'TRADOVATE' | 'AMPFUTURES' | 'TASTYTRADE' | 'TASTYFX' | 'CRYPTOCOMEXCHANGE' | 'COINBASEADVANCED' | 'ALPACA' | 'TRADIERBROKERAGE' | 'TRADEZERO' | 'COBRATRADING' | 'CLEARSTREET' | 'INVESTRADE' | 'PUBLIC' | 'PLUS500US' | 'OPTIMUSFUTURES' | 'EDGECLEAR' | 'IRONBEAM' | 'STONEX' | 'DORMANTRADING' | 'TRADIERFUTURES';
 
 export interface UnifiedInstrument {
   id: string;
@@ -1005,6 +1005,94 @@ async function nseIndia(): Promise<UnifiedInstrument[]> {
   return out;
 }
 
+async function cme(): Promise<UnifiedInstrument[]> {
+  // CME Group's official Quote Vendor Symbols workbook is the public product
+  // catalogue. It covers CME's listed derivatives across its DCMs and exposes
+  // the Globex/ClearPort symbols used by market-data vendors.
+  const url = 'https://www.cmegroup.com/tools-information/files/quote-vendor-codes.xlsx?lastUpdated-2026-09-18=';
+  try {
+    const response = await fetch(url, {
+      headers: { 'User-Agent': 'SIRE-market-catalog/1.0', Accept: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' },
+      signal: AbortSignal.timeout(20000)
+    });
+    if (!response.ok) throw new Error('HTTP ' + response.status);
+    const bytes = Buffer.from(await response.arrayBuffer());
+    const XLSX = await import('xlsx');
+    const workbook = XLSX.read(bytes, { type: 'buffer' });
+    const out: UnifiedInstrument[] = [];
+    const seen = new Set<string>();
+
+    const categoryFromSheet = (sheetName: string) => {
+      const s = sheetName.toLowerCase();
+      if (s.includes('agric')) return 'Agriculture';
+      if (s.includes('equity')) return 'Equities';
+      if (s.includes('metal')) return 'Metals';
+      if (s.includes('fx') || s.includes('foreign')) return 'Forex';
+      if (s.includes('interest')) return 'Interest Rates';
+      if (s.includes('energy')) return 'Energy';
+      return 'Derivatives';
+    };
+
+    for (const sheetName of workbook.SheetNames) {
+      const rows = XLSX.utils.sheet_to_json<any[]>(workbook.Sheets[sheetName], { header: 1, defval: '' });
+      if (!rows.length) continue;
+      const headerIndex = rows.findIndex((row: any[]) => row.some(v => /product\s*name/i.test(String(v))) && row.some(v => /globex/i.test(String(v))));
+      if (headerIndex < 0) continue;
+      const headers = rows[headerIndex].map(v => String(v).trim());
+      const find = (patterns: RegExp[]) => headers.findIndex(h => patterns.some(p => p.test(h)));
+      const nameI = find([/product\s*name/i, /^name$/i]);
+      const globexI = find([/^globex$/i, /globex\s*(symbol|code)/i]);
+      const clearingI = find([/^clearing$/i, /clearing\s*(symbol|code)/i]);
+      const exchangeI = find([/^exchange$/i]);
+      const groupI = find([/^product\s*group$/i, /^asset\s*class$/i]);
+      const typeI = find([/^cleared\s*as$/i, /^type$/i]);
+      if (globexI < 0 && clearingI < 0) continue;
+
+      for (const row of rows.slice(headerIndex + 1)) {
+        const name = String(nameI >= 0 ? row[nameI] ?? '' : '').trim();
+        const globex = String(globexI >= 0 ? row[globexI] ?? '' : '').trim();
+        const clearing = String(clearingI >= 0 ? row[clearingI] ?? '' : '').trim();
+        const symbol = globex || clearing;
+        if (!symbol || !name || /^(?:-|n\/a)$/i.test(symbol)) continue;
+        const exchange = String(exchangeI >= 0 ? row[exchangeI] ?? '' : 'CME Group').trim() || 'CME Group';
+        const productGroup = String(groupI >= 0 ? row[groupI] ?? '' : '').trim();
+        const clearedAs = String(typeI >= 0 ? row[typeI] ?? '' : '').trim();
+        const category = /option/i.test(clearedAs) ? 'Options' : /future/i.test(clearedAs) ? 'Futures' : categoryFromSheet(sheetName);
+        const key = exchange + ':' + symbol;
+        if (seen.has(key)) continue;
+        seen.add(key);
+
+        const item = cryptoItem('CME', exchange, category, {
+          symbol,
+          fullName: name,
+          status: 'online'
+        });
+        if (!item) continue;
+        item.id = 'CME:' + exchange + ':' + symbol;
+        item.providerLabel = 'CME';
+        item.marketType = exchange;
+        item.category = category;
+        item.name = name;
+        item.symbol = symbol;
+        item.displaySymbol = symbol;
+        item.status = 'Active';
+        item.quote = undefined;
+        item.instrumentType = clearedAs || category;
+        item.contractType = clearedAs || undefined;
+        item.logoUrl = providerLogo('CME');
+        item.providerLogoUrl = providerLogo('CME');
+        if (productGroup) item.base = productGroup;
+        out.push(item);
+      }
+    }
+    console.log('[SIRE CME] Products: ' + out.length);
+    return out;
+  } catch (error) {
+    console.warn('[SIRE CME] failed:', error);
+    return [];
+  }
+}
+
 async function nasdaqTrader(): Promise<UnifiedInstrument[]> {
   // Nasdaq Trader is the official public symbol-directory/discovery layer for the
   // Nasdaq universe. These are the published directories, not synthetic symbols.
@@ -1634,6 +1722,8 @@ export async function getUnifiedMarketCatalogue(fetchDeriv: () => Promise<any[]>
       // other U.S.-listed, bonds, NOM options, mutual funds and additional
       // Nasdaq-published derivatives directories.
       ['NASDAQTRADER', nasdaqTrader()],
+      // CME Group's official public product catalogue.
+      ['CME', cme()],
       // Crypto market discovery is owned exclusively by the CCXT global universe.
       ['OANDA', oanda()],
     ];
