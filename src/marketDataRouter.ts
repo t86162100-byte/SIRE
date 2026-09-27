@@ -27,13 +27,14 @@ type DiagnosticSink = (event: DerivFeedDiagnostic & {
 }) => void;
 
 export type MarketFeedFactory = (
+  instrument: SireMarketInstrument,
   onQuote: (quote: SireMarketQuote) => void,
   reportDiagnostic: DiagnosticSink,
 ) => SireMarketFeed;
 
 const providers = new Map<string, MarketFeedFactory>([
-  ['DERIV', (onQuote, reportDiagnostic) => createDerivDataFeed(onQuote, reportDiagnostic)],
-  ['FXCM', (onQuote, reportDiagnostic) => createFxcmDataFeed(onQuote, reportDiagnostic)],
+  ['DERIV', (_instrument, onQuote, reportDiagnostic) => createDerivDataFeed(onQuote, reportDiagnostic)],
+  ['FXCM', (_instrument, onQuote, reportDiagnostic) => createFxcmDataFeed(onQuote, reportDiagnostic)],
 ]);
 
 export function registerMarketFeed(provider: string, factory: MarketFeedFactory) {
@@ -59,7 +60,7 @@ export function createSireMarketFeed(
       'The instrument may be catalogued, but SIRE will not invent a data source for it.',
     );
   }
-  return factory(onQuote, reportDiagnostic);
+  return factory(instrument, onQuote, reportDiagnostic);
 }
 
 export function listRegisteredMarketFeeds() {
