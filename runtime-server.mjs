@@ -914,6 +914,15 @@ const server = http.createServer(async (req,res) => {
         sireHistoryStore: { enabled: stored.enabled, chunks: stored.chunks },
       }));
     }
+    if (req.method === 'POST' && pathname === '/api/sire/binance/browser-diagnostic') {
+      let parsed = {};
+      try { parsed = body ? JSON.parse(body) : {}; } catch { return res.writeHead(400,{ 'Access-Control-Allow-Origin':'*','Content-Type':'application/json; charset=utf-8' }).end(JSON.stringify({ok:false,error:'Invalid JSON request.'})); }
+      const total = Math.max(0, Number(parsed.total) || 0);
+      const counts = parsed.counts && typeof parsed.counts === 'object' ? parsed.counts : {};
+      const failures = parsed.failures && typeof parsed.failures === 'object' ? parsed.failures : {};
+      console.log('[SIRE BINANCE BROWSER REPORT]', JSON.stringify({source:'browser',total,counts,failures,reportedAt:parsed.reportedAt||Date.now()}));
+      return res.writeHead(200,{ 'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8' }).end(JSON.stringify({ok:true,total,counts,failures}));
+    }
     if (req.method === 'GET' && pathname === '/api/sire/markets/catalog') {
       try {
         const result = await getUnifiedMarketCatalogue(async () => {
