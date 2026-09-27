@@ -1,12 +1,3 @@
-import { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
-import { createLinkGroup, type LinkGroup } from 'openalgo-charts';
-import { Search } from 'lucide-react';
-import {
-  siBinance, siBybit, siOkx, siKraken, siCoinbase, siKucoin, siMexc,
-  siGemini, siBitfinex, siBitstamp, siBitvavo, siCoinex, siLbank, siCryptoDotCom,
-  siHtx, siUpbit, siPoloniex, siBithumb, siPhemex, siWhitebit, siBitso, siBitkub,
-  siPionex, siHyperliquid, siOanda, siGate,
-} from 'simple-icons';
 import ResearchLab from './ResearchLab';
 import FinancialChart from './FinancialChart';
 import type { DerivInstrument } from './derivMarketData';
@@ -39,55 +30,48 @@ const makeAssetLogoFallback = (item: Instrument) => {
   return base ? 'https://cdn.jsdelivr.net/gh/vadimmalykhin/binance-icons/crypto/' + encodeURIComponent(base) + '.svg' : makeLogoFallback(item.displaySymbol || item.symbol);
 };
 /*
- * Exchange logos are bundled into the SIRE frontend instead of being fetched
- * from an image CDN at runtime. This prevents the loading/blinking behaviour
- * seen on mobile when an external logo request is slow or unavailable.
- *
- * TradingView's Symbol Search expects exchange_logo to be an actual image URL
- * and recommends square SVG images; these bundled SVGs are converted to data
- * URLs so the browser has no second network request to make for the logo.
+ * Exchange logos use the same working image-loading path as the existing
+ * Deriv/provider logos. No npm icon package or runtime CDN is used.
  */
-const providerLogoIcons: Record<string, { svg: string }> = {
-  binance: siBinance,
-  bybit: siBybit,
-  okx: siOkx,
-  kraken: siKraken,
-  coinbase: siCoinbase,
-  kucoin: siKucoin,
-  mexc: siMexc,
-  gemini: siGemini,
-  bitfinex: siBitfinex,
-  bitstamp: siBitstamp,
-  bitvavo: siBitvavo,
-  coinex: siCoinex,
-  lbank: siLbank,
-  cryptocom: siCryptoDotCom,
-  cryptocomexchange: siCryptoDotCom,
-  htx: siHtx,
-  upbit: siUpbit,
-  poloniex: siPoloniex,
-  bithumb: siBithumb,
-  phemex: siPhemex,
-  whitebit: siWhitebit,
-  bitso: siBitso,
-  bitkub: siBitkub,
-  pionex: siPionex,
-  hyperliquid: siHyperliquid,
-  oanda: siOanda,
-  gate: siGate,
-  gateio: siGate,
+const exchangeDomains: Record<string, string> = {
+  binance: 'binance.com',
+  bitget: 'bitget.com',
+  bybit: 'bybit.com',
+  okx: 'okx.com',
+  kraken: 'kraken.com',
+  coinbase: 'coinbase.com',
+  gate: 'gate.io',
+  gateio: 'gate.io',
+  kucoin: 'kucoin.com',
+  mexc: 'mexc.com',
+  gemini: 'gemini.com',
+  bitfinex: 'bitfinex.com',
+  bitstamp: 'bitstamp.net',
+  bitvavo: 'bitvavo.com',
+  coinex: 'coinex.com',
+  lbank: 'lbank.com',
+  cryptocom: 'crypto.com',
+  htx: 'htx.com',
+  upbit: 'upbit.com',
+  poloniex: 'poloniex.com',
+  bithumb: 'bithumb.com',
+  phemex: 'phemex.com',
+  whitebit: 'whitebit.com',
+  bitso: 'bitso.com',
+  bitkub: 'bitkub.com',
+  pionex: 'pionex.com',
+  hyperliquid: 'hyperliquid.xyz',
+  oanda: 'oanda.com',
+  woox: 'woo.org',
 };
 
 const makeProviderLogoFallback = (item: Instrument) => {
   const key = String(item.exchange || item.providerLabel || item.provider || '')
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]/g, '');
-  const icon = providerLogoIcons[key];
-  if (icon?.svg) {
-    return 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(icon.svg);
-  }
-  return makeLogoFallback(item.providerLabel || item.provider || item.exchange || '?');
+    .trim().toLowerCase().replace(/[^a-z0-9]/g, '');
+  const domain = item.provider === 'DERIV'
+    ? 'deriv.com'
+    : (exchangeDomains[key] || (key ? key + '.com' : 'deriv.com'));
+  return 'https://www.google.com/s2/favicons?domain=' + encodeURIComponent(domain) + '&sz=128';
 };
 
 const chooseInitialDerivInstrument = (items: Instrument[]) =>
