@@ -217,9 +217,6 @@ export default function App() {
     linkGroupRef.current = linked
       ? createLinkGroup({ crosshair: true, viewport: true, symbol: true })
       : null;
-    return () => {
-      window.clearInterval(globalCryptoRefresh);
-};
   }, [linked]);
 
   useEffect(() => () => { linkGroupRef.current?.destroy(); linkGroupRef.current = null; }, []);
