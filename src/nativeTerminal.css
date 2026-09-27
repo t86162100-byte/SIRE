@@ -145,7 +145,7 @@
   min-width: 86px;
   max-width: 44%;
   display: grid !important;
-  grid-template-columns: auto 32px;
+  grid-template-columns: auto 34px;
   grid-template-rows: auto auto;
   align-items: center;
   justify-content: end;
@@ -166,30 +166,35 @@
   text-align: right;
   letter-spacing: -.1px;
 }
-.quote-broker-logo-wrap {
+.quote-exchange-logo-wrap {
   grid-column: 2;
   grid-row: 1 / span 2;
-  width: 32px;
-  height: 32px;
-  min-width: 32px;
-  flex: 0 0 32px;
+  width: 34px;
+  height: 34px;
+  min-width: 34px;
+  flex: 0 0 34px;
   display: grid;
   place-items: center;
   overflow: hidden;
   border-radius: 50%;
   background: #171b20;
   border: 0;
+  box-sizing: border-box;
 }
-.quote-broker-logo {
-  width: 100%;
-  height: 100%;
-  min-width: 100%;
-  min-height: 100%;
-  max-width: none;
-  max-height: none;
+
+.quote-exchange-logo {
+  width: 28px !important;
+  height: 28px !important;
+  min-width: 28px !important;
+  min-height: 28px !important;
+  max-width: 28px !important;
+  max-height: 28px !important;
   display: block;
+  margin: 0 auto;
   border-radius: 50%;
-  object-fit: cover;
+  object-fit: contain !important;
+  object-position: center;
+  box-sizing: border-box;
 }
 .quote-broker small {
   grid-column: 1;
@@ -219,22 +224,20 @@
 .sire-instrument-search-list .quote-instrument-name b { font-size: 13px !important; }
 .sire-instrument-search-list .quote-instrument-name small { font-size: 10px !important; }
 .sire-instrument-search-list .quote-broker { min-width: 78px; grid-template-columns:auto 22px; }
-.sire-instrument-search-list .quote-broker-logo-wrap {
-  width: 28px;
-  height: 28px;
-  min-width: 28px;
-  flex: 0 0 28px;
+.sire-instrument-search-list .quote-exchange-logo-wrap {
+  width: 30px;
+  height: 30px;
+  min-width: 30px;
+  flex-basis: 30px;
 }
-.sire-instrument-search-list .quote-broker-logo {
-  width: 100% !important;
-  height: 100% !important;
-  min-width: 100% !important;
-  min-height: 100% !important;
-  max-width: none !important;
-  max-height: none !important;
-  object-fit: cover !important;
-  padding: 0;
-  box-sizing: border-box;
+.sire-instrument-search-list .quote-exchange-logo {
+  width: 24px !important;
+  height: 24px !important;
+  min-width: 24px !important;
+  min-height: 24px !important;
+  max-width: 24px !important;
+  max-height: 24px !important;
+  object-fit: contain !important;
 }
 .sire-instrument-search-list .quote-broker b { font-size: 10px !important; }
 .sire-instrument-search-list .quote-broker small { font-size: 9px !important; }
@@ -258,7 +261,7 @@
   .quote-broker {
     min-width: 78px;
     max-width: 45%;
-    grid-template-columns:auto 32px;
+    grid-template-columns:auto 34px;
     column-gap: 6px;
   }
   .quote-broker b { font-size: 10px !important; }
