@@ -998,7 +998,7 @@ const server = http.createServer(async (req,res) => {
         if (res.writableEnded || res.destroyed) return;
         try { res.write(`event: ${type}\ndata: ${JSON.stringify(payload)}\n\n`); } catch {}
       };
-      res.writeHead(200,{ 'Access-Control-Allow-Origin':'*','Cache-Control':'no-cache, no-transform','Content-Type':'text/event-stream; charset=utf-8','Connection':'keep-alive','X-Accel-Buffering':'no' });
+      res.writeHead(200,{ 'Access-Control-Allow-Origin':'*','Cache-Control':'no-cache, no-transform','Content-Type':'text/event-stream; charset=utf-8','Connection':'keep-alive','X-Accel-Buffering':'no','X-SIRE-GPT-Request-Id':requestId,'Access-Control-Expose-Headers':'X-SIRE-GPT-Request-Id' });
       res.flushHeaders?.();
       res.socket?.setKeepAlive?.(true);
       const heartbeat = setInterval(() => {
