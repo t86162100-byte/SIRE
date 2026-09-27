@@ -844,125 +844,58 @@ async function twelveData(): Promise<UnifiedInstrument[]> {
   console.log('[SIRE TWELVEDATA] Total multi-asset catalogue: ' + out.length);
   return out;
 }
-async function finnhub(): Promise<UnifiedInstrument[]> {
-  const apiKey = String(process.env.FINNHUB_API_KEY || '').trim();
-  if (!apiKey) {
-    console.warn('[SIRE FINNHUB] FINNHUB_API_KEY not configured; skipping optional global catalogue.');
-    return [];
-  }
-
+async function nasdaqTrader(): Promise<UnifiedInstrument[]> {
+  const sources = [
+    { file: 'nasdaqlisted.txt', category: 'Stocks', marketType: 'NASDAQ' },
+    { file: 'otherlisted.txt', category: 'Stocks', marketType: 'US Other Exchanges' },
+    { file: 'bondslist.txt', category: 'Bonds', marketType: 'US Bonds' },
+    { file: 'options.txt', category: 'Options', marketType: 'US Options' },
+    { file: 'mfundslist.txt', category: 'Funds', marketType: 'US Mutual Funds' },
+  ];
   const out: UnifiedInstrument[] = [];
   const seen = new Set<string>();
-
-  const addRows = (rows: any[], category: string, marketType: string) => {
-    for (const raw of rows) {
-      const symbol = String(raw?.symbol || raw?.displaySymbol || '').trim();
-      if (!symbol) continue;
-      const id = 'FINNHUB:' + marketType + ':' + symbol;
-      if (seen.has(id)) continue;
-      seen.add(id);
-      const item = cryptoItem('FINNHUB', marketType, category, {
-        symbol,
-        baseAsset: raw?.baseCurrency || raw?.base || '',
-        quoteAsset: raw?.quoteCurrency || raw?.quote || '',
-        fullName: raw?.description || raw?.displaySymbol || symbol,
-        status: raw?.status || 'online'
+  for (const source of sources) {
+    try {
+      const response = await fetch('https://www.nasdaqtrader.com/dynamic/SymDir/' + source.file, {
+        headers: { Accept: 'text/plain,text/csv,*/*' }
       });
-      if (!item) continue;
-      item.name = String(raw?.description || raw?.displaySymbol || symbol);
-      item.category = category;
-      item.marketType = marketType;
-      item.logoUrl = providerLogo('FINNHUB');
-      item.providerLogoUrl = providerLogo('FINNHUB');
-      out.push(item);
-    }
-  };
-
-  // Finnhub publishes exchange metadata plus symbol catalogues. Discover
-  // every exchange/venue returned by the API; do not hard-code a short list.
-  try {
-    const exchangesPayload = await getJsonAny([
-      'https://finnhub.io/api/v1/stock/exchange?token=' + encodeURIComponent(apiKey)
-    ], 15000);
-    const exchanges = Array.isArray(exchangesPayload) ? exchangesPayload : [];
-
-    for (const exchange of exchanges) {
-      const code = String(exchange?.code || exchange?.mic || '').trim();
-      if (!code) continue;
-      try {
-        const rows = await getJsonAny([
-          'https://finnhub.io/api/v1/stock/symbol?exchange=' +
-          encodeURIComponent(code) + '&token=' + encodeURIComponent(apiKey)
-        ], 15000);
-        for (const raw of Array.isArray(rows) ? rows : []) {
-          const type = String(raw?.type || raw?.instrumentType || '').toUpperCase();
-          const category =
-            type.includes('ETF') ? 'Funds' :
-            type.includes('MUTUAL') || type.includes('FUND') ? 'Funds' :
-            type.includes('INDEX') ? 'Indices' :
-            type.includes('BOND') || type.includes('FIXED') ? 'Bonds' :
-            'Stocks';
-          addRows([raw], category, code);
+      if (!response.ok) throw new Error('HTTP ' + response.status);
+      const text = await response.text();
+      const rows = text.split(/\r?\n/).filter(Boolean);
+      if (!rows.length) continue;
+      const headers = rows[0].split('|').map(v => v.trim());
+      for (const line of rows.slice(1)) {
+        if (!line || line.startsWith('File Creation Time')) continue;
+        const values = line.split('|');
+        const raw: Record<string,string> = {};
+        headers.forEach((header, index) => { raw[header] = String(values[index] ?? '').trim(); });
+        const symbol = String(raw['Symbol'] || raw['ACT Symbol'] || raw['Option Symbol'] || raw['Underlying'] || '').trim();
+        const name = String(raw['Security Name'] || raw['Company Name'] || raw['Underlying Security Name'] || symbol).trim();
+        if (!symbol || !name) continue;
+        let category = source.category;
+        if (source.file === 'nasdaqlisted.txt' || source.file === 'otherlisted.txt') {
+          const isEtf = String(raw['ETF'] || '').toUpperCase() === 'Y' || /\bETF\b|EXCHANGE[- ]TRADED FUND/i.test(name);
+          category = isEtf ? 'Funds' : 'Stocks';
         }
-      } catch (error) {
-        console.warn('[SIRE FINNHUB] stock exchange failed:', code, error);
+        const exchange = String(raw['Exchange'] || raw['Market Category'] || source.marketType).trim();
+        const key = 'NASDAQTRADER:' + source.file + ':' + exchange + ':' + symbol;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        const item = cryptoItem('NASDAQTRADER', source.marketType, category, { symbol, fullName: name, status: 'online' });
+        if (!item) continue;
+        item.name = name;
+        item.category = category;
+        item.marketType = exchange || source.marketType;
+        item.logoUrl = providerLogo('NASDAQTRADER');
+        item.providerLogoUrl = providerLogo('NASDAQTRADER');
+        out.push(item);
       }
+      console.log('[SIRE NASDAQTRADER] ' + source.file + ': ' + rows.length);
+    } catch (error) {
+      console.warn('[SIRE NASDAQTRADER] ' + source.file + ' failed:', error);
     }
-  } catch (error) {
-    console.warn('[SIRE FINNHUB] stock exchange discovery failed:', error);
   }
-
-  // Discover all forex venues exposed by Finnhub, then load each venue's
-  // complete symbol catalogue. Finnhub documents 10+ forex brokers.
-  try {
-    const forexExchanges = await getJsonAny([
-      'https://finnhub.io/api/v1/forex/exchange?token=' + encodeURIComponent(apiKey)
-    ], 15000);
-    for (const venueRaw of Array.isArray(forexExchanges) ? forexExchanges : []) {
-      const venue = typeof venueRaw === 'string'
-        ? venueRaw
-        : String(venueRaw?.code || venueRaw?.name || venueRaw?.exchange || '').trim();
-      if (!venue) continue;
-      try {
-        const rows = await getJsonAny([
-          'https://finnhub.io/api/v1/forex/symbol?exchange=' +
-          encodeURIComponent(venue) + '&token=' + encodeURIComponent(apiKey)
-        ], 15000);
-        addRows(Array.isArray(rows) ? rows : [], 'Forex', venue);
-      } catch (error) {
-        console.warn('[SIRE FINNHUB] forex venue failed:', venue, error);
-      }
-    }
-  } catch (error) {
-    console.warn('[SIRE FINNHUB] forex exchange discovery failed:', error);
-  }
-
-  // Discover all crypto venues instead of assuming Binance is the whole
-  // catalogue. Finnhub documents 15+ crypto brokers/exchanges.
-  try {
-    const cryptoExchanges = await getJsonAny([
-      'https://finnhub.io/api/v1/crypto/exchange?token=' + encodeURIComponent(apiKey)
-    ], 15000);
-    for (const venueRaw of Array.isArray(cryptoExchanges) ? cryptoExchanges : []) {
-      const venue = typeof venueRaw === 'string'
-        ? venueRaw
-        : String(venueRaw?.code || venueRaw?.name || venueRaw?.exchange || '').trim();
-      if (!venue) continue;
-      try {
-        const rows = await getJsonAny([
-          'https://finnhub.io/api/v1/crypto/symbol?exchange=' +
-          encodeURIComponent(venue) + '&token=' + encodeURIComponent(apiKey)
-        ], 15000);
-        addRows(Array.isArray(rows) ? rows : [], 'Crypto', venue);
-      } catch (error) {
-        console.warn('[SIRE FINNHUB] crypto venue failed:', venue, error);
-      }
-    }
-  } catch (error) {
-    console.warn('[SIRE FINNHUB] crypto exchange discovery failed:', error);
-  }
-
-  console.log('[SIRE FINNHUB] Complete discovered catalogue: ' + out.length);
+  console.log('[SIRE NASDAQTRADER] Total catalogue: ' + out.length);
   return out;
 }
 async function okx(): Promise<UnifiedInstrument[]> {
@@ -1043,7 +976,7 @@ export async function getUnifiedMarketCatalogue(fetchDeriv: () => Promise<any[]>
       ['OKX', okx()],
       ['KRAKEN', kraken()],
       ['TWELVEDATA', twelveData()],
-      ['FINNHUB', finnhub()],
+      ['NASDAQTRADER', nasdaqTrader()],
       ['OANDA', oanda()],
     ];
     const results = await Promise.allSettled(providers.map(([, promise]) => promise));
