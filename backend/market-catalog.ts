@@ -595,8 +595,16 @@ async function binance(): Promise<UnifiedInstrument[]> {
     ['COIN-M',['https://dapi.binance.com/dapi/v1/exchangeInfo']],
     ['Options',['https://eapi.binance.com/eapi/v1/exchangeInfo']]
   ];
-  for(const [f,u] of sources) try { const r=await getJsonAny(u,15000); add(f,f==='Margin'?(Array.isArray(r)?r:[]):f==='Options'?(r?.optionSymbols||[]):(r?.symbols||[])); } catch(e){console.warn('[SIRE BINANCE] '+f+' failed:',e)}
-  console.log('[SIRE BINANCE] Total: '+out.length); return out;
+  const results = await Promise.allSettled(sources.map(async ([f,u]) => {
+    const r = await getJsonAny(u,8000);
+    add(f, f === 'Margin' ? (Array.isArray(r) ? r : []) : f === 'Options' ? (r?.optionSymbols || []) : (r?.symbols || []));
+    console.log('[SIRE BINANCE] ' + f + ': ' + out.filter(x => x.provider === 'BINANCE' && x.marketType.toLowerCase().includes(f.toLowerCase().replace('-',' '))).length);
+  }));
+  results.forEach((r,index) => {
+    if (r.status === 'rejected') console.warn('[SIRE BINANCE] ' + sources[index][0] + ' failed:', r.reason);
+  });
+  console.log('[SIRE BINANCE] Total: ' + out.length);
+  return out;
 }
 async function bitget(): Promise<UnifiedInstrument[]> { const out:UnifiedInstrument[]=[];for(const c of ['SPOT','MARGIN','USDT-FUTURES','COIN-FUTURES','USDC-FUTURES'])try{const r=await getJson('https://api.bitget.com/api/v3/market/instruments?category='+c,15000);for(const raw of r?.data||[]){if(String(raw?.status||'').toLowerCase()!=='online')continue;const t=c==='SPOT'?'Spot':c==='MARGIN'?'Margin':c==='USDT-FUTURES'?(String(raw?.type||'').toLowerCase()==='delivery'?'USDT Futures':'USDT Perpetuals'):c==='COIN-FUTURES'?(String(raw?.type||'').toLowerCase()==='delivery'?'Coin-M Futures':'Coin-M Perpetuals'):(String(raw?.type||'').toLowerCase()==='delivery'?'USDC Futures':'USDC Perpetuals');const i=cryptoItem('BITGET',t,'Crypto',raw);if(i)out.push(i)}}catch(e){console.warn('[SIRE BITGET] '+c+' failed:',e)}return out; }
 
@@ -1471,6 +1479,42 @@ async function tse(): Promise<UnifiedInstrument[]> {
 async function okx(): Promise<UnifiedInstrument[]> { const out:UnifiedInstrument[]=[];for(const t of ['SPOT','MARGIN','SWAP','FUTURES','OPTION'])try{const r=await getJsonAny(['https://www.okx.com/api/v5/public/instruments?instType='+t,'https://app.okx.com/api/v5/public/instruments?instType='+t],15000);for(const raw of r?.data||[]){if(String(raw?.state||'').toLowerCase()!=='live')continue;const mt=t==='SPOT'?'Spot':t==='MARGIN'?'Margin':t==='SWAP'?'Perpetuals':t==='FUTURES'?'Futures':'Options';const i=cryptoItem('OKX',mt,'Crypto',raw);if(i)out.push(i)}}catch(e){console.warn('[SIRE OKX] '+t+' failed:',e)}return out; }
 
 
+function derivItem(raw: any): UnifiedInstrument | null {
+  const symbol = String(raw?.symbol || '').trim();
+  if (!symbol) return null;
+  const categoryMap: Record<string,string> = {
+    synthetic: 'Synthetic Indices',
+    forex: 'Forex',
+    commodities: 'Commodities',
+    indices: 'Indices',
+    stocks: 'Stocks',
+    crypto: 'Crypto',
+    other: 'Other',
+  };
+  const categoryKey = String(raw?.category || '').toLowerCase();
+  const category = categoryMap[categoryKey] || 'Other';
+  const marketType = category === 'Synthetic Indices' ? 'Synthetic Indices' : category;
+  const base = String(raw?.base || '').trim() || undefined;
+  const quote = String(raw?.quote || '').trim() || undefined;
+  return {
+    id: 'DERIV:' + symbol,
+    provider: 'DERIV',
+    providerLabel: 'Deriv',
+    marketType,
+    category,
+    symbol,
+    displaySymbol: symbol,
+    name: String(raw?.name || symbol).trim() || symbol,
+    base,
+    quote,
+    exchangeOpen: Number.isFinite(Number(raw?.exchangeOpen)) ? Number(raw.exchangeOpen) : undefined,
+    status: Number(raw?.tradingSuspended) === 1 ? 'suspended' : 'online',
+    logoUrl: assetLogo(base) || providerLogo('DERIV'),
+    providerLogoUrl: providerLogo('DERIV'),
+    instrumentType: String(raw?.symbolType || marketType),
+  };
+}
+
 export async function getUnifiedMarketCatalogue(fetchDeriv: () => Promise<any[]>): Promise<UnifiedInstrument[]> {
   if (cached && Date.now() - cached.at < CACHE_MS) return cached.instruments;
   if (loading) return loading;
@@ -1492,7 +1536,7 @@ export async function getUnifiedMarketCatalogue(fetchDeriv: () => Promise<any[]>
     ];
     const results = await Promise.allSettled(
       providers.map(([provider, promise]) =>
-        withProviderTimeout(provider, promise, provider === 'DERIV' ? 20000 : 15000)
+        withProviderTimeout(provider, promise, provider === 'DERIV' ? 10000 : 8000)
       )
     );
     results.forEach((result, index) => {
