@@ -173,18 +173,14 @@ export default function App() {
       // the end user's browser is eligible. Discover Binance directly from the
       // browser using Binance's documented public market-data endpoints.
       try {
+        console.info('[SIRE BINANCE BROWSER] starting official browser catalogue discovery');
         const binanceItems = await fetchBinanceBrowserCatalogue();
         if (!cancelled && binanceItems.length) {
           setInstruments(current => {
             const existing = new Set(current.map(item => item.id));
-            return current.concat(binanceItems.filter((item:any) => !existing.has(item.id)) as Instrument[]);
-          });
-          console.info('[SIRE BINANCE BROWSER] official catalogue loaded', {
-            total: binanceItems.length,
-            spot: binanceItems.filter((x:any)=>x.marketType==='Spot').length,
-            perpetuals: binanceItems.filter((x:any)=>x.marketType==='Perpetuals').length,
-            futures: binanceItems.filter((x:any)=>x.marketType==='Futures').length,
-            options: binanceItems.filter((x:any)=>x.marketType==='Options').length,
+            const additions = binanceItems.filter((item:any) => !existing.has(item.id)) as Instrument[];
+            console.info('[SIRE BINANCE BROWSER] publishing instruments to SIRE', {received:binanceItems.length,added:additions.length});
+            return current.concat(additions);
           });
         }
       } catch (error) {
