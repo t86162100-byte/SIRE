@@ -339,6 +339,39 @@ export default function App() {
         console.warn('[SIRE MARKET STARTUP] Global CCXT crypto universe unavailable:', error);
       }
 
+      // CCXT expands the global universe in the backend after the fast first response.
+      // Keep polling so newly loaded exchanges/market types appear without requiring a reload.
+      const globalCryptoRefresh = window.setInterval(async () => {
+        try {
+          const response = await fetch('/api/sire/markets/global-crypto', { cache: 'no-store', headers: { 'Cache-Control': 'no-cache' } });
+          const payload = await response.json().catch(() => null);
+          if (!response.ok || !payload?.ok || !Array.isArray(payload?.instruments)) return;
+          const refreshedItems = payload.instruments.map((raw: any) => ({
+            ...raw,
+            provider: 'GLOBALCRYPTO',
+            providerLabel: raw.exchangeName || raw.exchange,
+            marketType: raw.type || 'Crypto',
+            category: 'Crypto',
+            displaySymbol: raw.symbol,
+            name: raw.symbol,
+            exchangeOpen: 1,
+            status: 'online',
+            logoUrl: raw.base ? makeAssetLogoFallback({ ...raw, base: raw.base, displaySymbol: raw.symbol } as Instrument) : '',
+            providerLogoUrl: makeProviderLogoFallback({ ...raw, provider: 'GLOBALCRYPTO' } as Instrument),
+            instrumentType: raw.type || 'crypto',
+          })) as Instrument[];
+          if (cancelled) return;
+          setInstruments(current => {
+            const existing = new Set(current.map(item => item.id));
+            const additions = refreshedItems.filter(item => !existing.has(item.id));
+            return additions.length ? current.concat(additions) : current;
+          });
+          console.info('[SIRE MARKET STARTUP] Global CCXT crypto universe refreshed', { total: refreshedItems.length });
+        } catch (error) {
+          console.warn('[SIRE MARKET STARTUP] Global CCXT refresh failed:', error);
+        }
+      }, 15000);
+
       try {
         const binanceItems = await loadBinanceCatalogue();
         if (cancelled) return;
@@ -474,7 +507,9 @@ export default function App() {
     linkGroupRef.current = linked
       ? createLinkGroup({ crosshair: true, viewport: true, symbol: true })
       : null;
-    return () => {};
+    return () => {
+      window.clearInterval(globalCryptoRefresh);
+};
   }, [linked]);
 
   useEffect(() => () => { linkGroupRef.current?.destroy(); linkGroupRef.current = null; }, []);
