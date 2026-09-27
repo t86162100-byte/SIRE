@@ -12,6 +12,7 @@ type Instrument = DerivInstrument & {
   id: string;
   provider: MarketProvider;
   providerLabel: string;
+  exchange?: string;
   marketType: string;
   category: string;
   displaySymbol: string;
@@ -206,7 +207,7 @@ export default function App() {
           const payload = await response.json().catch(() => null);
           if (!response.ok || !payload?.ok || !Array.isArray(payload?.instruments) || cancelled) return;
           const refreshedItems = payload.instruments.map((raw: any) => ({
-            ...raw, provider: 'GLOBALCRYPTO', providerLabel: raw.exchangeName || raw.exchange,
+            ...raw, provider: 'GLOBALCRYPTO', exchange: raw.exchange, providerLabel: raw.exchangeName || raw.exchange,
             marketType: raw.type || 'Crypto', category: 'Crypto', displaySymbol: raw.symbol, name: raw.symbol,
             exchangeOpen: 1, status: 'online',
             logoUrl: raw.base ? makeAssetLogoFallback({ ...raw, base: raw.base, displaySymbol: raw.symbol } as Instrument) : '',
@@ -332,7 +333,7 @@ export default function App() {
     });
   }, [randomizedInstruments, search, providerFilter, categoryFilter]);
 
-  const chartableInstruments = useMemo(() => instruments.filter(item => ['DERIV','FXCM','YFINANCE','SP','NASDAQTRADER','NYSEAMERICAN','CME','CBOT','NYMEX','COMEX','OANDA','TWELVEDATA'].includes(String(item.provider))), [instruments]);
+  const chartableInstruments = useMemo(() => instruments.filter(item => ['DERIV','FXCM','GLOBALCRYPTO','YFINANCE','SP','NASDAQTRADER','NYSEAMERICAN','CME','CBOT','NYMEX','COMEX','OANDA','TWELVEDATA'].includes(String(item.provider))), [instruments]);
   const quoteWindow = useMemo(() => {
     const rowHeight = 88;
     const buffer = 18;
@@ -421,7 +422,7 @@ export default function App() {
           {chartItems.map((chartSymbol, index) => <div className={`sire-chart-cell${activeChartIndex === index ? ' sire-chart-cell--active' : ''}`} key={index} onPointerDown={() => setActiveChartIndex(index)}>{chartSymbol && <FinancialChart
             symbol={chartSymbol}
             isActive={activeChartIndex === index}
-            instruments={chartableInstruments.map(item => ({ symbol: item.symbol, name: item.name, pipSize: item.pipSize, provider: item.provider, marketType: item.marketType, category: item.category }))}
+            instruments={chartableInstruments.map(item => ({ symbol: item.symbol, name: item.name, pipSize: item.pipSize, provider: item.provider, exchange: item.exchange, marketType: item.marketType, category: item.category }))}
             onInstrumentTap={() => openInstrumentPicker('main')}
             onSelectInstrument={item => {
               setChartSymbols(current => current.map((value, slot) => slot === index ? item.symbol : value));
