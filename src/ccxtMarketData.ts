@@ -41,10 +41,15 @@ export function createCcxtMarketDataFeed(instrument:Instrument,onQuote?:(q:any)=
           const r=await fetch(base+'/quote?'+new URLSearchParams({exchange,symbol}),{cache:'no-store'}); const p:any=await readJson(r);
           if(!r.ok||!p?.ok) throw new Error(p?.error||'CCXT quote request failed.');
           const q=p.quote; const epoch=Number(q.epoch),price=Number(q.price); if(!Number.isFinite(epoch)||!Number.isFinite(price)) throw new Error('CCXT returned invalid quote.');
-          const t=Math.floor(epoch/seconds)*seconds;
-          if(!current||t>current.time) current={time:t,open:price,high:price,low:price,close:price,volume:Number(q.volume)||0};
-          else if(t===current.time) current={...current,high:Math.max(current.high,price),low:Math.min(current.low,price),close:price,volume:Number(q.volume)||current.volume||0};
-          else current={...current,close:price,high:Math.max(current.high,price),low:Math.min(current.low,price)};
+          const serverCandle=q.candle;
+          if(serverCandle&&Number.isFinite(Number(serverCandle.time))){
+            current={time:Number(serverCandle.time),open:Number(serverCandle.open),high:Number(serverCandle.high),low:Number(serverCandle.low),close:Number(serverCandle.close),volume:Number(serverCandle.volume)||0};
+          } else {
+            const t=Math.floor(epoch/seconds)*seconds;
+            if(!current||t>current.time) current={time:t,open:price,high:price,low:price,close:price,volume:0};
+            else if(t===current.time) current={...current,high:Math.max(current.high,price),low:Math.min(current.low,price),close:price};
+            else current={...current,close:price,high:Math.max(current.high,price),low:Math.min(current.low,price)};
+          }
           last={symbol,price,epoch,bid:q.bid,ask:q.ask,source:q.source}; onQuote?.(last); onBar({...current});
         }catch(e){ onDiagnostic?.({level:'warning',code:'CCXT_LIVE_PRICE_NOT_RECEIVED',message:'Live CCXT price request failed for '+exchange+' '+symbol+'.',detail:e instanceof Error?e.message:String(e)}); }
         if(!stopped) timer=window.setTimeout(run,2500);
