@@ -1,4 +1,4 @@
-export type MarketProvider = 'DERIV' | 'BINANCE' | 'BITGET' | 'BYBIT' | 'OKX' | 'KRAKEN' | 'COINBASE' | 'GATEIO' | 'KUCOIN' | 'GEMINI' | 'BITSO' | 'BITFINEX' | 'BITVAVO' | 'COINEX' | 'LBANK' | 'WOOX' | 'CRYPTOCOM' | 'HTX' | 'BITKUB' | 'UPBIT' | 'PIONEX' | 'POLONIEX' | 'BITHUMB' | 'MEXC' | 'PHEMEX' | 'WHITEBIT' | 'TWELVEDATA' | 'NASDAQTRADER' | 'XETR' | 'HKEX' | 'BSE' | 'TSE' | 'XFRA' | 'EUREX' | 'ASX' | 'TWSE' | 'PSX' | 'NSE' | 'BITSTAMP' | 'OANDA' | 'TRADINGVIEW' | 'FOREXCOM' | 'INTERACTIVEBROKERS' | 'TRADESTATION' | 'WEBULL' | 'MOOMOO' | 'NINJATRADER' | 'TRADOVATE' | 'AMPFUTURES' | 'TASTYTRADE' | 'TASTYFX' | 'CRYPTOCOMEXCHANGE' | 'COINBASEADVANCED' | 'ALPACA' | 'TRADIERBROKERAGE' | 'TRADEZERO' | 'COBRATRADING' | 'CLEARSTREET' | 'INVESTRADE' | 'PUBLIC' | 'PLUS500US' | 'OPTIMUSFUTURES' | 'EDGECLEAR' | 'IRONBEAM' | 'STONEX' | 'DORMANTRADING' | 'TRADIERFUTURES';
+export type MarketProvider = 'DERIV' | 'BINANCE' | 'BITGET' | 'BYBIT' | 'OKX' | 'KRAKEN' | 'COINBASE' | 'GATEIO' | 'KUCOIN' | 'GEMINI' | 'BITSO' | 'BITFINEX' | 'BITVAVO' | 'COINEX' | 'LBANK' | 'WOOX' | 'CRYPTOCOM' | 'HTX' | 'BITKUB' | 'UPBIT' | 'PIONEX' | 'POLONIEX' | 'BITHUMB' | 'MEXC' | 'PHEMEX' | 'WHITEBIT' | 'TWELVEDATA' | 'NASDAQTRADER' | 'XETR' | 'HKEX' | 'BSE' | 'TSE' | 'XFRA' | 'EUREX' | 'ASX' | 'TWSE' | 'PSX' | 'IDX' | 'NSE' | 'BITSTAMP' | 'OANDA' | 'TRADINGVIEW' | 'FOREXCOM' | 'INTERACTIVEBROKERS' | 'TRADESTATION' | 'WEBULL' | 'MOOMOO' | 'NINJATRADER' | 'TRADOVATE' | 'AMPFUTURES' | 'TASTYTRADE' | 'TASTYFX' | 'CRYPTOCOMEXCHANGE' | 'COINBASEADVANCED' | 'ALPACA' | 'TRADIERBROKERAGE' | 'TRADEZERO' | 'COBRATRADING' | 'CLEARSTREET' | 'INVESTRADE' | 'PUBLIC' | 'PLUS500US' | 'OPTIMUSFUTURES' | 'EDGECLEAR' | 'IRONBEAM' | 'STONEX' | 'DORMANTRADING' | 'TRADIERFUTURES';
 
 export interface UnifiedInstrument {
   id: string;
@@ -1528,6 +1528,27 @@ async function psx(): Promise<UnifiedInstrument[]> {
   } catch (error) { console.warn('[SIRE PSX] failed:', error); return []; }
 }
 
+async function idx(): Promise<UnifiedInstrument[]> {
+  const url = 'https://idx.co.id/en/listed-companies/company-profiles/';
+  try {
+    const html = await getText(url, 12000);
+    const out: UnifiedInstrument[] = [];
+    const seen = new Set<string>();
+    const rowRe = /<tr[^>]*>\s*<td[^>]*>\s*\d+\s*<\/td>\s*<td[^>]*>\s*([^<]+)\s*<\/td>\s*<td[^>]*>\s*([^<]+)\s*<\/td>/gi;
+    let m: RegExpExecArray | null;
+    while ((m = rowRe.exec(html))) {
+      const symbol=m[1].replace(/\s+/g,' ').trim(), name=m[2].replace(/\s+/g,' ').trim();
+      if (!/^[A-Z0-9.-]{2,8}$/.test(symbol) || !name || seen.has(symbol)) continue;
+      seen.add(symbol);
+      const item=cryptoItem('IDX','Indonesia Stock Exchange','Stocks',{symbol,fullName:name,quoteAsset:'IDR',status:'online'});
+      if (!item) continue;
+      item.id='IDX:IDX:'+symbol; item.displaySymbol=symbol; item.name=name; item.marketType='IDX'; item.category='Stocks'; item.quote='IDR'; item.status='Active'; item.logoUrl=providerLogo('IDX'); item.providerLogoUrl=providerLogo('IDX'); out.push(item);
+    }
+    console.log('[SIRE IDX] listed companies: '+out.length);
+    return out;
+  } catch (error) { console.warn('[SIRE IDX] failed:', error); return []; }
+}
+
 async function tse(): Promise<UnifiedInstrument[]> {
   const url = 'https://www.jpx.co.jp/markets/statistics-equities/misc/tvdivq0000001vg2-att/data_j.xls';
   try {
@@ -1653,6 +1674,7 @@ export async function getUnifiedMarketCatalogue(fetchDeriv: () => Promise<any[]>
       ['ASX', asx()],
       ['TWSE', twse()],
       ['PSX', psx()],
+      ['IDX', idx()],
       ['XFRA', xfra()],
       ['EUREX', eurex()],
       ['HKEX', hkex()],
@@ -1689,7 +1711,7 @@ export async function getUnifiedMarketCatalogue(fetchDeriv: () => Promise<any[]>
       ['OANDA', oanda()],
     ];
     const results = await Promise.allSettled(
-      providers.map(([provider, promise]) => withProviderTimeout(provider, promise, provider === 'DERIV' || provider === 'NASDAQTRADER' || provider === 'XETR' || provider === 'XFRA' || provider === 'EUREX' || provider === 'ASX' || provider === 'TWSE' || provider === 'PSX' ? 12000 : 7000))
+      providers.map(([provider, promise]) => withProviderTimeout(provider, promise, provider === 'DERIV' || provider === 'NASDAQTRADER' || provider === 'XETR' || provider === 'XFRA' || provider === 'EUREX' || provider === 'ASX' || provider === 'TWSE' || provider === 'PSX' || provider === 'IDX' ? 12000 : 7000))
     );
     results.forEach((result, index) => {
       if (result.status === 'rejected') console.warn('[SIRE MARKET CATALOG] provider failed:', providers[index][0], result.reason);
