@@ -1523,14 +1523,11 @@ export async function getUnifiedMarketCatalogue(fetchDeriv: () => Promise<any[]>
     // reliably receive DERIV + the major crypto venues instead of whichever
     // public file happens to finish first.
     const providers: Array<[MarketProvider, Promise<UnifiedInstrument[]>]> = [
+      // Deriv remains on its dedicated implementation and is intentionally untouched.
       ['DERIV', fetchDeriv().then(items => items.map(derivItem).filter(Boolean) as UnifiedInstrument[])],
-      ['BITGET', bitget()], ['BYBIT', bybit()], ['OKX', okx()], ['KRAKEN', kraken()],
-      ['COINBASE', coinbase()], ['GATEIO', gateio()], ['KUCOIN', kucoin()], ['GEMINI', gemini()], ['BITSO', bitso()],
-      ['BITFINEX', bitfinex()], ['BITVAVO', bitvavo()], ['COINEX', coinex()], ['LBANK', lbank()], ['WOOX', woox()],
-      ['CRYPTOCOM', cryptocom()], ['HTX', htx()], ['BITKUB', bitkub()], ['UPBIT', upbit()], ['PIONEX', pionex()],
-      ['POLONIEX', poloniex()], ['BITHUMB', bithumb()], ['MEXC', mexc()], ['PHEMEX', phemex()], ['WHITEBIT', whitebit()],
-      ['BITSTAMP', bitstamp()], ['CRYPTOCOMEXCHANGE', brokerCatalogue('CRYPTOCOMEXCHANGE')],
-      ['COINBASEADVANCED', brokerCatalogue('COINBASEADVANCED')], ['OANDA', oanda()],
+      // Crypto market discovery is now owned exclusively by the CCXT global universe.
+      // Keep non-crypto catalogues here; do not duplicate crypto exchange loaders.
+      ['OANDA', oanda()],
     ];
     const results = await Promise.allSettled(
       providers.map(([provider, promise]) =>
