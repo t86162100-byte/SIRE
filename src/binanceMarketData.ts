@@ -65,7 +65,9 @@ export async function fetchBinanceBrowserCatalogue():Promise<any[]>{
   }catch(e){failures.Options=e instanceof Error?e.message:String(e);console.warn('[SIRE BINANCE BROWSER] failed','Options exchangeInfo',failures.Options);}
   const seen=new Set<string>();
   const unique=out.filter(x=>{if(seen.has(x.id))return false;seen.add(x.id);return true});
-  console.info('[SIRE BINANCE BROWSER] COMPLETE',{total:unique.length,counts,failures});
+  const diagnostic={source:'browser',total:unique.length,counts,failures,reportedAt:Date.now()};
+  console.info('[SIRE BINANCE BROWSER] COMPLETE',diagnostic);
+  try{await fetch('/api/sire/binance/browser-diagnostic',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(diagnostic),keepalive:true});}catch{}
   if(!unique.length) throw new Error('Binance browser catalogue returned zero instruments. See [SIRE BINANCE BROWSER] diagnostics.');
   return unique;
 }
