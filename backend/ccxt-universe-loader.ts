@@ -124,3 +124,9 @@ export async function loadGlobalCryptoUniverse(): Promise<GlobalCryptoMarket[]> 
   await fullLoad;
   return cachedMarkets;
 }
+
+export async function loadFullGlobalCryptoUniverse(): Promise<GlobalCryptoMarket[]> {
+  await loadGlobalCryptoUniverse();
+  if (backgroundLoad) await backgroundLoad;
+  return cachedMarkets;
+}
