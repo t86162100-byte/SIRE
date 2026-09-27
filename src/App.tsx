@@ -11,7 +11,7 @@ import { loadKucoinCatalogue } from './providers/kucoin';
 import { loadGateioCatalogue } from './providers/gateio';
 import { loadHyperliquidCatalogue } from './providers/hyperliquid';
 
-type MarketProvider = 'DERIV' | 'HYPERLIQUID' | 'BINANCE' | 'BITGET' | 'BYBIT' | 'OKX' | 'KRAKEN' | 'COINBASE' | 'GATEIO' | 'KUCOIN' | 'GEMINI' | 'BITSO' | 'BITFINEX' | 'BITVAVO' | 'COINEX' | 'LBANK' | 'WOOX' | 'CRYPTOCOM' | 'HTX' | 'BITKUB' | 'UPBIT' | 'PIONEX' | 'POLONIEX' | 'BITHUMB' | 'MEXC' | 'PHEMEX' | 'WHITEBIT' | 'TWELVEDATA' | 'NASDAQTRADER' | 'NSE' | 'BITSTAMP' | 'OANDA' | 'TRADINGVIEW' | 'FOREXCOM' | 'INTERACTIVEBROKERS' | 'TRADESTATION' | 'WEBULL' | 'MOOMOO' | 'NINJATRADER' | 'TRADOVATE' | 'AMPFUTURES' | 'TASTYTRADE' | 'TASTYFX' | 'CRYPTOCOMEXCHANGE' | 'COINBASEADVANCED' | 'ALPACA' | 'TRADIERBROKERAGE' | 'TRADEZERO' | 'COBRATRADING' | 'CLEARSTREET' | 'INVESTRADE' | 'PUBLIC' | 'PLUS500US' | 'OPTIMUSFUTURES' | 'EDGECLEAR' | 'IRONBEAM' | 'STONEX' | 'DORMANTRADING' | 'TRADIERFUTURES';
+type MarketProvider = 'DERIV' | 'HYPERLIQUID' | 'GLOBALCRYPTO' | 'BINANCE' | 'BITGET' | 'BYBIT' | 'OKX' | 'KRAKEN' | 'COINBASE' | 'GATEIO' | 'KUCOIN' | 'GEMINI' | 'BITSO' | 'BITFINEX' | 'BITVAVO' | 'COINEX' | 'LBANK' | 'WOOX' | 'CRYPTOCOM' | 'HTX' | 'BITKUB' | 'UPBIT' | 'PIONEX' | 'POLONIEX' | 'BITHUMB' | 'MEXC' | 'PHEMEX' | 'WHITEBIT' | 'TWELVEDATA' | 'NASDAQTRADER' | 'NSE' | 'BITSTAMP' | 'OANDA' | 'TRADINGVIEW' | 'FOREXCOM' | 'INTERACTIVEBROKERS' | 'TRADESTATION' | 'WEBULL' | 'MOOMOO' | 'NINJATRADER' | 'TRADOVATE' | 'AMPFUTURES' | 'TASTYTRADE' | 'TASTYFX' | 'CRYPTOCOMEXCHANGE' | 'COINBASEADVANCED' | 'ALPACA' | 'TRADIERBROKERAGE' | 'TRADEZERO' | 'COBRATRADING' | 'CLEARSTREET' | 'INVESTRADE' | 'PUBLIC' | 'PLUS500US' | 'OPTIMUSFUTURES' | 'EDGECLEAR' | 'IRONBEAM' | 'STONEX' | 'DORMANTRADING' | 'TRADIERFUTURES';
 type Instrument = DerivInstrument & {
   id: string;
   provider: MarketProvider;
@@ -309,6 +309,35 @@ export default function App() {
       setInstruments(items);
       setSelected(current => current && items.some(item => item.id === current.id) ? current : initial);
       setChartSymbols(current => current.length ? current : [initial.symbol]);
+
+      try {
+        const response = await fetch('/api/sire/markets/global-crypto', { cache: 'no-store', headers: { 'Cache-Control': 'no-cache' } });
+        const payload = await response.json().catch(() => null);
+        if (!response.ok || !payload?.ok || !Array.isArray(payload?.instruments)) throw new Error(payload?.error || 'Global crypto catalogue unavailable');
+        const globalItems = payload.instruments.map((raw: any) => ({
+          ...raw,
+          provider: 'GLOBALCRYPTO',
+          providerLabel: raw.exchangeName || raw.exchange,
+          marketType: raw.type || 'Crypto',
+          category: 'Crypto',
+          displaySymbol: raw.symbol,
+          name: raw.symbol,
+          exchangeOpen: 1,
+          status: 'online',
+          logoUrl: raw.base ? makeAssetLogoFallback({ ...raw, base: raw.base, displaySymbol: raw.symbol } as Instrument) : '',
+          providerLogoUrl: makeProviderLogoFallback({ ...raw, provider: 'GLOBALCRYPTO' } as Instrument),
+          instrumentType: raw.type || 'crypto',
+        })) as Instrument[];
+        if (cancelled) return;
+        setInstruments(current => {
+          const existing = new Set(current.map(item => item.id));
+          const additions = globalItems.filter(item => !existing.has(item.id));
+          return additions.length ? current.concat(additions) : current;
+        });
+        console.info('[SIRE MARKET STARTUP] Global CCXT crypto universe loaded', { total: globalItems.length });
+      } catch (error) {
+        console.warn('[SIRE MARKET STARTUP] Global CCXT crypto universe unavailable:', error);
+      }
 
       try {
         const binanceItems = await loadBinanceCatalogue();
