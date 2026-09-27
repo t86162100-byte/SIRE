@@ -458,6 +458,8 @@ export default function App() {
           bybit: next.filter(item => item.provider === 'BYBIT').length,
           bybitMarketTypes: Array.from(new Set(next.filter(item => item.provider === 'BYBIT').map(item => item.marketType)))
         });
+      } catch (error) {
+        console.warn('[SIRE MARKET STARTUP] Bybit browser augmentation skipped:', error);
       }
 
       try {
