@@ -1042,8 +1042,8 @@ async function cme(): Promise<UnifiedInstrument[]> {
   const collectCandidates=(v:any,out:any[]=[]):any[]=>{
     if(!v || typeof v!=='object') return out;
     if(Array.isArray(v)){ for(const x of v) collectCandidates(x,out); return out; }
-    const exchange=normExchange(scalar(v,['exchange','exchangeName','exchangeCode','dcm','venue','venueName','market','marketName']));
-    const symbol=scalar(v,['globex','globexSymbol','globexCode','symbol','productCode','code','ticker','product','productSymbol','id']);
+    const exchange=normExchange(scalar(v,['exch','exchange','exchangeName','exchangeCode','dcm','venue','venueName','market','marketName']));
+    const symbol=scalar(v,['globex','globexSymbol','globexCode','prodCode','symbol','productCode','code','ticker','product','productSymbol','id']);
     const name=scalar(v,['productName','name','description','displayName','fullName','title']);
     if(exchange && symbol && name) out.push(v);
     for(const x of Object.values(v)) collectCandidates(x,out);
@@ -1058,16 +1058,11 @@ async function cme(): Promise<UnifiedInstrument[]> {
         if(!response.ok) throw new Error('Product Slate HTTP '+response.status+' ('+cleared+' page '+page+')');
         const payload=await response.json();
         const rows=collectCandidates(payload);
-        if(!rows.length) {
-          const top=payload && typeof payload==='object' ? Object.keys(payload).slice(0,40) : [];
-          const sample=payload && typeof payload==='object' ? JSON.stringify(payload).slice(0,5000) : String(payload).slice(0,5000);
-          console.warn('[SIRE CME RAW SHAPE]', cleared, 'page='+page, 'keys='+JSON.stringify(top), 'sample='+sample);
-          break;
-        }
+        if(!rows.length) break;
         let added=0;
         for(const row of rows){
-          const exchange=normExchange(scalar(row,['exchange','exchangeName','exchangeCode','dcm','venue','venueName','market','marketName']));
-          const symbol=scalar(row,['globex','globexSymbol','globexCode','symbol','productCode','code','ticker','product','productSymbol','id']);
+          const exchange=normExchange(scalar(row,['exch','exchange','exchangeName','exchangeCode','dcm','venue','venueName','market','marketName']));
+          const symbol=scalar(row,['globex','globexSymbol','globexCode','prodCode','symbol','productCode','code','ticker','product','productSymbol','id']);
           const name=scalar(row,['productName','name','description','displayName','fullName','title']);
           if(!exchange||!symbol||!name) continue;
           const key=exchange+':'+symbol; if(seen.has(key)) continue; seen.add(key);
