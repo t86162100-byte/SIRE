@@ -1,4 +1,4 @@
-export type MarketProvider = 'DERIV' | 'BINANCE' | 'BITGET' | 'BYBIT' | 'OKX' | 'KRAKEN' | 'TWELVEDATA' | 'FINNHUB' | 'OANDA' | 'IG';
+export type MarketProvider = 'DERIV' | 'BINANCE' | 'BITGET' | 'BYBIT' | 'OKX' | 'KRAKEN' | 'COINBASE' | 'TWELVEDATA' | 'FINNHUB' | 'OANDA' | 'IG';
 
 export interface UnifiedInstrument {
   id: string;
@@ -84,7 +84,33 @@ function cryptoItem(provider: MarketProvider, marketType: string, category: stri
     exchangeOpen: 1,
     status: String(raw?.status || raw?.state || 'online'),
     logoUrl: assetLogo(base) || providerLogo(provider),
-    providerLogoUrl: providerLogo(provider),
+    providerLogoUrl: providerLogo(proviasync function coinbase(): Promise<UnifiedInstrument[]> {
+  try {
+    const response = await getJson('https://api.exchange.coinbase.com/products', 15000);
+    const rows = Array.isArray(response) ? response : [];
+    const out: UnifiedInstrument[] = [];
+    for (const raw of rows) {
+      const id = String(raw?.id || '').trim();
+      const status = String(raw?.status || '').toLowerCase();
+      if (!id || (status && !['online','active'].includes(status))) continue;
+      const [base, quote] = id.split('-');
+      const item = cryptoItem('COINBASE', 'Spot', 'Crypto', {
+        symbol: id,
+        baseAsset: base,
+        quoteAsset: quote,
+        fullName: String(raw?.display_name || raw?.name || id),
+        status: raw?.status || 'online'
+      });
+      if (item) out.push(item);
+    }
+    console.log('[SIRE COINBASE] Spot: ' + out.length);
+    return out;
+  } catch (error) {
+    console.warn('[SIRE COINBASE] failed:', error);
+    return [];
+  }
+}
+der),
   };
 }
 
@@ -510,6 +536,7 @@ export async function getUnifiedMarketCatalogue(fetchDeriv: () => Promise<any[]>
     const providers: Array<[MarketProvider, Promise<UnifiedInstrument[]>]> = [
       ['DERIV', fetchDeriv().then(items => items.map(derivItem).filter(Boolean) as UnifiedInstrument[])],
       ['BINANCE', binance()],
+      ['COINBASE', coinbase()],
       ['BITGET', bitget()],
       ['BYBIT', bybit()],
       ['OKX', okx()],
