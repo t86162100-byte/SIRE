@@ -1,4 +1,4 @@
-export type MarketProvider = 'DERIV' | 'BINANCE' | 'BITGET' | 'BYBIT' | 'OKX' | 'KRAKEN' | 'COINBASE' | 'GATEIO' | 'KUCOIN' | 'GEMINI' | 'BITSO' | 'BITFINEX' | 'BITVAVO' | 'COINEX' | 'LBANK' | 'WOOX' | 'CRYPTOCOM' | 'HTX' | 'BITKUB' | 'UPBIT' | 'PIONEX' | 'POLONIEX' | 'BITHUMB' | 'MEXC' | 'PHEMEX' | 'WHITEBIT' | 'TWELVEDATA' | 'FINNHUB' | 'OANDA' | 'IG';
+export type MarketProvider = 'DERIV' | 'BINANCE' | 'BITGET' | 'BYBIT' | 'OKX' | 'KRAKEN' | 'COINBASE' | 'GATEIO' | 'KUCOIN' | 'GEMINI' | 'BITSO' | 'BITFINEX' | 'BITVAVO' | 'COINEX' | 'LBANK' | 'WOOX' | 'CRYPTOCOM' | 'HTX' | 'BITKUB' | 'UPBIT' | 'PIONEX' | 'POLONIEX' | 'BITHUMB' | 'MEXC' | 'PHEMEX' | 'WHITEBIT' | 'TWELVEDATA' | 'FINNHUB' | 'OANDA' | 'IG' | 'TRADINGVIEW';
 
 export interface UnifiedInstrument {
   id: string;
@@ -518,6 +518,55 @@ async function whitebit(): Promise<UnifiedInstrument[]> {
   } catch (error) { console.warn('[SIRE WHITEBIT] failed:', error); return []; }
 }
 
+
+
+/**
+ * TradingView is a licensed market-data aggregator, not a single public
+ * symbol API. Its catalogue contains exchange/broker feeds spanning stocks,
+ * funds/ETFs, futures, forex, crypto, indices, bonds, options and economics.
+ *
+ * Keep a first-class provider record for the feed registry, but do not invent
+ * symbols or scrape TradingView. Individual feeds are populated only from
+ * their real/public APIs or configured licensed credentials.
+ */
+async function tradingviewFeedRegistry(): Promise<UnifiedInstrument[]> {
+  const configured = String(process.env.TRADINGVIEW_FEED_REGISTRY_URL || '').trim();
+  if (!configured) {
+    console.warn('[SIRE TRADINGVIEW] No licensed/public feed registry configured; no synthetic symbols created.');
+    return [];
+  }
+  try {
+    const payload = await getJson(configured, 20000);
+    const rows = Array.isArray(payload) ? payload : Array.isArray(payload?.instruments) ? payload.instruments : [];
+    const out: UnifiedInstrument[] = [];
+    for (const raw of rows) {
+      const symbol = String(raw?.symbol || raw?.ticker || '').trim();
+      if (!symbol) continue;
+      const category = String(raw?.category || raw?.type || 'Other');
+      const marketType = String(raw?.marketType || raw?.exchange || 'Feed');
+      const item = cryptoItem('TRADINGVIEW', marketType, category, {
+        symbol,
+        baseAsset: raw?.base || raw?.baseAsset || raw?.currency_base,
+        quoteAsset: raw?.quote || raw?.quoteAsset || raw?.currency_quote,
+        fullName: raw?.name || raw?.description || symbol,
+        status: raw?.status || 'online'
+      });
+      if (!item) continue;
+      item.name = String(raw?.name || raw?.description || symbol);
+      item.category = category;
+      item.marketType = marketType;
+      item.logoUrl = String(raw?.logoUrl || providerLogo('TRADINGVIEW'));
+      item.providerLogoUrl = providerLogo('TRADINGVIEW');
+      out.push(item);
+    }
+    console.log('[SIRE TRADINGVIEW] Licensed/public feed registry: ' + out.length);
+    return out;
+  } catch (error) {
+    console.warn('[SIRE TRADINGVIEW] feed registry failed:', error);
+    return [];
+  }
+}
+
 async function binance(): Promise<UnifiedInstrument[]> {
   const families: Array<[string, string[]]> = [
     ['Spot', ['https://data-api.binance.vision/api/v3/exchangeInfo','https://api.binance.com/api/v3/exchangeInfo','https://api-gcp.binance.com/api/v3/exchangeInfo','https://api1.binance.com/api/v3/exchangeInfo','https://api2.binance.com/api/v3/exchangeInfo']],
@@ -988,6 +1037,7 @@ export async function getUnifiedMarketCatalogue(fetchDeriv: () => Promise<any[]>
   loading = (async () => {
     const providers: Array<[MarketProvider, Promise<UnifiedInstrument[]>]> = [
       ['DERIV', fetchDeriv().then(items => items.map(derivItem).filter(Boolean) as UnifiedInstrument[])],
+      ['TRADINGVIEW', tradingviewFeedRegistry()],
       ['BINANCE', binance()],
       ['GATEIO', gateio()],
       ['KUCOIN', kucoin()],
