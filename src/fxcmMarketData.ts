@@ -22,8 +22,18 @@ export function createFxcmDataFeed(onQuote?:Handler,onDiagnostic?:(e:any)=>void)
   return {
     getBars,
     async getBarsPage({symbol,interval,before,countBack}:{symbol:string;interval:string;before:number;countBack:number}){return getBars({symbol,interval,countBack});},
-    async subscribe(symbol:string){stopped=false;await poll(symbol);},
-    async unsubscribe(){stopped=true;if(timer)window.clearTimeout(timer);timer=undefined;},
+    subscribeBars({symbol,interval}:{symbol:string;interval:string},onBar:(bar:FxcmBar)=>void,options?:{seedFrom?:FxcmBar}){
+      stopped=false; let current=options?.seedFrom?{...options.seedFrom}:null;
+      const seconds=FXCM_SECONDS[interval]||60;
+      const run=async()=>{try{const r=await fetch('/api/sire/fxcm/quote?symbol='+encodeURIComponent(symbol),{cache:'no-store'});const p=await r.json();if(!r.ok||!p?.ok)throw new Error(p?.error||'FXCM quote failed');const q=p.quote;const epoch=Number(q.epoch),price=Number(q.price);if(!Number.isFinite(epoch)||!Number.isFinite(price))throw new Error('FXCM quote contains invalid price/time');const t=Math.floor(epoch/seconds)*seconds;
+          if(!current||t>current.time) current={time:t,open:price,high:price,low:price,close:price,volume:0};
+          else if(t===current.time) current={...current,high:Math.max(current.high,price),low:Math.min(current.low,price),close:price};
+          last={symbol,price,epoch};onQuote?.(last);onBar({...current});
+        }catch(e){onDiagnostic?.({level:'warning',code:'LIVE_PRICE_NOT_RECEIVED',message:'FXCM live price request failed.',detail:e instanceof Error?e.message:String(e)});}
+        if(!stopped) timer=window.setTimeout(run,2000);};
+      void run(); return ()=>{stopped=true;if(timer)window.clearTimeout(timer);timer=undefined;};
+    },
+    getLiveState(){return last?{connectionStatus:'polling',subscriptionStatus:stopped?'stopped':'active',latestTick:{...last},dataTimestamp:last.epoch,dataAgeMs:Math.max(0,Date.now()-last.epoch*1000),stale:Date.now()-last.epoch*1000>10000,staleThresholdMs:10000,checkedAt:Date.now()}: {connectionStatus:'idle',subscriptionStatus:'idle',latestTick:null,dataTimestamp:null,dataAgeMs:null,stale:false,staleThresholdMs:10000,checkedAt:Date.now()};},
     close(){stopped=true;if(timer)window.clearTimeout(timer);timer=undefined;},
     getLiveState(){return last;}
   };
