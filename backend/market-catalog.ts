@@ -349,6 +349,90 @@ async function htx(): Promise<UnifiedInstrument[]> {
   } catch (error) { console.warn('[SIRE HTX] failed:', error); return []; }
 }
 
+async function bitkub(): Promise<UnifiedInstrument[]> {
+  try {
+    const payload = await getJson('https://api.bitkub.com/api/v3/market/symbols', 15000);
+    const rows = Array.isArray(payload?.result) ? payload.result : [];
+    const out: UnifiedInstrument[] = [];
+    for (const raw of rows) {
+      if (String(raw?.status || '').toLowerCase() !== 'active') continue;
+      const item = cryptoItem('BITKUB', 'Spot', 'Crypto', {
+        symbol: String(raw?.symbol || ''),
+        baseAsset: String(raw?.base_asset || ''),
+        quoteAsset: String(raw?.quote_asset || ''),
+        fullName: String(raw?.name || raw?.symbol || ''),
+        status: raw?.status || 'active'
+      });
+      if (item) out.push(item);
+    }
+    console.log('[SIRE BITKUB] Spot: ' + out.length);
+    return out;
+  } catch (error) { console.warn('[SIRE BITKUB] failed:', error); return []; }
+}
+
+async function upbit(): Promise<UnifiedInstrument[]> {
+  try {
+    const payload = await getJson('https://sg-api.upbit.com/v1/market/all', 15000);
+    const rows = Array.isArray(payload) ? payload : [];
+    const out: UnifiedInstrument[] = [];
+    for (const raw of rows) {
+      const symbol = String(raw?.market || '').trim();
+      const parts = symbol.split('-');
+      const item = cryptoItem('UPBIT', 'Spot', 'Crypto', {
+        symbol,
+        baseAsset: parts[1] || '',
+        quoteAsset: parts[0] || '',
+        fullName: String(raw?.english_name || symbol)
+      });
+      if (item) out.push(item);
+    }
+    console.log('[SIRE UPBIT] Spot: ' + out.length);
+    return out;
+  } catch (error) { console.warn('[SIRE UPBIT] failed:', error); return []; }
+}
+
+async function pionex(): Promise<UnifiedInstrument[]> {
+  try {
+    const payload = await getJson('https://api.pionex.com/api/v1/common/symbols', 15000);
+    const rows = Array.isArray(payload?.data?.symbols) ? payload.data.symbols : [];
+    const out: UnifiedInstrument[] = [];
+    for (const raw of rows) {
+      if (raw?.enable === false) continue;
+      const item = cryptoItem('PIONEX', String(raw?.type || 'SPOT'), 'Crypto', {
+        symbol: String(raw?.symbol || ''),
+        baseAsset: String(raw?.baseCurrency || ''),
+        quoteAsset: String(raw?.quoteCurrency || ''),
+        fullName: String(raw?.name || raw?.symbol || '')
+      });
+      if (item) out.push(item);
+    }
+    console.log('[SIRE PIONEX] Markets: ' + out.length);
+    return out;
+  } catch (error) { console.warn('[SIRE PIONEX] failed:', error); return []; }
+}
+
+async function poloniex(): Promise<UnifiedInstrument[]> {
+  try {
+    const payload = await getJson('https://api.poloniex.com/markets', 15000);
+    const rows = Array.isArray(payload) ? payload : [];
+    const out: UnifiedInstrument[] = [];
+    for (const raw of rows) {
+      const symbol = String(raw?.symbol || raw?.id || '').trim().toUpperCase();
+      if (!symbol) continue;
+      const parts = symbol.split('_');
+      const item = cryptoItem('POLONIEX', 'Spot', 'Crypto', {
+        symbol,
+        baseAsset: parts[0] || '',
+        quoteAsset: parts[1] || '',
+        fullName: symbol
+      });
+      if (item) out.push(item);
+    }
+    console.log('[SIRE POLONIEX] Spot: ' + out.length);
+    return out;
+  } catch (error) { console.warn('[SIRE POLONIEX] failed:', error); return []; }
+}
+
 async function binance(): Promise<UnifiedInstrument[]> {
   const families: Array<[string, string[]]> = [
     ['Spot', ['https://data-api.binance.vision/api/v3/exchangeInfo','https://api.binance.com/api/v3/exchangeInfo','https://api-gcp.binance.com/api/v3/exchangeInfo','https://api1.binance.com/api/v3/exchangeInfo','https://api2.binance.com/api/v3/exchangeInfo']],
@@ -782,6 +866,10 @@ export async function getUnifiedMarketCatalogue(fetchDeriv: () => Promise<any[]>
       ['WOOX', woox()],
       ['CRYPTOCOM', cryptocom()],
       ['HTX', htx()],
+      ['BITKUB', bitkub()],
+      ['UPBIT', upbit()],
+      ['PIONEX', pionex()],
+      ['POLONIEX', poloniex()],
       ['COINBASE', coinbase()],
       ['BITGET', bitget()],
       ['BYBIT', bybit()],
