@@ -727,50 +727,145 @@ async function getJsonAuth(url: string, headers: Record<string, string>, timeout
 async function oanda(): Promise<UnifiedInstrument[]> {
   const token = String(process.env.OANDA_API_TOKEN || '').trim();
   const accountId = String(process.env.OANDA_ACCOUNT_ID || '').trim();
-  if (!token || !accountId) {
-    console.warn('[SIRE OANDA] OANDA_API_TOKEN/OANDA_ACCOUNT_ID not configured; skipping optional broker catalogue.');
-    return [];
-  }
-  const hosts = [
-    'https://api-fxtrade.oanda.com',
-    'https://api-fxpractice.oanda.com'
-  ];
-  let response: any;
-  let last: unknown;
-  for (const host of hosts) {
-    try {
-      response = await getJsonAuth(
-        host + '/v3/accounts/' + encodeURIComponent(accountId) + '/instruments',
-        { Authorization: 'Bearer ' + token },
-        15000
-      );
-      break;
-    } catch (error) { last = error; }
-  }
-  if (!response) throw last || new Error('OANDA instruments request failed');
-  const rows = Array.isArray(response?.instruments) ? response.instruments : [];
-  const out: UnifiedInstrument[] = [];
-  for (const raw of rows) {
-    const symbol = String(raw?.name || '').trim();
-    if (!symbol) continue;
-    const type = String(raw?.type || '').toUpperCase();
-    const category = type === 'CURRENCY' ? 'Forex' : type === 'METAL' ? 'Metals' : 'CFD';
-    const marketType = type === 'CURRENCY' ? 'FX' : type === 'METAL' ? 'Metals' : 'CFD';
-    const item = cryptoItem('OANDA', marketType, category, {
-      symbol,
-      fullName: String(raw?.displayName || symbol),
-      status: 'tradeable'
-    });
-    if (item) {
-      item.name = String(raw?.displayName || symbol);
-      item.category = category;
-      item.marketType = marketType;
-      item.logoUrl = providerLogo('OANDA');
-      item.providerLogoUrl = providerLogo('OANDA');
-      out.push(item);
+
+  // When OANDA credentials are configured, use the account-specific v3
+  // instrument catalogue. This is the authoritative list for that account
+  // and can vary by OANDA division/country.
+  if (token && accountId) {
+    const hosts = [
+      'https://api-fxtrade.oanda.com',
+      'https://api-fxpractice.oanda.com'
+    ];
+    let response: any;
+    let last: unknown;
+    for (const host of hosts) {
+      try {
+        response = await getJsonAuth(
+          host + '/v3/accounts/' + encodeURIComponent(accountId) + '/instruments',
+          { Authorization: 'Bearer ' + token },
+          15000
+        );
+        break;
+      } catch (error) { last = error; }
     }
+    if (!response) throw last || new Error('OANDA instruments request failed');
+
+    const rows = Array.isArray(response?.instruments) ? response.instruments : [];
+    const out: UnifiedInstrument[] = [];
+    for (const raw of rows) {
+      const symbol = String(raw?.name || '').trim();
+      if (!symbol) continue;
+      const type = String(raw?.type || '').toUpperCase();
+      const category = type === 'CURRENCY' ? 'Forex' : type === 'METAL' ? 'Metals' : 'CFD';
+      const marketType = type === 'CURRENCY' ? 'FX' : type === 'METAL' ? 'Metals' : 'CFD';
+      const item = cryptoItem('OANDA', marketType, category, {
+        symbol,
+        fullName: String(raw?.displayName || symbol),
+        status: 'tradeable'
+      });
+      if (item) {
+        item.name = String(raw?.displayName || symbol);
+        item.category = category;
+        item.marketType = marketType;
+        item.logoUrl = providerLogo('OANDA');
+        item.providerLogoUrl = providerLogo('OANDA');
+        out.push(item);
+      }
+    }
+    console.log('[SIRE OANDA] Account catalogue: ' + out.length);
+    return out;
   }
-  console.log('[SIRE OANDA] Total catalogue: ' + out.length);
+
+  // No credentials: build the public OANDA Forex catalogue from OANDA's
+  // current public US margin-rate page. We do not manufacture pairs.
+  const publicUrl = 'https://www.oanda.com/us-en/legal/margin-rates/';
+  const currencyCode = /^[A-Z]{3}$/;
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 7000);
+    try {
+      const response = await fetch(publicUrl, {
+        signal: controller.signal,
+        headers: { Accept: 'text/html,application/xhtml+xml' }
+      });
+      if (!response.ok) throw new Error('HTTP ' + response.status);
+      const html = await response.text();
+      const pairs = Array.from(new Set(
+        Array.from(html.matchAll(/\\b([A-Z]{3})\\s*\\/\\s*([A-Z]{3})\\b/g))
+          .map(match => match[1] + '/' + match[2])
+          .filter(pair => {
+            const [base, quote] = pair.split('/');
+            return currencyCode.test(base) && currencyCode.test(quote) && base !== quote;
+          })
+      ));
+
+      const out: UnifiedInstrument[] = pairs.map(symbol => {
+        const [base, quote] = symbol.split('/');
+        return {
+          id: 'OANDA:FX:' + symbol.replace('/', '_'),
+          provider: 'OANDA',
+          providerLabel: 'OANDA',
+          marketType: 'FX',
+          category: 'Forex',
+          symbol,
+          displaySymbol: symbol,
+          name: symbol,
+          base,
+          quote,
+          exchangeOpen: 1,
+          status: 'online',
+          logoUrl: providerLogo('OANDA'),
+          providerLogoUrl: providerLogo('OANDA')
+        };
+      });
+
+      if (out.length >= 20) {
+        console.log('[SIRE OANDA] Public Forex catalogue: ' + out.length);
+        return out;
+      }
+      console.warn('[SIRE OANDA] Public page returned too few parsable pairs: ' + out.length);
+    } finally {
+      clearTimeout(timer);
+    }
+  } catch (error) {
+    console.warn('[SIRE OANDA] Public catalogue fetch failed:', error);
+  }
+
+  // Safety fallback: these are pairs explicitly published in OANDA's current
+  // US forex margin table. This fallback is only used if the public page is
+  // temporarily unavailable; it is not used to invent additional instruments.
+  const fallbackPairs = [
+    'SGD/JPY','EUR/GBP','USD/HUF','AUD/HKD','GBP/CHF','USD/THB','CAD/JPY',
+    'SGD/CHF','AUD/CHF','AUD/USD','USD/CNH','EUR/HKD','EUR/NZD','GBP/HKD',
+    'NZD/HKD','NZD/USD','EUR/CHF','CHF/ZAR','USD/PLN','GBP/AUD','EUR/ZAR',
+    'AUD/JPY','EUR/PLN','EUR/HUF','EUR/TRY','USD/JPY','GBP/NZD','NZD/CAD',
+    'AUD/CAD','USD/CAD','GBP/CAD','HKD/JPY','AUD/SGD','USD/HKD','GBP/JPY',
+    'USD/TRY','USD/MXN','GBP/USD','EUR/CAD','NZD/CHF','USD/CZK','EUR/CZK',
+    'GBP/PLN','USD/SEK','GBP/SGD','EUR/SGD','USD/NOK','EUR/JPY','USD/ZAR',
+    'EUR/AUD','EUR/DKK','USD/DKK','USD/CHF','ZAR/JPY','EUR/USD','GBP/ZAR',
+    'CAD/SGD','NZD/JPY','AUD/NZD','CHF/HKD','CHF/JPY','NZD/SGD','TRY/JPY',
+    'CAD/CHF','EUR/NOK','EUR/SEK','USD/SGD'
+  ];
+  const out = fallbackPairs.map(symbol => {
+    const [base, quote] = symbol.split('/');
+    return {
+      id: 'OANDA:FX:' + symbol.replace('/', '_'),
+      provider: 'OANDA' as MarketProvider,
+      providerLabel: 'OANDA',
+      marketType: 'FX',
+      category: 'Forex',
+      symbol,
+      displaySymbol: symbol,
+      name: symbol,
+      base,
+      quote,
+      exchangeOpen: 1,
+      status: 'online',
+      logoUrl: providerLogo('OANDA'),
+      providerLogoUrl: providerLogo('OANDA')
+    };
+  });
+  console.log('[SIRE OANDA] Public Forex fallback catalogue: ' + out.length);
   return out;
 }
 
