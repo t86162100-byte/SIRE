@@ -1675,7 +1675,8 @@ export async function getUnifiedMarketCatalogue(fetchDeriv: () => Promise<any[]>
       ['TWSE', twse()],
       ['PSX', psx()],
       ['IDX', idx()],
-      ['XFRA', xfra()],
+      // Frankfurt's full public T7 file is too large to materialize in the startup catalogue.
+      // Keep it out of the all-markets payload so core/crypto venues cannot be starved of memory.
       ['EUREX', eurex()],
       ['HKEX', hkex()],
       ['BSE', bse()],
