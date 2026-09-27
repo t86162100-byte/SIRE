@@ -332,7 +332,7 @@ export default function App() {
     });
   }, [randomizedInstruments, search, providerFilter, categoryFilter]);
 
-  const chartableInstruments = useMemo(() => instruments.filter(item => item.provider === 'DERIV' || item.provider === 'FXCM'), [instruments]);
+  const chartableInstruments = useMemo(() => instruments.filter(item => ['DERIV','FXCM','YFINANCE','SP','NASDAQTRADER','NYSEAMERICAN','CME','CBOT','NYMEX','COMEX','OANDA','TWELVEDATA'].includes(String(item.provider))), [instruments]);
   const quoteWindow = useMemo(() => {
     const rowHeight = 88;
     const buffer = 18;
@@ -344,7 +344,7 @@ export default function App() {
   const selectInstrument = (item: Instrument) => {
     setSelected(item);
     setSearch('');
-    if (item.provider === 'DERIV' || item.provider === 'FXCM') {
+    if (chartableInstruments.some(candidate => candidate.id === item.id)) {
       setChartSymbols(current => current.length
         ? current.map((value, index) => index === 0 ? item.symbol : value)
         : [item.symbol]);
