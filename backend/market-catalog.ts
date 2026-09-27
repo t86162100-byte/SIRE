@@ -1005,12 +1005,15 @@ async function nseIndia(): Promise<UnifiedInstrument[]> {
 }
 
 async function nasdaqTrader(): Promise<UnifiedInstrument[]> {
+  // Nasdaq Trader's public Symbol Directory is the authoritative discovery layer for
+  // the public instrument universe. Keep these files separate so SIRE preserves
+  // the source/venue/type instead of flattening everything into "Stocks".
   const sources = [
     { file: 'nasdaqlisted.txt', category: 'Stocks', marketType: 'NASDAQ' },
     { file: 'otherlisted.txt', category: 'Stocks', marketType: 'US Other Exchanges' },
     { file: 'bondslist.txt', category: 'Bonds', marketType: 'US Bonds' },
-    { file: 'options.txt', category: 'Options', marketType: 'US Options' },
-    { file: 'mfundslist.txt', category: 'Funds', marketType: 'US Mutual Funds' },
+    { file: 'options.txt', category: 'Options', marketType: 'Nasdaq Options (NOM)' },
+    { file: 'mfundslist.txt', category: 'Funds', marketType: 'Nasdaq Fund Network' },
   ];
 
   const parseSource = async (source: typeof sources[number]): Promise<UnifiedInstrument[]> => {
@@ -1065,6 +1068,61 @@ async function nasdaqTrader(): Promise<UnifiedInstrument[]> {
       clearTimeout(timer);
     }
   };
+
+  // Additional Nasdaq-published directories use CSV rather than the pipe-delimited
+  // format above. These are real published directories; never synthesize symbols.
+  const parseCsvDirectory = async (file: string, category: string, marketType: string) => {
+    const response = await fetch('https://www.nasdaqtrader.com/SymbolDirectory/' + file, {
+      signal: AbortSignal.timeout(10000),
+      headers: { Accept: 'text/csv,text/plain,*/*' }
+    });
+    if (!response.ok) throw new Error(file + ' HTTP ' + response.status);
+    const text = await response.text();
+    const lines = text.replace(/^\\uFEFF/, '').split(/\\r?\\n/).filter(Boolean);
+    const out: UnifiedInstrument[] = [];
+    const seen = new Set<string>();
+    for (const line of lines) {
+      if (/^File Creation Time/i.test(line)) continue;
+      const cells = line.split(',').map(v => v.trim().replace(/^"|"$/g, ''));
+      if (!cells.length) continue;
+      let symbol = '', name = '';
+      if (file === 'pbot.csv') {
+        symbol = cells[1] || '';
+        name = cells[2] || symbol;
+      } else {
+        symbol = cells[2] || cells[1] || '';
+        name = cells[0] || symbol;
+      }
+      if (!symbol || !name || seen.has(symbol)) continue;
+      seen.add(symbol);
+      const item = cryptoItem('NASDAQTRADER', marketType, category, {
+        symbol,
+        fullName: name,
+        status: 'online'
+      });
+      if (!item) continue;
+      item.id = 'NASDAQTRADER:' + marketType + ':' + symbol;
+      item.symbol = symbol;
+      item.displaySymbol = symbol;
+      item.name = name;
+      item.marketType = marketType;
+      item.category = category;
+      item.status = 'Active';
+      item.logoUrl = providerLogo('NASDAQTRADER');
+      item.providerLogoUrl = providerLogo('NASDAQTRADER');
+      out.push(item);
+    }
+    console.log('[SIRE NASDAQTRADER] ' + file + ': ' + out.length);
+    return out;
+  };
+
+  const extraResults = await Promise.allSettled([
+    parseCsvDirectory('pbot.csv', 'Futures', 'PBOT Futures'),
+    parseCsvDirectory('phlxoptions.csv', 'Options', 'Nasdaq PHLX Options'),
+  ]);
+  extraResults.forEach((result, index) => {
+    if (result.status === 'rejected') console.warn('[SIRE NASDAQTRADER] extra directory failed:', index, result.reason);
+  });
 
   const results = await Promise.allSettled(sources.map(parseSource));
   const out = results.flatMap((result, index) => {
@@ -1525,8 +1583,11 @@ export async function getUnifiedMarketCatalogue(fetchDeriv: () => Promise<any[]>
     const providers: Array<[MarketProvider, Promise<UnifiedInstrument[]>]> = [
       // Deriv remains on its dedicated implementation and is intentionally untouched.
       ['DERIV', fetchDeriv().then(items => items.map(derivItem).filter(Boolean) as UnifiedInstrument[])],
-      // Crypto market discovery is now owned exclusively by the CCXT global universe.
-      // Keep non-crypto catalogues here; do not duplicate crypto exchange loaders.
+      // Nasdaq Trader supplies the public instrument master for Nasdaq-listed,
+      // other U.S.-listed, bonds, NOM options, mutual funds and additional
+      // Nasdaq-published derivatives directories.
+      ['NASDAQTRADER', nasdaqTrader()],
+      // Crypto market discovery is owned exclusively by the CCXT global universe.
       ['OANDA', oanda()],
     ];
     const results = await Promise.allSettled(
