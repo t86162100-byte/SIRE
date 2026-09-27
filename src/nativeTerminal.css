@@ -60,55 +60,195 @@
 .sire-global-crypto-button small{font-size:10px;font-weight:600;opacity:.65;white-space:nowrap}
 .sire-global-crypto-button:hover,.sire-global-crypto-button.active{border-color:#596575;background:#202731}
 
-/* Compact, TradingView-style instrument rows */
-.quote-asset-logo-wrap {
-  width: 28px;
-  height: 28px;
-  min-width: 28px;
-  border-radius: 50%;
-  overflow: hidden;
-}
-.quote-asset-logo { width: 28px; height: 28px; border-radius: 50%; object-fit: contain; }
-.quote-broker {
+/* TradingView-style instrument cards: large asset mark, two-line identity, exchange name + logo on the same line. */
+.native-symbol-list .symbol-row,
+.sire-instrument-search-list button {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 72px;
+  height: 72px;
   display: flex;
   align-items: center;
-  justify-content: flex-end;
-  gap: 6px;
+  gap: 14px;
+  padding: 9px 14px;
+  margin: 0;
+  border: 0;
+  border-bottom: 1px solid #1f2329;
+  border-radius: 0;
+  background: #000;
+  color: #eef1f5;
+  text-align: left;
+}
+.native-symbol-list .symbol-row:hover,
+.native-symbol-list .symbol-row:focus-visible,
+.native-symbol-list .symbol-row.active {
+  background: #0b0d10;
+  outline: none;
+}
+.quote-asset-logo-wrap {
+  width: 48px;
+  height: 48px;
+  min-width: 48px;
+  flex: 0 0 48px;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  border-radius: 50%;
+  background: #20252b;
+  border: 0;
+}
+.quote-asset-logo {
+  width: 100%;
+  height: 100%;
+  min-width: 100%;
+  min-height: 100%;
+  max-width: none;
+  max-height: none;
+  display: block;
+  border-radius: 50%;
+  object-fit: cover;
+}
+.quote-instrument-name {
+  min-width: 0;
+  flex: 1 1 auto;
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: flex-start !important;
+  justify-content: center !important;
+  gap: 5px;
+  overflow: hidden;
+}
+.quote-instrument-name b {
+  display: block;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
+  color: #f1f3f5;
+  font: 700 15px/1.05 Arial, sans-serif !important;
+  letter-spacing: -.1px;
+}
+.quote-instrument-name small {
+  display: block !important;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #8d949d;
+  font: 500 12px/1.05 Arial, sans-serif !important;
+  margin: 0;
+}
+.quote-broker {
+  flex: 0 0 auto;
+  min-width: 86px;
+  max-width: 44%;
+  display: grid !important;
+  grid-template-columns: auto 26px;
+  grid-template-rows: auto auto;
+  align-items: center;
+  justify-content: end;
+  column-gap: 8px;
+  row-gap: 4px;
+  overflow: visible;
+}
+.quote-broker b {
+  grid-column: 1;
+  grid-row: 1;
+  max-width: 100%;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #e9edf1;
+  font: 800 12px/1 Arial, sans-serif !important;
+  text-align: right;
+  letter-spacing: -.1px;
+}
+.quote-broker-logo-wrap {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  width: 26px;
+  height: 26px;
+  min-width: 26px;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  border-radius: 50%;
+  background: #171b20;
+  border: 0;
 }
 .quote-broker-logo {
-  width: 18px;
-  height: 18px;
-  min-width: 18px;
+  width: 100% !important;
+  height: 100% !important;
+  min-width: 100% !important;
+  min-height: 100%;
+  max-width: none !important;
+  max-height: none !important;
+  display: block;
   border-radius: 50%;
-  object-fit: contain;
+  object-fit: cover;
 }
-.quote-broker b { order: -1; }
-.quote-instrument-name b,
-.quote-broker b { text-transform: uppercase; }
+.quote-broker small {
+  grid-column: 1;
+  grid-row: 2;
+  display: block !important;
+  max-width: 100%;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #8d949d;
+  font: 500 11px/1 Arial, sans-serif !important;
+  text-align: right;
+  margin: 0;
+}
+.sire-instrument-search-list button {
+  min-height: 66px;
+  height: 66px;
+  padding: 8px 12px;
+}
+.sire-instrument-search-list .quote-asset-logo-wrap {
+  width: 42px;
+  height: 42px;
+  min-width: 42px;
+  flex-basis: 42px;
+}
+.sire-instrument-search-list .quote-instrument-name b { font-size: 13px !important; }
+.sire-instrument-search-list .quote-instrument-name small { font-size: 10px !important; }
+.sire-instrument-search-list .quote-broker { min-width: 78px; grid-template-columns:auto 22px; }
+.sire-instrument-search-list .quote-broker-logo-wrap { width:22px;height:22px;min-width:22px; }
+.sire-instrument-search-list .quote-broker b { font-size: 10px !important; }
+.sire-instrument-search-list .quote-broker small { font-size: 9px !important; }
 
-/* Compact TradingView-style market rows */
-.native-symbol-list .symbol-row,.sire-instrument-search-list button{min-height:58px;}
-.quote-asset-logo-wrap{width:28px;height:28px;min-width:28px;display:grid;place-items:center;border-radius:50%;overflow:hidden;background:#151a21;border:1px solid #252d38;}
-.quote-asset-logo{width:20px;height:20px;max-width:20px;max-height:20px;object-fit:contain;border-radius:50%;}
-.quote-instrument-name{display:flex!important;flex:1 1 auto;min-width:0;align-items:flex-start;justify-content:center;flex-direction:column!important;}
-.quote-instrument-name b{font-size:11px!important;line-height:1.1;text-transform:uppercase;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-.quote-instrument-name small{display:none;}
-.quote-broker{display:flex!important;flex:0 0 auto;flex-direction:row!important;align-items:center;gap:5px;min-width:0;}
-.quote-broker-logo{width:17px!important;height:17px!important;min-width:17px;max-width:17px;object-fit:contain;border-radius:50%;}
-.quote-broker b{font-size:8px!important;line-height:1;text-transform:uppercase;white-space:nowrap;max-width:74px;overflow:hidden;text-overflow:ellipsis;}
-.quote-broker small{display:none!important;}
-@media(max-width:640px){.native-symbol-list .symbol-row,.sire-instrument-search-list button{min-height:52px;padding:6px 7px;gap:7px}.quote-asset-logo-wrap{width:24px;height:24px;min-width:24px}.quote-asset-logo{width:17px;height:17px;max-width:17px;max-height:17px}.quote-broker-logo{width:15px!important;height:15px!important;min-width:15px;max-width:15px}.quote-broker b{font-size:7px!important;max-width:62px}}
-
-/* TradingView-inspired symbol/exchange row treatment: circular logos are filled by the image itself. */
-.quote-asset-logo-wrap{width:30px;height:30px;min-width:30px;display:grid;place-items:center;border-radius:50%;overflow:hidden;background:#151a21;border:1px solid #252d38;}
-.quote-asset-logo{width:100%;height:100%;max-width:none;max-height:none;object-fit:cover;border-radius:50%;display:block;}
-.quote-instrument-name{display:flex!important;flex:1 1 auto;min-width:0;align-items:flex-start;justify-content:center;flex-direction:column!important;}
-.quote-instrument-name b{font-size:11px!important;line-height:1.1;text-transform:uppercase;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-.quote-instrument-name small{display:none;}
-.quote-broker{display:flex!important;flex:0 0 auto;flex-direction:row!important;align-items:center;gap:6px;min-width:0;}
-.quote-broker b{font-size:8px!important;font-weight:800!important;line-height:1;text-transform:uppercase;white-space:nowrap;max-width:74px;overflow:hidden;text-overflow:ellipsis;}
-.quote-broker-logo-wrap{width:20px;height:20px;min-width:20px;display:grid;place-items:center;border-radius:50%;overflow:hidden;background:#151a21;border:1px solid #303844;}
-.quote-broker-logo{width:100%!important;height:100%!important;min-width:0!important;max-width:none!important;object-fit:cover;border-radius:50%;display:block;}
-.quote-broker small{display:none!important;}
-@media(max-width:640px){.quote-asset-logo-wrap{width:27px;height:27px;min-width:27px}.quote-broker{gap:5px}.quote-broker-logo-wrap{width:19px;height:19px;min-width:19px}.quote-broker b{font-size:7px!important;max-width:62px}}
+@media (max-width: 640px) {
+  .native-symbol-list .symbol-row {
+    min-height: 70px;
+    height: 70px;
+    gap: 12px;
+    padding: 8px 13px;
+  }
+  .quote-asset-logo-wrap {
+    width: 48px;
+    height: 48px;
+    min-width: 48px;
+    flex-basis: 48px;
+  }
+  .quote-instrument-name { gap: 5px; }
+  .quote-instrument-name b { font-size: 14px !important; }
+  .quote-instrument-name small { font-size: 11px !important; }
+  .quote-broker {
+    min-width: 78px;
+    max-width: 45%;
+    grid-template-columns:auto 24px;
+    column-gap: 6px;
+  }
+  .quote-broker b { font-size: 10px !important; }
+  .quote-broker small { font-size: 9px !important; }
+  .quote-broker-logo-wrap {
+    width: 24px;
+    height: 24px;
+    min-width: 24px;
+  }
+}
