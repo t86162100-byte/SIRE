@@ -46,12 +46,33 @@ async function loadPriorityMarkets() {
 
 async function loadAllMarkets() {
   const exchangeIds = Object.keys(ccxt.exchanges);
-  const concurrency = 6;
+  const concurrency = 4;
+  const failed = new Set<string>();
   for (let i = 0; i < exchangeIds.length; i += concurrency) {
     const batch = exchangeIds.slice(i, i + concurrency);
     const settled = await Promise.allSettled(batch.map(loadExchange));
-    for (const result of settled) {
-      if (result.status === 'fulfilled' && result.value.length) mergeMarkets(result.value);
+    settled.forEach((result, index) => {
+      const id = batch[index];
+      if (result.status === 'fulfilled' && result.value.length) {
+        mergeMarkets(result.value);
+      } else {
+        failed.add(id);
+        console.warn('[SIRE GLOBAL CRYPTO] exchange load failed:', id, result.status === 'rejected' ? String(result.reason) : 'empty catalogue');
+      }
+    });
+  }
+  // Retry failed exchanges once after the full pass, so transient API failures
+  // do not permanently exclude an exchange from the scrolling catalogue.
+  if (failed.size) {
+    const retryIds = [...failed];
+    for (let i = 0; i < retryIds.length; i += concurrency) {
+      const batch = retryIds.slice(i, i + concurrency);
+      const settled = await Promise.allSettled(batch.map(loadExchange));
+      settled.forEach((result, index) => {
+        const id = batch[index];
+        if (result.status === 'fulfilled' && result.value.length) mergeMarkets(result.value);
+        else console.warn('[SIRE GLOBAL CRYPTO] exchange retry failed:', id);
+      });
     }
   }
 }
