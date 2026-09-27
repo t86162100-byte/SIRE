@@ -140,8 +140,19 @@ async function bybit(): Promise<UnifiedInstrument[]> {
   for (const category of categories) {
     let cursor = '';
     for (let page = 0; page < 12; page++) {
-      const url = 'https://api.bybit.com/v5/market/instruments-info?category=' + category + '&limit=1000' + (cursor ? '&cursor=' + encodeURIComponent(cursor) : '');
-      const response = await getJsonAny([url, url.replace('https://api.bybit.com/', 'https://api.bytick.com/')]);
+      const query = '?category=' + category + '&limit=1000' + (cursor ? '&cursor=' + encodeURIComponent(cursor) : '');
+      // Bybit documents api.bybit.com as the mainnet endpoint, but US-hosted
+      // server IPs receive HTTP 403. Try the documented regional mainnet
+      // endpoints as fallbacks so a Render US instance can still build the
+      // public instrument catalogue without authentication.
+      const response = await getJsonAny([
+        'https://api.bybit.com/v5/market/instruments-info' + query,
+        'https://api.bybit.ae/v5/market/instruments-info' + query,
+        'https://api.bybit.eu/v5/market/instruments-info' + query,
+        'https://api.bybit.kz/v5/market/instruments-info' + query,
+        'https://api.bybit.id/v5/market/instruments-info' + query,
+        'https://api.bytick.com/v5/market/instruments-info' + query
+      ]);
       const items = Array.isArray(response?.result?.list) ? response.result.list : [];
       for (const raw of items) {
         if (String(raw.status || '').toLowerCase() !== 'trading') continue;
