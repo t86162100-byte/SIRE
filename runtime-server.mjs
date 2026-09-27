@@ -17,6 +17,7 @@ import { recordIssue, getRecentIssues } from './backend/sire-issue-tracker.ts';
 import { getUnifiedMarketCatalogue, getCmeCatalogueForDiagnostics, getNyseAmericanCatalogueForDiagnostics } from './backend/market-catalog.ts';
 import { loadGlobalCryptoUniverse } from './backend/ccxt-universe-loader.ts';
 import { ccxtMarketHistory, ccxtMarketQuote, ccxtMarketCapabilities } from './backend/ccxt-market-data.ts';
+import { startInstrumentAudit, getInstrumentAuditStatus, getInstrumentAuditResults } from './backend/instrument-auditor.ts';
 
 const PORT = Number(process.env.PORT || 10000);
 const HOST = '0.0.0.0';
@@ -721,6 +722,19 @@ const server = http.createServer(async (req,res) => {
     if (req.method === 'GET' && pathname === '/api/sire/fxcm/quote') {
       try { const u=new URL(req.url||'/',`http://${req.headers.host||'localhost'}`); const symbol=String(u.searchParams.get('symbol')||'').trim(); if(!symbol) throw new Error('symbol is required'); const quote=await fxcmQuote(symbol); return res.writeHead(200,{'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify({ok:true,quote})); }
       catch(e){ return res.writeHead(502,{'Access-Control-Allow-Origin':'*','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify({ok:false,error:e instanceof Error?e.message:String(e)})); }
+    }
+    if (req.method === 'POST' && pathname === '/api/sire/instrument-audit/start') {
+      const result=startInstrumentAudit();
+      return res.writeHead(202,{'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify({ok:true,audit:result}));
+    }
+    if (req.method === 'GET' && pathname === '/api/sire/instrument-audit/status') {
+      return res.writeHead(200,{'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify({ok:true,audit:getInstrumentAuditStatus()}));
+    }
+    if (req.method === 'GET' && pathname === '/api/sire/instrument-audit/results') {
+      const u=new URL(req.url||'/',`http://${req.headers.host||'localhost'}`);
+      const failedOnly=u.searchParams.get('failedOnly')==='true';
+      const exchange=u.searchParams.get('exchange')||undefined;
+      return res.writeHead(200,{'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify({ok:true,count:getInstrumentAuditResults({failedOnly,exchange}).length,rows:getInstrumentAuditResults({failedOnly,exchange})}));
     }
     if (req.method === 'GET' && pathname === '/api/sire/ccxt/capabilities') {
       try {
