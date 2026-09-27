@@ -18,6 +18,13 @@ export interface UnifiedInstrument {
   status?: string;
   logoUrl: string;
   providerLogoUrl: string;
+  instrumentType?: string;
+  contractType?: string;
+  settlement?: string;
+  expiry?: string | number;
+  strike?: number;
+  optionType?: string;
+  supportsMargin?: boolean;
 }
 
 const CACHE_MS = 5 * 60 * 1000;
@@ -114,6 +121,13 @@ function cryptoItem(provider: MarketProvider, marketType: string, category: stri
     status: String(raw?.status || raw?.state || 'online'),
     logoUrl: assetLogo(base) || providerLogo(provider),
     providerLogoUrl: providerLogo(provider),
+    instrumentType: marketType,
+    contractType: raw?.contractType || raw?.contract_type || raw?.type || undefined,
+    settlement: raw?.settleCoin || raw?.settleCcy || raw?.settleCurrency || raw?.settle_currency || undefined,
+    expiry: raw?.deliveryTime || raw?.delivery_time || raw?.expireDate || raw?.expirationTime || raw?.expiration_time || undefined,
+    strike: Number.isFinite(Number(raw?.strikePrice ?? raw?.strike_price ?? raw?.strike)) ? Number(raw?.strikePrice ?? raw?.strike_price ?? raw?.strike) : undefined,
+    optionType: raw?.optionsType || raw?.optionType || (raw?.is_call === true ? 'Call' : raw?.is_call === false ? 'Put' : undefined),
+    supportsMargin: Boolean(raw?.isMarginEnabled || raw?.marginEnabled || raw?.margin),
   };
 }
 
@@ -143,46 +157,9 @@ async function coinbase(): Promise<UnifiedInstrument[]> {
     return [];
   }
 }
-async function gateio(): Promise<UnifiedInstrument[]> {
-  try {
-    const rows = await getJson('https://api.gateio.ws/api/v4/spot/currency_pairs', 15000);
-    const out: UnifiedInstrument[] = [];
-    for (const raw of Array.isArray(rows) ? rows : []) {
-      if (String(raw?.trade_status || '').toLowerCase() !== 'tradable') continue;
-      const item = cryptoItem('GATEIO', 'Spot', 'Crypto', {
-        symbol: String(raw?.id || ''),
-        baseAsset: String(raw?.base || ''),
-        quoteAsset: String(raw?.quote || ''),
-        fullName: String(raw?.base_name || raw?.id || ''),
-        status: raw?.trade_status || 'tradable'
-      });
-      if (item) out.push(item);
-    }
-    console.log('[SIRE GATEIO] Spot: ' + out.length);
-    return out;
-  } catch (error) { console.warn('[SIRE GATEIO] failed:', error); return []; }
-}
+async function gateio(): Promise<UnifiedInstrument[]> { const out:UnifiedInstrument[]=[];try{const r=await getJson('https://api.gateio.ws/api/v4/spot/currency_pairs',15000);for(const raw of r||[]){if(String(raw?.trade_status||'').toLowerCase()!=='tradable')continue;const i=cryptoItem('GATEIO','Spot','Crypto',{symbol:raw?.id,baseAsset:raw?.base,quoteAsset:raw?.quote,status:'online'});if(i)out.push(i)}}catch(e){console.warn('[SIRE GATEIO] Spot failed:',e)}for(const settle of ['usdt','usdc','btc','usd'])for(const kind of ['futures','delivery'])try{const r=await getJson('https://api.gateio.ws/api/v4/'+kind+'/'+settle+'/contracts',15000);for(const raw of r||[]){const i=cryptoItem('GATEIO',kind==='futures'?'Perpetuals':'Futures','Crypto',{...raw,symbol:raw?.name,baseAsset:String(raw?.underlying||'').split('_')[0],quoteAsset:settle.toUpperCase()});if(i)out.push(i)}}catch(e){console.warn('[SIRE GATEIO] '+kind+'/'+settle+' failed:',e)}try{const us=await getJson('https://api.gateio.ws/api/v4/options/underlyings',15000);for(const u of us||[]){const underlying=String(u?.name||'');if(!underlying)continue;const r=await getJson('https://api.gateio.ws/api/v4/options/contracts?underlying='+encodeURIComponent(underlying),15000);for(const raw of r||[]){const i=cryptoItem('GATEIO','Options','Crypto',{...raw,symbol:raw?.name,baseAsset:underlying.split('_')[0],quoteAsset:underlying.split('_')[1]||'USDT'});if(i)out.push(i)}}}catch(e){console.warn('[SIRE GATEIO] Options failed:',e)}return out; }
 
-async function kucoin(): Promise<UnifiedInstrument[]> {
-  try {
-    const payload = await getJson('https://api.kucoin.com/api/v2/symbols', 15000);
-    const rows = Array.isArray(payload?.data) ? payload.data : [];
-    const out: UnifiedInstrument[] = [];
-    for (const raw of rows) {
-      if (raw?.enableTrading === false) continue;
-      const item = cryptoItem('KUCOIN', 'Spot', 'Crypto', {
-        symbol: String(raw?.symbol || ''),
-        baseAsset: String(raw?.baseCurrency || ''),
-        quoteAsset: String(raw?.quoteCurrency || ''),
-        fullName: String(raw?.symbol || ''),
-        status: raw?.enableTrading === false ? 'offline' : 'online'
-      });
-      if (item) out.push(item);
-    }
-    console.log('[SIRE KUCOIN] Spot: ' + out.length);
-    return out;
-  } catch (error) { console.warn('[SIRE KUCOIN] failed:', error); return []; }
-}
+async function kucoin(): Promise<UnifiedInstrument[]> { const out:UnifiedInstrument[]=[];try{const r=await getJson('https://api.kucoin.com/api/v2/symbols',15000);for(const raw of r?.data||[]){if(raw?.enableTrading===false)continue;const i=cryptoItem('KUCOIN','Spot','Crypto',{symbol:raw?.symbol,baseAsset:raw?.baseCurrency,quoteAsset:raw?.quoteCurrency,status:'online'});if(i)out.push(i)}}catch(e){console.warn('[SIRE KUCOIN] Spot failed:',e)}for(const u of ['https://api.kucoin.com/api/v3/margin/symbols','https://api.kucoin.com/api/v1/isolated/symbols'])try{const r=await getJson(u,15000);const rows=Array.isArray(r?.data)?r.data:r?.data?.items||[];for(const raw of rows){if(raw?.enableTrading===false||raw?.tradeEnable===false)continue;const i=cryptoItem('KUCOIN','Margin','Crypto',{symbol:raw?.symbol,baseAsset:raw?.baseCurrency,quoteAsset:raw?.quoteCurrency,status:'online',isMarginEnabled:true});if(i&&!out.some(x=>x.marketType==='Margin'&&x.symbol===i.symbol))out.push(i)}}catch(e){console.warn('[SIRE KUCOIN] Margin failed:',e)}try{const r=await getJson('https://api-futures.kucoin.com/api/v1/contracts/active',15000);for(const raw of r?.data||[]){const i=cryptoItem('KUCOIN',raw?.expireDate?'Futures':'Perpetuals','Crypto',raw);if(i)out.push(i)}}catch(e){console.warn('[SIRE KUCOIN] Futures failed:',e)}return out; }
 
 async function gemini(): Promise<UnifiedInstrument[]> {
   try {
@@ -616,116 +593,13 @@ async function tradingviewFeedRegistry(): Promise<UnifiedInstrument[]> {
   return out;
 }
 
-async function binance(): Promise<UnifiedInstrument[]> {
-  const families: Array<[string, string[]]> = [
-    ['Spot', ['https://data-api.binance.vision/api/v3/exchangeInfo','https://api.binance.com/api/v3/exchangeInfo','https://api-gcp.binance.com/api/v3/exchangeInfo','https://api1.binance.com/api/v3/exchangeInfo','https://api2.binance.com/api/v3/exchangeInfo']],
-    ['USD-M Futures', ['https://fapi.binance.com/fapi/v1/exchangeInfo','https://fapi1.binance.com/fapi/v1/exchangeInfo','https://fapi2.binance.com/fapi/v1/exchangeInfo']],
-    ['COIN-M Futures', ['https://dapi.binance.com/dapi/v1/exchangeInfo']],
-    ['Options', ['https://eapi.binance.com/eapi/v1/exchangeInfo']]
-  ];
-  const out: UnifiedInstrument[] = [];
-  for (const [family, urls] of families) {
-    try {
-      const response = await getJsonAny(urls);
-      const rows = family === 'Options' ? (Array.isArray(response?.optionSymbols) ? response.optionSymbols : []) : (Array.isArray(response?.symbols) ? response.symbols : []);
-      for (const raw of rows) {
-        if (String(raw?.status || raw?.contractStatus || '').toUpperCase() !== 'TRADING') continue;
-        const normalized = family === 'Options'
-          ? { ...raw, baseAsset: String(raw?.underlying || '').replace(/USDT$|USDC$|USD$/i, ''), quoteAsset: raw?.quoteAsset || 'USDT' }
-          : raw;
-        const item = cryptoItem('BINANCE', family, 'Crypto', normalized);
-        if (item) out.push(item);
-      }
-      console.log('[SIRE BINANCE] ' + family + ': ' + out.filter(x => x.marketType === family).length);
-    } catch (error) {
-      console.warn('[SIRE BINANCE] ' + family + ' failed:', error);
-    }
-  }
-  return out;
-}
-async function bitget(): Promise<UnifiedInstrument[]> {
-  const categories = ['SPOT', 'USDT-FUTURES', 'COIN-FUTURES', 'USDC-FUTURES'];
-  const responses = await Promise.all(categories.map(category => getJsonAny([
-    'https://api.bitget.com/api/v3/market/instruments?category=' + category,
-    'https://api.bitget.com/api/v2/spot/public/symbols'
-  ])));
-  const out: UnifiedInstrument[] = [];
-  for (let i = 0; i < categories.length; i++) {
-    const category = categories[i];
-    const items = Array.isArray(responses[i]?.data) ? responses[i].data : [];
-    for (const raw of items) {
-      if (String(raw.status || '').toLowerCase() !== 'online') continue;
-      const item = cryptoItem('BITGET', category === 'SPOT' ? 'Spot' : category.replace('-FUTURES', ' Futures'), 'Crypto', raw);
-      if (item) out.push(item);
-    }
-  }
-  return out;
-}
+async function binance(): Promise<UnifiedInstrument[]> { const out:UnifiedInstrument[]=[]; const add=(f:string,rows:any[])=>rows.forEach(raw=>{const st=String(raw?.status||raw?.contractStatus||'').toUpperCase();if(st&&!['TRADING','ONLINE','ENABLED'].includes(st))return;const i=cryptoItem('BINANCE',f,'Crypto',raw);if(i)out.push(i)}); const src:Array<[string,string[]]>=[['Spot',['https://data-api.binance.vision/api/v3/exchangeInfo','https://api.binance.com/api/v3/exchangeInfo']],['Margin',['https://api.binance.com/sapi/v1/margin/allPairs']],['USD-M Perpetuals',['https://fapi.binance.com/fapi/v1/exchangeInfo']],['COIN-M Futures',['https://dapi.binance.com/dapi/v1/exchangeInfo']],['Options',['https://eapi.binance.com/eapi/v1/exchangeInfo']]]; for(const [f,u] of src)try{const r=await getJsonAny(u,15000);add(f,f==='Margin'?(Array.isArray(r)?r:[]):f==='Options'?(r?.optionSymbols||[]):(r?.symbols||[]))}catch(e){console.warn('[SIRE BINANCE] '+f+' failed:',e)} console.log('[SIRE BINANCE] Total: '+out.length);return out; }
 
-async function bybit(): Promise<UnifiedInstrument[]> {
-  const categories = ['spot', 'linear', 'inverse', 'option'];
-  const out: UnifiedInstrument[] = [];
-  for (const category of categories) {
-    let cursor = '';
-    for (let page = 0; page < 12; page++) {
-      const query = '?category=' + category + '&limit=1000' + (cursor ? '&cursor=' + encodeURIComponent(cursor) : '');
-      // Bybit documents api.bybit.com as the mainnet endpoint, but US-hosted
-      // server IPs receive HTTP 403. Try the documented regional mainnet
-      // endpoints as fallbacks so a Render US instance can still build the
-      // public instrument catalogue without authentication.
-      const response = await getJsonAny([
-        'https://api.bybit.com/v5/market/instruments-info' + query,
-        'https://api.bybit.tr/v5/market/instruments-info' + query,
-        'https://api.bybit.ae/v5/market/instruments-info' + query,
-        'https://api.bybit.eu/v5/market/instruments-info' + query,
-        'https://api.bybit.kz/v5/market/instruments-info' + query,
-        'https://api.bybitgeorgia.ge/v5/market/instruments-info' + query,
-        'https://api.bybit.id/v5/market/instruments-info' + query,
-        'https://api.spark-fintech.com/v5/market/instruments-info' + query,
-        'https://api.bytick.com/v5/market/instruments-info' + query
-      ]);
-      if (Number(response?.retCode) !== 0) throw new Error(String(response?.retMsg || 'Bybit API error'));
-      const items = Array.isArray(response?.result?.list) ? response.result.list : [];
-      for (const raw of items) {
-        if (String(raw.status || '').toLowerCase() !== 'trading') continue;
-        const item = cryptoItem('BYBIT', category === 'spot' ? 'Spot' : category === 'linear' ? 'Perpetuals' : category === 'inverse' ? 'Inverse Futures' : 'Options', 'Crypto', raw);
-        if (item) out.push(item);
-      }
-      cursor = String(response?.result?.nextPageCursor || '');
-      if (!cursor || !items.length || category === 'spot') break;
-    }
-  }
-  return out;
-}
+async function bitget(): Promise<UnifiedInstrument[]> { const out:UnifiedInstrument[]=[];for(const c of ['SPOT','MARGIN','USDT-FUTURES','COIN-FUTURES','USDC-FUTURES'])try{const r=await getJson('https://api.bitget.com/api/v3/market/instruments?category='+c,15000);for(const raw of r?.data||[]){if(String(raw?.status||'').toLowerCase()!=='online')continue;const t=c==='SPOT'?'Spot':c==='MARGIN'?'Margin':c==='USDT-FUTURES'?(String(raw?.type||'').toLowerCase()==='delivery'?'USDT Futures':'USDT Perpetuals'):c==='COIN-FUTURES'?(String(raw?.type||'').toLowerCase()==='delivery'?'Coin-M Futures':'Coin-M Perpetuals'):(String(raw?.type||'').toLowerCase()==='delivery'?'USDC Futures':'USDC Perpetuals');const i=cryptoItem('BITGET',t,'Crypto',raw);if(i)out.push(i)}}catch(e){console.warn('[SIRE BITGET] '+c+' failed:',e)}return out; }
 
-async function kraken(): Promise<UnifiedInstrument[]> {
-  const response = await getJsonAny([
-    'https://api.kraken.com/0/public/AssetPairs'
-  ]);
-  if (Array.isArray(response?.error) && response.error.length) {
-    throw new Error(response.error.join(', '));
-  }
-  const rows = response?.result && typeof response.result === 'object' ? Object.entries(response.result) : [];
-  const out: UnifiedInstrument[] = [];
-  for (const [pairKey, rawValue] of rows) {
-    const raw: any = rawValue;
-    const status = String(raw?.status || 'online').toLowerCase();
-    if (status && !['online','trading'].includes(status)) continue;
-    const symbol = String(raw?.wsname || raw?.altname || pairKey).trim();
-    if (!symbol) continue;
-    const base = String(raw?.base || '').replace(/^X|^Z/, '').trim() || undefined;
-    const quote = String(raw?.quote || '').replace(/^X|^Z/, '').trim() || undefined;
-    const item = cryptoItem('KRAKEN', 'Spot', 'Crypto', {
-      symbol,
-      baseAsset: base,
-      quoteAsset: quote,
-      status: 'online'
-    });
-    if (item) out.push(item);
-  }
-  console.log('[SIRE KRAKEN] Spot: ' + out.length);
-  return out;
-}
+async function bybit(): Promise<UnifiedInstrument[]> { const out:UnifiedInstrument[]=[];for(const c of ['spot','linear','inverse','option']){let cursor='';for(let p=0;p<100;p++)try{const q='?category='+c+'&limit=1000'+(c==='option'?'&baseCoin=All':'')+(cursor?'&cursor='+encodeURIComponent(cursor):'');const r=await getJsonAny(['https://api.bybit.com/v5/market/instruments-info'+q,'https://api.bybit.tr/v5/market/instruments-info'+q,'https://api.bybit.ae/v5/market/instruments-info'+q,'https://api.bybit.eu/v5/market/instruments-info'+q],12000);const rows=r?.result?.list||[];for(const raw of rows){const st=String(raw?.status||'').toLowerCase();if(c==='option'?!['trading','prelaunch','delivering'].includes(st):!['trading','pendingopen','prelaunch'].includes(st))continue;const t=c==='spot'?(raw?.marginTrading&&raw.marginTrading!=='none'?'Spot/Margin':'Spot'):c==='linear'?(String(raw?.contractType||'').toLowerCase().includes('perpetual')?'Linear Perpetuals':'Linear Futures'):c==='inverse'?(String(raw?.contractType||'').toLowerCase().includes('perpetual')?'Inverse Perpetuals':'Inverse Futures'):'Options';const i=cryptoItem('BYBIT',t,'Crypto',raw);if(i)out.push(i)}cursor=String(r?.result?.nextPageCursor||'');if(!cursor||c==='spot'||!rows.length)break}catch(e){console.warn('[SIRE BYBIT] '+c+' failed:',e);break}}return out; }
+
+async function kraken(): Promise<UnifiedInstrument[]> { const out:UnifiedInstrument[]=[];try{const r=await getJsonAny(['https://api.kraken.com/0/public/AssetPairs'],15000);for(const [k,v] of Object.entries(r?.result||{})){const raw:any=v;if(['online','trading'].includes(String(raw?.status||'online').toLowerCase())){const i=cryptoItem('KRAKEN','Spot','Crypto',{symbol:raw?.wsname||raw?.altname||k,baseAsset:raw?.base,quoteAsset:raw?.quote,status:'online'});if(i)out.push(i)}}}catch(e){console.warn('[SIRE KRAKEN] Spot failed:',e)}try{const r=await getJsonAny(['https://futures.kraken.com/derivatives/api/v3/instruments'],15000);for(const raw of r?.instruments||[]){const sym=String(raw?.symbol||raw?.instrumentName||'');if(!sym)continue;const t=String(raw?.type||raw?.contractType||'').toLowerCase().includes('perpetual')||sym.startsWith('PF_')||sym.startsWith('PI_')?'Perpetuals':'Futures';const i=cryptoItem('KRAKEN',t,'Crypto',{...raw,symbol:sym});if(i)out.push(i)}}catch(e){console.warn('[SIRE KRAKEN] Derivatives failed:',e)}return out; }
 
 async function getJsonAuth(url: string, headers: Record<string, string>, timeoutMs = 12000) {
   const controller = new AbortController();
@@ -1591,50 +1465,8 @@ async function tse(): Promise<UnifiedInstrument[]> {
   } catch (error) { console.warn('[SIRE TSE] failed:', error); return []; }
 }
 
-async function okx(): Promise<UnifiedInstrument[]> {
-  const types = ['SPOT', 'SWAP', 'FUTURES', 'OPTION'];
-  const out: UnifiedInstrument[] = [];
-  for (const instType of types) {
-    const response = await getJsonAny([
-      'https://www.okx.com/api/v5/public/instruments?instType=' + instType,
-      'https://app.okx.com/api/v5/public/instruments?instType=' + instType,
-      'https://my.okx.com/api/v5/public/instruments?instType=' + instType
-    ]);
-    const items = Array.isArray(response?.data) ? response.data : [];
-    for (const raw of items) {
-      if (String(raw.state || '').toLowerCase() !== 'live') continue;
-      const marketType = instType === 'SPOT' ? 'Spot' : instType === 'SWAP' ? 'Perpetuals' : instType === 'FUTURES' ? 'Futures' : 'Options';
-      const item = cryptoItem('OKX', marketType, raw.instCategory === '3' ? 'Stocks' : raw.instCategory === '4' ? 'Metals' : raw.instCategory === '5' ? 'Commodities' : raw.instCategory === '6' ? 'Forex' : 'Crypto', raw);
-      if (item) out.push(item);
-    }
-  }
-  return out;
-}
+async function okx(): Promise<UnifiedInstrument[]> { const out:UnifiedInstrument[]=[];for(const t of ['SPOT','MARGIN','SWAP','FUTURES','OPTION'])try{const r=await getJsonAny(['https://www.okx.com/api/v5/public/instruments?instType='+t,'https://app.okx.com/api/v5/public/instruments?instType='+t],15000);for(const raw of r?.data||[]){if(String(raw?.state||'').toLowerCase()!=='live')continue;const mt=t==='SPOT'?'Spot':t==='MARGIN'?'Margin':t==='SWAP'?'Perpetuals':t==='FUTURES'?'Futures':'Options';const i=cryptoItem('OKX',mt,'Crypto',raw);if(i)out.push(i)}}catch(e){console.warn('[SIRE OKX] '+t+' failed:',e)}return out; }
 
-function derivItem(raw: any): UnifiedInstrument | null {
-  const symbol = String(raw?.symbol || raw?.underlying_symbol || '').trim();
-  if (!symbol) return null;
-  const name = String(raw?.display_name || raw?.underlying_symbol_name || raw?.name || symbol);
-  return {
-    id: 'DERIV:Market:' + symbol,
-    provider: 'DERIV',
-    providerLabel: 'Deriv',
-    marketType: 'Market',
-    category: (() => { const m = String(raw?.market || raw?.market_display_name || '').toLowerCase(); if (m.includes('forex') || m.includes('currency')) return 'Forex'; if (m.includes('commod')) return 'Commodities'; if (m.includes('stock') || m.includes('equities')) return 'Stocks'; if (m.includes('index') || m.includes('indices')) return 'Indices'; if (m.includes('crypto')) return 'Crypto'; if (m.includes('synthetic')) return 'Synthetic Indices'; if (m.includes('basket')) return 'Baskets'; return String(raw?.market_display_name || raw?.market || 'Deriv'); })(),
-    symbol,
-    displaySymbol: symbol,
-    name,
-    base: undefined,
-    quote: undefined,
-    price: undefined,
-    bid: undefined,
-    ask: undefined,
-    exchangeOpen: Number(raw?.exchangeOpen ?? raw?.exchange_open ?? raw?.exchange_is_open ?? 1),
-    status: Number(raw?.tradingSuspended ?? raw?.trading_suspended ?? raw?.is_trading_suspended ?? 0) === 1 ? 'suspended' : 'online',
-    logoUrl: providerLogo('deriv'),
-    providerLogoUrl: providerLogo('deriv'),
-  };
-}
 
 export async function getUnifiedMarketCatalogue(fetchDeriv: () => Promise<any[]>): Promise<UnifiedInstrument[]> {
   if (cached && Date.now() - cached.at < CACHE_MS) return cached.instruments;
@@ -1647,18 +1479,13 @@ export async function getUnifiedMarketCatalogue(fetchDeriv: () => Promise<any[]>
     // public file happens to finish first.
     const providers: Array<[MarketProvider, Promise<UnifiedInstrument[]>]> = [
       ['DERIV', fetchDeriv().then(items => items.map(derivItem).filter(Boolean) as UnifiedInstrument[])],
-      ['BINANCE', binance()],
-      ['BITGET', bitget()],
-      ['BYBIT', bybit()],
-      ['OKX', okx()],
-      ['KRAKEN', kraken()],
-      ['COINBASE', coinbase()],
-      ['GATEIO', gateio()],
-      ['KUCOIN', kucoin()],
-      ['GEMINI', gemini()],
-      ['COINEX', coinex()],
-      ['UPBIT', upbit()],
-      ['OANDA', oanda()],
+      ['BINANCE', binance()], ['BITGET', bitget()], ['BYBIT', bybit()], ['OKX', okx()], ['KRAKEN', kraken()],
+      ['COINBASE', coinbase()], ['GATEIO', gateio()], ['KUCOIN', kucoin()], ['GEMINI', gemini()], ['BITSO', bitso()],
+      ['BITFINEX', bitfinex()], ['BITVAVO', bitvavo()], ['COINEX', coinex()], ['LBANK', lbank()], ['WOOX', woox()],
+      ['CRYPTOCOM', cryptocom()], ['HTX', htx()], ['BITKUB', bitkub()], ['UPBIT', upbit()], ['PIONEX', pionex()],
+      ['POLONIEX', poloniex()], ['BITHUMB', bithumb()], ['MEXC', mexc()], ['PHEMEX', phemex()], ['WHITEBIT', whitebit()],
+      ['BITSTAMP', bitstamp()], ['CRYPTOCOMEXCHANGE', brokerCatalogue('CRYPTOCOMEXCHANGE')],
+      ['COINBASEADVANCED', brokerCatalogue('COINBASEADVANCED')], ['OANDA', oanda()],
     ];
     const results = await Promise.allSettled(
       providers.map(([provider, promise]) =>
