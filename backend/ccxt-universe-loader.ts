@@ -61,7 +61,7 @@ async function loadExchanges(ids: string[]) {
 const initialExchanges = ['coinbase', 'kraken', 'kucoin', 'mexc', 'bitget'];
 
 async function loadAllRemainingExchanges() {
-  const all = Object.keys(ccxt.exchanges);
+  const all = Array.isArray((ccxt as any).exchanges) ? (ccxt as any).exchanges : Object.keys((ccxt as any).exchanges);
   const remaining = all.filter(id => !initialExchanges.includes(id));
   await loadExchanges(remaining);
   console.info('[SIRE GLOBAL CRYPTO] all exchanges processed', {
