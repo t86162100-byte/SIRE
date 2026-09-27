@@ -1,4 +1,4 @@
-export type MarketProvider = 'DERIV' | 'BINANCE' | 'BITGET' | 'BYBIT' | 'OKX' | 'KRAKEN' | 'COINBASE' | 'GATEIO' | 'KUCOIN' | 'GEMINI' | 'BITSO' | 'BITFINEX' | 'BITVAVO' | 'COINEX' | 'LBANK' | 'WOOX' | 'CRYPTOCOM' | 'HTX' | 'BITKUB' | 'UPBIT' | 'PIONEX' | 'POLONIEX' | 'BITHUMB' | 'MEXC' | 'PHEMEX' | 'WHITEBIT' | 'TWELVEDATA' | 'NASDAQTRADER' | 'OANDA' | 'TRADINGVIEW' | 'FOREXCOM' | 'INTERACTIVEBROKERS' | 'TRADESTATION' | 'WEBULL' | 'MOOMOO' | 'NINJATRADER' | 'TRADOVATE' | 'AMPFUTURES' | 'TASTYTRADE' | 'TASTYFX' | 'CRYPTOCOMEXCHANGE' | 'COINBASEADVANCED' | 'ALPACA' | 'TRADIERBROKERAGE' | 'TRADEZERO' | 'COBRATRADING' | 'CLEARSTREET' | 'INVESTRADE' | 'PUBLIC' | 'PLUS500US' | 'OPTIMUSFUTURES' | 'EDGECLEAR' | 'IRONBEAM' | 'STONEX' | 'DORMANTRADING' | 'TRADIERFUTURES';
+export type MarketProvider = 'DERIV' | 'BINANCE' | 'BITGET' | 'BYBIT' | 'OKX' | 'KRAKEN' | 'COINBASE' | 'GATEIO' | 'KUCOIN' | 'GEMINI' | 'BITSO' | 'BITFINEX' | 'BITVAVO' | 'COINEX' | 'LBANK' | 'WOOX' | 'CRYPTOCOM' | 'HTX' | 'BITKUB' | 'UPBIT' | 'PIONEX' | 'POLONIEX' | 'BITHUMB' | 'MEXC' | 'PHEMEX' | 'WHITEBIT' | 'TWELVEDATA' | 'NASDAQTRADER' | 'NSE' | 'BITSTAMP' | 'OANDA' | 'TRADINGVIEW' | 'FOREXCOM' | 'INTERACTIVEBROKERS' | 'TRADESTATION' | 'WEBULL' | 'MOOMOO' | 'NINJATRADER' | 'TRADOVATE' | 'AMPFUTURES' | 'TASTYTRADE' | 'TASTYFX' | 'CRYPTOCOMEXCHANGE' | 'COINBASEADVANCED' | 'ALPACA' | 'TRADIERBROKERAGE' | 'TRADEZERO' | 'COBRATRADING' | 'CLEARSTREET' | 'INVESTRADE' | 'PUBLIC' | 'PLUS500US' | 'OPTIMUSFUTURES' | 'EDGECLEAR' | 'IRONBEAM' | 'STONEX' | 'DORMANTRADING' | 'TRADIERFUTURES';
 
 export interface UnifiedInstrument {
   id: string;
@@ -1049,6 +1049,89 @@ async function twelveData(): Promise<UnifiedInstrument[]> {
   console.log('[SIRE TWELVEDATA] Total multi-asset catalogue: ' + out.length);
   return out;
 }
+
+async function bitstamp(): Promise<UnifiedInstrument[]> {
+  try {
+    const payload = await getJson('https://www.bitstamp.net/api/v2/markets/', 15000);
+    const rows = Array.isArray(payload) ? payload : [];
+    const out: UnifiedInstrument[] = [];
+    for (const raw of rows) {
+      const symbol = String(raw?.market_symbol || raw?.name || '').trim().toUpperCase();
+      if (!symbol) continue;
+      const base = String(raw?.base_currency || '').trim().toUpperCase() || undefined;
+      const quote = String(raw?.quote_currency || '').trim().toUpperCase() || undefined;
+      const status = String(raw?.market_type || raw?.trading || 'online');
+      const item = cryptoItem('BITSTAMP', 'Spot', 'Crypto', {
+        symbol,
+        baseAsset: base,
+        quoteAsset: quote,
+        fullName: String(raw?.name || symbol),
+        status
+      });
+      if (item) out.push(item);
+    }
+    console.log('[SIRE BITSTAMP] Spot: ' + out.length);
+    return out;
+  } catch (error) {
+    console.warn('[SIRE BITSTAMP] failed:', error);
+    return [];
+  }
+}
+
+async function nseIndia(): Promise<UnifiedInstrument[]> {
+  const sources = [
+    { url: 'https://nsearchives.nseindia.com/content/equities/EQUITY_L.csv', category: 'Stocks', marketType: 'NSE Equity' },
+    { url: 'https://nsearchives.nseindia.com/emerge/corporates/content/SME_EQUITY_L.csv', category: 'Stocks', marketType: 'NSE SME' },
+    { url: 'https://nsearchives.nseindia.com/content/equities/eq_etfseclist.csv', category: 'Funds', marketType: 'NSE ETF' },
+    { url: 'https://nsearchives.nseindia.com/content/equities/DEBT.csv', category: 'Bonds', marketType: 'NSE Debt' },
+  ];
+  const out: UnifiedInstrument[] = [];
+  const seen = new Set<string>();
+
+  for (const source of sources) {
+    try {
+      const response = await fetch(source.url, {
+        signal: AbortSignal.timeout(10000),
+        headers: { Accept: 'text/csv,text/plain,*/*', 'User-Agent': 'SIRE-market-catalog/1.0' }
+      });
+      if (!response.ok) throw new Error('HTTP ' + response.status);
+      const text = await response.text();
+      const lines = text.split(/\r?\n/).filter(Boolean);
+      if (!lines.length) continue;
+      const delimiter = lines[0].includes('|') ? '|' : ',';
+      const headers = lines[0].split(delimiter).map(v => v.trim().replace(/^"|"$/g, ''));
+      for (const line of lines.slice(1)) {
+        const values = line.split(delimiter).map(v => v.trim().replace(/^"|"$/g, ''));
+        const raw: Record<string,string> = {};
+        headers.forEach((header, index) => { raw[header] = values[index] ?? ''; });
+        const symbol = String(raw['SYMBOL'] || raw['Symbol'] || raw['Security Symbol'] || raw['SYMBOL_NAME'] || raw['Scrip Code'] || '').trim();
+        const name = String(raw['NAME OF COMPANY'] || raw['NAME'] || raw['Company Name'] || raw['Security Name'] || raw['DESCRIPTION'] || symbol).trim();
+        if (!symbol || !name) continue;
+        const key = source.marketType + ':' + symbol;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        const item = cryptoItem('NSE', source.marketType, source.category, {
+          symbol,
+          fullName: name,
+          status: 'online'
+        });
+        if (!item) continue;
+        item.name = name;
+        item.category = source.category;
+        item.marketType = source.marketType;
+        item.logoUrl = providerLogo('NSE');
+        item.providerLogoUrl = providerLogo('NSE');
+        out.push(item);
+      }
+      console.log('[SIRE NSE] ' + source.marketType + ': ' + (lines.length - 1));
+    } catch (error) {
+      console.warn('[SIRE NSE] ' + source.marketType + ' failed:', error);
+    }
+  }
+  console.log('[SIRE NSE] Total catalogue: ' + out.length);
+  return out;
+}
+
 async function nasdaqTrader(): Promise<UnifiedInstrument[]> {
   const sources = [
     { file: 'nasdaqlisted.txt', category: 'Stocks', marketType: 'NASDAQ' },
@@ -1200,6 +1283,8 @@ export async function getUnifiedMarketCatalogue(fetchDeriv: () => Promise<any[]>
       ['KRAKEN', kraken()],
       ['TWELVEDATA', twelveData()],
       ['NASDAQTRADER', nasdaqTrader()],
+      ['NSE', nseIndia()],
+      ['BITSTAMP', bitstamp()],
       ['FOREXCOM', brokerCatalogue('FOREXCOM')],
       ['INTERACTIVEBROKERS', brokerCatalogue('INTERACTIVEBROKERS')],
       ['TRADESTATION', brokerCatalogue('TRADESTATION')],
