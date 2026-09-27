@@ -1762,6 +1762,26 @@ async function sp(): Promise<UnifiedInstrument[]> {
   return items;
 }
 
+async function binance(): Promise<UnifiedInstrument[]> {
+  try {
+    const mod = await import('./binance-market-data.ts');
+    const rows = await mod.getBinanceCatalogue();
+    const out: UnifiedInstrument[] = rows.map((raw:any) => ({
+      ...raw,
+      provider: 'BINANCE',
+      providerLabel: 'Binance',
+      category: 'Crypto',
+      logoUrl: raw.logoUrl || providerLogo('binance'),
+      providerLogoUrl: raw.providerLogoUrl || providerLogo('binance'),
+    })) as UnifiedInstrument[];
+    console.log('[SIRE BINANCE] Instruments: ' + out.length);
+    return out;
+  } catch (error) {
+    console.warn('[SIRE BINANCE] failed:', error);
+    return [];
+  }
+}
+
 async function okx(): Promise<UnifiedInstrument[]> { const out:UnifiedInstrument[]=[];for(const t of ['SPOT','MARGIN','SWAP','FUTURES','OPTION'])try{const r=await getJsonAny(['https://www.okx.com/api/v5/public/instruments?instType='+t,'https://app.okx.com/api/v5/public/instruments?instType='+t],15000);for(const raw of r?.data||[]){if(String(raw?.state||'').toLowerCase()!=='live')continue;const mt=t==='SPOT'?'Spot':t==='MARGIN'?'Margin':t==='SWAP'?'Perpetuals':t==='FUTURES'?'Futures':'Options';const i=cryptoItem('OKX',mt,'Crypto',raw);if(i)out.push(i)}}catch(e){console.warn('[SIRE OKX] '+t+' failed:',e)}return out; }
 
 
@@ -1839,6 +1859,7 @@ export async function getUnifiedMarketCatalogue(fetchDeriv: () => Promise<any[]>
     const providers: Array<[MarketProvider, Promise<UnifiedInstrument[]>]> = [
       // Deriv remains on its dedicated implementation and is intentionally untouched.
       ['DERIV', fetchDeriv().then(items => items.map(derivItem).filter(Boolean) as UnifiedInstrument[])],
+      ['BINANCE', binance()],
       ['FXCM', fxcm()],
       // Nasdaq Trader supplies the public instrument master for Nasdaq-listed,
       // other U.S.-listed, bonds, NOM options, mutual funds and additional
