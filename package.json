@@ -8,7 +8,7 @@
     "build": "vite build",
     "preview": "vite preview",
     "start": "tsx runtime-server.mjs",
-    "postinstall": "puppeteer browsers install chrome",
+    "postinstall": "if [ \"$RENDER\" = \"true\" ]; then echo \"Skipping Puppeteer Chrome download on Render\"; else puppeteer browsers install chrome; fi",
     "autonomous:market-worker": "node autonomous/market-worker.mjs",
     "autonomous:free-poll": "node autonomous/free-market-poll.mjs",
     "autonomous:sire-cycle": "tsx autonomous/sire-autonomous-cycle.ts"
