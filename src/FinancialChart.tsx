@@ -265,8 +265,8 @@ function ChartDiagnosticsPanel({ open, events, symbol, interval, quoteAgeMs, bar
     <div className="sire-chart-diagnostics__list">{events.length ? events.map(event => <div key={event.id} className={'sire-chart-diagnostics__event is-' + event.level}><div><b>{diagnosticLabel(event.level)} · {event.code}</b><time>{new Date(event.timestamp).toLocaleTimeString()}</time><button type="button" className="sire-chart-diagnostics__copy" onClick={() => void copy(event.id, diagnosticText(event))}>{copiedId === event.id ? 'Copied' : 'Copy'}</button></div><span>{event.message}</span>{event.detail && <small>{event.detail}</small>}{event.operation && <small><b>Operation:</b> {event.operation}</small>}{event.location && <small><b>Location:</b> {event.location.file}:{event.location.line}:{event.location.column}{event.location.functionName ? ` · ${event.location.functionName}` : ''}</small>}{event.stack && <details className="sire-chart-diagnostics__stack"><summary>Call stack</summary><pre>{event.stack}</pre></details>}</div>) : <div className="sire-chart-diagnostics__empty">No chart faults detected. Monitoring all chart layers continuously.</div>}</div>
   </div>;
 }
-import { createDerivDataFeed, DERIV_INTERVAL_SECONDS, tickToBar, type DerivBar, type DerivInstrument, type DerivFeedDiagnostic } from './derivMarketData';
-import { createFxcmDataFeed } from './fxcmMarketData';
+import { DERIV_INTERVAL_SECONDS, tickToBar, type DerivBar, type DerivInstrument, type DerivFeedDiagnostic } from './derivMarketData';
+import { createSireMarketFeed } from './marketDataRouter';
 
 export { type DerivInstrument, type DerivBar } from './derivMarketData';
 
@@ -800,18 +800,8 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
     const host = containerRef.current;
     let widget: Widget;
     try {
-      const isFxcm = marketInstrument?.provider === 'FXCM';
-      const feed = dataFeedRef.current || (isFxcm ? createFxcmDataFeed(quote => {
-        if (quote.symbol !== symbolRef.current) return;
-        lastTickAtRef.current = Date.now();
-        lastLiveQuoteRef.current = quote;
-        if (replayModeRef.current) return;
-        const series = widgetRef.current?.chart.primarySeries();
-        const bars = (series?.getData?.() || []) as DerivBar[];
-        const previousClosed = bars.length > 1 ? bars[bars.length - 2] : null;
-        const percent = previousClosed?.close ? ((quote.price - previousClosed.close) / previousClosed.close) * 100 : 0;
-        setMarketQuote({ price: quote.price, percent });
-      }, reportDiagnostic) : createDerivDataFeed(quote => {
+      const provider = String(marketInstrument?.provider || 'DERIV').toUpperCase();
+      const feed = dataFeedRef.current || createSireMarketFeed(marketInstrument || { symbol, name: marketInstrumentName, provider }, quote => {
         if (quote.symbol !== symbolRef.current) return;
         lastTickAtRef.current = Date.now();
         lastLiveQuoteRef.current = quote;
@@ -820,20 +810,18 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
         const bars = (series?.getData?.() || []) as DerivBar[];
         const previous = bars[bars.length - 1] || null;
         const seconds = DERIV_INTERVAL_SECONDS[timeframeRef.current] || 60;
-        const next = tickToBar(previous, quote.epoch, quote.price, seconds);
-        if (series?.update) series.update(next);
-        // Keep the live bar count/axis chrome on the same hot path as the price.
-        // The chart engine coalesces update() calls into the next render frame, so
-        // both the forming candle and its price metadata move together.
+        if (provider === 'DERIV') {
+          const next = tickToBar(previous, quote.epoch, quote.price, seconds);
+          if (series?.update) series.update(next);
+        }
         const previousClosed = bars.length > 1 ? bars[bars.length - 2] : null;
         const percent = previousClosed?.close ? ((quote.price - previousClosed.close) / previousClosed.close) * 100 : 0;
         setMarketQuote({ price: quote.price, percent });
-        // Healthy tick updates are intentionally not logged individually; the monitor checks their effect on the chart.
-      }, reportDiagnostic));
+      }, reportDiagnostic);
       dataFeedRef.current = feed;
       widget = createWidget(host, {
         symbol,
-        exchange: isFxcm ? 'FXCM' : 'DERIV',
+        exchange: provider,
         feed,
         interval: '1m',
         intervals: CHART_INTERVALS,
