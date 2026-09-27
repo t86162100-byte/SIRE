@@ -1322,8 +1322,8 @@ async function bse(): Promise<UnifiedInstrument[]> {
   const segments = ['Equity','Preference Shares','Debentures and Bonds','Commercial Papers','MF','Equity - Institutional Series'];
   const out: UnifiedInstrument[] = [];
   const seen = new Set<string>();
-  for (const segment of segments) {
-    for (const group of groups) {
+  const jobs = segments.flatMap(segment => groups.map(group => ({ segment, group })));
+  const results = await Promise.allSettled(jobs.map(async ({ segment, group }) => {
       try {
         const url = new URL(base);
         url.searchParams.set('scripcode','');
@@ -1368,8 +1368,8 @@ async function bse(): Promise<UnifiedInstrument[]> {
           out.push(item);
         }
       } catch {}
-    }
-  }
+  }));
+  void results;
   console.log('[SIRE BSE] Securities: ' + out.length);
   return out;
 }
