@@ -275,6 +275,7 @@ export default function ResearchLab({ symbol, instruments, onClose, runtimeConte
         const decoder=new TextDecoder();
         let buffer='';
         let finalData:AgentResponse|null=null;
+        let gptRequestId = response.headers.get('X-SIRE-GPT-Request-Id') || '';
         const consume=(chunk:string)=>{
           buffer+=chunk;
           const events=buffer.split(/\r?\n\r?\n/);
@@ -290,6 +291,7 @@ export default function ResearchLab({ symbol, instruments, onClose, runtimeConte
             let payload:any;
             try { payload=JSON.parse(data); } catch { return; }
             if(type==='gpt.status') {
+              if (payload?.requestId) gptRequestId = String(payload.requestId);
               const item=payload as CouncilActivity;
               setActivity(previous=>[...previous,item]);
               if (payload?.chartControl?.commandId) {
@@ -337,7 +339,31 @@ export default function ResearchLab({ symbol, instruments, onClose, runtimeConte
         // leaving that event in the decoder buffer without the trailing blank line.
         // Flush the buffer once more before declaring the response missing.
         if(buffer.trim()) consume('\n\n');
-        if(!finalData) throw new Error('Direct GPT stream closed before a final response event was received.');
+        if(!finalData && gptRequestId) {
+          setActivity(previous => [...previous, { actor:'SIRE', phase:'working', text:'The live connection ended, but GPT is still running. Reconnecting to the request…' }]);
+          const recoveryDeadline = Date.now() + (95 * 60 * 1000);
+          while(!finalData && Date.now() < recoveryDeadline && !isCancelled()) {
+            await new Promise(resolve => setTimeout(resolve, 3000));
+            if (isCancelled()) return;
+            const recovery = await fetch('/api/sire/agent/gpt/status?requestId=' + encodeURIComponent(gptRequestId), { cache:'no-store' });
+            if (!recovery.ok) continue;
+            const status = await recovery.json().catch(() => null);
+            if (status?.status === 'completed' && status.response) {
+              finalData = status.response as AgentResponse;
+              break;
+            }
+            if (status?.status === 'failed') {
+              const detail = status.error?.status ? ` (HTTP ${status.error.status})` : '';
+              throw new Error(String(status.error?.error || 'Direct GPT failed') + detail);
+            }
+            if (status?.lastActivity?.text) {
+              setActivity(previous => [...previous, { actor:'GPT', phase:'working', text:String(status.lastActivity.text) }]);
+            }
+          }
+        }
+        if(!finalData) throw new Error(gptRequestId
+          ? 'GPT request did not finish before the 95-minute safety ceiling.'
+          : 'GPT connection ended before SIRE received a request id; please retry.');
         const data=finalData;
         if(data.error) throw new Error(String(data.error));
         if(isCancelled()) return;
