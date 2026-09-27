@@ -156,6 +156,32 @@ export default function App() {
       throw new Error(lastError);
     };
 
+    // Binance discovery must be independent of the unified catalogue. It is an
+    // official public-data source and must start even if another provider is slow,
+    // unavailable, or geo-restricted on the Render server.
+    void (async () => {
+      try {
+        console.info('[SIRE BINANCE BROWSER] INDEPENDENT START');
+        await fetch('/api/sire/binance/browser-diagnostic', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ source: 'browser-start', total: 0, counts: {}, failures: {}, reportedAt: Date.now() }),
+          keepalive: true,
+        });
+        const binanceItems = await fetchBinanceBrowserCatalogue();
+        if (!cancelled && binanceItems.length) {
+          setInstruments(current => {
+            const existing = new Set(current.map(item => item.id));
+            const additions = binanceItems.filter((item:any) => !existing.has(item.id)) as Instrument[];
+            console.info('[SIRE BINANCE BROWSER] publishing instruments to SIRE', {received:binanceItems.length,added:additions.length});
+            return current.concat(additions);
+          });
+        }
+      } catch (error) {
+        console.warn('[SIRE BINANCE BROWSER] independent discovery failed:', error);
+      }
+    })();
+
     startup().then(async items => {
       if (cancelled) return;
       // The server catalogue already contains the required startup data (including
@@ -169,24 +195,6 @@ export default function App() {
       setInstruments(items);
       setSelected(current => current && items.some(item => item.id === current.id) ? current : initial);
       setChartSymbols(current => current.length ? current : [initial.symbol]);
-      // Binance public APIs can be geo-restricted from a server region even when
-      // the end user's browser is eligible. Discover Binance directly from the
-      // browser using Binance's documented public market-data endpoints.
-      try {
-        console.info('[SIRE BINANCE BROWSER] starting official browser catalogue discovery');
-        const binanceItems = await fetchBinanceBrowserCatalogue();
-        if (!cancelled && binanceItems.length) {
-          setInstruments(current => {
-            const existing = new Set(current.map(item => item.id));
-            const additions = binanceItems.filter((item:any) => !existing.has(item.id)) as Instrument[];
-            console.info('[SIRE BINANCE BROWSER] publishing instruments to SIRE', {received:binanceItems.length,added:additions.length});
-            return current.concat(additions);
-          });
-        }
-      } catch (error) {
-        console.warn('[SIRE BINANCE BROWSER] official catalogue unavailable:', error);
-      }
-
       try {
         const response = await fetch('/api/sire/markets/global-crypto', { cache: 'no-store', headers: { 'Cache-Control': 'no-cache' } });
         const payload = await response.json().catch(() => null);
