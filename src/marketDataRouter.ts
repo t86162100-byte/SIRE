@@ -1,7 +1,6 @@
 import { createDerivDataFeed, type DerivFeedDiagnostic } from './derivMarketData';
 import { createFxcmDataFeed } from './fxcmMarketData';
 import { createUniversalMarketDataFeed } from './universalMarketData';
-import { createCcxtMarketDataFeed } from './ccxtMarketData';
 
 export type SireMarketProvider = string;
 
@@ -37,7 +36,6 @@ export type MarketFeedFactory = (
 const providers = new Map<string, MarketFeedFactory>([
   ['DERIV', (_instrument, onQuote, reportDiagnostic) => createDerivDataFeed(onQuote, reportDiagnostic)],
   ['FXCM', (_instrument, onQuote, reportDiagnostic) => createFxcmDataFeed(onQuote, reportDiagnostic)],
-  ['GLOBALCRYPTO', (instrument, onQuote, reportDiagnostic) => createCcxtMarketDataFeed(instrument, onQuote, reportDiagnostic)],
   ...['YFINANCE','SP','NASDAQTRADER','NYSEAMERICAN','CME','CBOT','NYMEX','COMEX','OANDA','TWELVEDATA'].map(provider => [provider, (instrument: SireMarketInstrument, onQuote: (q:SireMarketQuote)=>void, reportDiagnostic: DiagnosticSink) => createUniversalMarketDataFeed(instrument, onQuote, reportDiagnostic)] as [string, MarketFeedFactory]),
 ]);
 
