@@ -1,4 +1,4 @@
-export type MarketProvider = 'DERIV' | 'BINANCE' | 'BITGET' | 'BYBIT' | 'OKX';
+export type MarketProvider = 'DERIV' | 'BINANCE' | 'BITGET' | 'BYBIT' | 'OKX' | 'KRAKEN';
 
 export interface UnifiedInstrument {
   id: string;
@@ -170,6 +170,35 @@ async function bybit(): Promise<UnifiedInstrument[]> {
   return out;
 }
 
+async function kraken(): Promise<UnifiedInstrument[]> {
+  const response = await getJsonAny([
+    'https://api.kraken.com/0/public/AssetPairs'
+  ]);
+  if (Array.isArray(response?.error) && response.error.length) {
+    throw new Error(response.error.join(', '));
+  }
+  const rows = response?.result && typeof response.result === 'object' ? Object.entries(response.result) : [];
+  const out: UnifiedInstrument[] = [];
+  for (const [pairKey, rawValue] of rows) {
+    const raw: any = rawValue;
+    const status = String(raw?.status || 'online').toLowerCase();
+    if (status && !['online','trading'].includes(status)) continue;
+    const symbol = String(raw?.wsname || raw?.altname || pairKey).trim();
+    if (!symbol) continue;
+    const base = String(raw?.base || '').replace(/^X|^Z/, '').trim() || undefined;
+    const quote = String(raw?.quote || '').replace(/^X|^Z/, '').trim() || undefined;
+    const item = cryptoItem('KRAKEN', 'Spot', 'Crypto', {
+      symbol,
+      baseAsset: base,
+      quoteAsset: quote,
+      status: 'online'
+    });
+    if (item) out.push(item);
+  }
+  console.log('[SIRE KRAKEN] Spot: ' + out.length);
+  return out;
+}
+
 async function okx(): Promise<UnifiedInstrument[]> {
   const types = ['SPOT', 'SWAP', 'FUTURES', 'OPTION'];
   const out: UnifiedInstrument[] = [];
@@ -225,6 +254,7 @@ export async function getUnifiedMarketCatalogue(fetchDeriv: () => Promise<any[]>
       ['BITGET', bitget()],
       ['BYBIT', bybit()],
       ['OKX', okx()],
+      ['KRAKEN', kraken()],
     ];
     const results = await Promise.allSettled(providers.map(([, promise]) => promise));
     results.forEach((result, index) => {
