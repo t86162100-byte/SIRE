@@ -192,8 +192,22 @@ export default function App() {
       const hasDeriv = items.some(item => item.provider === 'DERIV');
       setDerivError(hasDeriv ? '' : 'Deriv market data is temporarily unavailable; other market providers remain available.');
       setDerivLoading(false);
-      setInstruments(items);
-      setSelected(current => current && items.some(item => item.id === current.id) ? current : initial);
+      setInstruments(current => {
+        const existing = new Set(current.map(item => item.id));
+        const additions = items.filter(item => !existing.has(item.id));
+        const merged = additions.length ? current.concat(additions) : current;
+        console.info('[SIRE MARKET STARTUP] publishing unified catalogue', {
+          received: items.length,
+          added: additions.length,
+          total: merged.length,
+          binance: merged.filter(item => item.provider === 'BINANCE').length,
+        });
+        return merged;
+      });
+      setSelected(current => current && (
+        items.some(item => item.id === current.id) ||
+        current.provider === 'BINANCE'
+      ) ? current : initial);
       setChartSymbols(current => current.length ? current : [initial.symbol]);
       try {
         const response = await fetch('/api/sire/markets/global-crypto', { cache: 'no-store', headers: { 'Cache-Control': 'no-cache' } });
@@ -255,9 +269,15 @@ export default function App() {
       console.error('[DERIV MARKET DATA] active symbol discovery failed', error);
       setDerivLoading(false);
       setDerivError(error instanceof Error ? error.message : 'Deriv market catalogue failed to load.');
-      setInstruments([]);
-      setSelected(null);
-      setChartSymbols([]);
+      setInstruments(current => {
+        const preserved = current.filter(item => item.provider === 'BINANCE');
+        console.info('[SIRE MARKET STARTUP] preserving Binance catalogue after unified startup failure', {
+          binance: preserved.length,
+        });
+        return preserved;
+      });
+      setSelected(current => current?.provider === 'BINANCE' ? current : null);
+      setChartSymbols(current => current.length ? current : []);
     });
 
     return () => {
