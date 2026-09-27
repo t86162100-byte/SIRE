@@ -55,3 +55,7 @@
 .sire-chat-account-card h2{margin:14px 0 8px;font-size:22px}
 .sire-chat-account-card p{margin:0 0 20px;color:rgba(255,255,255,.62);font-size:13px;line-height:1.55}
 .sire-chat-account-button{border:0;border-radius:10px;padding:11px 18px;background:#fff;color:#111;font-weight:750;cursor:pointer}
+
+.sire-global-crypto-button{width:100%;display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 12px;margin:0 0 8px;border:1px solid #2a3440;border-radius:8px;background:#11161d;color:#fff;font:inherit;font-weight:800;cursor:pointer;text-align:left}
+.sire-global-crypto-button small{font-size:10px;font-weight:600;opacity:.65;white-space:nowrap}
+.sire-global-crypto-button:hover,.sire-global-crypto-button.active{border-color:#596575;background:#202731}
