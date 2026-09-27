@@ -142,19 +142,19 @@
 }
 .quote-broker {
   flex: 0 0 auto;
-  min-width: 86px;
-  max-width: 44%;
+  min-width: 118px;
+  max-width: 48%;
   display: grid !important;
-  grid-template-columns: auto 34px;
+  grid-template-columns: 34px minmax(0, auto);
   grid-template-rows: auto auto;
   align-items: center;
   justify-content: end;
-  column-gap: 8px;
+  column-gap: 7px;
   row-gap: 4px;
   overflow: visible;
 }
 .quote-broker b {
-  grid-column: 1;
+  grid-column: 2;
   grid-row: 1;
   max-width: 100%;
   min-width: 0;
@@ -163,12 +163,13 @@
   white-space: nowrap;
   color: #e9edf1;
   font: 800 12px/1 Arial, sans-serif !important;
-  text-align: right;
+  text-align: left;
   letter-spacing: -.1px;
 }
 .quote-exchange-logo-wrap {
-  grid-column: 2;
-  grid-row: 1 / span 2;
+  grid-column: 1;
+  grid-row: 1;
+
   width: 34px;
   height: 34px;
   min-width: 34px;
@@ -197,7 +198,7 @@
   box-sizing: border-box;
 }
 .quote-broker small {
-  grid-column: 1;
+  grid-column: 2;
   grid-row: 2;
   display: block !important;
   max-width: 100%;
@@ -223,7 +224,7 @@
 }
 .sire-instrument-search-list .quote-instrument-name b { font-size: 13px !important; }
 .sire-instrument-search-list .quote-instrument-name small { font-size: 10px !important; }
-.sire-instrument-search-list .quote-broker { min-width: 78px; grid-template-columns:auto 22px; }
+.sire-instrument-search-list .quote-broker { min-width: 104px; grid-template-columns:30px minmax(0,auto); }
 .sire-instrument-search-list .quote-exchange-logo-wrap {
   width: 30px;
   height: 30px;
@@ -259,16 +260,17 @@
   .quote-instrument-name b { font-size: 14px !important; }
   .quote-instrument-name small { font-size: 11px !important; }
   .quote-broker {
-    min-width: 78px;
-    max-width: 45%;
-    grid-template-columns:auto 34px;
+    min-width: 112px;
+    max-width: 48%;
+    grid-template-columns:34px minmax(0,auto);
     column-gap: 6px;
   }
   .quote-broker b { font-size: 10px !important; }
   .quote-broker small { font-size: 9px !important; }
-  .quote-broker-logo-wrap {
-    width: 24px;
-    height: 24px;
-    min-width: 24px;
+  .quote-exchange-logo-wrap {
+    width: 34px;
+    height: 34px;
+    min-width: 34px;
+    flex-basis: 34px;
   }
 }
