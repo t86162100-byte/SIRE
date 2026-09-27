@@ -36,42 +36,129 @@ async function loadExchange(id: string): Promise<GlobalCryptoMarket[]> {
     }));
 }
 
-async function loadEveryExchangeAtOnce(): Promise<GlobalCryptoMarket[]> {
-  const exchangeIds = Object.keys(ccxt.exchanges);
-  console.info('[SIRE GLOBAL CRYPTO] loading ALL CCXT exchanges and markets', { exchanges: exchangeIds.length });
-  const concurrency = 8;
-  const failed: string[] = [];
+const initialExchanges = ['coinbase', 'kraken', 'kucoin', 'mexc', 'bitget'];
+let backgroundLoad: Promise<void> | null = null;
 
-  // All exchanges participate in this one catalogue build. Concurrency limits
-  // protect Render and exchange APIs, but the HTTP response waits for the
-  // complete catalogue instead of returning a partial priority snapshot.
-  for (let i = 0; i < exchangeIds.length; i += concurrency) {
-    const batch = exchangeIds.slice(i, i + concurrency);
-    const settled = await Promise.allSettled(batch.map(loadExchange));
-    settled.forEach((result, index) => {
-      const id = batch[index];
-      if (result.status === 'fulfilled' && result.value.length) mergeMarkets(result.value);
-      else failed.push(id);
+async function loadExchanges(ids: string[]) {
+  for (const id of ids) {
+    try {
+      const markets = await loadExchange(id);
+      if (markets.length) {
+        mergeMarkets(markets);
+        console.info('[SIRE GLOBAL CRYPTO] exchange confirmed and added', { exchange: id, markets: markets.length, total: cachedMarkets.length });
+      } else {
+        console.warn('[SIRE GLOBAL CRYPTO] exchange returned no active markets', { exchange: id });
+      }
+    } catch (error) {
+      console.warn('[SIRE GLOBAL CRYPTO] exchange load failed', { exchange: id, error: error instanceof Error ? error.message : String(error) });
+    }
+  }
+}
+
+async function loadAllRemainingExchanges() {
+  const all = Object.keys(ccxt.exchanges);
+  const remaining = all.filter(id => !initialExchanges.includes(id));
+  // Deliberately load one exchange at a time after the initial catalogue is
+  // confirmed. Each completed exchange is immediately merged into the shared
+  // catalogue, so clients can see the catalogue grow exchange-by-exchange.
+  await loadExchanges(remaining);
+  console.info('[SIRE GLOBAL CRYPTO] all exchanges processed', { exchanges: all.length, markets: cachedMarkets.length });
+}
+
+export async function loadGlobalCryptoUniverse(): Promise<GlobalCryptoMarket[]> {
+  if (cachedMarkets.length) {
+    if (!backgroundLoad) {
+      backgroundLoad = loadAllRemainingExchanges().catch(error => {
+        console.warn('[SIRE GLOBAL CRYPTO] background expansion failed', error);
+        backgroundLoad = null;
+      });
+    }
+    return cachedMarkets;
+  }
+
+  if (!fullLoad) {
+    fullLoad = loadExchanges(initialExchanges).then(() => {
+      fullLoad = null;
+      if (!backgroundLoad) {
+        backgroundLoad = loadAllRemainingExchanges().catch(error => {
+          console.warn('[SIRE GLOBAL CRYPTO] background expansion failed', error);
+          backgroundLoad = null;
+        });
+      }
+      return cachedMarkets;
+    }).catch(error => {
+      fullLoad = null;
+      throw error;
     });
   }
 
-  if (failed.length) {
-    console.warn('[SIRE GLOBAL CRYPTO] retrying failed exchanges', { count: failed.length, exchanges: failed });
-    for (let i = 0; i < failed.length; i += concurrency) {
-      const batch = failed.slice(i, i + concurrency);
-      const settled = await Promise.allSettled(batch.map(loadExchange));
-      settled.forEach((result, index) => {
-        if (result.status === 'fulfilled' && result.value.length) mergeMarkets(result.value);
-      });
+  await fullLoad;
+  return cachedMarkets;
+}mport ccxt from 'ccxt';
+
+export type GlobalCryptoMarket = {
+  id: string; exchange: string; exchangeName: string; symbol: string;
+  base?: string; quote?: string; settle?: string; type?: string;
+  spot?: boolean; margin?: boolean; swap?: boolean; future?: boolean; option?: boolean;
+  active?: boolean; contract?: boolean; expiry?: number | null;
+};
+
+const exchangeOptions = { enableRateLimit: true, timeout: 15000 };
+let cachedMarkets: GlobalCryptoMarket[] = [];
+let fullLoad: Promise<GlobalCryptoMarket[]> | null = null;
+
+function mergeMarkets(markets: GlobalCryptoMarket[]) {
+  const byId = new Map(cachedMarkets.map(m => [m.id, m]));
+  for (const market of markets) byId.set(market.id, market);
+  cachedMarkets = [...byId.values()];
+}
+
+async function loadExchange(id: string): Promise<GlobalCryptoMarket[]> {
+  const Exchange = (ccxt as any)[id];
+  if (!Exchange) return [];
+  const exchange = new Exchange(exchangeOptions);
+  const markets = await exchange.loadMarkets();
+  return Object.values(markets as Record<string, any>)
+    .filter((m: any) => m && m.active !== false)
+    .map((m: any) => ({
+      id: `CCXT:${id}:${m.id}`,
+      exchange: id,
+      exchangeName: exchange.name || id,
+      symbol: m.symbol || m.id,
+      base: m.base, quote: m.quote, settle: m.settle,
+      type: m.type, spot: m.spot, margin: m.margin, swap: m.swap,
+      future: m.future, option: m.option, active: m.active,
+      contract: m.contract, expiry: m.expiry ?? null,
+    }));
+}
+
+const initialExchanges = ['coinbase', 'kraken', 'kucoin', 'mexc', 'bitget'];
+let backgroundLoad: Promise<void> | null = null;
+
+async function loadExchanges(ids: string[]) {
+  for (const id of ids) {
+    try {
+      const markets = await loadExchange(id);
+      if (markets.length) {
+        mergeMarkets(markets);
+        console.info('[SIRE GLOBAL CRYPTO] exchange confirmed and added', { exchange: id, markets: markets.length, total: cachedMarkets.length });
+      } else {
+        console.warn('[SIRE GLOBAL CRYPTO] exchange returned no active markets', { exchange: id });
+      }
+    } catch (error) {
+      console.warn('[SIRE GLOBAL CRYPTO] exchange load failed', { exchange: id, error: error instanceof Error ? error.message : String(error) });
     }
   }
+}
 
-  console.info('[SIRE GLOBAL CRYPTO] ALL CCXT markets loaded', {
-    exchanges: exchangeIds.length,
-    markets: cachedMarkets.length,
-    failedExchanges: failed.length,
-  });
-  return cachedMarkets;
+async function loadAllRemainingExchanges() {
+  const all = Object.keys(ccxt.exchanges);
+  const remaining = all.filter(id => !initialExchanges.includes(id));
+  // Deliberately load one exchange at a time after the initial catalogue is
+  // confirmed. Each completed exchange is immediately merged into the shared
+  // catalogue, so clients can see the catalogue grow exchange-by-exchange.
+  await loadExchanges(remaining);
+  console.info('[SIRE GLOBAL CRYPTO] all exchanges processed', { exchanges: all.length, markets: cachedMarkets.length });
 }
 
 export async function loadGlobalCryptoUniverse(): Promise<GlobalCryptoMarket[]> {
