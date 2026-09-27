@@ -9,6 +9,8 @@ export type DerivMarketCategory =
 
 export type DerivInstrument = {
   symbol: string;
+  provider: 'deriv';
+  broker: 'Deriv';
   name: string;
   market: string;
   submarket: string;
@@ -105,6 +107,8 @@ export function normalizeDerivInstrument(item: any): DerivInstrument | null {
   const suspended = Number(item?.is_trading_suspended);
   return {
     symbol,
+    provider: 'deriv',
+    broker: 'Deriv',
     name: text(item?.underlying_symbol_name ?? item?.display_name) || symbol,
     market: text(item?.market) || 'other',
     submarket: text(item?.submarket),
