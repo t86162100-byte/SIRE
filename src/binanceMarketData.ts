@@ -21,14 +21,53 @@ function browserItem(raw:any,marketType:string):any|null{
 }
 export async function fetchBinanceBrowserCatalogue():Promise<any[]>{
   const out:any[]=[];
-  const add=(rows:any[],mt:string)=>{for(const r of rows||[]){const x=browserItem(r,mt);if(x)out.push(x)}};
-  const spot=await directJson(SPOT_BASES.map(x=>x+'/api/v3/exchangeInfo'));add(spot?.symbols,'Spot');
-  try{const margin=await directJson(SPOT_BASES.map(x=>x+'/sapi/v1/margin/allPairs'));add(margin,'Margin')}catch(e){console.warn('[SIRE BINANCE BROWSER] Cross Margin unavailable:',e)}
-  try{const isolated=await directJson(SPOT_BASES.map(x=>x+'/sapi/v1/margin/isolated/allPairs'));add(isolated,'Isolated Margin')}catch(e){console.warn('[SIRE BINANCE BROWSER] Isolated Margin unavailable:',e)}
-  try{const usd=await directJson(['https://fapi.binance.com/fapi/v1/exchangeInfo']);for(const r of usd?.symbols||[]){const x=browserItem(r,String(r?.contractType||'')==='PERPETUAL'?'Perpetuals':'Futures');if(x)out.push(x)}}catch(e){console.warn('[SIRE BINANCE BROWSER] USD-M unavailable:',e)}
-  try{const coin=await directJson(['https://dapi.binance.com/dapi/v1/exchangeInfo']);for(const r of coin?.symbols||[]){const x=browserItem(r,String(r?.contractType||'')==='PERPETUAL'?'Perpetuals':'Futures');if(x){x.id='BINANCE:COIN-M:'+x.marketType+':'+x.symbol;x.name=(x.base&&x.quote)?x.base+' / '+x.quote+' (COIN-M)':x.symbol;out.push(x)}}}catch(e){console.warn('[SIRE BINANCE BROWSER] COIN-M unavailable:',e)}
-  try{const options=await directJson(['https://eapi.binance.com/eapi/v1/exchangeInfo']);for(const r of options?.optionSymbols||[]){const x=browserItem(r,'Options');if(x){x.name=String(r?.symbol||x.symbol);x.base=String(r?.underlying||'').replace(/USDT$|USDC$|BUSD$/,'')||x.base;x.quote=String(r?.quoteAsset||'').trim()||x.quote;x.optionType=String(r?.side||'').toUpperCase();out.push(x)}}}catch(e){console.warn('[SIRE BINANCE BROWSER] Options unavailable:',e)}
-  const seen=new Set<string>();return out.filter(x=>{if(seen.has(x.id))return false;seen.add(x.id);return true});
+  const counts:Record<string,number>={};
+  const failures:Record<string,string>={};
+  const add=(rows:any[],mt:string)=>{let n=0;for(const r of rows||[]){const x=browserItem(r,mt);if(x){out.push(x);n++;}}counts[mt]=(counts[mt]||0)+n;};
+  const load=async(label:string,urls:string,mt:string)=>{
+    try{
+      console.info('[SIRE BINANCE BROWSER] request',label,urls);
+      const data=await directJson(urls.split('|'));
+      const rows=Array.isArray(data)?data:(data?.symbols||[]);
+      add(rows,mt);
+      console.info('[SIRE BINANCE BROWSER] success',label,{count:rows.length,accepted:counts[mt]||0});
+      return true;
+    }catch(e){
+      const message=e instanceof Error?e.message:String(e);
+      failures[label]=message;
+      console.warn('[SIRE BINANCE BROWSER] failed',label,message);
+      return false;
+    }
+  };
+  await load('spot exchangeInfo',SPOT_BASES.map(x=>x+'/api/v3/exchangeInfo').join('|'),'Spot');
+  await load('cross margin allPairs',SPOT_BASES.map(x=>x+'/sapi/v1/margin/allPairs').join('|'),'Margin');
+  await load('isolated margin allPairs',SPOT_BASES.map(x=>x+'/sapi/v1/margin/isolated/allPairs').join('|'),'Isolated Margin');
+  try{
+    const usd=await directJson(['https://fapi.binance.com/fapi/v1/exchangeInfo']);
+    const rows=usd?.symbols||[]; let accepted=0;
+    for(const r of rows){const x=browserItem(r,String(r?.contractType||'')==='PERPETUAL'?'Perpetuals':'Futures');if(x){out.push(x);accepted++;}}
+    counts['USD-M']=accepted;
+    console.info('[SIRE BINANCE BROWSER] success','USD-M exchangeInfo',{count:rows.length,accepted});
+  }catch(e){failures['USD-M']=e instanceof Error?e.message:String(e);console.warn('[SIRE BINANCE BROWSER] failed','USD-M exchangeInfo',failures['USD-M']);}
+  try{
+    const coin=await directJson(['https://dapi.binance.com/dapi/v1/exchangeInfo']);
+    const rows=coin?.symbols||[]; let accepted=0;
+    for(const r of rows){const x=browserItem(r,String(r?.contractType||'')==='PERPETUAL'?'Perpetuals':'Futures');if(x){x.id='BINANCE:COIN-M:'+x.marketType+':'+x.symbol;x.name=(x.base&&x.quote)?x.base+' / '+x.quote+' (COIN-M)':x.symbol;out.push(x);accepted++;}}
+    counts['COIN-M']=accepted;
+    console.info('[SIRE BINANCE BROWSER] success','COIN-M exchangeInfo',{count:rows.length,accepted});
+  }catch(e){failures['COIN-M']=e instanceof Error?e.message:String(e);console.warn('[SIRE BINANCE BROWSER] failed','COIN-M exchangeInfo',failures['COIN-M']);}
+  try{
+    const options=await directJson(['https://eapi.binance.com/eapi/v1/exchangeInfo']);
+    const rows=options?.optionSymbols||[]; let accepted=0;
+    for(const r of rows){const x=browserItem(r,'Options');if(x){x.name=String(r?.symbol||x.symbol);x.base=String(r?.underlying||'').replace(/USDT$|USDC$|BUSD$/,'')||x.base;x.quote=String(r?.quoteAsset||'').trim()||x.quote;x.optionType=String(r?.side||'').toUpperCase();out.push(x);accepted++;}}
+    counts.Options=accepted;
+    console.info('[SIRE BINANCE BROWSER] success','Options exchangeInfo',{count:rows.length,accepted});
+  }catch(e){failures.Options=e instanceof Error?e.message:String(e);console.warn('[SIRE BINANCE BROWSER] failed','Options exchangeInfo',failures.Options);}
+  const seen=new Set<string>();
+  const unique=out.filter(x=>{if(seen.has(x.id))return false;seen.add(x.id);return true});
+  console.info('[SIRE BINANCE BROWSER] COMPLETE',{total:unique.length,counts,failures});
+  if(!unique.length) throw new Error('Binance browser catalogue returned zero instruments. See [SIRE BINANCE BROWSER] diagnostics.');
+  return unique;
 }
 
 export function createBinanceDataFeed(instrument:Instrument,onQuote?:(q:SireMarketQuote)=>void,onDiagnostic?:(e:any)=>void){
