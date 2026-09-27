@@ -433,6 +433,26 @@ async function poloniex(): Promise<UnifiedInstrument[]> {
   } catch (error) { console.warn('[SIRE POLONIEX] failed:', error); return []; }
 }
 
+async function bithumb(): Promise<UnifiedInstrument[]> {
+  try {
+    const rows = await getJson('https://api.bithumb.com/v1/market/all?isDetails=false', 15000);
+    const out: UnifiedInstrument[] = [];
+    for (const raw of Array.isArray(rows) ? rows : []) {
+      const symbol = String(raw?.market || '').trim();
+      const parts = symbol.split('-');
+      const item = cryptoItem('BITHUMB', 'Spot', 'Crypto', {
+        symbol,
+        baseAsset: parts[1] || '',
+        quoteAsset: parts[0] || '',
+        fullName: String(raw?.english_name || raw?.market || '')
+      });
+      if (item) out.push(item);
+    }
+    console.log('[SIRE BITHUMB] Spot: ' + out.length);
+    return out;
+  } catch (error) { console.warn('[SIRE BITHUMB] failed:', error); return []; }
+}
+
 async function binance(): Promise<UnifiedInstrument[]> {
   const families: Array<[string, string[]]> = [
     ['Spot', ['https://data-api.binance.vision/api/v3/exchangeInfo','https://api.binance.com/api/v3/exchangeInfo','https://api-gcp.binance.com/api/v3/exchangeInfo','https://api1.binance.com/api/v3/exchangeInfo','https://api2.binance.com/api/v3/exchangeInfo']],
@@ -870,6 +890,7 @@ export async function getUnifiedMarketCatalogue(fetchDeriv: () => Promise<any[]>
       ['UPBIT', upbit()],
       ['PIONEX', pionex()],
       ['POLONIEX', poloniex()],
+      ['BITHUMB', bithumb()],
       ['COINBASE', coinbase()],
       ['BITGET', bitget()],
       ['BYBIT', bybit()],
