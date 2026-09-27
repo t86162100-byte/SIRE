@@ -17,7 +17,7 @@ import { recordIssue, getRecentIssues } from './backend/sire-issue-tracker.ts';
 import { getUnifiedMarketCatalogue, getCmeCatalogueForDiagnostics, getNyseAmericanCatalogueForDiagnostics } from './backend/market-catalog.ts';
 import { loadGlobalCryptoUniverse } from './backend/ccxt-universe-loader.ts';
 import { ccxtMarketHistory, ccxtMarketQuote, ccxtMarketCapabilities } from './backend/ccxt-market-data.ts';
-import { getCcxtLiveQuote, getCcxtLiveStatus, getCcxtExchangeRuntime } from './backend/ccxt-live-market-data.ts';
+import { getCcxtLiveQuote, getCcxtLiveStatus } from './backend/ccxt-live-market-data-v2.ts';
 
 const PORT = Number(process.env.PORT || 10000);
 const HOST = '0.0.0.0';
@@ -808,9 +808,6 @@ const server = http.createServer(async (req,res) => {
           return res.writeHead(502,{'Access-Control-Allow-Origin':'*','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify({ok:false,error:fallback instanceof Error?fallback.message:String(fallback)}));
         }
       }
-    }
-    if (req.method === 'GET' && pathname === '/api/sire/ccxt/exchanges') {
-      return res.writeHead(200,{'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify({ok:true,...getCcxtExchangeRuntime()}));
     }
     if (req.method === 'GET' && pathname === '/api/sire/ccxt/live-status') {
       const u=new URL(req.url||'/',`http://${req.headers.host||'localhost'}`);
