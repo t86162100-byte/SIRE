@@ -7,6 +7,7 @@ import type { DerivInstrument } from './derivMarketData';
 import { SireErrorScreen } from './SireErrorBoundary';
 import './nativeTerminal.css';
 import { loadBinanceCatalogue } from './providers/binance';
+import { loadKucoinCatalogue } from './providers/kucoin';
 
 type MarketProvider = 'DERIV' | 'BINANCE' | 'BITGET' | 'BYBIT' | 'OKX' | 'KRAKEN' | 'COINBASE' | 'GATEIO' | 'KUCOIN' | 'GEMINI' | 'BITSO' | 'BITFINEX' | 'BITVAVO' | 'COINEX' | 'LBANK' | 'WOOX' | 'CRYPTOCOM' | 'HTX' | 'BITKUB' | 'UPBIT' | 'PIONEX' | 'POLONIEX' | 'BITHUMB' | 'MEXC' | 'PHEMEX' | 'WHITEBIT' | 'TWELVEDATA' | 'NASDAQTRADER' | 'NSE' | 'BITSTAMP' | 'OANDA' | 'TRADINGVIEW' | 'FOREXCOM' | 'INTERACTIVEBROKERS' | 'TRADESTATION' | 'WEBULL' | 'MOOMOO' | 'NINJATRADER' | 'TRADOVATE' | 'AMPFUTURES' | 'TASTYTRADE' | 'TASTYFX' | 'CRYPTOCOMEXCHANGE' | 'COINBASEADVANCED' | 'ALPACA' | 'TRADIERBROKERAGE' | 'TRADEZERO' | 'COBRATRADING' | 'CLEARSTREET' | 'INVESTRADE' | 'PUBLIC' | 'PLUS500US' | 'OPTIMUSFUTURES' | 'EDGECLEAR' | 'IRONBEAM' | 'STONEX' | 'DORMANTRADING' | 'TRADIERFUTURES';
 type Instrument = DerivInstrument & {
@@ -321,6 +322,22 @@ export default function App() {
         });
       } catch (error) {
         console.warn('[SIRE MARKET STARTUP] Binance catalogue unavailable:', error);
+      }
+
+      try {
+        const kucoinItems = await loadKucoinCatalogue();
+        if (cancelled) return;
+        setInstruments(current => {
+          const existing = new Set(current.map(item => item.id));
+          const additions = kucoinItems.filter(item => !existing.has(item.id));
+          return additions.length ? current.concat(additions) : current;
+        });
+        console.info('[SIRE MARKET STARTUP] KuCoin catalogue loaded', {
+          total: kucoinItems.length,
+          marketTypes: Array.from(new Set(kucoinItems.map(item => item.marketType))),
+        });
+      } catch (error) {
+        console.warn('[SIRE MARKET STARTUP] KuCoin catalogue unavailable:', error);
       }
 
       try {
