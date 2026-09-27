@@ -147,12 +147,16 @@ async function bybit(): Promise<UnifiedInstrument[]> {
       // public instrument catalogue without authentication.
       const response = await getJsonAny([
         'https://api.bybit.com/v5/market/instruments-info' + query,
+        'https://api.bybit.tr/v5/market/instruments-info' + query,
         'https://api.bybit.ae/v5/market/instruments-info' + query,
         'https://api.bybit.eu/v5/market/instruments-info' + query,
         'https://api.bybit.kz/v5/market/instruments-info' + query,
+        'https://api.bybitgeorgia.ge/v5/market/instruments-info' + query,
         'https://api.bybit.id/v5/market/instruments-info' + query,
+        'https://api.spark-fintech.com/v5/market/instruments-info' + query,
         'https://api.bytick.com/v5/market/instruments-info' + query
       ]);
+      if (Number(response?.retCode) !== 0) throw new Error(String(response?.retMsg || 'Bybit API error'));
       const items = Array.isArray(response?.result?.list) ? response.result.list : [];
       for (const raw of items) {
         if (String(raw.status || '').toLowerCase() !== 'trading') continue;
