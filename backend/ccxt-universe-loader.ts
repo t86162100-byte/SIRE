@@ -7,32 +7,78 @@ export type GlobalCryptoMarket = {
   active?: boolean; contract?: boolean; expiry?: number | null;
 };
 
-export async function loadGlobalCryptoUniverse(): Promise<GlobalCryptoMarket[]> {
+const exchangeOptions = { enableRateLimit: true, timeout: 15000 };
+const priorityExchanges = ['binance', 'bybit', 'okx', 'coinbase', 'kraken', 'bitget', 'gateio', 'kucoin', 'mexc'];
+let cachedMarkets: GlobalCryptoMarket[] = [];
+let backgroundLoad: Promise<void> | null = null;
+
+function mergeMarkets(markets: GlobalCryptoMarket[]) {
+  const byId = new Map(cachedMarkets.map(m => [m.id, m]));
+  for (const market of markets) byId.set(market.id, market);
+  cachedMarkets = [...byId.values()];
+}
+
+async function loadExchange(id: string): Promise<GlobalCryptoMarket[]> {
+  const Exchange = (ccxt as any)[id];
+  if (!Exchange) return [];
+  const exchange = new Exchange(exchangeOptions);
+  const markets = await exchange.loadMarkets();
+  return Object.values(markets as Record<string, any>)
+    .filter((m: any) => m && m.active !== false)
+    .map((m: any) => ({
+      id: `CCXT:${id}:${m.id}`,
+      exchange: id,
+      exchangeName: exchange.name || id,
+      symbol: m.symbol || m.id,
+      base: m.base, quote: m.quote, settle: m.settle,
+      type: m.type, spot: m.spot, margin: m.margin, swap: m.swap,
+      future: m.future, option: m.option, active: m.active,
+      contract: m.contract, expiry: m.expiry ?? null,
+    }));
+}
+
+async function loadPriorityMarkets() {
+  const settled = await Promise.allSettled(priorityExchanges.map(loadExchange));
+  for (const result of settled) {
+    if (result.status === 'fulfilled' && result.value.length) mergeMarkets(result.value);
+  }
+}
+
+async function loadAllMarkets() {
   const exchangeIds = Object.keys(ccxt.exchanges);
-  const results: GlobalCryptoMarket[] = [];
   const concurrency = 6;
   for (let i = 0; i < exchangeIds.length; i += concurrency) {
     const batch = exchangeIds.slice(i, i + concurrency);
-    const settled = await Promise.allSettled(batch.map(async id => {
-      const Exchange = (ccxt as any)[id];
-      if (!Exchange) return [];
-      const exchange = new Exchange({ enableRateLimit: true, timeout: 15000 });
-      const markets = await exchange.loadMarkets();
-      return Object.values(markets as Record<string, any>)
-        .filter((m: any) => m && (m.active !== false))
-        .map((m: any) => ({
-          id: `CCXT:${id}:${m.id}`,
-          exchange: id,
-          exchangeName: exchange.name || id,
-          symbol: m.symbol || m.id,
-          base: m.base, quote: m.quote, settle: m.settle,
-          type: m.type, spot: m.spot, margin: m.margin, swap: m.swap,
-          future: m.future, option: m.option, active: m.active,
-          contract: m.contract, expiry: m.expiry ?? null
-        }));
-    }));
-    for (const r of settled) if (r.status === 'fulfilled') results.push(...r.value);
+    const settled = await Promise.allSettled(batch.map(loadExchange));
+    for (const result of settled) {
+      if (result.status === 'fulfilled' && result.value.length) mergeMarkets(result.value);
+    }
   }
-  const seen = new Set<string>();
-  return results.filter(m => !seen.has(m.id) && seen.add(m.id));
+}
+
+export async function loadGlobalCryptoUniverse(): Promise<GlobalCryptoMarket[]> {
+  // Return the last-known-good cache immediately on every request.
+  if (cachedMarkets.length) {
+    if (!backgroundLoad) {
+      backgroundLoad = loadAllMarkets().catch(error => {
+        console.warn('[SIRE GLOBAL CRYPTO] background refresh failed:', error);
+      }).finally(() => { backgroundLoad = null; });
+    }
+    return cachedMarkets;
+  }
+
+  // The first request gets a useful catalogue from major exchanges instead of
+  // waiting for every CCXT exchange (many of which can be slow/unreachable).
+  await loadPriorityMarkets();
+  if (!cachedMarkets.length) {
+    throw new Error('CCXT global crypto catalogue returned no active markets from priority exchanges.');
+  }
+
+  // Continue expanding the universe after the first response is available.
+  if (!backgroundLoad) {
+    backgroundLoad = loadAllMarkets().catch(error => {
+      console.warn('[SIRE GLOBAL CRYPTO] background refresh failed:', error);
+    }).finally(() => { backgroundLoad = null; });
+  }
+  return cachedMarkets;
 }
