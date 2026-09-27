@@ -34,6 +34,7 @@ let loading: Promise<UnifiedInstrument[]> | null = null;
 const providerLogo = (name: string) => {
   const value = String(name || '').trim().toLowerCase();
   if (value === 'deriv') return 'https://deriv.com/favicon.ico';
+  if (value === 'nasdaq' || value === 'nasdaqtrader') return 'https://cdn.simpleicons.org/nasdaq';
   return 'https://cdn.simpleicons.org/' + value;
 };
 const assetLogo = (base?: string) => {
@@ -106,7 +107,7 @@ function cryptoItem(provider: MarketProvider, marketType: string, category: stri
   return {
     id: provider + ':' + marketType + ':' + symbol,
     provider,
-    providerLabel: provider[0] + provider.slice(1).toLowerCase(),
+    providerLabel: provider === 'NASDAQTRADER' ? 'Nasdaq' : provider[0] + provider.slice(1).toLowerCase(),
     marketType,
     category,
     symbol,
@@ -1005,135 +1006,180 @@ async function nseIndia(): Promise<UnifiedInstrument[]> {
 }
 
 async function nasdaqTrader(): Promise<UnifiedInstrument[]> {
-  // Nasdaq Trader's public Symbol Directory is the authoritative discovery layer for
-  // the public instrument universe. Keep these files separate so SIRE preserves
-  // the source/venue/type instead of flattening everything into "Stocks".
-  const sources = [
-    { file: 'nasdaqlisted.txt', category: 'Stocks', marketType: 'NASDAQ' },
+  // Nasdaq Trader is the official public symbol-directory/discovery layer for the
+  // Nasdaq universe. These are the published directories, not synthetic symbols.
+  // The exchange name shown to users is simply "Nasdaq".
+  const pipeSources = [
+    { file: 'nasdaqlisted.txt', category: 'Stocks', marketType: 'Nasdaq Listed' },
     { file: 'otherlisted.txt', category: 'Stocks', marketType: 'US Other Exchanges' },
-    { file: 'bondslist.txt', category: 'Bonds', marketType: 'US Bonds' },
-    { file: 'options.txt', category: 'Options', marketType: 'Nasdaq Options (NOM)' },
+    { file: 'bondslist.txt', category: 'Bonds', marketType: 'Nasdaq Bonds' },
+    { file: 'options.txt', category: 'Options', marketType: 'Nasdaq Options Market' },
     { file: 'mfundslist.txt', category: 'Funds', marketType: 'Nasdaq Fund Network' },
-  ];
+  ] as const;
 
-  const parseSource = async (source: typeof sources[number]): Promise<UnifiedInstrument[]> => {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 7000);
-    try {
-      const response = await fetch('https://www.nasdaqtrader.com/dynamic/SymDir/' + source.file, {
-        signal: controller.signal,
-        headers: { Accept: 'text/plain,text/csv,*/*' }
-      });
-      if (!response.ok) throw new Error('HTTP ' + response.status);
-      const text = await response.text();
-      const rows = text.split(/\r?\n/).filter(Boolean);
-      if (!rows.length) return [];
-      const headers = rows[0].split('|').map(v => v.trim());
-      const out: UnifiedInstrument[] = [];
-      const seen = new Set<string>();
+  const csvSources = [
+    { file: 'pbot.csv', category: 'Futures', marketType: 'PBOT Futures' },
+    { file: 'phlxoptions.csv', category: 'Options', marketType: 'Nasdaq PHLX Options' },
+  ] as const;
 
-      for (const line of rows.slice(1)) {
-        if (!line || line.startsWith('File Creation Time')) continue;
-        const values = line.split('|');
-        const raw: Record<string,string> = {};
-        headers.forEach((header, index) => { raw[header] = String(values[index] ?? '').trim(); });
-        const symbol = String(raw['Symbol'] || raw['ACT Symbol'] || raw['Option Symbol'] || raw['Underlying'] || '').trim();
-        const name = String(raw['Security Name'] || raw['Company Name'] || raw['Underlying Security Name'] || symbol).trim();
-        if (!symbol || !name) continue;
-
-        let category = source.category;
-        if (source.file === 'nasdaqlisted.txt' || source.file === 'otherlisted.txt') {
-          const isEtf = String(raw['ETF'] || '').toUpperCase() === 'Y' || /\bETF\b|EXCHANGE[- ]TRADED FUND/i.test(name);
-          category = isEtf ? 'Funds' : 'Stocks';
-        }
-
-        const exchange = String(raw['Exchange'] || raw['Market Category'] || source.marketType).trim();
-        const key = 'NASDAQTRADER:' + source.file + ':' + exchange + ':' + symbol;
-        if (seen.has(key)) continue;
-        seen.add(key);
-
-        const item = cryptoItem('NASDAQTRADER', source.marketType, category, { symbol, fullName: name, status: 'online' });
-        if (!item) continue;
-        item.name = name;
-        item.category = category;
-        item.marketType = exchange || source.marketType;
-        item.logoUrl = providerLogo('NASDAQTRADER');
-        item.providerLogoUrl = providerLogo('NASDAQTRADER');
-        out.push(item);
-      }
-
-      console.log('[SIRE NASDAQTRADER] ' + source.file + ': ' + rows.length);
-      return out;
-    } finally {
-      clearTimeout(timer);
+  const splitCsvLine = (line: string): string[] => {
+    const cells: string[] = [];
+    let cell = '';
+    let quoted = false;
+    for (let i = 0; i < line.length; i++) {
+      const ch = line[i];
+      if (ch === '"') {
+        if (quoted && line[i + 1] === '"') { cell += '"'; i++; }
+        else quoted = !quoted;
+      } else if (ch === ',' && !quoted) {
+        cells.push(cell.trim());
+        cell = '';
+      } else cell += ch;
     }
+    cells.push(cell.trim());
+    return cells;
   };
 
-  // Additional Nasdaq-published directories use CSV rather than the pipe-delimited
-  // format above. These are real published directories; never synthesize symbols.
-  const parseCsvDirectory = async (file: string, category: string, marketType: string) => {
-    const response = await fetch('https://www.nasdaqtrader.com/SymbolDirectory/' + file, {
-      signal: AbortSignal.timeout(10000),
-      headers: { Accept: 'text/csv,text/plain,*/*' }
+  const makeItem = (
+    symbol: string,
+    name: string,
+    category: string,
+    marketType: string,
+    idSuffix: string
+  ): UnifiedInstrument | null => {
+    symbol = String(symbol || '').trim();
+    name = String(name || symbol).trim();
+    if (!symbol) return null;
+    const item = cryptoItem('NASDAQTRADER', marketType, category, {
+      symbol,
+      fullName: name,
+      status: 'online'
     });
-    if (!response.ok) throw new Error(file + ' HTTP ' + response.status);
-    const text = await response.text();
-    const lines = text.replace(/^\\uFEFF/, '').split(/\\r?\\n/).filter(Boolean);
+    if (!item) return null;
+    item.id = 'NASDAQ:' + marketType + ':' + (idSuffix || symbol);
+    item.symbol = symbol;
+    item.displaySymbol = symbol;
+    item.name = name;
+    item.providerLabel = 'Nasdaq';
+    item.marketType = marketType;
+    item.category = category;
+    item.status = 'Active';
+    item.logoUrl = providerLogo('nasdaq');
+    item.providerLogoUrl = providerLogo('nasdaq');
+    return item;
+  };
+
+  const parsePipe = async (source: typeof pipeSources[number]): Promise<UnifiedInstrument[]> => {
+    const text = await getText('https://www.nasdaqtrader.com/dynamic/SymDir/' + source.file, 12000);
+    const rows = text.replace(/^\uFEFF/, '').split(/\r?\n/).filter(Boolean);
+    if (!rows.length) return [];
+
+    const headerIndex = rows.findIndex(row => /(^|\\|)(Symbol|ACT Symbol|Root Symbol|Fund Symbol)(\\||$)/i.test(row));
+    if (headerIndex < 0) throw new Error(source.file + ': header row not found');
+
+    const headers = rows[headerIndex].split('|').map(v => v.trim());
     const out: UnifiedInstrument[] = [];
     const seen = new Set<string>();
-    for (const line of lines) {
-      if (/^File Creation Time/i.test(line)) continue;
-      const cells = line.split(',').map(v => v.trim().replace(/^"|"$/g, ''));
-      if (!cells.length) continue;
-      let symbol = '', name = '';
-      if (file === 'pbot.csv') {
-        symbol = cells[1] || '';
-        name = cells[2] || symbol;
+
+    for (const line of rows.slice(headerIndex + 1)) {
+      if (!line || /^File Creation Time/i.test(line)) continue;
+      const values = line.split('|');
+      const raw: Record<string, string> = {};
+      headers.forEach((header, index) => { raw[header] = String(values[index] ?? '').trim(); });
+
+      let symbol = '';
+      let name = '';
+      if (source.file === 'options.txt') {
+        // NOM publishes option classes here; Root Symbol is the instrument identifier.
+        symbol = raw['Root Symbol'] || raw['Underlying Symbol'] || '';
+        name = raw['Underlying Issue Name'] || symbol;
+      } else if (source.file === 'mfundslist.txt') {
+        symbol = raw['Fund Symbol'] || '';
+        name = raw['Fund Name'] || symbol;
       } else {
-        symbol = cells[2] || cells[1] || '';
-        name = cells[0] || symbol;
+        symbol = raw['Symbol'] || raw['ACT Symbol'] || '';
+        name = raw['Security Name'] || raw['Company Name'] || symbol;
       }
-      if (!symbol || !name || seen.has(symbol)) continue;
-      seen.add(symbol);
-      const item = cryptoItem('NASDAQTRADER', marketType, category, {
-        symbol,
-        fullName: name,
-        status: 'online'
-      });
-      if (!item) continue;
-      item.id = 'NASDAQTRADER:' + marketType + ':' + symbol;
-      item.symbol = symbol;
-      item.displaySymbol = symbol;
-      item.name = name;
-      item.marketType = marketType;
-      item.category = category;
-      item.status = 'Active';
-      item.logoUrl = providerLogo('NASDAQTRADER');
-      item.providerLogoUrl = providerLogo('NASDAQTRADER');
-      out.push(item);
+      if (!symbol) continue;
+
+      let category = source.category;
+      if (source.file === 'nasdaqlisted.txt' || source.file === 'otherlisted.txt') {
+        const isEtf = String(raw['ETF'] || '').toUpperCase() === 'Y' ||
+          /\\bETF\\b|EXCHANGE[- ]TRADED FUND/i.test(name);
+        category = isEtf ? 'Funds' : 'Stocks';
+      }
+
+      const exchange = source.file === 'otherlisted.txt'
+        ? (raw['Exchange'] || source.marketType)
+        : source.marketType;
+      const key = source.file + ':' + exchange + ':' + symbol;
+      if (seen.has(key)) continue;
+      seen.add(key);
+
+      const item = makeItem(symbol, name, category, exchange, key);
+      if (item) out.push(item);
     }
-    console.log('[SIRE NASDAQTRADER] ' + file + ': ' + out.length);
+    console.log('[SIRE NASDAQ] ' + source.file + ': ' + out.length);
     return out;
   };
 
-  const extraResults = await Promise.allSettled([
-    parseCsvDirectory('pbot.csv', 'Futures', 'PBOT Futures'),
-    parseCsvDirectory('phlxoptions.csv', 'Options', 'Nasdaq PHLX Options'),
+  const parseCsv = async (source: typeof csvSources[number]): Promise<UnifiedInstrument[]> => {
+    const text = await getText('https://www.nasdaqtrader.com/SymbolDirectory/' + source.file, 12000);
+    const rows = text.replace(/^\uFEFF/, '').split(/\r?\n/).filter(Boolean);
+    if (!rows.length) return [];
+
+    const out: UnifiedInstrument[] = [];
+    const seen = new Set<string>();
+    for (const line of rows) {
+      if (/^File Creation Time/i.test(line)) continue;
+      const cells = splitCsvLine(line);
+      if (!cells.length) continue;
+
+      // Official layouts:
+      // PBOT: commodity id, PBOT product symbol, description, last trade date, expiry date.
+      // PHLX: company, cycle, option symbol, stock symbol, specialist unit.
+      const symbol = source.file === 'pbot.csv'
+        ? String(cells[1] || '').trim()
+        : String(cells[2] || '').trim();
+      const name = source.file === 'pbot.csv'
+        ? String(cells[2] || symbol).trim()
+        : String(cells[0] || symbol).trim();
+      if (!symbol) continue;
+
+      const key = source.file + ':' + symbol;
+      if (seen.has(key)) continue;
+      seen.add(key);
+
+      const item = makeItem(symbol, name, source.category, source.marketType, key);
+      if (item) out.push(item);
+    }
+    console.log('[SIRE NASDAQ] ' + source.file + ': ' + out.length);
+    return out;
+  };
+
+  const [pipeResults, csvResults] = await Promise.all([
+    Promise.allSettled(pipeSources.map(parsePipe)),
+    Promise.allSettled(csvSources.map(parseCsv)),
   ]);
-  extraResults.forEach((result, index) => {
-    if (result.status === 'rejected') console.warn('[SIRE NASDAQTRADER] extra directory failed:', index, result.reason);
+
+  const out = [
+    ...pipeResults.flatMap(r => r.status === 'fulfilled' ? r.value : []),
+    ...csvResults.flatMap(r => r.status === 'fulfilled' ? r.value : []),
+  ];
+
+  pipeResults.forEach((r, i) => {
+    if (r.status === 'rejected') console.warn('[SIRE NASDAQ] ' + pipeSources[i].file + ' failed:', r.reason);
+  });
+  csvResults.forEach((r, i) => {
+    if (r.status === 'rejected') console.warn('[SIRE NASDAQ] ' + csvSources[i].file + ' failed:', r.reason);
   });
 
-  const results = await Promise.allSettled(sources.map(parseSource));
-  const out = results.flatMap((result, index) => {
-    if (result.status === 'fulfilled') return result.value;
-    console.warn('[SIRE NASDAQTRADER] ' + sources[index].file + ' failed:', result.reason);
-    return [];
-  });
-  out.push(...extraResults.flatMap(result => result.status === 'fulfilled' ? result.value : []));
-
-  console.log('[SIRE NASDAQTRADER] Total catalogue: ' + out.length);
-  return out;
+  // Defensive final dedupe: one catalogue entry per Nasdaq-published instrument key.
+  const unique = out.filter((item, index, arr) =>
+    arr.findIndex(other => other.id === item.id) === index
+  );
+  console.log('[SIRE NASDAQ] Total catalogue: ' + unique.length);
+  return unique;
 }
 async function twse(): Promise<UnifiedInstrument[]> {
   const url = 'https://openapi.twse.com.tw/v1/opendata/t187ap03_L';
