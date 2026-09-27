@@ -421,11 +421,11 @@ export default function App() {
           {chartItems.map((chartSymbol, index) => <div className={`sire-chart-cell${activeChartIndex === index ? ' sire-chart-cell--active' : ''}`} key={index} onPointerDown={() => setActiveChartIndex(index)}>{chartSymbol && <FinancialChart
             symbol={chartSymbol}
             isActive={activeChartIndex === index}
-            instruments={chartableInstruments.map(item => ({ symbol: item.symbol, name: item.name, pipSize: item.pipSize, provider: item.provider }))}
+            instruments={chartableInstruments.map(item => ({ symbol: item.symbol, name: item.name, pipSize: item.pipSize, provider: item.provider, marketType: item.marketType, category: item.category }))}
             onInstrumentTap={() => openInstrumentPicker('main')}
             onSelectInstrument={item => {
               setChartSymbols(current => current.map((value, slot) => slot === index ? item.symbol : value));
-              if (index === 0) setSelected(current => current?.symbol === item.symbol ? current : instruments.find(candidate => candidate.symbol === item.symbol) || current);
+              if (index === 0) setSelected(current => current?.symbol === item.symbol ? current : instruments.find(candidate => candidate.symbol === item.symbol && candidate.provider === item.provider) || current);
             }}
             onWidgetReady={widget => {
               if (!linked) return;
