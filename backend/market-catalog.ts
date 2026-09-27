@@ -1,4 +1,4 @@
-export type MarketProvider = 'SP' | 'DERIV' | 'BINANCE' | 'BITGET' | 'BYBIT' | 'OKX' | 'KRAKEN' | 'COINBASE' | 'GATEIO' | 'KUCOIN' | 'GEMINI' | 'BITSO' | 'BITFINEX' | 'BITVAVO' | 'COINEX' | 'LBANK' | 'WOOX' | 'CRYPTOCOM' | 'HTX' | 'BITKUB' | 'UPBIT' | 'PIONEX' | 'POLONIEX' | 'BITHUMB' | 'MEXC' | 'PHEMEX' | 'WHITEBIT' | 'TWELVEDATA' | 'NASDAQTRADER' | 'CME' | 'CBOT' | 'NYMEX' | 'COMEX' | 'NYSEAMERICAN' | 'XETR' | 'HKEX' | 'BSE' | 'TSE' | 'XFRA' | 'EUREX' | 'ASX' | 'TWSE' | 'PSX' | 'IDX' | 'NSE' | 'BITSTAMP' | 'OANDA' | 'TRADINGVIEW' | 'FOREXCOM' | 'INTERACTIVEBROKERS' | 'TRADESTATION' | 'WEBULL' | 'MOOMOO' | 'NINJATRADER' | 'TRADOVATE' | 'AMPFUTURES' | 'TASTYTRADE' | 'TASTYFX' | 'CRYPTOCOMEXCHANGE' | 'COINBASEADVANCED' | 'ALPACA' | 'TRADIERBROKERAGE' | 'TRADEZERO' | 'COBRATRADING' | 'CLEARSTREET' | 'INVESTRADE' | 'PUBLIC' | 'PLUS500US' | 'OPTIMUSFUTURES' | 'EDGECLEAR' | 'IRONBEAM' | 'STONEX' | 'DORMANTRADING' | 'TRADIERFUTURES';
+export type MarketProvider = 'YFINANCE' | 'SP' | 'DERIV' | 'BINANCE' | 'BITGET' | 'BYBIT' | 'OKX' | 'KRAKEN' | 'COINBASE' | 'GATEIO' | 'KUCOIN' | 'GEMINI' | 'BITSO' | 'BITFINEX' | 'BITVAVO' | 'COINEX' | 'LBANK' | 'WOOX' | 'CRYPTOCOM' | 'HTX' | 'BITKUB' | 'UPBIT' | 'PIONEX' | 'POLONIEX' | 'BITHUMB' | 'MEXC' | 'PHEMEX' | 'WHITEBIT' | 'TWELVEDATA' | 'NASDAQTRADER' | 'CME' | 'CBOT' | 'NYMEX' | 'COMEX' | 'NYSEAMERICAN' | 'XETR' | 'HKEX' | 'BSE' | 'TSE' | 'XFRA' | 'EUREX' | 'ASX' | 'TWSE' | 'PSX' | 'IDX' | 'NSE' | 'BITSTAMP' | 'OANDA' | 'TRADINGVIEW' | 'FOREXCOM' | 'INTERACTIVEBROKERS' | 'TRADESTATION' | 'WEBULL' | 'MOOMOO' | 'NINJATRADER' | 'TRADOVATE' | 'AMPFUTURES' | 'TASTYTRADE' | 'TASTYFX' | 'CRYPTOCOMEXCHANGE' | 'COINBASEADVANCED' | 'ALPACA' | 'TRADIERBROKERAGE' | 'TRADEZERO' | 'COBRATRADING' | 'CLEARSTREET' | 'INVESTRADE' | 'PUBLIC' | 'PLUS500US' | 'OPTIMUSFUTURES' | 'EDGECLEAR' | 'IRONBEAM' | 'STONEX' | 'DORMANTRADING' | 'TRADIERFUTURES';
 
 export interface UnifiedInstrument {
   id: string;
@@ -26,6 +26,10 @@ export interface UnifiedInstrument {
   optionType?: string;
   supportsMargin?: boolean;
 }
+
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
+const execFileAsync = promisify(execFile);
 
 const CACHE_MS = 5 * 60 * 1000;
 let cached: { at: number; instruments: UnifiedInstrument[] } | null = null;
@@ -1669,6 +1673,49 @@ async function tse(): Promise<UnifiedInstrument[]> {
   } catch (error) { console.warn('[SIRE TSE] failed:', error); return []; }
 }
 
+async function yfinance(): Promise<UnifiedInstrument[]> {
+  try {
+    const { stdout } = await execFileAsync(
+      process.env.YFINANCE_PYTHON || '.venv/bin/python',
+      ['backend/yfinance_catalog.py'],
+      { timeout: 90000, maxBuffer: 8 * 1024 * 1024 }
+    );
+    const rows = JSON.parse(stdout || '[]');
+    const out: UnifiedInstrument[] = [];
+    for (const raw of Array.isArray(rows) ? rows : []) {
+      const symbol = String(raw?.symbol || '').trim();
+      if (!symbol) continue;
+      const category = String(raw?.category || 'Stocks');
+      const item = cryptoItem('YFINANCE', String(raw?.marketType || 'Yahoo Finance'), category, {
+        symbol,
+        baseAsset: raw?.base,
+        quoteAsset: raw?.quote,
+        fullName: raw?.name || symbol,
+        status: 'online'
+      });
+      if (!item) continue;
+      item.id = 'YFINANCE:' + symbol;
+      item.providerLabel = 'Yahoo Finance (yfinance)';
+      item.marketType = String(raw?.marketType || 'Yahoo Finance');
+      item.category = category;
+      item.name = String(raw?.name || symbol);
+      item.displaySymbol = symbol;
+      item.symbol = symbol;
+      item.quote = String(raw?.quote || '').trim() || undefined;
+      item.status = 'Active';
+      item.logoUrl = 'https://cdn.simpleicons.org/yahoo';
+      item.providerLogoUrl = 'https://cdn.simpleicons.org/yahoo';
+      item.instrumentType = String(raw?.type || category);
+      out.push(item);
+    }
+    console.log('[SIRE YFINANCE] Catalogue: ' + out.length);
+    return out;
+  } catch (error) {
+    console.warn('[SIRE YFINANCE] failed:', error);
+    return [];
+  }
+}
+
 async function sp(): Promise<UnifiedInstrument[]> {
   // S&P DJI publishes the S&P 500 as an index, not as an exchange. Keep this
   // provider separate from Nasdaq/NYSE/CME so the catalogue preserves the
@@ -1779,6 +1826,7 @@ export async function getUnifiedMarketCatalogue(fetchDeriv: () => Promise<any[]>
       // Nasdaq Trader supplies the public instrument master for Nasdaq-listed,
       // other U.S.-listed, bonds, NOM options, mutual funds and additional
       // Nasdaq-published derivatives directories.
+      ['YFINANCE', yfinance()],
       ['SP', sp()],
       ['NASDAQTRADER', nasdaqTrader()],
       // NYSE American (formerly NYSE Amex) is a separate exchange universe.
