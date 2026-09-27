@@ -580,28 +580,56 @@ async function tradingviewFeedRegistry(): Promise<UnifiedInstrument[]> {
 
 async function binance(): Promise<UnifiedInstrument[]> {
   const out: UnifiedInstrument[] = [];
-  const add = (family:string, rows:any[]) => { for (const raw of rows) {
-    const st=String(raw?.status||raw?.contractStatus||'').toUpperCase();
-    if(st && !['TRADING','ONLINE','ENABLED'].includes(st)) continue;
-    let mt=family;
-    if(family==='USD-M') mt=String(raw?.contractType||'').toUpperCase().includes('PERPETUAL')?'USD-M Perpetuals':'USD-M Futures';
-    if(family==='COIN-M') mt=String(raw?.contractType||'').toUpperCase().includes('PERPETUAL')?'COIN-M Perpetuals':'COIN-M Futures';
-    const i=cryptoItem('BINANCE',mt,'Crypto',raw); if(i) out.push(i);
-  }};
-  const sources:Array<[string,string[]]>=[
-    ['Spot',['https://data-api.binance.vision/api/v3/exchangeInfo','https://api.binance.com/api/v3/exchangeInfo']],
-    ['Margin',['https://api.binance.com/sapi/v1/margin/allPairs']],
-    ['USD-M',['https://fapi.binance.com/fapi/v1/exchangeInfo']],
-    ['COIN-M',['https://dapi.binance.com/dapi/v1/exchangeInfo']],
-    ['Options',['https://eapi.binance.com/eapi/v1/exchangeInfo']]
+  const add = (family: string, rows: any[]) => {
+    for (const raw of rows) {
+      const st = String(raw?.status || raw?.contractStatus || '').toUpperCase();
+      if (st && !['TRADING', 'ONLINE', 'ENABLED'].includes(st)) continue;
+      let mt = family;
+      if (family === 'USD-M') mt = String(raw?.contractType || '').toUpperCase().includes('PERPETUAL') ? 'USD-M Perpetuals' : 'USD-M Futures';
+      if (family === 'COIN-M') mt = String(raw?.contractType || '').toUpperCase().includes('PERPETUAL') ? 'COIN-M Perpetuals' : 'COIN-M Futures';
+      const i = cryptoItem('BINANCE', mt, 'Crypto', raw);
+      if (i) out.push(i);
+    }
+  };
+
+  // Binance documents api.binance.com, api-gcp.binance.com and api1-api4.binance.com
+  // as alternate Spot REST hosts. Try them all because hosting-region routing can
+  // return HTTP 451 on one host while another public host remains reachable.
+  const sources: Array<[string, string[]]> = [
+    ['Spot', [
+      'https://data-api.binance.vision/api/v3/exchangeInfo',
+      'https://api-gcp.binance.com/api/v3/exchangeInfo',
+      'https://api1.binance.com/api/v3/exchangeInfo',
+      'https://api2.binance.com/api/v3/exchangeInfo',
+      'https://api3.binance.com/api/v3/exchangeInfo',
+      'https://api4.binance.com/api/v3/exchangeInfo',
+      'https://api.binance.com/api/v3/exchangeInfo',
+    ]],
+    ['Margin', [
+      'https://api-gcp.binance.com/sapi/v1/margin/allPairs',
+      'https://api1.binance.com/sapi/v1/margin/allPairs',
+      'https://api.binance.com/sapi/v1/margin/allPairs',
+    ]],
+    ['USD-M', ['https://fapi.binance.com/fapi/v1/exchangeInfo']],
+    ['COIN-M', ['https://dapi.binance.com/dapi/v1/exchangeInfo']],
+    ['Options', ['https://eapi.binance.com/eapi/v1/exchangeInfo']],
   ];
-  const results = await Promise.allSettled(sources.map(async ([f,u]) => {
-    const r = await getJsonAny(u,8000);
-    add(f, f === 'Margin' ? (Array.isArray(r) ? r : []) : f === 'Options' ? (r?.optionSymbols || []) : (r?.symbols || []));
-    console.log('[SIRE BINANCE] ' + f + ': ' + out.filter(x => x.provider === 'BINANCE' && x.marketType.toLowerCase().includes(f.toLowerCase().replace('-',' '))).length);
+
+  const results = await Promise.allSettled(sources.map(async ([family, urls]) => {
+    const r = await getJsonAny(urls, 8000);
+    const rows = family === 'Margin'
+      ? (Array.isArray(r) ? r : [])
+      : family === 'Options'
+        ? (r?.optionSymbols || [])
+        : (r?.symbols || []);
+    add(family, rows);
+    console.log('[SIRE BINANCE] ' + family + ': ' + rows.length);
   }));
-  results.forEach((r,index) => {
-    if (r.status === 'rejected') console.warn('[SIRE BINANCE] ' + sources[index][0] + ' failed:', r.reason);
+
+  results.forEach((result, index) => {
+    if (result.status === 'rejected') {
+      console.warn('[SIRE BINANCE] ' + sources[index][0] + ' failed:', result.reason);
+    }
   });
   console.log('[SIRE BINANCE] Total: ' + out.length);
   return out;
