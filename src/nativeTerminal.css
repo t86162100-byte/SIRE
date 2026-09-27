@@ -178,6 +178,7 @@
   border-radius: 50%;
   background: #171b20;
   border: 0;
+  transform: translateY(-1px);
 }
 .quote-broker-logo {
   width: 100% !important;
@@ -219,7 +220,7 @@
 .sire-instrument-search-list .quote-instrument-name b { font-size: 13px !important; }
 .sire-instrument-search-list .quote-instrument-name small { font-size: 10px !important; }
 .sire-instrument-search-list .quote-broker { min-width: 78px; grid-template-columns:auto 22px; }
-.sire-instrument-search-list .quote-broker-logo-wrap { width:22px;height:22px;min-width:22px; }
+.sire-instrument-search-list .quote-broker-logo-wrap { width:22px;height:22px;min-width:22px; transform:translateY(-1px); }
 .sire-instrument-search-list .quote-broker-logo { object-fit: contain !important; padding: 2px; box-sizing: border-box; }
 .sire-instrument-search-list .quote-broker b { font-size: 10px !important; }
 .sire-instrument-search-list .quote-broker small { font-size: 9px !important; }
