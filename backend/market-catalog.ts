@@ -791,7 +791,7 @@ async function oanda(): Promise<UnifiedInstrument[]> {
       if (!response.ok) throw new Error('HTTP ' + response.status);
       const html = await response.text();
       const pairs = Array.from(new Set(
-        Array.from(html.matchAll(/\\b([A-Z]{3})\\s*\\/\\s*([A-Z]{3})\\b/g))
+        Array.from(html.matchAll(/\b([A-Z]{3})\s*\/\s*([A-Z]{3})\b/g))
           .map(match => match[1] + '/' + match[2])
           .filter(pair => {
             const [base, quote] = pair.split('/');
@@ -1248,6 +1248,3 @@ export async function getUnifiedMarketCatalogue(fetchDeriv: () => Promise<any[]>
     console.log('[SIRE MARKET CATALOG] provider counts:', JSON.stringify(counts));
     cached = { at: Date.now(), instruments: unique };
     return unique;
-  })().finally(() => { loading = null; });
-  return loading;
-}
