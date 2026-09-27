@@ -15,6 +15,7 @@ import { runSireDiagnostics } from './backend/sire-diagnostics.ts';
 import { runAutonomousCycle } from './autonomous/sire-autonomous-cycle.ts';
 import { recordIssue, getRecentIssues } from './backend/sire-issue-tracker.ts';
 import { getUnifiedMarketCatalogue, getCmeCatalogueForDiagnostics, getNyseAmericanCatalogueForDiagnostics } from './backend/market-catalog.ts';
+import { binanceHistory, binanceQuote } from './backend/binance-market-data.ts';
 
 const PORT = Number(process.env.PORT || 10000);
 const HOST = '0.0.0.0';
@@ -770,6 +771,29 @@ const server = http.createServer(async (req,res) => {
     if (req.method === 'GET' && pathname === '/api/sire/fxcm/quote') {
       try { const u=new URL(req.url||'/',`http://${req.headers.host||'localhost'}`); const symbol=String(u.searchParams.get('symbol')||'').trim(); if(!symbol) throw new Error('symbol is required'); const quote=await fxcmQuote(symbol); return res.writeHead(200,{'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify({ok:true,quote})); }
       catch(e){ return res.writeHead(502,{'Access-Control-Allow-Origin':'*','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify({ok:false,error:e instanceof Error?e.message:String(e)})); }
+    }
+    if (req.method === 'GET' && pathname === '/api/sire/binance/history') {
+      try {
+        const u=new URL(req.url||'/',`http://${req.headers.host||'localhost'}`);
+        const symbol=String(u.searchParams.get('symbol')||'').trim();
+        const marketType=String(u.searchParams.get('marketType')||'Spot').trim();
+        const interval=String(u.searchParams.get('interval')||'1min').trim();
+        const count=Math.max(2,Math.min(1500,Number(u.searchParams.get('count')||500)));
+        const from=Number(u.searchParams.get('from')),to=Number(u.searchParams.get('to'));
+        if(!symbol) throw new Error('symbol is required');
+        const bars=await binanceHistory({symbol,marketType,interval,count,from,to});
+        return res.writeHead(200,{'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify({ok:true,symbol,marketType,interval,bars}));
+      } catch(e) { return res.writeHead(502,{'Access-Control-Allow-Origin':'*','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify({ok:false,error:e instanceof Error?e.message:String(e)})); }
+    }
+    if (req.method === 'GET' && pathname === '/api/sire/binance/quote') {
+      try {
+        const u=new URL(req.url||'/',`http://${req.headers.host||'localhost'}`);
+        const symbol=String(u.searchParams.get('symbol')||'').trim();
+        const marketType=String(u.searchParams.get('marketType')||'Spot').trim();
+        if(!symbol) throw new Error('symbol is required');
+        const quote=await binanceQuote({symbol,marketType});
+        return res.writeHead(200,{'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify({ok:true,quote}));
+      } catch(e) { return res.writeHead(502,{'Access-Control-Allow-Origin':'*','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify({ok:false,error:e instanceof Error?e.message:String(e)})); }
     }
     if (req.method === 'GET' && pathname === '/api/sire/market-data/history') {
       try {
