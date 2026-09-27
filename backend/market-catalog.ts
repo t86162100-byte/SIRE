@@ -1,4 +1,4 @@
-export type MarketProvider = 'DERIV' | 'BINANCE' | 'BITGET' | 'BYBIT' | 'OKX' | 'KRAKEN' | 'COINBASE' | 'GATEIO' | 'KUCOIN' | 'GEMINI' | 'BITSO' | 'BITFINEX' | 'BITVAVO' | 'COINEX' | 'LBANK' | 'WOOX' | 'CRYPTOCOM' | 'HTX' | 'BITKUB' | 'UPBIT' | 'PIONEX' | 'POLONIEX' | 'BITHUMB' | 'MEXC' | 'PHEMEX' | 'WHITEBIT' | 'TWELVEDATA' | 'NASDAQTRADER' | 'XETR' | 'HKEX' | 'BSE' | 'NSE' | 'BITSTAMP' | 'OANDA' | 'TRADINGVIEW' | 'FOREXCOM' | 'INTERACTIVEBROKERS' | 'TRADESTATION' | 'WEBULL' | 'MOOMOO' | 'NINJATRADER' | 'TRADOVATE' | 'AMPFUTURES' | 'TASTYTRADE' | 'TASTYFX' | 'CRYPTOCOMEXCHANGE' | 'COINBASEADVANCED' | 'ALPACA' | 'TRADIERBROKERAGE' | 'TRADEZERO' | 'COBRATRADING' | 'CLEARSTREET' | 'INVESTRADE' | 'PUBLIC' | 'PLUS500US' | 'OPTIMUSFUTURES' | 'EDGECLEAR' | 'IRONBEAM' | 'STONEX' | 'DORMANTRADING' | 'TRADIERFUTURES';
+export type MarketProvider = 'DERIV' | 'BINANCE' | 'BITGET' | 'BYBIT' | 'OKX' | 'KRAKEN' | 'COINBASE' | 'GATEIO' | 'KUCOIN' | 'GEMINI' | 'BITSO' | 'BITFINEX' | 'BITVAVO' | 'COINEX' | 'LBANK' | 'WOOX' | 'CRYPTOCOM' | 'HTX' | 'BITKUB' | 'UPBIT' | 'PIONEX' | 'POLONIEX' | 'BITHUMB' | 'MEXC' | 'PHEMEX' | 'WHITEBIT' | 'TWELVEDATA' | 'NASDAQTRADER' | 'XETR' | 'HKEX' | 'BSE' | 'TSE' | 'NSE' | 'BITSTAMP' | 'OANDA' | 'TRADINGVIEW' | 'FOREXCOM' | 'INTERACTIVEBROKERS' | 'TRADESTATION' | 'WEBULL' | 'MOOMOO' | 'NINJATRADER' | 'TRADOVATE' | 'AMPFUTURES' | 'TASTYTRADE' | 'TASTYFX' | 'CRYPTOCOMEXCHANGE' | 'COINBASEADVANCED' | 'ALPACA' | 'TRADIERBROKERAGE' | 'TRADEZERO' | 'COBRATRADING' | 'CLEARSTREET' | 'INVESTRADE' | 'PUBLIC' | 'PLUS500US' | 'OPTIMUSFUTURES' | 'EDGECLEAR' | 'IRONBEAM' | 'STONEX' | 'DORMANTRADING' | 'TRADIERFUTURES';
 
 export interface UnifiedInstrument {
   id: string;
@@ -1374,6 +1374,48 @@ async function bse(): Promise<UnifiedInstrument[]> {
   return out;
 }
 
+async function tse(): Promise<UnifiedInstrument[]> {
+  const url = 'https://www.jpx.co.jp/markets/statistics-equities/misc/tvdivq0000001vg2-att/data_j.xls';
+  try {
+    const response = await fetch(url, { headers: { 'User-Agent': 'SIRE-market-catalog/1.0' }, signal: AbortSignal.timeout(15000) });
+    if (!response.ok) throw new Error('HTTP ' + response.status);
+    const buffer = Buffer.from(await response.arrayBuffer());
+    const XLSX = await import('xlsx');
+    const workbook = XLSX.read(buffer, { type: 'buffer' });
+    const sheet = workbook.Sheets[workbook.SheetNames[0]];
+    const rows = XLSX.utils.sheet_to_json<any[]>(sheet, { header: 1, defval: '' });
+    const headerIndex = rows.findIndex(row => row.some(v => /コード|Code/i.test(String(v))) && row.some(v => /銘柄名|会社名|Name/i.test(String(v))));
+    if (headerIndex < 0) throw new Error('JPX TSE header row not found');
+    const headers = rows[headerIndex].map(v => String(v).trim());
+    const findCol = (patterns: RegExp[]) => headers.findIndex(h => patterns.some(p => p.test(h)));
+    const codeI = findCol([/コード/i, /code/i]);
+    const nameI = findCol([/銘柄名/i, /会社名/i, /name/i]);
+    const marketI = findCol([/市場・商品区分/i, /市場区分/i, /market/i]);
+    const isinI = findCol([/ISIN/i]);
+    const out: UnifiedInstrument[] = [];
+    const seen = new Set<string>();
+    for (const row of rows.slice(headerIndex + 1)) {
+      const code = String(row[codeI] ?? '').trim();
+      const name = String(row[nameI] ?? '').trim();
+      if (!/^\d{4}[A-Z]?$/.test(code) || !name) continue;
+      const isin = isinI >= 0 ? String(row[isinI] ?? '').trim() : '';
+      const market = marketI >= 0 ? String(row[marketI] ?? '').trim() : '';
+      const key = 'TSE:' + (isin || code);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      const category = /ETF|ETN|REIT|投資法人|インフラ/i.test(market + ' ' + name) ? 'Funds' : 'Stocks';
+      const item = cryptoItem('TSE','Tokyo Stock Exchange',category,{symbol:code,fullName:name,status:'online'});
+      if (!item) continue;
+      item.id='TSE:TSE:'+(isin || code); item.symbol=code; item.displaySymbol=code; item.name=name;
+      item.marketType=market || 'TSE'; item.category=category; item.quote='JPY'; item.status='Active';
+      item.logoUrl=providerLogo('TSE'); item.providerLogoUrl=providerLogo('TSE');
+      out.push(item);
+    }
+    console.log('[SIRE TSE] Listed issues: ' + out.length);
+    return out;
+  } catch (error) { console.warn('[SIRE TSE] failed:', error); return []; }
+}
+
 async function okx(): Promise<UnifiedInstrument[]> {
   const types = ['SPOT', 'SWAP', 'FUTURES', 'OPTION'];
   const out: UnifiedInstrument[] = [];
@@ -1456,6 +1498,7 @@ export async function getUnifiedMarketCatalogue(fetchDeriv: () => Promise<any[]>
       ['XETR', xetra()],
       ['HKEX', hkex()],
       ['BSE', bse()],
+      ['TSE', tse()],
       ['NSE', nseIndia()],
       ['BITSTAMP', bitstamp()],
       ['FOREXCOM', brokerCatalogue('FOREXCOM')],
