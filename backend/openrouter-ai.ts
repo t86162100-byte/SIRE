@@ -291,7 +291,7 @@ export async function runGptHead(input: {
        } else if(name==='request_market_data'&&input.tools?.marketDataRequest){
         await emit('Market Data','working','Requesting historical market data…');
         const output=await input.tools.marketDataRequest({symbol:String(args.symbol||''),interval:args.interval?String(args.interval):undefined,count:Number.isFinite(Number(args.count))?Number(args.count):undefined,from:Number.isFinite(Number(args.from))?Number(args.from):undefined,to:Number.isFinite(Number(args.to))?Number(args.to):undefined,dataType:String(args.dataType||'candles')});
-        messages.push({role:'tool',tool_call_id:callId,content:String(output).slice(0,120000)}); else if(name==='web_search'&&input.tools?.webSearch){
+        messages.push({role:'tool',tool_call_id:callId,content:String(output).slice(0,120000)}); } else if(name==='web_search'&&input.tools?.webSearch){
         await emit('Web','research','Searching the web…'); const output=await input.tools.webSearch(String(args.query||query).slice(0,1000)); messages.push({role:'tool',tool_call_id:callId,content:String(output).slice(0,14000)});
       } else messages.push({role:'tool',tool_call_id:callId,content:'Tool unavailable. Continue without it.'});
     }
