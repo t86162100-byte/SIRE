@@ -215,40 +215,101 @@ async function ig(): Promise<UnifiedInstrument[]> {
   const apiKey = String(process.env.IG_API_KEY || '').trim();
   const identifier = String(process.env.IG_IDENTIFIER || '').trim();
   const password = String(process.env.IG_PASSWORD || '').trim();
-  if (!apiKey || !identifier || !password) return [];
-  const envs = ['https://api.ig.com/gateway/deal','https://demo-api.ig.com/gateway/deal'];
-  let session:any = null;
+  if (!apiKey || !identifier || !password) {
+    console.warn('[SIRE IG] credentials not configured; skipping optional broker catalogue.');
+    return [];
+  }
+
+  const envs = ['https://api.ig.com/gateway/deal', 'https://demo-api.ig.com/gateway/deal'];
+  let session: any = null;
   for (const base of envs) {
     try {
-      const r = await fetch(base + '/session', {method:'POST', headers:{'X-IG-API-KEY':apiKey,'Content-Type':'application/json','Accept':'application/json','VERSION':'3'}, body:JSON.stringify({identifier,password})});
-      if (!r.ok) continue;
-      const p = await r.json();
-      const accessToken = String(p?.oauthToken?.access_token || '').trim();
-      const accountId = String(p?.currentAccountId || '').trim();
-      if (accessToken && accountId) { session={base,accessToken,accountId}; break; }
+      const response = await fetch(base + '/session', {
+        method: 'POST',
+        headers: { 'X-IG-API-KEY': apiKey, 'Content-Type': 'application/json', Accept: 'application/json', VERSION: '3' },
+        body: JSON.stringify({ identifier, password })
+      });
+      if (!response.ok) continue;
+      const payload = await response.json();
+      const accessToken = String(payload?.oauthToken?.access_token || '').trim();
+      const accountId = String(payload?.currentAccountId || '').trim();
+      if (accessToken && accountId) { session = { base, accessToken, accountId }; break; }
     } catch {}
   }
-  if (!session) return [];
-  const out:UnifiedInstrument[]=[]; const seen=new Set<string>();
-  const terms=['','forex','indices','commodities','shares','etf','rates','sectors'];
-  for (const term of terms) {
-    try {
-      const url=session.base+'/markets'+(term?'?searchTerm='+encodeURIComponent(term):'');
-      const r=await fetch(url,{headers:{'X-IG-API-KEY':apiKey,'Authorization':'Bearer '+session.accessToken,'IG-ACCOUNT-ID':session.accountId,'Accept':'application/json','VERSION':'1'}});
-      if (!r.ok) continue;
-      const p=await r.json(); const rows=Array.isArray(p?.markets)?p.markets:[];
-      for (const raw of rows) {
-        const epic=String(raw?.epic||'').trim(); if(!epic||seen.has(epic)) continue; seen.add(epic);
-        const type=String(raw?.instrumentType||raw?.type||'').toUpperCase();
-        const category=type.includes('CURRENC')?'Forex':type.includes('COMMOD')?'Commodities':type.includes('SHARE')?'Stocks':type.includes('INDIC')?'Indices':type.includes('SECTOR')?'Sectors':type.includes('RATE')?'Rates':type.includes('BINARY')?'Binaries':type.includes('OPTION')?'Options':'CFD';
-        const item=cryptoItem('IG','CFD',category,{symbol:epic,fullName:String(raw?.instrumentName||raw?.name||epic),status:String(raw?.marketStatus||'online')});
-        if(item){item.name=String(raw?.instrumentName||raw?.name||epic);item.category=category;item.marketType='CFD';item.logoUrl=providerLogo('IG');item.providerLogoUrl=providerLogo('IG');item.status=String(raw?.marketStatus||'online');out.push(item);}
-      }
-    } catch {}
+  if (!session) {
+    console.warn('[SIRE IG] authenticated session could not be established.');
+    return [];
   }
-  console.log('[SIRE IG] Total catalogue: '+out.length); return out;
-}
 
+  const headers = {
+    'X-IG-API-KEY': apiKey,
+    Authorization: 'Bearer ' + session.accessToken,
+    'IG-ACCOUNT-ID': session.accountId,
+    Accept: 'application/json',
+    VERSION: '1'
+  };
+  const out: UnifiedInstrument[] = [];
+  const seen = new Set<string>();
+  const visited = new Set<string>();
+  const queue: string[] = [''];
+  let nodes = 0;
+
+  const addMarkets = (rows: any[]) => {
+    for (const raw of rows) {
+      const epic = String(raw?.epic || raw?.instrumentId || raw?.marketId || '').trim();
+      if (!epic || seen.has(epic)) continue;
+      seen.add(epic);
+      const type = String(raw?.instrumentType || raw?.type || '').toUpperCase();
+      const category =
+        type.includes('CURRENC') ? 'Forex' :
+        type.includes('COMMOD') ? 'Commodities' :
+        type.includes('SHARE') ? 'Stocks' :
+        type.includes('INDIC') ? 'Indices' :
+        type.includes('SECTOR') ? 'Sectors' :
+        type.includes('RATE') ? 'Rates' :
+        type.includes('BINARY') ? 'Binaries' :
+        type.includes('OPTION') ? 'Options' : 'CFD';
+      const item = cryptoItem('IG', 'CFD', category, {
+        symbol: epic,
+        fullName: String(raw?.instrumentName || raw?.name || raw?.instrumentName || epic),
+        status: String(raw?.marketStatus || raw?.status || 'online')
+      });
+      if (!item) continue;
+      item.name = String(raw?.instrumentName || raw?.name || epic);
+      item.category = category;
+      item.marketType = 'CFD';
+      item.logoUrl = providerLogo('IG');
+      item.providerLogoUrl = providerLogo('IG');
+      item.status = String(raw?.marketStatus || raw?.status || 'online');
+      out.push(item);
+    }
+  };
+
+  while (queue.length && nodes < 500) {
+    const nodeId = queue.shift()!;
+    if (visited.has(nodeId)) continue;
+    visited.add(nodeId);
+    try {
+      const url = session.base + '/marketnavigation' + (nodeId ? '/' + encodeURIComponent(nodeId) : '');
+      const response = await fetch(url, { headers });
+      if (!response.ok) continue;
+      const payload = await response.json();
+      const markets = Array.isArray(payload?.markets) ? payload.markets : [];
+      const children = Array.isArray(payload?.nodes) ? payload.nodes : [];
+      addMarkets(markets);
+      for (const child of children) {
+        const childId = String(child?.id || child?.nodeId || '').trim();
+        if (childId && !visited.has(childId)) queue.push(childId);
+      }
+      nodes += 1;
+    } catch (error) {
+      console.warn('[SIRE IG] navigation node failed:', nodeId, error);
+    }
+  }
+
+  console.log('[SIRE IG] Navigation nodes: ' + nodes + ', instruments: ' + out.length);
+  return out;
+}
 async function oanda(): Promise<UnifiedInstrument[]> {
   const token = String(process.env.OANDA_API_TOKEN || '').trim();
   const accountId = String(process.env.OANDA_ACCOUNT_ID || '').trim();
