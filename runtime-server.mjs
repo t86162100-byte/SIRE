@@ -639,6 +639,71 @@ async function fxcmQuote(symbol){
   return {symbol,epoch:Math.floor(new Date(offer.time||Date.now()).getTime()/1000),price:Number.isFinite(bid)&&Number.isFinite(ask)?(bid+ask)/2:Number.isFinite(bid)?bid:ask,bid,ask,high:Number(offer.high),low:Number(offer.low)};
 }
 
+async function twelveDataRequest(path, params={}) {
+  const apiKey=String(process.env.TWELVE_DATA_API_KEY||'').trim();
+  if(!apiKey) throw new Error('TWELVE_DATA_API_KEY is not configured on Render.');
+  const query=new URLSearchParams({...params,apikey:apiKey});
+  const response=await fetch('https://api.twelvedata.com/'+path+'?'+query.toString(),{signal:AbortSignal.timeout(20000),headers:{Accept:'application/json'}});
+  const text=await response.text(); let data={}; try{data=text?JSON.parse(text):{};}catch{data={};}
+  if(!response.ok || data?.status==='error' || data?.code) throw new Error('Twelve Data HTTP '+response.status+': '+String(data?.message||data?.code||text.slice(0,300)));
+  return data;
+}
+function twelveDataExchange(provider,marketType){
+  const p=String(provider||'').toUpperCase(), m=String(marketType||'').toUpperCase();
+  if(p==='NASDAQTRADER') {
+    if(m.includes('NYSE')) return 'NYSE';
+    if(m.includes('AMEX')||m.includes('AMERICAN')) return 'AMEX';
+    return 'NASDAQ';
+  }
+  if(p==='NYSEAMERICAN') return 'AMEX';
+  return '';
+}
+function normalizeTwelveSymbol(provider,symbol){
+  const p=String(provider||'').toUpperCase();
+  const s=String(symbol||'').trim();
+  if(p==='OANDA' || p==='FXCM') return s.replace(/_/g,'/');
+  return s;
+}
+async function universalMarketHistory({provider,symbol,marketType,category,interval,count,from,to}){
+  const normalized=normalizeTwelveSymbol(provider,symbol);
+  const exchange=twelveDataExchange(provider,marketType);
+  const params={symbol:normalized,interval,outputsize:String(Math.min(5000,Math.max(2,Number(count)||500))),order:'ASC'};
+  if(exchange) params.exchange=exchange;
+  if(Number.isFinite(Number(from))) params.start_date=new Date(Number(from)*1000).toISOString();
+  if(Number.isFinite(Number(to))) params.end_date=new Date(Number(to)*1000).toISOString();
+  let data;
+  try {
+    data=await twelveDataRequest('time_series',params);
+  } catch(first) {
+    // Retry without exchange when the catalogue provider's venue name is not
+    // accepted by Twelve Data; the symbol itself may still be globally unique.
+    if(exchange) {
+      delete params.exchange;
+      data=await twelveDataRequest('time_series',params);
+    } else throw first;
+  }
+  const values=Array.isArray(data?.values)?data.values:[];
+  const bars=values.map(v=>({
+    time:Math.floor(new Date(String(v.datetime||'')).getTime()/1000),
+    open:Number(v.open),high:Number(v.high),low:Number(v.low),close:Number(v.close),volume:Number(v.volume)||0
+  })).filter(v=>Number.isFinite(v.time)&&[v.open,v.high,v.low,v.close].every(Number.isFinite)).sort((a,b)=>a.time-b.time);
+  if(!bars.length) throw new Error('Twelve Data returned no candles for '+normalized+'.');
+  return bars;
+}
+async function universalMarketQuote({provider,symbol,marketType}){
+  const normalized=normalizeTwelveSymbol(provider,symbol);
+  const exchange=twelveDataExchange(provider,marketType);
+  const params={symbol:normalized};
+  if(exchange) params.exchange=exchange;
+  let data;
+  try { data=await twelveDataRequest('quote',params); }
+  catch(first) { if(exchange){delete params.exchange;data=await twelveDataRequest('quote',params);} else throw first; }
+  const price=Number(data?.close ?? data?.price);
+  const epoch=Number(data?.timestamp)||Math.floor(Date.now()/1000);
+  if(!Number.isFinite(price)) throw new Error('Twelve Data returned no live price for '+normalized+'.');
+  return {symbol,epoch,price,bid:Number(data?.bid),ask:Number(data?.ask),volume:Number(data?.volume)||0};
+}
+
 const server = http.createServer(async (req,res) => {
   if (req.method === 'OPTIONS') { res.writeHead(204,{ 'Access-Control-Allow-Origin':'*','Access-Control-Allow-Methods':'GET,POST,PUT,DELETE,OPTIONS','Access-Control-Allow-Headers':'Content-Type, Authorization' }); return res.end(); }
   if (await serveStatic(req,res)) return;
@@ -655,6 +720,25 @@ const server = http.createServer(async (req,res) => {
     if (req.method === 'GET' && pathname === '/api/sire/fxcm/quote') {
       try { const u=new URL(req.url||'/',`http://${req.headers.host||'localhost'}`); const symbol=String(u.searchParams.get('symbol')||'').trim(); if(!symbol) throw new Error('symbol is required'); const quote=await fxcmQuote(symbol); return res.writeHead(200,{'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify({ok:true,quote})); }
       catch(e){ return res.writeHead(502,{'Access-Control-Allow-Origin':'*','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify({ok:false,error:e instanceof Error?e.message:String(e)})); }
+    }
+    if (req.method === 'GET' && pathname === '/api/sire/market-data/history') {
+      try {
+        const u=new URL(req.url||'/',`http://${req.headers.host||'localhost'}`);
+        const bars=await universalMarketHistory({
+          provider:u.searchParams.get('provider')||'',symbol:u.searchParams.get('symbol')||'',
+          marketType:u.searchParams.get('marketType')||'',category:u.searchParams.get('category')||'',
+          interval:u.searchParams.get('interval')||'1min',count:Number(u.searchParams.get('count')||500),
+          from:Number(u.searchParams.get('from')),to:Number(u.searchParams.get('to'))
+        });
+        return res.writeHead(200,{'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify({ok:true,bars}));
+      } catch(e) { return res.writeHead(502,{'Access-Control-Allow-Origin':'*','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify({ok:false,error:e instanceof Error?e.message:String(e)})); }
+    }
+    if (req.method === 'GET' && pathname === '/api/sire/market-data/quote') {
+      try {
+        const u=new URL(req.url||'/',`http://${req.headers.host||'localhost'}`);
+        const quote=await universalMarketQuote({provider:u.searchParams.get('provider')||'',symbol:u.searchParams.get('symbol')||'',marketType:u.searchParams.get('marketType')||''});
+        return res.writeHead(200,{'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify({ok:true,quote}));
+      } catch(e) { return res.writeHead(502,{'Access-Control-Allow-Origin':'*','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify({ok:false,error:e instanceof Error?e.message:String(e)})); }
     }
     if (pathname === '/api/sire/markets/global-crypto' && req.method === 'GET') {
       try {
