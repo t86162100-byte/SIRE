@@ -1098,6 +1098,7 @@ async function nyseAmerican(): Promise<UnifiedInstrument[]> {
       const rows=Array.isArray(payload)?payload:(Array.isArray(payload?.data?.rows)?payload.data.rows:Array.isArray(payload?.data)?payload.data:[]);
       if(!rows.length) break;
       let added=0;
+      if(page<=2){ const prefixes=rows.map((x:any)=>String(x?.url||'').split(':')[1]||'').reduce((a:string,k:string)=>{a[k]=(a[k]||0)+1;return a;},{} as Record<string,number>); console.log('[SIRE NYSE URL CODES] page '+page,JSON.stringify(prefixes)); }
       for(const raw of rows){
         const exchange=String(raw?.exchange||raw?.exchangeName||raw?.listingExchange||raw?.market||raw?.marketName||raw?.exchangeCode||'').trim();
         const listingUrl=String(raw?.url||'').trim();
