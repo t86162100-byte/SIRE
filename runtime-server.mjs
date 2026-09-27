@@ -16,6 +16,7 @@ import { runAutonomousCycle } from './autonomous/sire-autonomous-cycle.ts';
 import { recordIssue, getRecentIssues } from './backend/sire-issue-tracker.ts';
 import { getUnifiedMarketCatalogue, getCmeCatalogueForDiagnostics, getNyseAmericanCatalogueForDiagnostics } from './backend/market-catalog.ts';
 import { loadGlobalCryptoUniverse } from './backend/ccxt-universe-loader.ts';
+import { ccxtMarketHistory, ccxtMarketQuote, ccxtMarketCapabilities } from './backend/ccxt-market-data.ts';
 
 const PORT = Number(process.env.PORT || 10000);
 const HOST = '0.0.0.0';
@@ -720,6 +721,33 @@ const server = http.createServer(async (req,res) => {
     if (req.method === 'GET' && pathname === '/api/sire/fxcm/quote') {
       try { const u=new URL(req.url||'/',`http://${req.headers.host||'localhost'}`); const symbol=String(u.searchParams.get('symbol')||'').trim(); if(!symbol) throw new Error('symbol is required'); const quote=await fxcmQuote(symbol); return res.writeHead(200,{'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify({ok:true,quote})); }
       catch(e){ return res.writeHead(502,{'Access-Control-Allow-Origin':'*','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify({ok:false,error:e instanceof Error?e.message:String(e)})); }
+    }
+    if (req.method === 'GET' && pathname === '/api/sire/ccxt/capabilities') {
+      try {
+        const u=new URL(req.url||'/',`http://${req.headers.host||'localhost'}`);
+        const result=await ccxtMarketCapabilities(u.searchParams.get('exchange')||'',u.searchParams.get('symbol')||'');
+        return res.writeHead(200,{'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify({ok:true,...result}));
+      } catch(e) { return res.writeHead(502,{'Access-Control-Allow-Origin':'*','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify({ok:false,error:e instanceof Error?e.message:String(e)})); }
+    }
+    if (req.method === 'GET' && pathname === '/api/sire/ccxt/history') {
+      try {
+        const u=new URL(req.url||'/',`http://${req.headers.host||'localhost'}`);
+        const result=await ccxtMarketHistory({
+          exchangeId:u.searchParams.get('exchange')||'',
+          symbol:u.searchParams.get('symbol')||'',
+          timeframe:u.searchParams.get('timeframe')||'1m',
+          limit:Number(u.searchParams.get('limit')||500),
+          until:Number(u.searchParams.get('until')),
+        });
+        return res.writeHead(200,{'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify({ok:true,...result}));
+      } catch(e) { return res.writeHead(502,{'Access-Control-Allow-Origin':'*','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify({ok:false,error:e instanceof Error?e.message:String(e)})); }
+    }
+    if (req.method === 'GET' && pathname === '/api/sire/ccxt/quote') {
+      try {
+        const u=new URL(req.url||'/',`http://${req.headers.host||'localhost'}`);
+        const result=await ccxtMarketQuote(u.searchParams.get('exchange')||'',u.searchParams.get('symbol')||'');
+        return res.writeHead(200,{'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify({ok:true,quote:result}));
+      } catch(e) { return res.writeHead(502,{'Access-Control-Allow-Origin':'*','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify({ok:false,error:e instanceof Error?e.message:String(e)})); }
     }
     if (req.method === 'GET' && pathname === '/api/sire/market-data/history') {
       try {
