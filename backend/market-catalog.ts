@@ -1,4 +1,4 @@
-export type MarketProvider = 'DERIV' | 'BINANCE' | 'BITGET' | 'BYBIT' | 'OKX' | 'KRAKEN';
+export type MarketProvider = 'DERIV' | 'BINANCE' | 'BITGET' | 'BYBIT' | 'OKX' | 'KRAKEN' | 'TWELVEDATA' | 'FINNHUB';
 
 export interface UnifiedInstrument {
   id: string;
@@ -199,6 +199,85 @@ async function kraken(): Promise<UnifiedInstrument[]> {
   return out;
 }
 
+async function twelveData(): Promise<UnifiedInstrument[]> {
+  const apiKey = String(process.env.TWELVE_DATA_API_KEY || '').trim();
+  if (!apiKey) {
+    console.warn('[SIRE TWELVEDATA] TWELVE_DATA_API_KEY not configured; skipping optional global catalogue.');
+    return [];
+  }
+  const response = await getJsonAny([
+    'https://api.twelvedata.com/stocks?exchange=NYSE,NASDAQ,AMEX,OTC&country=United%20States&apikey=' + encodeURIComponent(apiKey),
+    'https://api.twelvedata.com/stocks?apikey=' + encodeURIComponent(apiKey)
+  ], 15000);
+  const rows = Array.isArray(response?.data) ? response.data : [];
+  const out: UnifiedInstrument[] = [];
+  for (const raw of rows) {
+    const symbol = String(raw?.symbol || '').trim();
+    if (!symbol) continue;
+    const type = String(raw?.type || raw?.instrument_type || 'Common Stock').toLowerCase();
+    const exchange = String(raw?.exchange || '').trim();
+    const category = type.includes('fund') || type.includes('etf') ? 'Funds' : 'Stocks';
+    const item = cryptoItem('TWELVEDATA', category, category, {
+      symbol,
+      baseAsset: symbol,
+      fullName: String(raw?.name || symbol),
+      status: 'online'
+    });
+    if (item) {
+      item.name = String(raw?.name || symbol);
+      item.marketType = exchange || 'US Market';
+      item.category = category;
+      item.logoUrl = providerLogo('TWELVEDATA');
+      item.providerLogoUrl = providerLogo('TWELVEDATA');
+      out.push(item);
+    }
+  }
+  console.log('[SIRE TWELVEDATA] Stocks/Funds: ' + out.length);
+  return out;
+}
+
+async function finnhub(): Promise<UnifiedInstrument[]> {
+  const apiKey = String(process.env.FINNHUB_API_KEY || '').trim();
+  if (!apiKey) {
+    console.warn('[SIRE FINNHUB] FINNHUB_API_KEY not configured; skipping optional global catalogue.');
+    return [];
+  }
+  const exchanges = ['US', 'GB', 'DE', 'FR', 'HK', 'JP', 'CA', 'AU'];
+  const out: UnifiedInstrument[] = [];
+  for (const exchange of exchanges) {
+    try {
+      const response = await getJsonAny([
+        'https://finnhub.io/api/v1/stock/symbol?exchange=' + exchange + '&token=' + encodeURIComponent(apiKey)
+      ], 15000);
+      const rows = Array.isArray(response) ? response : [];
+      for (const raw of rows) {
+        const symbol = String(raw?.symbol || '').trim();
+        if (!symbol) continue;
+        const type = String(raw?.type || '').toUpperCase();
+        const category = type.includes('ETF') || type.includes('FUND') ? 'Funds' : 'Stocks';
+        const item = cryptoItem('FINNHUB', category, category, {
+          symbol,
+          baseAsset: symbol,
+          fullName: String(raw?.description || symbol),
+          status: 'online'
+        });
+        if (item) {
+          item.name = String(raw?.description || symbol);
+          item.marketType = exchange;
+          item.category = category;
+          item.logoUrl = providerLogo('FINNHUB');
+          item.providerLogoUrl = providerLogo('FINNHUB');
+          out.push(item);
+        }
+      }
+    } catch (error) {
+      console.warn('[SIRE FINNHUB] ' + exchange + ' failed:', error);
+    }
+  }
+  console.log('[SIRE FINNHUB] Stocks/Funds: ' + out.length);
+  return out;
+}
+
 async function okx(): Promise<UnifiedInstrument[]> {
   const types = ['SPOT', 'SWAP', 'FUTURES', 'OPTION'];
   const out: UnifiedInstrument[] = [];
@@ -255,6 +334,8 @@ export async function getUnifiedMarketCatalogue(fetchDeriv: () => Promise<any[]>
       ['BYBIT', bybit()],
       ['OKX', okx()],
       ['KRAKEN', kraken()],
+      ['TWELVEDATA', twelveData()],
+      ['FINNHUB', finnhub()],
     ];
     const results = await Promise.allSettled(providers.map(([, promise]) => promise));
     results.forEach((result, index) => {
