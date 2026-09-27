@@ -1097,6 +1097,7 @@ async function nyseAmerican(): Promise<UnifiedInstrument[]> {
       const payload=await response.json();
       const rows=Array.isArray(payload)?payload:(Array.isArray(payload?.data?.rows)?payload.data.rows:Array.isArray(payload?.data)?payload.data:[]);
       if(!rows.length) break;
+      if(page===1) console.log('[SIRE NYSE AMERICAN RAW ROW]', JSON.stringify(rows[0]).slice(0,8000));
       let added=0;
       for(const raw of rows){
         const exchange=String(raw?.exchange||raw?.exchangeName||raw?.listingExchange||raw?.market||raw?.marketName||raw?.exchangeCode||'').trim();
