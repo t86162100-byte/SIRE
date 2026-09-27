@@ -104,68 +104,7 @@ export default function App() {
   const [multiChartInstrument, setMultiChartInstrument] = useState('');
   const [multiChartPosition, setMultiChartPosition] = useState<'up' | 'down' | 'left' | 'right'>('right');
   const [chartSymbols, setChartSymbols] = useState<string[]>([]);
-  const [instrumentAudit, setInstrumentAudit] = useState<{running:boolean;cursor:number;total:number;pass:number;fail:number;finishedAt?:string;error?:string}>({running:false,cursor:0,total:0,pass:0,fail:0});
-  const [exchangeAudit, setExchangeAudit] = useState<{running:boolean;cursor:number;total:number;working:number;failed:number;websocket:number;historyWorking:number}>({running:false,cursor:0,total:0,working:0,failed:0,websocket:0,historyWorking:0});
-  const auditStartedRef = useRef(false);
-  const exchangeAuditStartedRef = useRef(false);
   const linkGroupRef = useRef<LinkGroup | null>(null);
-
-
-  useEffect(() => {
-    let timer: number | null = null;
-    const poll = async () => {
-      try {
-        const response = await fetch('/api/sire/instrument-audit/status', { cache: 'no-store', headers: { 'Cache-Control': 'no-cache' } });
-        const payload = await response.json().catch(() => null);
-        if (payload?.ok && payload?.status) {
-          const status = payload.status;
-          setInstrumentAudit({ running:Boolean(status.running), cursor:Number(status.cursor||0), total:Number(status.total||0), pass:Number(status.pass||0), fail:Number(status.fail||0), finishedAt:status.finishedAt, error:status.error });
-          if (!status.running && Number(status.total||0) > 0 && timer !== null) { window.clearInterval(timer); timer = null; }
-        }
-      } catch {}
-    };
-    const onChartOpen = async () => {
-      // Exchange-by-exchange verification now owns the initial Chart audit.
-      // The much larger instrument audit remains available through its API and is
-      // intentionally not launched concurrently, to avoid hammering exchange APIs.
-      void poll();
-      if (timer === null) timer = window.setInterval(() => void poll(), 3000);
-    };
-    window.addEventListener('sire:chart-open', onChartOpen);
-    // tabNavigation mounts very early and initially selects Chart before React effects
-    // are attached. Detect that already-active state so the audit cannot miss the first
-    // Chart open event.
-    if (document.documentElement.classList.contains('sire-chart-tab') || document.getElementById('root')?.classList.contains('sire-chart-tab')) {
-      void onChartOpen();
-    }
-    return () => { if (timer !== null) window.clearInterval(timer); window.removeEventListener('sire:chart-open', onChartOpen); };
-  }, []);
-
-  useEffect(() => {
-    let timer: number | null = null;
-    const poll = async () => {
-      try {
-        const response = await fetch('/api/sire/ccxt/exchange-audit/status', { cache:'no-store', headers:{'Cache-Control':'no-cache'} });
-        const payload = await response.json().catch(() => null);
-        const status = payload?.audit;
-        if (payload?.ok && status) {
-          setExchangeAudit({running:Boolean(status.running),cursor:Number(status.cursor||0),total:Number(status.total||0),working:Number(status.working||0),failed:Number(status.failed||0),websocket:Number(status.websocket||0),historyWorking:Number(status.historyWorking||0)});
-          if (!status.running && Number(status.total||0)>0 && timer!==null) { window.clearInterval(timer); timer=null; }
-        }
-      } catch {}
-    };
-    const start = async () => {
-      if (!exchangeAuditStartedRef.current) {
-        exchangeAuditStartedRef.current = true;
-        try { await fetch('/api/sire/ccxt/exchange-audit/start', {method:'POST',cache:'no-store',headers:{'Cache-Control':'no-cache'}}); } catch {}
-      }
-      void poll();
-      if (timer===null) timer=window.setInterval(() => void poll(),3000);
-    };
-    window.addEventListener('sire:chart-open', start);
-    if (document.documentElement.classList.contains('sire-chart-tab') || document.getElementById('root')?.classList.contains('sire-chart-tab')) void start();
-    return () => { if(timer!==null) window.clearInterval(timer); window.removeEventListener('sire:chart-open',start); };
-  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -463,16 +402,6 @@ export default function App() {
     setMultiChartOpen(false);
   };
   return <main className={`native-terminal-shell${researchLabOpen ? ' sire-research-open' : ''}`}>
-    {exchangeAudit.total > 0 && <div style={{position:'fixed',top:12,left:'50%',transform:'translateX(-50%)',zIndex:10000,width:'min(92vw,620px)',padding:'10px 14px',border:'1px solid rgba(255,255,255,.18)',borderRadius:12,background:'rgba(10,12,16,.88)',backdropFilter:'blur(14px)',color:'#fff',fontSize:12,pointerEvents:'none'}}>
-      <div style={{display:'flex',justifyContent:'space-between',gap:12}}><strong>{exchangeAudit.running ? 'Exchange data audit running' : 'Exchange data audit complete'}</strong><span>{exchangeAudit.running ? `${exchangeAudit.cursor} / ${exchangeAudit.total}` : `${exchangeAudit.total} exchanges checked`}</span></div>
-      <div style={{marginTop:6,opacity:.7}}>{exchangeAudit.working} live · {exchangeAudit.websocket} WebSocket · {exchangeAudit.historyWorking} history · {exchangeAudit.failed} failed</div>
-      <div style={{height:3,marginTop:7,borderRadius:99,background:'rgba(255,255,255,.12)',overflow:'hidden'}}><div style={{height:'100%',width:`${exchangeAudit.total ? Math.min(100,Math.round(exchangeAudit.cursor/exchangeAudit.total*100)) : 0}%`,background:'#fff'}} /></div>
-    </div>}
-    {instrumentAudit.total > 0 && <div style={{position:'fixed',top:76,left:'50%',transform:'translateX(-50%)',zIndex:10000,width:'min(92vw,620px)',padding:'10px 14px',border:'1px solid rgba(255,255,255,.18)',borderRadius:12,background:'rgba(10,12,16,.88)',backdropFilter:'blur(14px)',color:'#fff',fontSize:12,pointerEvents:'none'}}>
-      <div style={{display:'flex',justifyContent:'space-between',gap:12}}><strong>{instrumentAudit.running ? 'Instrument audit running' : 'Instrument audit complete'}</strong><span>{instrumentAudit.running ? `${instrumentAudit.cursor.toLocaleString()} / ${instrumentAudit.total.toLocaleString()}` : `${instrumentAudit.total.toLocaleString()} checked`}</span></div>
-      <div style={{marginTop:6,opacity:.7}}>{instrumentAudit.pass.toLocaleString()} working · {instrumentAudit.fail.toLocaleString()} failed{instrumentAudit.error ? ` · ${instrumentAudit.error}` : ''}</div>
-      <div style={{height:3,marginTop:7,borderRadius:99,background:'rgba(255,255,255,.12)',overflow:'hidden'}}><div style={{height:'100%',width:`${instrumentAudit.total ? Math.min(100,Math.round(instrumentAudit.cursor/instrumentAudit.total*100)) : 0}%`,background:'#fff'}} /></div>
-    </div>}
 
     <div className="native-terminal-body">
       <aside className="native-symbol-sidebar symbol-sidebar"><div className="sidebar-search"><Search size={15} /><input value={search} onChange={event => setSearch(event.target.value)} placeholder="Search" /></div><div className="sidebar-meta"><span>{derivLoading ? "LOADING MARKETS" : derivError ? "MARKET ERROR" : "ALL MARKETS"}</span><b>{instruments.length}</b></div>
