@@ -1760,7 +1760,7 @@ export async function getUnifiedMarketCatalogue(fetchDeriv: () => Promise<any[]>
     ];
     const results = await Promise.allSettled(
       providers.map(([provider, promise]) =>
-        withProviderTimeout(provider, promise, provider === 'DERIV' ? 10000 : 20000)
+        withProviderTimeout(provider, promise, provider === 'DERIV' ? 10000 : provider === 'CME' ? 120000 : 20000)
       )
     );
     results.forEach((result, index) => {
