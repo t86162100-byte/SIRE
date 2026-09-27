@@ -44,8 +44,47 @@ export function createBinanceDataFeed(instrument:Instrument,onQuote?:(q:SireMark
     getBars,
     async getBarsPage({symbol,interval,before,countBack}:{symbol:string;interval:string;before:number;countBack:number}){const bars=await getBars({symbol,interval,countBack,to:before-1});return {bars:bars.filter((b:any)=>b.time<before),hasMore:bars.length>0,nextBefore:bars[0]?.time};},
     subscribeBars({symbol,interval}:{symbol:string;interval:string},onBar:(bar:any)=>void,options?:{seedFrom?:any}){
-      stopped=false;current=options?.seedFrom?{...options.seedFrom}:null;const seconds=SEC[interval]||60;
-      const run=async()=>{try{const p=await request('/api/sire/binance/quote',{symbol,marketType:String(instrument.marketType||'Spot')});const q=p.quote;const epoch=Number(q.epoch),price=Number(q.price),t=Math.floor(epoch/seconds)*seconds;if(!current||t>current.time)current={time:t,open:price,high:price,low:price,close:price,volume:Number(q.volume)||0};else if(t===current.time)current={...current,high:Math.max(current.high,price),low:Math.min(current.low,price),close:price,volume:Number(q.volume)||current.volume||0};last={...q,epoch,price};onQuote?.(last);onBar({...current});onDiagnostic?.({level:'info',code:'LIVE_PRICE_RECEIVED',message:'Binance live price received for '+symbol+'.'});}catch(e){onDiagnostic?.({level:'warning',code:'LIVE_PRICE_NOT_RECEIVED',message:'Binance live price request failed for '+symbol+'.',detail:e instanceof Error?e.message:String(e)});}if(!stopped)timer=window.setTimeout(run,1500);};void run();return()=>{stopped=true;if(timer)clearTimeout(timer);timer=undefined;};
+      stopped=false;current=options?.seedFrom?{...options.seedFrom}:null;
+      const seconds=SEC[interval]||60;
+      let socket:any=null;
+      let reconnect:any=null;
+      const emit=(epoch:number,price:number,volume=0)=>{
+        if(!Number.isFinite(epoch)||!Number.isFinite(price))return;
+        const t=Math.floor(epoch/seconds)*seconds;
+        if(!current||t>current.time)current={time:t,open:price,high:price,low:price,close:price,volume};
+        else if(t===current.time)current={...current,high:Math.max(current.high,price),low:Math.min(current.low,price),close:price,volume:volume||current.volume||0};
+        last={symbol,price,epoch};
+        onQuote?.(last);onBar({...current});
+      };
+      const useSocket=mt=>{
+        const s=symbol.toLowerCase();
+        if(mt==='Spot'||mt==='Margin')return 'wss://stream.binance.com:9443/ws/'+s+'@aggTrade';
+        if(mt==='Perpetuals'||mt==='Futures')return s.includes('_')?'wss://dstream.binance.com/ws/'+s+'@aggTrade':'wss://fstream.binance.com/ws/'+s+'@aggTrade';
+        return '';
+      };
+      const connect=()=>{
+        if(stopped)return;
+        const mt=String(instrument.marketType||'Spot');
+        const url=useSocket(mt);
+        if(!url){void poll();return;}
+        try{
+          socket=new WebSocket(url);
+          socket.onopen=()=>onDiagnostic?.({level:'info',code:'LIVE_STREAM_CONNECTED',message:'Binance WebSocket live stream connected for '+symbol+'.'});
+          socket.onmessage=(event:any)=>{
+            try{const m=JSON.parse(String(event.data));const price=Number(m?.p);const epoch=Number(m?.T??m?.E??Date.now())/1000;const volume=Number(m?.q)||0;if(Number.isFinite(price))emit(epoch,price,volume);}catch{}
+          };
+          socket.onerror=()=>onDiagnostic?.({level:'warning',code:'LIVE_STREAM_ERROR',message:'Binance WebSocket live stream error for '+symbol+'.'});
+          socket.onclose=()=>{if(!stopped){onDiagnostic?.({level:'warning',code:'LIVE_STREAM_RECONNECTING',message:'Binance WebSocket disconnected; reconnecting '+symbol+'.'});reconnect=setTimeout(connect,1000);}};
+        }catch{reconnect=setTimeout(connect,1000);}
+      };
+      const poll=async()=>{
+        if(stopped)return;
+        try{const p=await request('/api/sire/binance/quote',{symbol,marketType:String(instrument.marketType||'Spot')});const q=p.quote;emit(Number(q.epoch),Number(q.price),Number(q.volume));}
+        catch(e){onDiagnostic?.({level:'warning',code:'LIVE_PRICE_NOT_RECEIVED',message:'Binance live price request failed for '+symbol+'.',detail:e instanceof Error?e.message:String(e)});}
+        if(!stopped)timer=window.setTimeout(poll,1500);
+      };
+      connect();
+      return()=>{stopped=true;if(timer)clearTimeout(timer);if(reconnect)clearTimeout(reconnect);try{socket?.close();}catch{}socket=null;timer=undefined;};
     },
     getLiveState(){return last?{connectionStatus:'polling',subscriptionStatus:stopped?'stopped':'active',latestTick:{...last},dataTimestamp:last.epoch,dataAgeMs:Math.max(0,Date.now()-last.epoch*1000),stale:Date.now()-last.epoch*1000>10000,staleThresholdMs:10000,checkedAt:Date.now()}:{connectionStatus:'idle',subscriptionStatus:'idle',latestTick:null,dataTimestamp:null,dataAgeMs:null,stale:false,staleThresholdMs:10000,checkedAt:Date.now()};},
     close(){stopped=true;if(timer)clearTimeout(timer);timer=undefined;}
