@@ -261,6 +261,80 @@ const augmentBybitInstrumentsInBrowser = async (items: Instrument[]): Promise<In
   return additions.length ? items.concat(additions) : items;
 };
 
+const augmentMajorCryptoProvidersInBrowser = async (items: Instrument[]): Promise<Instrument[]> => {
+  const existing = new Set(items.map(item => item.id));
+  const additions: Instrument[] = [];
+  const add = (provider: MarketProvider, marketType: string, raw: any) => {
+    const symbol = String(raw?.symbol || raw?.instId || raw?.market || '').trim();
+    if (!symbol) return;
+    const status = String(raw?.status || raw?.state || raw?.tradeStatus || '').toUpperCase();
+    if (status && ['OFFLINE','SUSPENDED','BREAK','HALT'].includes(status)) return;
+    const base = String(raw?.baseCoin || raw?.baseAsset || raw?.baseCcy || raw?.base_currency || '').trim() || undefined;
+    const quote = String(raw?.quoteCoin || raw?.quoteAsset || raw?.quoteCcy || raw?.quote_currency || '').trim() || undefined;
+    const id = provider + ':' + marketType + ':' + symbol;
+    if (existing.has(id)) return;
+    existing.add(id);
+    additions.push({
+      ...(raw as any),
+      id,
+      provider,
+      providerLabel: provider === 'BITGET' ? 'Bitget' : provider === 'OKX' ? 'OKX' : 'MEXC',
+      marketType,
+      category: 'Crypto',
+      symbol,
+      displaySymbol: symbol,
+      name: base ? base + (quote ? ' / ' + quote : '') : symbol,
+      base,
+      quote,
+      exchangeOpen: 1,
+      status: status || 'online',
+      logoUrl: base ? 'https://cdn.jsdelivr.net/gh/spothq/cryptocurrency-icons@master/128/color/' + encodeURIComponent(base.toLowerCase()) + '.png' : '',
+      providerLogoUrl: provider === 'BITGET' ? 'https://cdn.simpleicons.org/bitget' : provider === 'OKX' ? 'https://cdn.simpleicons.org/okx' : 'https://cdn.simpleicons.org/mexc',
+      instrumentType: marketType,
+    } as Instrument);
+  };
+  const fetchJson = async (urls: string[]) => {
+    let last: unknown = null;
+    for (const url of urls) {
+      try {
+        const response = await fetch(url, { cache: 'no-store', headers: { Accept: 'application/json' } });
+        if (!response.ok) { last = new Error('HTTP ' + response.status); continue; }
+        return await response.json();
+      } catch (error) { last = error; }
+    }
+    throw last || new Error('All browser endpoints failed');
+  };
+
+  try {
+    const r = await fetchJson(['https://api.bitget.com/api/v2/spot/public/symbols']);
+    for (const raw of Array.isArray(r?.data) ? r.data : []) {
+      if (String(raw?.status || '').toLowerCase() !== 'online') continue;
+      add('BITGET','Spot',{...raw,symbol:raw?.symbol,baseCoin:raw?.baseCoin,quoteCoin:raw?.quoteCoin});
+    }
+    console.info('[SIRE BITGET BROWSER] Spot:', additions.filter(x=>x.provider==='BITGET').length);
+  } catch (error) { console.warn('[SIRE BITGET BROWSER] Spot unavailable:', error); }
+
+  try {
+    const r = await fetchJson(['https://www.okx.com/api/v5/public/instruments?instType=SPOT','https://app.okx.com/api/v5/public/instruments?instType=SPOT']);
+    for (const raw of Array.isArray(r?.data) ? r.data : []) {
+      if (String(raw?.state || '').toLowerCase() !== 'live') continue;
+      add('OKX','Spot',raw);
+    }
+    console.info('[SIRE OKX BROWSER] Spot:', additions.filter(x=>x.provider==='OKX').length);
+  } catch (error) { console.warn('[SIRE OKX BROWSER] Spot unavailable:', error); }
+
+  try {
+    const r = await fetchJson(['https://api.mexc.com/api/v3/exchangeInfo']);
+    for (const raw of Array.isArray(r?.symbols) ? r.symbols : []) {
+      if (String(raw?.status || '').toUpperCase() !== 'ENABLED') continue;
+      add('MEXC','Spot',raw);
+    }
+    console.info('[SIRE MEXC BROWSER] Spot:', additions.filter(x=>x.provider==='MEXC').length);
+  } catch (error) { console.warn('[SIRE MEXC BROWSER] Spot unavailable:', error); }
+
+  return additions.length ? items.concat(additions) : items;
+};
+
 const chooseInitialDerivInstrument = (items: Instrument[]) =>
   items.find(item => item.provider === 'DERIV' && item.exchangeOpen !== 0 && item.tradingSuspended !== 1) ||
   items.find(item => item.provider === 'DERIV') || items[0] || null;
@@ -384,8 +458,25 @@ export default function App() {
           bybit: next.filter(item => item.provider === 'BYBIT').length,
           bybitMarketTypes: Array.from(new Set(next.filter(item => item.provider === 'BYBIT').map(item => item.marketType)))
         });
+      }
+
+      try {
+        const currentItems = items;
+        const next = await augmentMajorCryptoProvidersInBrowser(currentItems);
+        if (cancelled) return;
+        setInstruments(current => {
+          const existing = new Set(current.map(item => item.id));
+          const additions = next.filter(item => !existing.has(item.id));
+          return additions.length ? current.concat(additions) : current;
+        });
+        console.info('[SIRE MARKET STARTUP] catalogue after major crypto browser augmentation', {
+          total: next.length,
+          bitget: next.filter(item => item.provider === 'BITGET').length,
+          okx: next.filter(item => item.provider === 'OKX').length,
+          mexc: next.filter(item => item.provider === 'MEXC').length
+        });
       } catch (error) {
-        console.warn('[SIRE MARKET STARTUP] Bybit browser augmentation skipped:', error);
+        console.warn('[SIRE MARKET STARTUP] major crypto browser augmentation skipped:', error);
       }
     }).catch(error => {
       if (cancelled || error?.message === 'SIRE startup cancelled.') return;
