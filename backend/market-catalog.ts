@@ -200,6 +200,109 @@ async function bitso(): Promise<UnifiedInstrument[]> {
   } catch (error) { console.warn('[SIRE BITSO] failed:', error); return []; }
 }
 
+async function bitfinex(): Promise<UnifiedInstrument[]> {
+  try {
+    const payload = await getJson('https://api-pub.bitfinex.com/v2/conf/pub:list:pair:exchange', 15000);
+    const rows = Array.isArray(payload) ? payload : [];
+    const out: UnifiedInstrument[] = [];
+    for (const raw of rows) {
+      const symbol = String(raw || '').trim().toUpperCase();
+      if (!symbol) continue;
+      const item = cryptoItem('BITFINEX', 'Spot', 'Crypto', { symbol, fullName: symbol });
+      if (item) out.push(item);
+    }
+    console.log('[SIRE BITFINEX] Spot: ' + out.length);
+    return out;
+  } catch (error) { console.warn('[SIRE BITFINEX] failed:', error); return []; }
+}
+
+async function bitvavo(): Promise<UnifiedInstrument[]> {
+  try {
+    const rows = await getJson('https://api.bitvavo.com/v2/markets', 15000);
+    const out: UnifiedInstrument[] = [];
+    for (const raw of Array.isArray(rows) ? rows : []) {
+      if (String(raw?.status || '').toLowerCase() !== 'trading') continue;
+      const item = cryptoItem('BITVAVO', 'Spot', 'Crypto', {
+        symbol: String(raw?.market || ''),
+        baseAsset: String(raw?.base || ''),
+        quoteAsset: String(raw?.quote || ''),
+        fullName: String(raw?.market || ''),
+        status: raw?.status || 'trading'
+      });
+      if (item) out.push(item);
+    }
+    console.log('[SIRE BITVAVO] Spot: ' + out.length);
+    return out;
+  } catch (error) { console.warn('[SIRE BITVAVO] failed:', error); return []; }
+}
+
+async function coinex(): Promise<UnifiedInstrument[]> {
+  try {
+    const payload = await getJson('https://api.coinex.com/v2/spot/market', 15000);
+    const rows = Array.isArray(payload?.data) ? payload.data : [];
+    const out: UnifiedInstrument[] = [];
+    for (const raw of rows) {
+      const item = cryptoItem('COINEX', 'Spot', 'Crypto', {
+        symbol: String(raw?.market || ''),
+        baseAsset: String(raw?.base_ccy || ''),
+        quoteAsset: String(raw?.quote_ccy || ''),
+        fullName: String(raw?.market || ''),
+        status: raw?.status || 'online'
+      });
+      if (item) out.push(item);
+    }
+    console.log('[SIRE COINEX] Spot: ' + out.length);
+    return out;
+  } catch (error) { console.warn('[SIRE COINEX] failed:', error); return []; }
+}
+
+async function lbank(): Promise<UnifiedInstrument[]> {
+  try {
+    const payload = await getJson('https://api.lbank.info/v2/currencyPairs.do', 15000);
+    const rows = Array.isArray(payload?.data) ? payload.data : [];
+    const out: UnifiedInstrument[] = [];
+    for (const raw of rows) {
+      const symbol = String(raw || '').trim().toUpperCase();
+      const parts = symbol.split('_');
+      const item = cryptoItem('LBANK', 'Spot', 'Crypto', {
+        symbol,
+        baseAsset: parts[0] || '',
+        quoteAsset: parts[1] || '',
+        fullName: symbol
+      });
+      if (item) out.push(item);
+    }
+    console.log('[SIRE LBANK] Spot: ' + out.length);
+    return out;
+  } catch (error) { console.warn('[SIRE LBANK] failed:', error); return []; }
+}
+
+async function woox(): Promise<UnifiedInstrument[]> {
+  try {
+    const payload = await getJson('https://api-pub.woox.io/v1/public/info', 15000);
+    const rows = Array.isArray(payload?.rows) ? payload.rows : [];
+    const out: UnifiedInstrument[] = [];
+    for (const raw of rows) {
+      if (raw?.is_trading === 0) continue;
+      const symbol = String(raw?.symbol || '').trim();
+      const parts = symbol.split('_');
+      const base = parts.length >= 3 ? parts[1] : '';
+      const quote = parts.length >= 3 ? parts[2] : '';
+      const marketType = String(parts[0] || 'SPOT');
+      const item = cryptoItem('WOOX', marketType, 'Crypto', {
+        symbol,
+        baseAsset: base,
+        quoteAsset: quote,
+        fullName: symbol,
+        status: raw?.is_trading ? 'online' : 'offline'
+      });
+      if (item) out.push(item);
+    }
+    console.log('[SIRE WOOX] Markets: ' + out.length);
+    return out;
+  } catch (error) { console.warn('[SIRE WOOX] failed:', error); return []; }
+}
+
 async function binance(): Promise<UnifiedInstrument[]> {
   const families: Array<[string, string[]]> = [
     ['Spot', ['https://data-api.binance.vision/api/v3/exchangeInfo','https://api.binance.com/api/v3/exchangeInfo','https://api-gcp.binance.com/api/v3/exchangeInfo','https://api1.binance.com/api/v3/exchangeInfo','https://api2.binance.com/api/v3/exchangeInfo']],
@@ -626,6 +729,11 @@ export async function getUnifiedMarketCatalogue(fetchDeriv: () => Promise<any[]>
       ['KUCOIN', kucoin()],
       ['GEMINI', gemini()],
       ['BITSO', bitso()],
+      ['BITFINEX', bitfinex()],
+      ['BITVAVO', bitvavo()],
+      ['COINEX', coinex()],
+      ['LBANK', lbank()],
+      ['WOOX', woox()],
       ['COINBASE', coinbase()],
       ['BITGET', bitget()],
       ['BYBIT', bybit()],
