@@ -1339,10 +1339,10 @@ async function bse(): Promise<UnifiedInstrument[]> {
           },
           signal: AbortSignal.timeout(9000)
         });
-        if (!response.ok) continue;
+        if (!response.ok) return;
         const data = await response.json();
         const rows = Array.isArray(data) ? data : (data?.Table || data?.data || []);
-        if (!Array.isArray(rows)) continue;
+        if (!Array.isArray(rows)) return;
         for (const row of rows) {
           const code = String(row.scripcode ?? row.Scripcode ?? row.ScripCode ?? '').trim();
           const symbol = String(row.scrip_id ?? row.Scrip_Id ?? row.Symbol ?? row.symbol ?? '').trim();
