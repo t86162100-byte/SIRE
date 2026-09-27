@@ -9,8 +9,9 @@ import './nativeTerminal.css';
 import { loadBinanceCatalogue } from './providers/binance';
 import { loadKucoinCatalogue } from './providers/kucoin';
 import { loadGateioCatalogue } from './providers/gateio';
+import { loadHyperliquidCatalogue } from './providers/hyperliquid';
 
-type MarketProvider = 'DERIV' | 'BINANCE' | 'BITGET' | 'BYBIT' | 'OKX' | 'KRAKEN' | 'COINBASE' | 'GATEIO' | 'KUCOIN' | 'GEMINI' | 'BITSO' | 'BITFINEX' | 'BITVAVO' | 'COINEX' | 'LBANK' | 'WOOX' | 'CRYPTOCOM' | 'HTX' | 'BITKUB' | 'UPBIT' | 'PIONEX' | 'POLONIEX' | 'BITHUMB' | 'MEXC' | 'PHEMEX' | 'WHITEBIT' | 'TWELVEDATA' | 'NASDAQTRADER' | 'NSE' | 'BITSTAMP' | 'OANDA' | 'TRADINGVIEW' | 'FOREXCOM' | 'INTERACTIVEBROKERS' | 'TRADESTATION' | 'WEBULL' | 'MOOMOO' | 'NINJATRADER' | 'TRADOVATE' | 'AMPFUTURES' | 'TASTYTRADE' | 'TASTYFX' | 'CRYPTOCOMEXCHANGE' | 'COINBASEADVANCED' | 'ALPACA' | 'TRADIERBROKERAGE' | 'TRADEZERO' | 'COBRATRADING' | 'CLEARSTREET' | 'INVESTRADE' | 'PUBLIC' | 'PLUS500US' | 'OPTIMUSFUTURES' | 'EDGECLEAR' | 'IRONBEAM' | 'STONEX' | 'DORMANTRADING' | 'TRADIERFUTURES';
+type MarketProvider = 'DERIV' | 'HYPERLIQUID' | 'BINANCE' | 'BITGET' | 'BYBIT' | 'OKX' | 'KRAKEN' | 'COINBASE' | 'GATEIO' | 'KUCOIN' | 'GEMINI' | 'BITSO' | 'BITFINEX' | 'BITVAVO' | 'COINEX' | 'LBANK' | 'WOOX' | 'CRYPTOCOM' | 'HTX' | 'BITKUB' | 'UPBIT' | 'PIONEX' | 'POLONIEX' | 'BITHUMB' | 'MEXC' | 'PHEMEX' | 'WHITEBIT' | 'TWELVEDATA' | 'NASDAQTRADER' | 'NSE' | 'BITSTAMP' | 'OANDA' | 'TRADINGVIEW' | 'FOREXCOM' | 'INTERACTIVEBROKERS' | 'TRADESTATION' | 'WEBULL' | 'MOOMOO' | 'NINJATRADER' | 'TRADOVATE' | 'AMPFUTURES' | 'TASTYTRADE' | 'TASTYFX' | 'CRYPTOCOMEXCHANGE' | 'COINBASEADVANCED' | 'ALPACA' | 'TRADIERBROKERAGE' | 'TRADEZERO' | 'COBRATRADING' | 'CLEARSTREET' | 'INVESTRADE' | 'PUBLIC' | 'PLUS500US' | 'OPTIMUSFUTURES' | 'EDGECLEAR' | 'IRONBEAM' | 'STONEX' | 'DORMANTRADING' | 'TRADIERFUTURES';
 type Instrument = DerivInstrument & {
   id: string;
   provider: MarketProvider;
@@ -358,6 +359,22 @@ export default function App() {
       }
 
       try {
+        const hyperliquidItems = await loadHyperliquidCatalogue();
+        if (cancelled) return;
+        setInstruments(current => {
+          const existing = new Set(current.map(item => item.id));
+          const additions = hyperliquidItems.filter(item => !existing.has(item.id));
+          return additions.length ? current.concat(additions) : current;
+        });
+        console.info('[SIRE MARKET STARTUP] Hyperliquid catalogue loaded', {
+          total: hyperliquidItems.length,
+          marketTypes: Array.from(new Set(hyperliquidItems.map(item => item.marketType))),
+        });
+      } catch (error) {
+        console.warn('[SIRE MARKET STARTUP] Hyperliquid catalogue unavailable:', error);
+      }
+
+      try {
         const currentItems = items;
         const next = await augmentBybitInstrumentsInBrowser(currentItems);
         if (cancelled) return;
@@ -556,7 +573,7 @@ export default function App() {
     <div className="native-terminal-body">
       <aside className="native-symbol-sidebar symbol-sidebar"><div className="sidebar-search"><Search size={15} /><input value={search} onChange={event => setSearch(event.target.value)} placeholder="Search" /></div><div className="sidebar-meta"><span>{derivLoading ? "LOADING MARKETS" : derivError ? "MARKET ERROR" : "ALL MARKETS"}</span><b>{instruments.length}</b></div>
         <div className="sire-market-providers">
-          {(['ALL','DERIV','BINANCE','BITGET','BYBIT','OKX','KRAKEN','COINBASE','GATEIO','KUCOIN','GEMINI','BITSO','BITFINEX','BITVAVO','COINEX','LBANK','WOOX','CRYPTOCOM','HTX','BITKUB','UPBIT','PIONEX','POLONIEX','BITHUMB','MEXC','PHEMEX','WHITEBIT','TWELVEDATA','NASDAQTRADER','XETR','XFRA','EUREX','ASX','TWSE','PSX','IDX','HKEX','BSE','TSE','NSE','BITSTAMP','OANDA','FOREXCOM','INTERACTIVEBROKERS','TRADESTATION','WEBULL','MOOMOO','NINJATRADER','TRADOVATE','AMPFUTURES','TASTYTRADE','TASTYFX','CRYPTOCOMEXCHANGE','COINBASEADVANCED','ALPACA','TRADIERBROKERAGE','TRADEZERO','COBRATRADING','CLEARSTREET','INVESTRADE','PUBLIC','PLUS500US','OPTIMUSFUTURES','EDGECLEAR','IRONBEAM','STONEX','DORMANTRADING','TRADIERFUTURES','TRADINGVIEW'] as const).map(provider => (
+          {(['ALL','DERIV','HYPERLIQUID','BINANCE','BITGET','BYBIT','OKX','KRAKEN','COINBASE','GATEIO','KUCOIN','GEMINI','BITSO','BITFINEX','BITVAVO','COINEX','LBANK','WOOX','CRYPTOCOM','HTX','BITKUB','UPBIT','PIONEX','POLONIEX','BITHUMB','MEXC','PHEMEX','WHITEBIT','TWELVEDATA','NASDAQTRADER','XETR','XFRA','EUREX','ASX','TWSE','PSX','IDX','HKEX','BSE','TSE','NSE','BITSTAMP','OANDA','FOREXCOM','INTERACTIVEBROKERS','TRADESTATION','WEBULL','MOOMOO','NINJATRADER','TRADOVATE','AMPFUTURES','TASTYTRADE','TASTYFX','CRYPTOCOMEXCHANGE','COINBASEADVANCED','ALPACA','TRADIERBROKERAGE','TRADEZERO','COBRATRADING','CLEARSTREET','INVESTRADE','PUBLIC','PLUS500US','OPTIMUSFUTURES','EDGECLEAR','IRONBEAM','STONEX','DORMANTRADING','TRADIERFUTURES','TRADINGVIEW'] as const).map(provider => (
             <button key={provider} type="button" className={providerFilter === provider ? 'active' : ''} onClick={() => setProviderFilter(provider)}>{provider === 'ALL' ? 'All' : provider[0] + provider.slice(1).toLowerCase()}</button>
           ))}
         </div><div className="sire-market-providers sire-market-categories">
