@@ -477,6 +477,7 @@ export default function App() {
     return () => {
       cancelled = true;
       if (retryTimer !== null) window.clearTimeout(retryTimer);
+      window.clearInterval(globalCryptoRefresh);
     };
   }, []);
 
