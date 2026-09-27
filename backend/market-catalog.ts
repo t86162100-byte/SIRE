@@ -799,27 +799,35 @@ async function twelveData(): Promise<UnifiedInstrument[]> {
 
   const sources: Array<{ endpoint: string; category: string; marketType: string; rows: (payload: any) => any[] }> = [
     { endpoint: '/stocks', category: 'Stocks', marketType: 'Equities', rows: p => Array.isArray(p?.data) ? p.data : [] },
-    { endpoint: '/etfs', category: 'Funds', marketType: 'ETF', rows: p => Array.isArray(p?.data) ? p.data : Array.isArray(p?.result?.list) ? p.result.list : [] },
-    { endpoint: '/funds', category: 'Funds', marketType: 'Funds', rows: p => Array.isArray(p?.data) ? p.data : Array.isArray(p?.result?.list) ? p.result.list : [] },
-    { endpoint: '/mutual_funds/list', category: 'Funds', marketType: 'Mutual Funds', rows: p => Array.isArray(p?.data) ? p.data : Array.isArray(p?.result?.list) ? p.result.list : [] },
-    { endpoint: '/money_market_funds/list', category: 'Funds', marketType: 'Money Market Funds', rows: p => Array.isArray(p?.data) ? p.data : Array.isArray(p?.result?.list) ? p.result.list : [] },
+    { endpoint: '/etfs', category: 'Funds', marketType: 'ETF', rows: p => Array.isArray(p?.data) ? p.data : [] },
+    { endpoint: '/funds', category: 'Funds', marketType: 'Funds', rows: p => Array.isArray(p?.data) ? p.data : [] },
+    { endpoint: '/mutual_funds/list', category: 'Funds', marketType: 'Mutual Funds', rows: p => Array.isArray(p?.data) ? p.data : [] },
+    { endpoint: '/money_market_funds/list', category: 'Funds', marketType: 'Money Market Funds', rows: p => Array.isArray(p?.data) ? p.data : [] },
     { endpoint: '/forex_pairs', category: 'Forex', marketType: 'Spot FX', rows: p => Array.isArray(p?.data) ? p.data : [] },
     { endpoint: '/commodities', category: 'Commodities', marketType: 'Spot Commodities', rows: p => Array.isArray(p?.data) ? p.data : [] },
-    { endpoint: '/indices', category: 'Indices', marketType: 'Indices', rows: p => Array.isArray(p?.data) ? p.data : Array.isArray(p?.result?.list) ? p.result.list : [] },
-    { endpoint: '/bonds', category: 'Bonds', marketType: 'Bonds', rows: p => Array.isArray(p?.data) ? p.data : Array.isArray(p?.result?.list) ? p.result.list : [] },
+    { endpoint: '/indices', category: 'Indices', marketType: 'Indices', rows: p => Array.isArray(p?.data) ? p.data : [] },
+    { endpoint: '/bonds', category: 'Bonds', marketType: 'Bonds', rows: p => Array.isArray(p?.data) ? p.data : [] },
     { endpoint: '/cryptocurrencies', category: 'Crypto', marketType: 'Aggregated Crypto', rows: p => Array.isArray(p?.data) ? p.data : [] },
   ];
 
   const out: UnifiedInstrument[] = [];
   for (const source of sources) {
     try {
-      const response = await getJsonAny([
-        'https://api.twelvedata.com' + source.endpoint + '?apikey=' + encodeURIComponent(apiKey)
-      ], 15000);
-      if (String(response?.status || '').toLowerCase() === 'error') {
-        throw new Error(String(response?.message || 'Twelve Data API error'));
+      const allRows: any[] = [];
+      // Twelve Data reference lists are paginated. Walk every available page
+      // instead of silently taking the first page and calling that "all".
+      for (let page = 1; page <= 200; page++) {
+        const response = await getJsonAny([
+          'https://api.twelvedata.com' + source.endpoint + '?apikey=' + encodeURIComponent(apiKey) + '&page=' + page
+        ], 15000);
+        if (String(response?.status || '').toLowerCase() === 'error') {
+          throw new Error(String(response?.message || 'Twelve Data API error'));
+        }
+        const pageRows = source.rows(response);
+        allRows.push(...pageRows);
+        if (pageRows.length === 0 || pageRows.length < 5000) break;
       }
-      for (const raw of source.rows(response)) {
+      for (const raw of allRows) {
         const symbol = String(raw?.symbol || raw?.ticker || '').trim();
         if (!symbol) continue;
         const base = String(raw?.currency_base || raw?.base_currency || raw?.base || raw?.symbol || '').trim() || undefined;
@@ -841,7 +849,7 @@ async function twelveData(): Promise<UnifiedInstrument[]> {
         item.providerLogoUrl = providerLogo('TWELVEDATA');
         out.push(item);
       }
-      console.log('[SIRE TWELVEDATA] ' + source.endpoint + ': ' + source.rows(response).length);
+      console.log('[SIRE TWELVEDATA] ' + source.endpoint + ': ' + allRows.length);
     } catch (error) {
       console.warn('[SIRE TWELVEDATA] ' + source.endpoint + ' failed:', error);
     }
