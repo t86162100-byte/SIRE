@@ -4,19 +4,30 @@ import { Search } from 'lucide-react';
 import ResearchLab from './ResearchLab';
 import FinancialChart from './FinancialChart';
 import { normalizeDerivInstrument, sortDerivInstruments, type DerivInstrument } from './derivMarketData';
+import { fetchCoinbaseInstruments, coinbaseCategoryLabel, type CoinbaseInstrument } from './coinbaseMarketData';
 import { SireErrorScreen } from './SireErrorBoundary';
 import './nativeTerminal.css';
 
-type Instrument = DerivInstrument;
+type Instrument = DerivInstrument | CoinbaseInstrument;
 
-const chooseInitialDerivInstrument = (items: DerivInstrument[]) =>
-  items.find(item => item.exchangeOpen !== 0 && item.tradingSuspended !== 1) || items[0] || null;
+const chooseInitialDerivInstrument = (items: Instrument[]) => {
+  const deriv = items.filter(item => item.provider === 'deriv');
+  return deriv.find(item => item.exchangeOpen !== 0 && item.tradingSuspended !== 1) || deriv[0] || null;
+};
+
+const sortUnifiedInstruments = (items: Instrument[]) => [...items].sort((a, b) =>
+  (a.provider === b.provider ? 0 : a.provider === 'deriv' ? -1 : 1) ||
+  a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }) ||
+  a.symbol.localeCompare(b.symbol),
+);
 
 export default function App() {
   const [instruments, setInstruments] = useState<Instrument[]>([]);
   const [selected, setSelected] = useState<Instrument | null>(null);
   const [derivLoading, setDerivLoading] = useState(true);
   const [derivError, setDerivError] = useState('');
+  const [coinbaseLoading, setCoinbaseLoading] = useState(true);
+  const [coinbaseError, setCoinbaseError] = useState('');
   const [search, setSearch] = useState('');
   const [instrumentSearchOpen, setInstrumentSearchOpen] = useState(false);
   const [instrumentSearchMode, setInstrumentSearchMode] = useState<'main' | 'multi'>('main');
@@ -96,8 +107,11 @@ export default function App() {
       if (!initial) throw new Error('Deriv returned an empty active-symbol catalogue.');
       setDerivError('');
       setDerivLoading(false);
-      setInstruments(next);
-      setSelected(current => current && next.some(item => item.symbol === current.symbol) ? current : initial);
+      setInstruments(current => sortUnifiedInstruments([
+        ...next,
+        ...current.filter(item => item.provider === 'coinbase'),
+      ]));
+      setSelected(current => current && current.provider === 'deriv' && next.some(item => item.symbol === current.symbol) ? current : initial);
       setChartSymbols(current => current.length ? current : [initial.symbol]);
     }).catch(error => {
       if (cancelled || error?.message === 'SIRE startup cancelled.') return;
@@ -113,6 +127,28 @@ export default function App() {
       cancelled = true;
       if (retryTimer !== null) window.clearTimeout(retryTimer);
     };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    fetchCoinbaseInstruments().then(items => {
+      if (cancelled) return;
+      setCoinbaseError('');
+      setCoinbaseLoading(false);
+      setInstruments(current => sortUnifiedInstruments([
+        ...current.filter(item => item.provider === 'deriv'),
+        ...items,
+      ]));
+    }).catch(error => {
+      if (cancelled) return;
+      const message = error instanceof Error ? error.message : 'Coinbase instrument catalogue failed to load.';
+      console.error('[COINBASE MARKET DATA] public product discovery failed', error);
+      setCoinbaseLoading(false);
+      setCoinbaseError(message);
+    });
+
+    return () => { cancelled = true; };
   }, []);
 
   useEffect(() => {
@@ -185,6 +221,7 @@ export default function App() {
   const selectInstrument = (item: Instrument) => {
     setSelected(item);
     setSearch('');
+    if (item.provider !== 'deriv') return;
     setChartSymbols(current => current.length
       ? current.map((value, index) => index === 0 ? item.symbol : value)
       : [item.symbol]);
@@ -196,17 +233,17 @@ export default function App() {
     setInstrumentSearchOpen(true);
   };
 
-  if (derivLoading) {
+  if (derivLoading || coinbaseLoading) {
     return <SireErrorScreen
-      source="SIRE startup"
-      message="Waiting for Deriv market data and the active instrument catalogue. The interface is blocked until startup data is available."
+      source="SIRE market catalogue startup"
+      message="Loading the complete Deriv and Coinbase instrument catalogues. SIRE will not present a partial catalogue."
     />;
   }
 
-  if (derivError) {
+  if (derivError || coinbaseError) {
     return <SireErrorScreen
-      source="Deriv market-data startup"
-      message={derivError}
+      source={derivError ? 'Deriv market-data startup' : 'Coinbase market-data startup'}
+      message={derivError || coinbaseError}
     />;
   }
 
@@ -248,13 +285,13 @@ export default function App() {
   };
   return <main className={`native-terminal-shell${researchLabOpen ? ' sire-research-open' : ''}`}>
     <div className="native-terminal-body">
-      <aside className="native-symbol-sidebar"><div className="sidebar-search"><Search size={15} /><input value={search} onChange={event => setSearch(event.target.value)} placeholder="Search" /></div><div className="sidebar-meta"><span>{derivLoading ? "LOADING DERIV" : derivError ? "DERIV ERROR" : "INSTRUMENTS"}</span><b>{instruments.length}</b></div>{derivError && <div className="sire-deriv-error">{derivError}</div>}<div className="native-symbol-list">{filtered.map(item => <button key={item.symbol} className={selected?.symbol === item.symbol ? 'active' : ''} onClick={() => selectInstrument(item)}><span><b>{item.name}</b><small>{item.symbol}</small></span><i>{item.exchangeOpen === 0 ? 'OFF' : 'LIVE'}</i></button>)}</div></aside>
+      <aside className="native-symbol-sidebar"><div className="sidebar-search"><Search size={15} /><input value={search} onChange={event => setSearch(event.target.value)} placeholder="Search" /></div><div className="sidebar-meta"><span>INSTRUMENTS</span><b>{instruments.length}</b></div><div className="native-symbol-list">{filtered.map(item => <button key={item.provider + ':' + item.symbol} className={selected?.provider === item.provider && selected?.symbol === item.symbol ? 'active' : ''} onClick={() => selectInstrument(item)}><span><b>{item.name}</b><small>{item.symbol} · {item.provider === 'coinbase' ? coinbaseCategoryLabel(item.category) : item.category}</small></span><i>{item.provider === 'coinbase' ? 'Coinbase' : 'Deriv'}</i></button>)}</div></aside>
       <section className="native-chart-panel">
         <div className={`sire-chart-grid sire-chart-grid--${chartLayout}${chartLayout === 2 ? ` sire-chart-grid--${multiChartPosition}` : ''}`} onContextMenu={event => event.preventDefault()}>
           {chartItems.map((chartSymbol, index) => <div className={`sire-chart-cell${activeChartIndex === index ? ' sire-chart-cell--active' : ''}`} key={index} onPointerDown={() => setActiveChartIndex(index)}>{chartSymbol && <FinancialChart
             symbol={chartSymbol}
             isActive={activeChartIndex === index}
-            instruments={instruments.map(item => ({ symbol: item.symbol, name: item.name, pipSize: item.pipSize }))}
+            instruments={instruments.filter(item => item.provider === 'deriv').map(item => ({ symbol: item.symbol, name: item.name, pipSize: item.pipSize }))}
             onInstrumentTap={() => openInstrumentPicker('main')}
             onSelectInstrument={item => {
               setChartSymbols(current => current.map((value, slot) => slot === index ? item.symbol : value));
@@ -291,8 +328,8 @@ export default function App() {
               <input autoFocus value={search} onChange={event => setSearch(event.target.value)} placeholder="Search instruments" />
             </div>
             <div className="sire-instrument-search-list">
-              {filtered.map(item => <button key={item.symbol} type="button" onClick={() => { if (instrumentSearchMode === 'multi') { setMultiChartInstrument(item.symbol); setSearch(''); setInstrumentSearchOpen(false); } else { selectInstrument(item); setInstrumentSearchOpen(false); } }}>
-                <span><b>{item.name}</b><small>{item.symbol}</small></span><i>{item.exchangeOpen === 0 ? 'OFF' : 'LIVE'}</i>
+              {filtered.map(item => <button key={item.provider + ':' + item.symbol} type="button" onClick={() => { if (instrumentSearchMode === 'multi') { setMultiChartInstrument(item.symbol); setSearch(''); setInstrumentSearchOpen(false); } else { selectInstrument(item); setInstrumentSearchOpen(false); } }}>
+                <span><b>{item.name}</b><small>{item.symbol} · {item.provider === 'coinbase' ? coinbaseCategoryLabel(item.category) : item.category}</small></span><i>{item.provider === 'coinbase' ? 'Coinbase' : 'Deriv'}</i>
               </button>)}
             </div>
           </div>
