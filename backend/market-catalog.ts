@@ -1,4 +1,4 @@
-export type MarketProvider = 'DERIV' | 'BINANCE' | 'BITGET' | 'BYBIT' | 'OKX' | 'KRAKEN' | 'TWELVEDATA' | 'FINNHUB';
+export type MarketProvider = 'DERIV' | 'BINANCE' | 'BITGET' | 'BYBIT' | 'OKX' | 'KRAKEN' | 'TWELVEDATA' | 'FINNHUB' | 'OANDA';
 
 export interface UnifiedInstrument {
   id: string;
@@ -199,6 +199,68 @@ async function kraken(): Promise<UnifiedInstrument[]> {
   return out;
 }
 
+async function getJsonAuth(url: string, headers: Record<string, string>, timeoutMs = 12000) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const response = await fetch(url, { signal: controller.signal, headers: { Accept: 'application/json', ...headers } });
+    if (!response.ok) throw new Error('HTTP ' + response.status);
+    return await response.json();
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function oanda(): Promise<UnifiedInstrument[]> {
+  const token = String(process.env.OANDA_API_TOKEN || '').trim();
+  const accountId = String(process.env.OANDA_ACCOUNT_ID || '').trim();
+  if (!token || !accountId) {
+    console.warn('[SIRE OANDA] OANDA_API_TOKEN/OANDA_ACCOUNT_ID not configured; skipping optional broker catalogue.');
+    return [];
+  }
+  const hosts = [
+    'https://api-fxtrade.oanda.com',
+    'https://api-fxpractice.oanda.com'
+  ];
+  let response: any;
+  let last: unknown;
+  for (const host of hosts) {
+    try {
+      response = await getJsonAuth(
+        host + '/v3/accounts/' + encodeURIComponent(accountId) + '/instruments',
+        { Authorization: 'Bearer ' + token },
+        15000
+      );
+      break;
+    } catch (error) { last = error; }
+  }
+  if (!response) throw last || new Error('OANDA instruments request failed');
+  const rows = Array.isArray(response?.instruments) ? response.instruments : [];
+  const out: UnifiedInstrument[] = [];
+  for (const raw of rows) {
+    const symbol = String(raw?.name || '').trim();
+    if (!symbol) continue;
+    const type = String(raw?.type || '').toUpperCase();
+    const category = type === 'CURRENCY' ? 'Forex' : type === 'METAL' ? 'Metals' : 'CFD';
+    const marketType = type === 'CURRENCY' ? 'FX' : type === 'METAL' ? 'Metals' : 'CFD';
+    const item = cryptoItem('OANDA', marketType, category, {
+      symbol,
+      fullName: String(raw?.displayName || symbol),
+      status: 'tradeable'
+    });
+    if (item) {
+      item.name = String(raw?.displayName || symbol);
+      item.category = category;
+      item.marketType = marketType;
+      item.logoUrl = providerLogo('OANDA');
+      item.providerLogoUrl = providerLogo('OANDA');
+      out.push(item);
+    }
+  }
+  console.log('[SIRE OANDA] Total catalogue: ' + out.length);
+  return out;
+}
+
 async function twelveData(): Promise<UnifiedInstrument[]> {
   const apiKey = String(process.env.TWELVE_DATA_API_KEY || '').trim();
   if (!apiKey) {
@@ -355,6 +417,7 @@ export async function getUnifiedMarketCatalogue(fetchDeriv: () => Promise<any[]>
       ['KRAKEN', kraken()],
       ['TWELVEDATA', twelveData()],
       ['FINNHUB', finnhub()],
+      ['OANDA', oanda()],
     ];
     const results = await Promise.allSettled(providers.map(([, promise]) => promise));
     results.forEach((result, index) => {
