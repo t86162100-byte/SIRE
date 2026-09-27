@@ -18,8 +18,6 @@ import { getUnifiedMarketCatalogue, getCmeCatalogueForDiagnostics, getNyseAmeric
 import { loadGlobalCryptoUniverse } from './backend/ccxt-universe-loader.ts';
 import { ccxtMarketHistory, ccxtMarketQuote, ccxtMarketCapabilities } from './backend/ccxt-market-data.ts';
 import { getCcxtLiveQuote, getCcxtLiveStatus, getCcxtExchangeRuntime } from './backend/ccxt-live-market-data.ts';
-import { startCcxtExchangeAudit, getCcxtExchangeAuditStatus, getCcxtExchangeAuditResults } from './backend/ccxt-exchange-audit.ts';
-import { startInstrumentAudit, getInstrumentAuditStatus, getInstrumentAuditResults } from './backend/instrument-auditor.ts';
 
 const PORT = Number(process.env.PORT || 10000);
 const HOST = '0.0.0.0';
@@ -456,14 +454,6 @@ function resolveChartControl(commandId, result) {
   return true;
 }
 
-async function instrumentAuditForGpt(input) {
-  const action=String(input?.action||'status');
-  if(action==='start') return JSON.stringify({ok:true,...startInstrumentAudit()});
-  if(action==='status') return JSON.stringify({ok:true,...getInstrumentAuditStatus()});
-  if(action==='results') return JSON.stringify({ok:true,results:getInstrumentAuditResults({failedOnly:Boolean(input?.failedOnly),exchange:input?.exchange?String(input.exchange):undefined})});
-  throw new Error('Instrument audit action must be start, status, or results.');
-}
-
 async function handleDirectGptRequest(parsed, onEvent) {
   const query = String(parsed.query || '').trim();
   if (!query) throw new Error('query is required');
@@ -476,7 +466,6 @@ async function handleDirectGptRequest(parsed, onEvent) {
       githubRequest: githubRequestForGpt,
       renderRequest: renderRequestForGpt,
       marketDataRequest: marketDataRequestForGpt,
-      instrumentAudit: instrumentAuditForGpt,
       chartControl: input => requestChartControlForGpt(input, onEvent),
       checkIntegrations: async () => {
         const result = {
@@ -785,19 +774,6 @@ const server = http.createServer(async (req,res) => {
       try { const u=new URL(req.url||'/',`http://${req.headers.host||'localhost'}`); const symbol=String(u.searchParams.get('symbol')||'').trim(); if(!symbol) throw new Error('symbol is required'); const quote=await fxcmQuote(symbol); return res.writeHead(200,{'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify({ok:true,quote})); }
       catch(e){ return res.writeHead(502,{'Access-Control-Allow-Origin':'*','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify({ok:false,error:e instanceof Error?e.message:String(e)})); }
     }
-    if (req.method === 'POST' && pathname === '/api/sire/instrument-audit/start') {
-      const result=startInstrumentAudit();
-      return res.writeHead(202,{'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify({ok:true,audit:result}));
-    }
-    if (req.method === 'GET' && pathname === '/api/sire/instrument-audit/status') {
-      return res.writeHead(200,{'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify({ok:true,audit:getInstrumentAuditStatus()}));
-    }
-    if (req.method === 'GET' && pathname === '/api/sire/instrument-audit/results') {
-      const u=new URL(req.url||'/',`http://${req.headers.host||'localhost'}`);
-      const failedOnly=u.searchParams.get('failedOnly')==='true';
-      const exchange=u.searchParams.get('exchange')||undefined;
-      return res.writeHead(200,{'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify({ok:true,count:getInstrumentAuditResults({failedOnly,exchange}).length,rows:getInstrumentAuditResults({failedOnly,exchange})}));
-    }
     if (req.method === 'GET' && pathname === '/api/sire/ccxt/capabilities') {
       try {
         const u=new URL(req.url||'/',`http://${req.headers.host||'localhost'}`);
@@ -839,18 +815,6 @@ const server = http.createServer(async (req,res) => {
     if (req.method === 'GET' && pathname === '/api/sire/ccxt/live-status') {
       const u=new URL(req.url||'/',`http://${req.headers.host||'localhost'}`);
       return res.writeHead(200,{'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify({ok:true,...getCcxtLiveStatus(u.searchParams.get('exchange')||undefined,u.searchParams.get('symbol')||undefined)}));
-    }
-    if (req.method === 'POST' && pathname === '/api/sire/ccxt/exchange-audit/start') {
-      return res.writeHead(200,{'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify({ok:true,audit:startCcxtExchangeAudit()}));
-    }
-    if (req.method === 'GET' && pathname === '/api/sire/ccxt/exchange-audit/status') {
-      return res.writeHead(200,{'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify({ok:true,audit:getCcxtExchangeAuditStatus()}));
-    }
-    if (req.method === 'GET' && pathname === '/api/sire/ccxt/exchange-audit/results') {
-      const u=new URL(req.url||'/',`http://${req.headers.host||'localhost'}`);
-      const failedOnly=u.searchParams.get('failedOnly')==='true';
-      const rows=getCcxtExchangeAuditResults(failedOnly);
-      return res.writeHead(200,{'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify({ok:true,count:rows.length,rows}));
     }
     if (req.method === 'GET' && pathname === '/api/sire/market-data/history') {
       try {
