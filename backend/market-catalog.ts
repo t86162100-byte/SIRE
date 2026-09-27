@@ -1248,3 +1248,6 @@ export async function getUnifiedMarketCatalogue(fetchDeriv: () => Promise<any[]>
     console.log('[SIRE MARKET CATALOG] provider counts:', JSON.stringify(counts));
     cached = { at: Date.now(), instruments: unique };
     return unique;
+  })().finally(() => { loading = null; });
+  return loading;
+}
