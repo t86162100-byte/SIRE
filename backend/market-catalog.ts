@@ -303,6 +303,52 @@ async function woox(): Promise<UnifiedInstrument[]> {
   } catch (error) { console.warn('[SIRE WOOX] failed:', error); return []; }
 }
 
+async function cryptocom(): Promise<UnifiedInstrument[]> {
+  try {
+    const response = await fetch('https://api.crypto.com/exchange/v1/public/get-instruments', {
+      method: 'GET', headers: { Accept: 'application/json' }
+    });
+    if (!response.ok) throw new Error('HTTP ' + response.status);
+    const payload = await response.json();
+    const rows = Array.isArray(payload?.result?.data) ? payload.result.data : [];
+    const out: UnifiedInstrument[] = [];
+    for (const raw of rows) {
+      if (raw?.tradable === false) continue;
+      const item = cryptoItem('CRYPTOCOM', String(raw?.inst_type || 'Market'), 'Crypto', {
+        symbol: String(raw?.symbol || ''),
+        baseAsset: String(raw?.base_ccy || ''),
+        quoteAsset: String(raw?.quote_ccy || ''),
+        fullName: String(raw?.display_name || raw?.symbol || ''),
+        status: raw?.tradable === false ? 'offline' : 'online'
+      });
+      if (item) out.push(item);
+    }
+    console.log('[SIRE CRYPTOCOM] Instruments: ' + out.length);
+    return out;
+  } catch (error) { console.warn('[SIRE CRYPTOCOM] failed:', error); return []; }
+}
+
+async function htx(): Promise<UnifiedInstrument[]> {
+  try {
+    const payload = await getJson('https://api.huobi.pro/v1/common/symbols', 15000);
+    const rows = Array.isArray(payload?.data) ? payload.data : [];
+    const out: UnifiedInstrument[] = [];
+    for (const raw of rows) {
+      if (String(raw?.state || '').toLowerCase() !== 'online') continue;
+      const item = cryptoItem('HTX', 'Spot', 'Crypto', {
+        symbol: String(raw?.symbol || ''),
+        baseAsset: String(raw?.['base-currency'] || ''),
+        quoteAsset: String(raw?.['quote-currency'] || ''),
+        fullName: String(raw?.symbol || ''),
+        status: raw?.state || 'online'
+      });
+      if (item) out.push(item);
+    }
+    console.log('[SIRE HTX] Spot: ' + out.length);
+    return out;
+  } catch (error) { console.warn('[SIRE HTX] failed:', error); return []; }
+}
+
 async function binance(): Promise<UnifiedInstrument[]> {
   const families: Array<[string, string[]]> = [
     ['Spot', ['https://data-api.binance.vision/api/v3/exchangeInfo','https://api.binance.com/api/v3/exchangeInfo','https://api-gcp.binance.com/api/v3/exchangeInfo','https://api1.binance.com/api/v3/exchangeInfo','https://api2.binance.com/api/v3/exchangeInfo']],
@@ -734,6 +780,8 @@ export async function getUnifiedMarketCatalogue(fetchDeriv: () => Promise<any[]>
       ['COINEX', coinex()],
       ['LBANK', lbank()],
       ['WOOX', woox()],
+      ['CRYPTOCOM', cryptocom()],
+      ['HTX', htx()],
       ['COINBASE', coinbase()],
       ['BITGET', bitget()],
       ['BYBIT', bybit()],
