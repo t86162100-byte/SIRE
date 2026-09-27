@@ -1,4 +1,4 @@
-export type MarketProvider = 'DERIV' | 'BINANCE' | 'BITGET' | 'BYBIT' | 'OKX' | 'KRAKEN' | 'COINBASE' | 'GATEIO' | 'KUCOIN' | 'GEMINI' | 'BITSO' | 'BITFINEX' | 'BITVAVO' | 'COINEX' | 'LBANK' | 'WOOX' | 'CRYPTOCOM' | 'HTX' | 'BITKUB' | 'UPBIT' | 'PIONEX' | 'POLONIEX' | 'BITHUMB' | 'MEXC' | 'PHEMEX' | 'WHITEBIT' | 'TWELVEDATA' | 'NASDAQTRADER' | 'XETR' | 'NSE' | 'BITSTAMP' | 'OANDA' | 'TRADINGVIEW' | 'FOREXCOM' | 'INTERACTIVEBROKERS' | 'TRADESTATION' | 'WEBULL' | 'MOOMOO' | 'NINJATRADER' | 'TRADOVATE' | 'AMPFUTURES' | 'TASTYTRADE' | 'TASTYFX' | 'CRYPTOCOMEXCHANGE' | 'COINBASEADVANCED' | 'ALPACA' | 'TRADIERBROKERAGE' | 'TRADEZERO' | 'COBRATRADING' | 'CLEARSTREET' | 'INVESTRADE' | 'PUBLIC' | 'PLUS500US' | 'OPTIMUSFUTURES' | 'EDGECLEAR' | 'IRONBEAM' | 'STONEX' | 'DORMANTRADING' | 'TRADIERFUTURES';
+export type MarketProvider = 'DERIV' | 'BINANCE' | 'BITGET' | 'BYBIT' | 'OKX' | 'KRAKEN' | 'COINBASE' | 'GATEIO' | 'KUCOIN' | 'GEMINI' | 'BITSO' | 'BITFINEX' | 'BITVAVO' | 'COINEX' | 'LBANK' | 'WOOX' | 'CRYPTOCOM' | 'HTX' | 'BITKUB' | 'UPBIT' | 'PIONEX' | 'POLONIEX' | 'BITHUMB' | 'MEXC' | 'PHEMEX' | 'WHITEBIT' | 'TWELVEDATA' | 'NASDAQTRADER' | 'XETR' | 'HKEX' | 'NSE' | 'BITSTAMP' | 'OANDA' | 'TRADINGVIEW' | 'FOREXCOM' | 'INTERACTIVEBROKERS' | 'TRADESTATION' | 'WEBULL' | 'MOOMOO' | 'NINJATRADER' | 'TRADOVATE' | 'AMPFUTURES' | 'TASTYTRADE' | 'TASTYFX' | 'CRYPTOCOMEXCHANGE' | 'COINBASEADVANCED' | 'ALPACA' | 'TRADIERBROKERAGE' | 'TRADEZERO' | 'COBRATRADING' | 'CLEARSTREET' | 'INVESTRADE' | 'PUBLIC' | 'PLUS500US' | 'OPTIMUSFUTURES' | 'EDGECLEAR' | 'IRONBEAM' | 'STONEX' | 'DORMANTRADING' | 'TRADIERFUTURES';
 
 export interface UnifiedInstrument {
   id: string;
@@ -1271,6 +1271,51 @@ async function xetra(): Promise<UnifiedInstrument[]> {
   }
 }
 
+async function hkex(): Promise<UnifiedInstrument[]> {
+  const url = 'https://www.hkex.com.hk/eng/services/trading/securities/securitieslists/ListOfSecurities.xlsx';
+  try {
+    const response = await fetch(url, { headers: { 'User-Agent': 'SIRE-market-catalog/1.0' }, signal: AbortSignal.timeout(15000) });
+    if (!response.ok) throw new Error('HTTP ' + response.status);
+    const buffer = Buffer.from(await response.arrayBuffer());
+    const XLSX = await import('xlsx');
+    const workbook = XLSX.read(buffer, { type: 'buffer' });
+    const sheet = workbook.Sheets[workbook.SheetNames[0]];
+    const rows = XLSX.utils.sheet_to_json<any[]>(sheet, { header: 1, defval: '' });
+    const headerIndex = rows.findIndex((row: any[]) => row.some(v => String(v).trim() === 'Stock Code'));
+    if (headerIndex < 0) throw new Error('HKEX header row not found');
+    const headers = rows[headerIndex].map(v => String(v).trim());
+    const idx = (names: string[]) => names.map(n => headers.findIndex(h => h.toLowerCase() === n.toLowerCase())).find(i => i >= 0) ?? -1;
+    const codeI = idx(['Stock Code','Stock Code (5-digit)']);
+    const nameI = idx(['English Name','Name']);
+    const isinI = idx(['ISIN']);
+    const typeI = idx(['Category','Security Type','Type']);
+    const currencyI = idx(['Trading Currency','Currency']);
+    const out: UnifiedInstrument[] = [];
+    const seen = new Set<string>();
+    for (const row of rows.slice(headerIndex + 1)) {
+      const symbol = String(row[codeI] ?? '').trim().replace(/^'+/,'');
+      const name = String(row[nameI] ?? '').trim();
+      if (!symbol || !name || !/^\d{1,5}$/.test(symbol)) continue;
+      const code = symbol.padStart(5,'0');
+      const isin = String(row[isinI] ?? '').trim();
+      const type = String(row[typeI] ?? '').toUpperCase();
+      const category = /BOND|DEBT|NOTE/i.test(type) ? 'Bonds' : /ETF|REIT|FUND|UNIT TRUST/i.test(type) ? 'Funds' : 'Stocks';
+      const key = 'HKEX:' + (isin || code);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      const item = cryptoItem('HKEX','HKEX',category,{symbol:code,fullName:name,status:'online'});
+      if (!item) continue;
+      item.id = 'HKEX:HKEX:' + (isin || code);
+      item.symbol = code; item.displaySymbol = code; item.name = name; item.marketType = 'HKEX';
+      item.category = category; item.quote = String(row[currencyI] ?? '').trim() || undefined;
+      item.status = 'Active'; item.logoUrl = providerLogo('HKEX'); item.providerLogoUrl = providerLogo('HKEX');
+      out.push(item);
+    }
+    console.log('[SIRE HKEX] Securities: ' + out.length);
+    return out;
+  } catch (error) { console.warn('[SIRE HKEX] failed:', error); return []; }
+}
+
 async function okx(): Promise<UnifiedInstrument[]> {
   const types = ['SPOT', 'SWAP', 'FUTURES', 'OPTION'];
   const out: UnifiedInstrument[] = [];
@@ -1351,6 +1396,7 @@ export async function getUnifiedMarketCatalogue(fetchDeriv: () => Promise<any[]>
       ['TWELVEDATA', twelveData()],
       ['NASDAQTRADER', nasdaqTrader()],
       ['XETR', xetra()],
+      ['HKEX', hkex()],
       ['NSE', nseIndia()],
       ['BITSTAMP', bitstamp()],
       ['FOREXCOM', brokerCatalogue('FOREXCOM')],
