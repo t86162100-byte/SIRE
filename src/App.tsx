@@ -49,7 +49,6 @@ const makeAssetLogoFallback = (item: Instrument) => {
  */
 const providerLogoIcons: Record<string, { svg: string }> = {
   binance: siBinance,
-  bitget: { title: 'Bitget', slug: 'bitget', svg: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path fill="#00F0FF" d="M4 3h7v7H4zM13 3h7v7h-7zM4 12h7v9H4zM13 12h7v9h-7z"/></svg>' },
   bybit: siBybit,
   okx: siOkx,
   kraken: siKraken,
@@ -77,7 +76,6 @@ const providerLogoIcons: Record<string, { svg: string }> = {
   oanda: siOanda,
   gate: siGate,
   gateio: siGate,
-  woox: makeLogoFallback('WOO'),
 };
 
 const makeProviderLogoFallback = (item: Instrument) => {
