@@ -4,7 +4,7 @@ import { loadFullGlobalCryptoUniverse } from './ccxt-universe-loader.ts';
 type AuditRow = {
   id:string; provider:string; exchange?:string; symbol:string; name?:string;
   capabilities:'PASS'|'FAIL'; history:'PASS'|'FAIL'|'UNTESTED'; livePrice:'PASS'|'FAIL'|'UNTESTED';
-  priceChanged:'PASS'|'FAIL'|'UNTESTED'; backwardHistory:'PASS'|'FAIL'|'UNTESTED';
+  priceChanged:'PASS'|'FAIL'|'UNCHANGED'|'UNTESTED'; backwardHistory:'PASS'|'FAIL'|'UNTESTED';
   errors:string[]; checkedAt:string;
 };
 
@@ -15,13 +15,20 @@ type AuditState = {
 
 let state:AuditState|null=null;
 let runPromise:Promise<void>|null=null;
+const exchangeCache=new Map<string,any>();
+const exchangeLoads=new Map<string,Promise<any>>();
 
 const sleep=(ms:number)=>new Promise(r=>setTimeout(r,ms));
 function err(e:unknown){return e instanceof Error?e.message:String(e);}
-function exchange(id:string){
-  const C=(ccxt as any)[id];
-  if(!C) throw new Error('CCXT exchange "'+id+'" is not available.');
-  return new C({enableRateLimit:true,timeout:20000});
+async function exchange(id:string){
+  const key=String(id||'').toLowerCase();
+  if(exchangeCache.has(key)) return exchangeCache.get(key);
+  if(exchangeLoads.has(key)) return exchangeLoads.get(key);
+  const C=(ccxt as any)[key];
+  if(!C) throw new Error('CCXT exchange "'+key+'" is not available.');
+  const p=(async()=>{const ex=new C({enableRateLimit:true,timeout:20000}); await ex.loadMarkets(); exchangeCache.set(key,ex); return ex;})();
+  exchangeLoads.set(key,p);
+  try{return await p;} finally{exchangeLoads.delete(key);}
 }
 
 async function auditOne(m:any):Promise<AuditRow>{
@@ -31,8 +38,7 @@ async function auditOne(m:any):Promise<AuditRow>{
   let livePrice:'PASS'|'FAIL'|'UNTESTED'='UNTESTED', priceChanged:'PASS'|'FAIL'|'UNTESTED'='UNTESTED';
   let backwardHistory:'PASS'|'FAIL'|'UNTESTED'='UNTESTED';
   try {
-    const ex=exchange(m.exchange);
-    await ex.loadMarkets();
+    const ex=await exchange(m.exchange);
     const market=ex.market(m.symbol);
     if(!market) throw new Error('Market was not found after loadMarkets.');
     const hasOHLCV=Boolean(ex.has?.fetchOHLCV);
@@ -66,8 +72,8 @@ async function auditOne(m:any):Promise<AuditRow>{
         const b=await ex.fetchTicker(m.symbol);
         const p2=Number(b?.last??b?.close??b?.bid??b?.ask);
         if(!Number.isFinite(p2)) throw new Error('Second ticker returned no valid price.');
-        priceChanged=p2!==p1?'PASS':'FAIL';
-        if(priceChanged==='FAIL') errors.push('live-price: two ticker snapshots were identical after 1.2s (this can be normal for inactive markets).');
+        priceChanged=p2!==p1?'PASS':'UNCHANGED';
+        if(priceChanged==='UNCHANGED') errors.push('live-price: price was unchanged across the 1.2s observation window; this is inconclusive for inactive/low-volume markets.');
       } catch(e){ livePrice='FAIL'; priceChanged='FAIL'; errors.push('quote: '+err(e)); }
     } else if(hasOHLCV) {
       try {
@@ -76,8 +82,8 @@ async function auditOne(m:any):Promise<AuditRow>{
         await sleep(1200);
         const b=await ex.fetchOHLCV(m.symbol,tf,undefined,2); const p2=Number(b?.at(-1)?.[4]);
         if(!Number.isFinite(p1)||!Number.isFinite(p2)) throw new Error('OHLCV fallback returned no valid current price.');
-        livePrice='PASS'; priceChanged=p2!==p1?'PASS':'FAIL';
-        if(priceChanged==='FAIL') errors.push('live-price: latest OHLCV close did not change during 1.2s; inactive symbols can legitimately remain unchanged.');
+        livePrice='PASS'; priceChanged=p2!==p1?'PASS':'UNCHANGED';
+        if(priceChanged==='UNCHANGED') errors.push('live-price: latest OHLCV close was unchanged across the 1.2s observation window.');
       } catch(e){ livePrice='FAIL'; priceChanged='FAIL'; errors.push('quote/ohlcv fallback: '+err(e)); }
     }
   } catch(e){ errors.push('capabilities: '+err(e)); }
