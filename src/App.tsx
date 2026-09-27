@@ -135,6 +135,12 @@ export default function App() {
       if (timer === null) timer = window.setInterval(() => void poll(), 3000);
     };
     window.addEventListener('sire:chart-open', onChartOpen);
+    // tabNavigation mounts very early and initially selects Chart before React effects
+    // are attached. Detect that already-active state so the audit cannot miss the first
+    // Chart open event.
+    if (document.documentElement.classList.contains('sire-chart-tab') || document.getElementById('root')?.classList.contains('sire-chart-tab')) {
+      void onChartOpen();
+    }
     return () => { if (timer !== null) window.clearInterval(timer); window.removeEventListener('sire:chart-open', onChartOpen); };
   }, []);
 
