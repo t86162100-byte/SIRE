@@ -177,6 +177,7 @@ export default function App() {
         const globalItems = payload.instruments.map((raw: any) => ({
           ...raw,
           provider: 'GLOBALCRYPTO',
+          exchange: raw.exchange,
           providerLabel: raw.exchangeName || raw.exchange,
           marketType: raw.type || 'Crypto',
           category: 'Crypto',
