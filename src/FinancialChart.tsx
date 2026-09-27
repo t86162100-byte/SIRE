@@ -12,7 +12,7 @@ import 'openalgo-charts/webgl';
 import { createWidget, type Widget } from 'openalgo-charts/widget';
 import './financialChart.css';
 
-type Instrument = { symbol: string; name: string; pipSize?: number };
+type Instrument = { symbol: string; name: string; pipSize?: number; provider?: 'DERIV' | 'FXCM' | string };
 type Props = {
   symbol: string;
   isActive?: boolean;
@@ -266,6 +266,7 @@ function ChartDiagnosticsPanel({ open, events, symbol, interval, quoteAgeMs, bar
   </div>;
 }
 import { createDerivDataFeed, DERIV_INTERVAL_SECONDS, tickToBar, type DerivBar, type DerivInstrument, type DerivFeedDiagnostic } from './derivMarketData';
+import { createFxcmDataFeed } from './fxcmMarketData';
 
 export { type DerivInstrument, type DerivBar } from './derivMarketData';
 
@@ -323,7 +324,7 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
   const replayCleanupRef = useRef<(() => void) | null>(null);
   const drawingInspectionRef = useRef<{ symbol: string; timeframe: string; capturedAt: number; id: string } | null>(null);
 
-  const dataFeedRef = useRef<ReturnType<typeof createDerivDataFeed> | null>(null);
+  const dataFeedRef = useRef<any>(null);
   const instrumentsRef = useRef(instruments);
   const onSelectInstrumentRef = useRef(onSelectInstrument);
   const symbolRef = useRef(symbol);
@@ -799,7 +800,18 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
     const host = containerRef.current;
     let widget: Widget;
     try {
-      const feed = dataFeedRef.current || createDerivDataFeed(quote => {
+      const isFxcm = marketInstrument?.provider === 'FXCM';
+      const feed = dataFeedRef.current || (isFxcm ? createFxcmDataFeed(quote => {
+        if (quote.symbol !== symbolRef.current) return;
+        lastTickAtRef.current = Date.now();
+        lastLiveQuoteRef.current = quote;
+        if (replayModeRef.current) return;
+        const series = widgetRef.current?.chart.primarySeries();
+        const bars = (series?.getData?.() || []) as DerivBar[];
+        const previousClosed = bars.length > 1 ? bars[bars.length - 2] : null;
+        const percent = previousClosed?.close ? ((quote.price - previousClosed.close) / previousClosed.close) * 100 : 0;
+        setMarketQuote({ price: quote.price, percent });
+      }, reportDiagnostic) : createDerivDataFeed(quote => {
         if (quote.symbol !== symbolRef.current) return;
         lastTickAtRef.current = Date.now();
         lastLiveQuoteRef.current = quote;
@@ -817,11 +829,11 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
         const percent = previousClosed?.close ? ((quote.price - previousClosed.close) / previousClosed.close) * 100 : 0;
         setMarketQuote({ price: quote.price, percent });
         // Healthy tick updates are intentionally not logged individually; the monitor checks their effect on the chart.
-      }, reportDiagnostic);
+      }, reportDiagnostic));
       dataFeedRef.current = feed;
       widget = createWidget(host, {
         symbol,
-        exchange: 'DERIV',
+        exchange: isFxcm ? 'FXCM' : 'DERIV',
         feed,
         interval: '1m',
         intervals: CHART_INTERVALS,
@@ -974,7 +986,7 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
       host.style.background = '#080808'; host.style.fontFamily = 'monospace'; host.style.fontSize = '14px';
       throw error;
     }
-  }, []);
+  }, [marketInstrument?.provider]);
 
   useEffect(() => {
     const widget = widgetRef.current;
