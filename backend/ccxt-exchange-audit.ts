@@ -1,5 +1,5 @@
 import ccxt from 'ccxt';
-import { getCcxtLiveQuote } from './ccxt-live-market-data.ts';
+import { getCcxtLiveQuote, stopCcxtLiveStream } from './ccxt-live-market-data.ts';
 
 export type CcxtExchangeAuditRow = {
   exchange: string;
@@ -99,6 +99,7 @@ async function auditOne(id: string): Promise<CcxtExchangeAuditRow> {
   } catch (error) {
     row.errors.push('market discovery: ' + (error instanceof Error ? error.message : String(error)));
   } finally {
+    try { stopCcxtLiveStream(id, row.sampleSymbol || ''); } catch {}
     try { await exchange?.close?.(); } catch {}
   }
 
