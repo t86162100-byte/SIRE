@@ -152,14 +152,15 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    if (!instruments.length) return;
+    const deriv = instruments.filter(item => item.provider === 'deriv');
+    if (!deriv.length) return;
     setChartSymbols(current => Array.from(
       { length: chartLayout },
       (_, index) => current[index] || (index === 0
-        ? (selected?.symbol || chooseInitialDerivInstrument(instruments)?.symbol || instruments[0].symbol)
-        : instruments[index % instruments.length].symbol),
+        ? (selected?.provider === 'deriv' ? selected.symbol : chooseInitialDerivInstrument(deriv)?.symbol || deriv[0].symbol)
+        : deriv[index % deriv.length].symbol),
     ));
-  }, [chartLayout, selected?.symbol]);
+  }, [chartLayout, selected?.provider, selected?.symbol, instruments]);
 
   useEffect(() => {
     setActiveChartIndex(current => Math.min(current, chartLayout - 1));
@@ -257,7 +258,8 @@ export default function App() {
 
   const chartItems = chartSymbols.slice(0, chartLayout);
   const openMultiChartManager = () => {
-    setMultiChartInstrument(chartSymbols[1] || instruments[1]?.symbol || instruments[0]?.symbol || '');
+    const deriv = instruments.filter(item => item.provider === 'deriv');
+    setMultiChartInstrument(chartSymbols[1] || deriv[1]?.symbol || deriv[0]?.symbol || '');
     setMultiChartOpen(true);
   };
   const confirmMultiChart = () => {
@@ -328,7 +330,7 @@ export default function App() {
               <input autoFocus value={search} onChange={event => setSearch(event.target.value)} placeholder="Search instruments" />
             </div>
             <div className="sire-instrument-search-list">
-              {filtered.map(item => <button key={item.provider + ':' + item.symbol} type="button" onClick={() => { if (instrumentSearchMode === 'multi') { setMultiChartInstrument(item.symbol); setSearch(''); setInstrumentSearchOpen(false); } else { selectInstrument(item); setInstrumentSearchOpen(false); } }}>
+              {filtered.filter(item => instrumentSearchMode === 'main' || item.provider === 'deriv').map(item => <button key={item.provider + ':' + item.symbol} type="button" onClick={() => { if (instrumentSearchMode === 'multi') { setMultiChartInstrument(item.symbol); setSearch(''); setInstrumentSearchOpen(false); } else { selectInstrument(item); setInstrumentSearchOpen(false); } }}>
                 <span><b>{item.name}</b><small>{item.symbol} · {item.provider === 'coinbase' ? coinbaseCategoryLabel(item.category) : item.category}</small></span><i>{item.provider === 'coinbase' ? 'Coinbase' : 'Deriv'}</i>
               </button>)}
             </div>
