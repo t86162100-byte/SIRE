@@ -286,16 +286,54 @@ export default function App() {
 
     startup().then(async items => {
       if (cancelled) return;
-      const withBinance = await augmentBinanceDerivativesInBrowser(items);
-      const next = await augmentBybitInstrumentsInBrowser(withBinance);
-      console.info('[SIRE MARKET STARTUP] unified catalogue after Binance + Bybit browser augmentation', { total: next.length, binance: next.filter(item => item.provider === 'BINANCE').length, binanceMarketTypes: Array.from(new Set(next.filter(item => item.provider === 'BINANCE').map(item => item.marketType))), bybit: next.filter(item => item.provider === 'BYBIT').length, bybitMarketTypes: Array.from(new Set(next.filter(item => item.provider === 'BYBIT').map(item => item.marketType))) });
-      const initial = chooseInitialDerivInstrument(next);
+      // The server catalogue already contains the required startup data (including
+      // Deriv). Publish it immediately so optional third-party browser augmentation
+      // can never block the entire SIRE interface.
+      const initial = chooseInitialDerivInstrument(items);
       if (!initial) throw new Error('Deriv returned an empty active-symbol catalogue.');
       setDerivError('');
       setDerivLoading(false);
-      setInstruments(next);
-      setSelected(current => current && next.some(item => item.id === current.id) ? current : initial);
+      setInstruments(items);
+      setSelected(current => current && items.some(item => item.id === current.id) ? current : initial);
       setChartSymbols(current => current.length ? current : [initial.symbol]);
+
+      // Binance/Bybit browser augmentation is additive only. If a provider is slow,
+      // blocked, or unavailable, the already-loaded catalogue remains usable.
+      try {
+        const withBinance = await augmentBinanceDerivativesInBrowser(items);
+        if (cancelled) return;
+        setInstruments(current => {
+          const existing = new Set(current.map(item => item.id));
+          const additions = withBinance.filter(item => !existing.has(item.id));
+          return additions.length ? current.concat(additions) : current;
+        });
+        const next = withBinance;
+        console.info('[SIRE MARKET STARTUP] catalogue after Binance browser augmentation', {
+          total: next.length,
+          binance: next.filter(item => item.provider === 'BINANCE').length,
+          binanceMarketTypes: Array.from(new Set(next.filter(item => item.provider === 'BINANCE').map(item => item.marketType)))
+        });
+      } catch (error) {
+        console.warn('[SIRE MARKET STARTUP] Binance browser augmentation skipped:', error);
+      }
+
+      try {
+        const currentItems = items;
+        const next = await augmentBybitInstrumentsInBrowser(currentItems);
+        if (cancelled) return;
+        setInstruments(current => {
+          const existing = new Set(current.map(item => item.id));
+          const additions = next.filter(item => !existing.has(item.id));
+          return additions.length ? current.concat(additions) : current;
+        });
+        console.info('[SIRE MARKET STARTUP] catalogue after Bybit browser augmentation', {
+          total: next.length,
+          bybit: next.filter(item => item.provider === 'BYBIT').length,
+          bybitMarketTypes: Array.from(new Set(next.filter(item => item.provider === 'BYBIT').map(item => item.marketType)))
+        });
+      } catch (error) {
+        console.warn('[SIRE MARKET STARTUP] Bybit browser augmentation skipped:', error);
+      }
     }).catch(error => {
       if (cancelled || error?.message === 'SIRE startup cancelled.') return;
       console.error('[DERIV MARKET DATA] active symbol discovery failed', error);
