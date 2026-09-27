@@ -294,8 +294,9 @@ export default function App() {
       // Deriv). Publish it immediately so optional third-party browser augmentation
       // can never block the entire SIRE interface.
       const initial = chooseInitialDerivInstrument(items);
-      if (!initial) throw new Error('Deriv returned an empty active-symbol catalogue.');
-      setDerivError('');
+      if (!initial) throw new Error('SIRE returned an empty active instrument catalogue.');
+      const hasDeriv = items.some(item => item.provider === 'DERIV');
+      setDerivError(hasDeriv ? '' : 'Deriv market data is temporarily unavailable; other market providers remain available.');
       setDerivLoading(false);
       setInstruments(items);
       setSelected(current => current && items.some(item => item.id === current.id) ? current : initial);
@@ -458,17 +459,9 @@ export default function App() {
   if (derivLoading) {
     return <SireErrorScreen
       source="SIRE startup"
-      message="Waiting for Deriv market data and the active instrument catalogue. The interface is blocked until startup data is available."
+      message="Loading the active market catalogue. The interface will remain usable if an individual provider is unavailable."
     />;
   }
-
-  if (derivError) {
-    return <SireErrorScreen
-      source="Deriv market-data startup"
-      message={derivError}
-    />;
-  }
-
 
   if (!instruments.length || !selected) {
     return <SireErrorScreen
