@@ -6,6 +6,7 @@ import FinancialChart from './FinancialChart';
 import type { DerivInstrument } from './derivMarketData';
 import { SireErrorScreen } from './SireErrorBoundary';
 import './nativeTerminal.css';
+import { loadBinanceCatalogue } from './providers/binance';
 
 type MarketProvider = 'DERIV' | 'BINANCE' | 'BITGET' | 'BYBIT' | 'OKX' | 'KRAKEN' | 'COINBASE' | 'GATEIO' | 'KUCOIN' | 'GEMINI' | 'BITSO' | 'BITFINEX' | 'BITVAVO' | 'COINEX' | 'LBANK' | 'WOOX' | 'CRYPTOCOM' | 'HTX' | 'BITKUB' | 'UPBIT' | 'PIONEX' | 'POLONIEX' | 'BITHUMB' | 'MEXC' | 'PHEMEX' | 'WHITEBIT' | 'TWELVEDATA' | 'NASDAQTRADER' | 'NSE' | 'BITSTAMP' | 'OANDA' | 'TRADINGVIEW' | 'FOREXCOM' | 'INTERACTIVEBROKERS' | 'TRADESTATION' | 'WEBULL' | 'MOOMOO' | 'NINJATRADER' | 'TRADOVATE' | 'AMPFUTURES' | 'TASTYTRADE' | 'TASTYFX' | 'CRYPTOCOMEXCHANGE' | 'COINBASEADVANCED' | 'ALPACA' | 'TRADIERBROKERAGE' | 'TRADEZERO' | 'COBRATRADING' | 'CLEARSTREET' | 'INVESTRADE' | 'PUBLIC' | 'PLUS500US' | 'OPTIMUSFUTURES' | 'EDGECLEAR' | 'IRONBEAM' | 'STONEX' | 'DORMANTRADING' | 'TRADIERFUTURES';
 type Instrument = DerivInstrument & {
@@ -37,124 +38,6 @@ const makeProviderLogoFallback = (item: Instrument) =>
     item.provider === 'DERIV' ? 'deriv.com' : item.provider.toLowerCase() + '.com'
   ) + '&sz=128';
 
-const augmentBinanceDerivativesInBrowser = async (items: Instrument[]): Promise<Instrument[]> => {
-  const existing = new Set(items.map(item => item.id));
-  const additions: Instrument[] = [];
-  const sources: Array<{ marketType: string; urls: string[]; rows: (payload: any) => any[] }> = [
-    {
-      marketType: 'Spot',
-      urls: [
-        'https://data-api.binance.vision/api/v3/exchangeInfo',
-        'https://api-gcp.binance.com/api/v3/exchangeInfo',
-        'https://api1.binance.com/api/v3/exchangeInfo',
-        'https://api2.binance.com/api/v3/exchangeInfo',
-        'https://api3.binance.com/api/v3/exchangeInfo',
-        'https://api4.binance.com/api/v3/exchangeInfo',
-        'https://api.binance.com/api/v3/exchangeInfo',
-      ],
-      rows: payload => Array.isArray(payload?.symbols) ? payload.symbols : [],
-    },
-    {
-      marketType: 'Margin',
-      urls: [
-        'https://api-gcp.binance.com/sapi/v1/margin/allPairs',
-        'https://api1.binance.com/sapi/v1/margin/allPairs',
-        'https://api.binance.com/sapi/v1/margin/allPairs',
-      ],
-      rows: payload => Array.isArray(payload) ? payload : [],
-    },
-    {
-      marketType: 'USD-M Futures',
-      urls: ['https://fapi.binance.com/fapi/v1/exchangeInfo'],
-      rows: payload => Array.isArray(payload?.symbols) ? payload.symbols : [],
-    },
-    {
-      marketType: 'COIN-M Futures',
-      urls: ['https://dapi.binance.com/dapi/v1/exchangeInfo'],
-      rows: payload => Array.isArray(payload?.symbols) ? payload.symbols : [],
-    },
-    {
-      marketType: 'Options',
-      urls: ['https://eapi.binance.com/eapi/v1/exchangeInfo'],
-      rows: payload => Array.isArray(payload?.optionSymbols) ? payload.optionSymbols : [],
-    },
-  ];
-
-  const toInstrument = (marketType: string, raw: any): Instrument | null => {
-    const symbol = String(raw?.symbol || '').trim();
-    if (!symbol) return null;
-    const status = String(raw?.status || raw?.contractStatus || raw?.state || '').toUpperCase();
-    if (status && !['TRADING', 'ONLINE', 'ENABLED', 'LIVE'].includes(status)) return null;
-    const underlying = String(raw?.underlying || '').trim();
-    const base = String(raw?.baseAsset || raw?.baseCoin || (underlying.replace(/USDT$|USDC$|USD$/i, '')) || '').trim() || undefined;
-    const quote = String(raw?.quoteAsset || raw?.quoteCoin || '').trim() || undefined;
-    const id = 'BINANCE:' + marketType + ':' + symbol;
-    const normalizedMarketType = marketType === 'USD-M Futures'
-      ? (String(raw?.contractType || '').toUpperCase().includes('PERPETUAL') ? 'USD-M Perpetuals' : 'USD-M Futures')
-      : marketType === 'COIN-M Futures'
-        ? (String(raw?.contractType || '').toUpperCase().includes('PERPETUAL') ? 'COIN-M Perpetuals' : 'COIN-M Futures')
-        : marketType;
-    return {
-      ...(raw as any),
-      id: 'BINANCE:' + normalizedMarketType + ':' + symbol,
-      provider: 'BINANCE',
-      providerLabel: 'Binance',
-      marketType: normalizedMarketType,
-      category: 'Crypto',
-      symbol,
-      displaySymbol: symbol,
-      name: base ? base + (quote ? ' / ' + quote : '') : symbol,
-      base,
-      quote,
-      exchangeOpen: 1,
-      status: status || 'TRADING',
-      logoUrl: base ? 'https://cdn.jsdelivr.net/gh/spothq/cryptocurrency-icons@master/128/color/' + encodeURIComponent(base.toLowerCase()) + '.png' : '',
-      providerLogoUrl: 'https://cdn.simpleicons.org/binance',
-      instrumentType: normalizedMarketType,
-      contractType: raw?.contractType || raw?.type || undefined,
-      settlement: raw?.marginAsset || raw?.settleAsset || raw?.settleCoin || undefined,
-      expiry: raw?.deliveryDate || raw?.deliveryTime || raw?.expirationTime || undefined,
-      strike: Number.isFinite(Number(raw?.strikePrice)) ? Number(raw.strikePrice) : undefined,
-      optionType: raw?.side || raw?.optionType || undefined,
-      supportsMargin: marketType === 'Margin',
-    } as Instrument;
-  };
-
-  const fetchFirstReachable = async (urls: string[]) => {
-    let lastError: unknown = null;
-    for (const url of urls) {
-      try {
-        const response = await fetch(url, { cache: 'no-store', headers: { Accept: 'application/json' } });
-        if (!response.ok) {
-          lastError = new Error('HTTP ' + response.status);
-          continue;
-        }
-        return await response.json();
-      } catch (error) {
-        lastError = error;
-      }
-    }
-    throw lastError || new Error('All Binance browser endpoints failed');
-  };
-
-  await Promise.all(sources.map(async source => {
-    try {
-      const payload = await fetchFirstReachable(source.urls);
-      for (const raw of source.rows(payload)) {
-        const item = toInstrument(source.marketType, raw);
-        if (item && !existing.has(item.id)) {
-          existing.add(item.id);
-          additions.push(item);
-        }
-      }
-      console.info('[SIRE BINANCE BROWSER] ' + source.marketType + ': ' + source.rows(payload).length);
-    } catch (error) {
-      console.warn('[SIRE BINANCE BROWSER] ' + source.marketType + ' unavailable:', error);
-    }
-  }));
-
-  return additions.length ? items.concat(additions) : items;
-};
 const augmentBybitInstrumentsInBrowser = async (items: Instrument[]): Promise<Instrument[]> => {
   const existing = new Set(items.map(item => item.id));
   const additions: Instrument[] = [];
@@ -424,24 +307,20 @@ export default function App() {
       setSelected(current => current && items.some(item => item.id === current.id) ? current : initial);
       setChartSymbols(current => current.length ? current : [initial.symbol]);
 
-      // Binance/Bybit browser augmentation is additive only. If a provider is slow,
-      // blocked, or unavailable, the already-loaded catalogue remains usable.
       try {
-        const withBinance = await augmentBinanceDerivativesInBrowser(items);
+        const binanceItems = await loadBinanceCatalogue();
         if (cancelled) return;
         setInstruments(current => {
           const existing = new Set(current.map(item => item.id));
-          const additions = withBinance.filter(item => !existing.has(item.id));
+          const additions = binanceItems.filter(item => !existing.has(item.id));
           return additions.length ? current.concat(additions) : current;
         });
-        const next = withBinance;
-        console.info('[SIRE MARKET STARTUP] catalogue after Binance browser augmentation', {
-          total: next.length,
-          binance: next.filter(item => item.provider === 'BINANCE').length,
-          binanceMarketTypes: Array.from(new Set(next.filter(item => item.provider === 'BINANCE').map(item => item.marketType)))
+        console.info('[SIRE MARKET STARTUP] Binance catalogue loaded', {
+          total: binanceItems.length,
+          marketTypes: Array.from(new Set(binanceItems.map(item => item.marketType))),
         });
       } catch (error) {
-        console.warn('[SIRE MARKET STARTUP] Binance browser augmentation skipped:', error);
+        console.warn('[SIRE MARKET STARTUP] Binance catalogue unavailable:', error);
       }
 
       try {
