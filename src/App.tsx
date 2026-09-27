@@ -341,6 +341,29 @@ export default function App() {
 
       // CCXT expands the global universe in the backend after the fast first response.
       // Keep polling so newly loaded exchanges/market types appear without requiring a reload.
+      const globalCryptoRefresh = window.setInterval(async () => {
+        try {
+          const response = await fetch('/api/sire/markets/global-crypto', { cache: 'no-store' });
+          const payload = await response.json().catch(() => null);
+          if (!response.ok || !payload?.ok || !Array.isArray(payload?.instruments) || cancelled) return;
+          const refreshedItems = payload.instruments.map((raw: any) => ({
+            ...raw, provider: 'GLOBALCRYPTO', providerLabel: raw.exchangeName || raw.exchange,
+            marketType: raw.type || 'Crypto', category: 'Crypto', displaySymbol: raw.symbol, name: raw.symbol,
+            exchangeOpen: 1, status: 'online',
+            logoUrl: raw.base ? makeAssetLogoFallback({ ...raw, base: raw.base, displaySymbol: raw.symbol } as Instrument) : '',
+            providerLogoUrl: makeProviderLogoFallback({ ...raw, provider: 'GLOBALCRYPTO' } as Instrument),
+            instrumentType: raw.type || 'crypto',
+          })) as Instrument[];
+          setInstruments(current => {
+            const existing = new Set(current.map(item => item.id));
+            const additions = refreshedItems.filter(item => !existing.has(item.id));
+            return additions.length ? current.concat(additions) : current;
+          });
+        } catch (error) {
+          console.warn('[SIRE MARKET STARTUP] Global CCXT catalogue refresh failed:', error);
+        }
+      }, 3000);
+
             try {
         const binanceItems = await loadBinanceCatalogue();
         if (cancelled) return;
