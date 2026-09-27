@@ -1,4 +1,4 @@
-export type MarketProvider = 'DERIV' | 'BINANCE' | 'BITGET' | 'BYBIT' | 'OKX' | 'KRAKEN' | 'COINBASE' | 'TWELVEDATA' | 'FINNHUB' | 'OANDA' | 'IG';
+export type MarketProvider = 'DERIV' | 'BINANCE' | 'BITGET' | 'BYBIT' | 'OKX' | 'KRAKEN' | 'COINBASE' | 'GATEIO' | 'KUCOIN' | 'GEMINI' | 'BITSO' | 'BITFINEX' | 'BITVAVO' | 'COINEX' | 'LBANK' | 'WOOX' | 'CRYPTOCOM' | 'HTX' | 'BITKUB' | 'UPBIT' | 'PIONEX' | 'POLONIEX' | 'BITHUMB' | 'MEXC' | 'PHEMEX' | 'WHITEBIT' | 'TWELVEDATA' | 'FINNHUB' | 'OANDA' | 'IG';
 
 export interface UnifiedInstrument {
   id: string;
@@ -806,6 +806,7 @@ async function twelveData(): Promise<UnifiedInstrument[]> {
     { endpoint: '/forex_pairs', category: 'Forex', marketType: 'Spot FX', rows: p => Array.isArray(p?.data) ? p.data : [] },
     { endpoint: '/commodities', category: 'Commodities', marketType: 'Spot Commodities', rows: p => Array.isArray(p?.data) ? p.data : [] },
     { endpoint: '/indices', category: 'Indices', marketType: 'Indices', rows: p => Array.isArray(p?.data) ? p.data : Array.isArray(p?.result?.list) ? p.result.list : [] },
+    { endpoint: '/bonds', category: 'Bonds', marketType: 'Bonds', rows: p => Array.isArray(p?.data) ? p.data : Array.isArray(p?.result?.list) ? p.result.list : [] },
     { endpoint: '/cryptocurrencies', category: 'Crypto', marketType: 'Aggregated Crypto', rows: p => Array.isArray(p?.data) ? p.data : [] },
   ];
 
@@ -832,7 +833,9 @@ async function twelveData(): Promise<UnifiedInstrument[]> {
         });
         if (!item) continue;
         item.name = String(raw?.name || raw?.description || symbol);
-        item.category = source.category;
+        const rawType = String(raw?.type || '').toLowerCase();
+        const inferredCategory = source.category === 'Stocks' && (rawType.includes('bond') ? 'Bonds' : rawType.includes('etf') || rawType.includes('fund') ? 'Funds' : source.category);
+        item.category = inferredCategory;
         item.marketType = String(raw?.exchange || raw?.country || source.marketType);
         item.logoUrl = providerLogo('TWELVEDATA');
         item.providerLogoUrl = providerLogo('TWELVEDATA');
@@ -917,7 +920,7 @@ function derivItem(raw: any): UnifiedInstrument | null {
     provider: 'DERIV',
     providerLabel: 'Deriv',
     marketType: 'Market',
-    category: String(raw?.market || raw?.market_display_name || 'Deriv'),
+    category: (() => { const m = String(raw?.market || raw?.market_display_name || '').toLowerCase(); if (m.includes('forex') || m.includes('currency')) return 'Forex'; if (m.includes('commod')) return 'Commodities'; if (m.includes('stock') || m.includes('equities')) return 'Stocks'; if (m.includes('index') || m.includes('indices')) return 'Indices'; if (m.includes('crypto')) return 'Crypto'; if (m.includes('synthetic')) return 'Synthetic Indices'; if (m.includes('basket')) return 'Baskets'; return String(raw?.market_display_name || raw?.market || 'Deriv'); })(),
     symbol,
     displaySymbol: symbol,
     name,
