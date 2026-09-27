@@ -153,13 +153,39 @@ const augmentBybitInstrumentsInBrowser = async (items: Instrument[]): Promise<In
       const params = new URLSearchParams({ category: source.category, limit: '1000' });
       if (source.category === 'option') params.set('baseCoin', 'All');
       if (source.paginate && cursor) params.set('cursor', cursor);
-      const response = await fetch('https://api.bybit.com/v5/market/instruments-info?' + params.toString(), {
-        cache: 'no-store',
-        headers: { Accept: 'application/json' },
-      });
-      if (!response.ok) throw new Error('HTTP ' + response.status);
-      const payload = await response.json();
-      if (Number(payload?.retCode) !== 0) throw new Error(String(payload?.retMsg || 'Bybit API error'));
+      const query = params.toString();
+      const endpoints = [
+        'https://api.bybit.com/v5/market/instruments-info?' + query,
+        'https://api.bybit.ae/v5/market/instruments-info?' + query,
+        'https://api.bybit.eu/v5/market/instruments-info?' + query,
+        'https://api.bybit.kz/v5/market/instruments-info?' + query,
+        'https://api.bybit.id/v5/market/instruments-info?' + query,
+        'https://api.bytick.com/v5/market/instruments-info?' + query,
+      ];
+      let payload: any = null;
+      let lastError: unknown = null;
+      for (const endpoint of endpoints) {
+        try {
+          const response = await fetch(endpoint, {
+            cache: 'no-store',
+            headers: { Accept: 'application/json' },
+          });
+          if (!response.ok) {
+            lastError = new Error('HTTP ' + response.status);
+            continue;
+          }
+          const candidate = await response.json();
+          if (Number(candidate?.retCode) !== 0) {
+            lastError = new Error(String(candidate?.retMsg || 'Bybit API error'));
+            continue;
+          }
+          payload = candidate;
+          break;
+        } catch (error) {
+          lastError = error;
+        }
+      }
+      if (!payload) throw lastError || new Error('All Bybit endpoints failed');
       const rows = Array.isArray(payload?.result?.list) ? payload.result.list : [];
       for (const raw of rows) {
         const item = toInstrument(source.marketType, raw);
