@@ -578,62 +578,6 @@ async function tradingviewFeedRegistry(): Promise<UnifiedInstrument[]> {
   return out;
 }
 
-async function binance(): Promise<UnifiedInstrument[]> {
-  const out: UnifiedInstrument[] = [];
-  const add = (family: string, rows: any[]) => {
-    for (const raw of rows) {
-      const st = String(raw?.status || raw?.contractStatus || '').toUpperCase();
-      if (st && !['TRADING', 'ONLINE', 'ENABLED'].includes(st)) continue;
-      let mt = family;
-      if (family === 'USD-M') mt = String(raw?.contractType || '').toUpperCase().includes('PERPETUAL') ? 'USD-M Perpetuals' : 'USD-M Futures';
-      if (family === 'COIN-M') mt = String(raw?.contractType || '').toUpperCase().includes('PERPETUAL') ? 'COIN-M Perpetuals' : 'COIN-M Futures';
-      const i = cryptoItem('BINANCE', mt, 'Crypto', raw);
-      if (i) out.push(i);
-    }
-  };
-
-  // Binance documents api.binance.com, api-gcp.binance.com and api1-api4.binance.com
-  // as alternate Spot REST hosts. Try them all because hosting-region routing can
-  // return HTTP 451 on one host while another public host remains reachable.
-  const sources: Array<[string, string[]]> = [
-    ['Spot', [
-      'https://data-api.binance.vision/api/v3/exchangeInfo',
-      'https://api-gcp.binance.com/api/v3/exchangeInfo',
-      'https://api1.binance.com/api/v3/exchangeInfo',
-      'https://api2.binance.com/api/v3/exchangeInfo',
-      'https://api3.binance.com/api/v3/exchangeInfo',
-      'https://api4.binance.com/api/v3/exchangeInfo',
-      'https://api.binance.com/api/v3/exchangeInfo',
-    ]],
-    ['Margin', [
-      'https://api-gcp.binance.com/sapi/v1/margin/allPairs',
-      'https://api1.binance.com/sapi/v1/margin/allPairs',
-      'https://api.binance.com/sapi/v1/margin/allPairs',
-    ]],
-    ['USD-M', ['https://fapi.binance.com/fapi/v1/exchangeInfo']],
-    ['COIN-M', ['https://dapi.binance.com/dapi/v1/exchangeInfo']],
-    ['Options', ['https://eapi.binance.com/eapi/v1/exchangeInfo']],
-  ];
-
-  const results = await Promise.allSettled(sources.map(async ([family, urls]) => {
-    const r = await getJsonAny(urls, 8000);
-    const rows = family === 'Margin'
-      ? (Array.isArray(r) ? r : [])
-      : family === 'Options'
-        ? (r?.optionSymbols || [])
-        : (r?.symbols || []);
-    add(family, rows);
-    console.log('[SIRE BINANCE] ' + family + ': ' + rows.length);
-  }));
-
-  results.forEach((result, index) => {
-    if (result.status === 'rejected') {
-      console.warn('[SIRE BINANCE] ' + sources[index][0] + ' failed:', result.reason);
-    }
-  });
-  console.log('[SIRE BINANCE] Total: ' + out.length);
-  return out;
-}
 async function bitget(): Promise<UnifiedInstrument[]> { const out:UnifiedInstrument[]=[];for(const c of ['SPOT','MARGIN','USDT-FUTURES','COIN-FUTURES','USDC-FUTURES'])try{const r=await getJson('https://api.bitget.com/api/v3/market/instruments?category='+c,15000);for(const raw of r?.data||[]){if(String(raw?.status||'').toLowerCase()!=='online')continue;const t=c==='SPOT'?'Spot':c==='MARGIN'?'Margin':c==='USDT-FUTURES'?(String(raw?.type||'').toLowerCase()==='delivery'?'USDT Futures':'USDT Perpetuals'):c==='COIN-FUTURES'?(String(raw?.type||'').toLowerCase()==='delivery'?'Coin-M Futures':'Coin-M Perpetuals'):(String(raw?.type||'').toLowerCase()==='delivery'?'USDC Futures':'USDC Perpetuals');const i=cryptoItem('BITGET',t,'Crypto',raw);if(i)out.push(i)}}catch(e){console.warn('[SIRE BITGET] '+c+' failed:',e)}return out; }
 
 async function bybit(): Promise<UnifiedInstrument[]> { const out:UnifiedInstrument[]=[];for(const c of ['spot','linear','inverse','option']){let cursor='';for(let p=0;p<100;p++)try{const q='?category='+c+'&limit=1000'+(c==='option'?'&baseCoin=All':'')+(cursor?'&cursor='+encodeURIComponent(cursor):'');const r=await getJsonAny(['https://api.bybit.com/v5/market/instruments-info'+q,'https://api.bybit.tr/v5/market/instruments-info'+q,'https://api.bybit.ae/v5/market/instruments-info'+q,'https://api.bybit.eu/v5/market/instruments-info'+q],12000);const rows=r?.result?.list||[];for(const raw of rows){const st=String(raw?.status||'').toLowerCase();if(c==='option'?!['trading','prelaunch','delivering'].includes(st):!['trading','pendingopen','prelaunch'].includes(st))continue;const t=c==='spot'?(raw?.marginTrading&&raw.marginTrading!=='none'?'Spot/Margin':'Spot'):c==='linear'?(String(raw?.contractType||'').toLowerCase().includes('perpetual')?'Linear Perpetuals':'Linear Futures'):c==='inverse'?(String(raw?.contractType||'').toLowerCase().includes('perpetual')?'Inverse Perpetuals':'Inverse Futures'):'Options';const i=cryptoItem('BYBIT',t,'Crypto',raw);if(i)out.push(i)}cursor=String(r?.result?.nextPageCursor||'');if(!cursor||c==='spot'||!rows.length)break}catch(e){console.warn('[SIRE BYBIT] '+c+' failed:',e);break}}return out; }
@@ -1580,7 +1524,7 @@ export async function getUnifiedMarketCatalogue(fetchDeriv: () => Promise<any[]>
     // public file happens to finish first.
     const providers: Array<[MarketProvider, Promise<UnifiedInstrument[]>]> = [
       ['DERIV', fetchDeriv().then(items => items.map(derivItem).filter(Boolean) as UnifiedInstrument[])],
-      ['BINANCE', binance()], ['BITGET', bitget()], ['BYBIT', bybit()], ['OKX', okx()], ['KRAKEN', kraken()],
+      ['BITGET', bitget()], ['BYBIT', bybit()], ['OKX', okx()], ['KRAKEN', kraken()],
       ['COINBASE', coinbase()], ['GATEIO', gateio()], ['KUCOIN', kucoin()], ['GEMINI', gemini()], ['BITSO', bitso()],
       ['BITFINEX', bitfinex()], ['BITVAVO', bitvavo()], ['COINEX', coinex()], ['LBANK', lbank()], ['WOOX', woox()],
       ['CRYPTOCOM', cryptocom()], ['HTX', htx()], ['BITKUB', bitkub()], ['UPBIT', upbit()], ['PIONEX', pionex()],
