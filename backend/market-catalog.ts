@@ -1,4 +1,4 @@
-export type MarketProvider = 'DERIV' | 'BINANCE' | 'BITGET' | 'BYBIT' | 'OKX' | 'KRAKEN' | 'COINBASE' | 'GATEIO' | 'KUCOIN' | 'GEMINI' | 'BITSO' | 'BITFINEX' | 'BITVAVO' | 'COINEX' | 'LBANK' | 'WOOX' | 'CRYPTOCOM' | 'HTX' | 'BITKUB' | 'UPBIT' | 'PIONEX' | 'POLONIEX' | 'BITHUMB' | 'MEXC' | 'PHEMEX' | 'WHITEBIT' | 'TWELVEDATA' | 'FINNHUB' | 'OANDA' | 'IG' | 'TRADINGVIEW';
+export type MarketProvider = 'DERIV' | 'BINANCE' | 'BITGET' | 'BYBIT' | 'OKX' | 'KRAKEN' | 'COINBASE' | 'GATEIO' | 'KUCOIN' | 'GEMINI' | 'BITSO' | 'BITFINEX' | 'BITVAVO' | 'COINEX' | 'LBANK' | 'WOOX' | 'CRYPTOCOM' | 'HTX' | 'BITKUB' | 'UPBIT' | 'PIONEX' | 'POLONIEX' | 'BITHUMB' | 'MEXC' | 'PHEMEX' | 'WHITEBIT' | 'TWELVEDATA' | 'FINNHUB' | 'OANDA' | 'TRADINGVIEW';
 
 export interface UnifiedInstrument {
   id: string;
@@ -530,41 +530,61 @@ async function whitebit(): Promise<UnifiedInstrument[]> {
  * their real/public APIs or configured licensed credentials.
  */
 async function tradingviewFeedRegistry(): Promise<UnifiedInstrument[]> {
-  const configured = String(process.env.TRADINGVIEW_FEED_REGISTRY_URL || '').trim();
-  if (!configured) {
-    console.warn('[SIRE TRADINGVIEW] No licensed/public feed registry configured; no synthetic symbols created.');
+  // TradingView aggregates hundreds of licensed exchange/broker feeds. SIRE does
+  // not scrape TradingView or invent tickers: each registry URL must be an
+  // authorized/public catalogue supplied by the operator.
+  const urls = String(process.env.TRADINGVIEW_FEED_REGISTRY_URLS || process.env.TRADINGVIEW_FEED_REGISTRY_URL || '')
+    .split(/[,\\n]/)
+    .map(value => value.trim())
+    .filter(Boolean);
+  if (!urls.length) {
+    console.warn('[SIRE TRADINGVIEW] No licensed/public feed registries configured; no synthetic symbols created.');
     return [];
   }
-  try {
-    const payload = await getJson(configured, 20000);
-    const rows = Array.isArray(payload) ? payload : Array.isArray(payload?.instruments) ? payload.instruments : [];
-    const out: UnifiedInstrument[] = [];
-    for (const raw of rows) {
-      const symbol = String(raw?.symbol || raw?.ticker || '').trim();
-      if (!symbol) continue;
-      const category = String(raw?.category || raw?.type || 'Other');
-      const marketType = String(raw?.marketType || raw?.exchange || 'Feed');
-      const item = cryptoItem('TRADINGVIEW', marketType, category, {
-        symbol,
-        baseAsset: raw?.base || raw?.baseAsset || raw?.currency_base,
-        quoteAsset: raw?.quote || raw?.quoteAsset || raw?.currency_quote,
-        fullName: raw?.name || raw?.description || symbol,
-        status: raw?.status || 'online'
-      });
-      if (!item) continue;
-      item.name = String(raw?.name || raw?.description || symbol);
-      item.category = category;
-      item.marketType = marketType;
-      item.logoUrl = String(raw?.logoUrl || providerLogo('TRADINGVIEW'));
-      item.providerLogoUrl = providerLogo('TRADINGVIEW');
-      out.push(item);
+
+  const out: UnifiedInstrument[] = [];
+  const seen = new Set<string>();
+  for (const configured of urls) {
+    try {
+      const payload = await getJson(configured, 20000);
+      const rows = Array.isArray(payload)
+        ? payload
+        : Array.isArray(payload?.instruments)
+          ? payload.instruments
+          : Array.isArray(payload?.data)
+            ? payload.data
+            : [];
+      for (const raw of rows) {
+        const symbol = String(raw?.symbol || raw?.ticker || raw?.displaySymbol || '').trim();
+        if (!symbol) continue;
+        const exchange = String(raw?.exchange || raw?.source || '').trim();
+        const category = String(raw?.category || raw?.type || raw?.assetType || 'Other').trim();
+        const marketType = String(raw?.marketType || exchange || 'Feed').trim();
+        const key = exchange + ':' + marketType + ':' + symbol;
+        if (seen.has(key)) continue;
+        const item = cryptoItem('TRADINGVIEW', marketType, category, {
+          symbol,
+          baseAsset: raw?.base || raw?.baseAsset || raw?.currency_base,
+          quoteAsset: raw?.quote || raw?.quoteAsset || raw?.currency_quote,
+          fullName: raw?.name || raw?.description || raw?.fullName || symbol,
+          status: raw?.status || raw?.state || 'online'
+        });
+        if (!item) continue;
+        item.name = String(raw?.name || raw?.description || raw?.fullName || symbol);
+        item.category = category;
+        item.marketType = marketType;
+        item.logoUrl = String(raw?.logoUrl || raw?.logo || providerLogo('TRADINGVIEW'));
+        item.providerLogoUrl = providerLogo('TRADINGVIEW');
+        seen.add(key);
+        out.push(item);
+      }
+      console.log('[SIRE TRADINGVIEW] registry loaded: ' + configured + ' (' + rows.length + ')');
+    } catch (error) {
+      console.warn('[SIRE TRADINGVIEW] registry failed: ' + configured, error);
     }
-    console.log('[SIRE TRADINGVIEW] Licensed/public feed registry: ' + out.length);
-    return out;
-  } catch (error) {
-    console.warn('[SIRE TRADINGVIEW] feed registry failed:', error);
-    return [];
   }
+  console.log('[SIRE TRADINGVIEW] Authorized/public feed registries total: ' + out.length);
+  return out;
 }
 
 async function binance(): Promise<UnifiedInstrument[]> {
@@ -1066,7 +1086,6 @@ export async function getUnifiedMarketCatalogue(fetchDeriv: () => Promise<any[]>
       ['TWELVEDATA', twelveData()],
       ['FINNHUB', finnhub()],
       ['OANDA', oanda()],
-      ['IG', ig()],
     ];
     const results = await Promise.allSettled(providers.map(([, promise]) => promise));
     results.forEach((result, index) => {
