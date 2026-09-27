@@ -1,6 +1,12 @@
 import { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import { createLinkGroup, type LinkGroup } from 'openalgo-charts';
 import { Search } from 'lucide-react';
+import {
+  siBinance, siBitget, siBybit, siOkx, siKraken, siCoinbase, siKucoin, siMexc,
+  siGemini, siBitfinex, siBitstamp, siBitvavo, siCoinex, siLbank, siCryptoDotCom,
+  siHtx, siUpbit, siPoloniex, siBithumb, siPhemex, siWhitebit, siBitso, siBitkub,
+  siPionex, siHyperliquid, siOanda, siGate, siWoo,
+} from 'simple-icons';
 import ResearchLab from './ResearchLab';
 import FinancialChart from './FinancialChart';
 import type { DerivInstrument } from './derivMarketData';
@@ -32,88 +38,58 @@ const makeAssetLogoFallback = (item: Instrument) => {
   const base = String(item.base || '').trim().toLowerCase();
   return base ? 'https://cdn.jsdelivr.net/gh/vadimmalykhin/binance-icons/crypto/' + encodeURIComponent(base) + '.svg' : makeLogoFallback(item.displaySymbol || item.symbol);
 };
-const providerDomains: Record<string, string> = {
-  DERIV: 'deriv.com',
-  OANDA: 'oanda.com',
-  COINBASE: 'coinbase.com',
-  KRAKEN: 'kraken.com',
-  BINANCE: 'binance.com',
-  BITGET: 'bitget.com',
-  BYBIT: 'bybit.com',
-  OKX: 'okx.com',
-  KUCOIN: 'kucoin.com',
-  MEXC: 'mexc.com',
-  GATEIO: 'gate.io',
-  GEMINI: 'gemini.com',
-  BITFINEX: 'bitfinex.com',
-  BITSTAMP: 'bitstamp.net',
-  HTX: 'htx.com',
-  CRYPTOCOM: 'crypto.com',
-  BITSO: 'bitso.com',
-  BITVAVO: 'bitvavo.com',
-  COINEX: 'coinex.com',
-  PHEMEX: 'phemex.com',
-  WHITEBIT: 'whitebit.com',
-  HYPERLIQUID: 'hyperliquid.xyz',
-};
-
-const exchangeDomains: Record<string, string> = {
-  binance: 'binance.com', bitget: 'bitget.com', bybit: 'bybit.com', okx: 'okx.com', kraken: 'kraken.com', coinbase: 'coinbase.com',
-  gate: 'gate.io', gateio: 'gate.io', kucoin: 'kucoin.com', mexc: 'mexc.com', gemini: 'gemini.com', bitfinex: 'bitfinex.com', bitstamp: 'bitstamp.net',
-  bitvavo: 'bitvavo.com', coinex: 'coinex.com', lbank: 'lbank.com', woox: 'woo.org', cryptocom: 'crypto.com', htx: 'htx.com', upbit: 'upbit.com',
-  poloniex: 'poloniex.com', bithumb: 'bithumb.com', phemex: 'phemex.com', whitebit: 'whitebit.com', bitso: 'bitso.com', bitkub: 'bitkub.com', pionex: 'pionex.com', oanda: 'oanda.com',
-};
-
 /*
- * Exchange logos are resolved from stable brand slugs instead of Google favicons.
- * That matters because a favicon is not the exchange's actual brand mark and can
- * fall back to a generic/white icon. TradingView's datafeed model likewise expects
- * a real exchange_logo URL supplied with each symbol result.
+ * Exchange logos are bundled into the SIRE frontend instead of being fetched
+ * from an image CDN at runtime. This prevents the loading/blinking behaviour
+ * seen on mobile when an external logo request is slow or unavailable.
+ *
+ * TradingView's Symbol Search expects exchange_logo to be an actual image URL
+ * and recommends square SVG images; these bundled SVGs are converted to data
+ * URLs so the browser has no second network request to make for the logo.
  */
-const exchangeLogoSlugs: Record<string, string> = {
-  binance: 'binance',
-  bitget: 'bitget',
-  bybit: 'bybit',
-  okx: 'okx',
-  kraken: 'kraken',
-  coinbase: 'coinbase',
-  kucoin: 'kucoin',
-  mexc: 'mexc',
-  gemini: 'gemini',
-  bitfinex: 'bitfinex',
-  bitstamp: 'bitstamp',
-  bitvavo: 'bitvavo',
-  coinex: 'coinex',
-  lbank: 'lbank',
-  cryptocom: 'crypto-dot-com',
-  'crypto.com': 'crypto-dot-com',
-  htx: 'htx',
-  upbit: 'upbit',
-  poloniex: 'poloniex',
-  bithumb: 'bithumb',
-  phemex: 'phemex',
-  whitebit: 'whitebit',
-  bitso: 'bitso',
-  bitkub: 'bitkub',
-  pionex: 'pionex',
-  hyperliquid: 'hyperliquid',
-  oanda: 'oanda',
-  gate: 'gate',
-  gateio: 'gate',
-  woox: 'woo',
+const providerLogoIcons: Record<string, { svg: string }> = {
+  binance: siBinance,
+  bitget: siBitget,
+  bybit: siBybit,
+  okx: siOkx,
+  kraken: siKraken,
+  coinbase: siCoinbase,
+  kucoin: siKucoin,
+  mexc: siMexc,
+  gemini: siGemini,
+  bitfinex: siBitfinex,
+  bitstamp: siBitstamp,
+  bitvavo: siBitvavo,
+  coinex: siCoinex,
+  lbank: siLbank,
+  cryptocom: siCryptoDotCom,
+  cryptocomexchange: siCryptoDotCom,
+  htx: siHtx,
+  upbit: siUpbit,
+  poloniex: siPoloniex,
+  bithumb: siBithumb,
+  phemex: siPhemex,
+  whitebit: siWhitebit,
+  bitso: siBitso,
+  bitkub: siBitkub,
+  pionex: siPionex,
+  hyperliquid: siHyperliquid,
+  oanda: siOanda,
+  gate: siGate,
+  gateio: siGate,
+  woox: siWoo,
 };
 
 const makeProviderLogoFallback = (item: Instrument) => {
   const key = String(item.exchange || item.providerLabel || item.provider || '')
     .trim()
     .toLowerCase()
-    .replace(/\\s+/g, '');
-  const slug = exchangeLogoSlugs[key];
-  if (slug) {
-    return 'https://cdn.simpleicons.org/' + slug;
+    .replace(/[^a-z0-9]/g, '');
+  const icon = providerLogoIcons[key];
+  if (icon?.svg) {
+    return 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(icon.svg);
   }
-  const domain = item.provider === 'DERIV' ? 'deriv.com' : (exchangeDomains[key] || (key + '.com'));
-  return 'https://www.google.com/s2/favicons?domain=' + encodeURIComponent(domain) + '&sz=128';
+  return makeLogoFallback(item.providerLabel || item.provider || item.exchange || '?');
 };
 
 const chooseInitialDerivInstrument = (items: Instrument[]) =>
@@ -451,12 +427,9 @@ export default function App() {
             <button key={category} type="button" className={categoryFilter === category ? 'active' : ''} onClick={() => setCategoryFilter(category)}>{category}</button>
           ))}
         </div>{derivError && <div className="sire-deriv-error">{derivError}</div>}<div className="native-symbol-list symbol-list" onScroll={event => setQuoteScrollTop(event.currentTarget.scrollTop)}><div style={{height: quoteWindow.top}} aria-hidden="true" /><div className="sire-quote-window">{quoteWindow.items.map(item => <button key={item.id} className={`symbol-row ${selected?.id === item.id ? 'active' : ''}`} data-provider={item.provider} onClick={() => selectInstrument(item)}><span className="quote-asset-logo-wrap"><img className="quote-asset-logo" src={item.logoUrl || makeAssetLogoFallback(item)} alt="" decoding="async" onError={event => { const image = event.currentTarget; image.onerror = null; image.src = makeLogoFallback(item.displaySymbol || item.symbol); }} /></span><span className="quote-instrument-name"><b>{String(item.displaySymbol || item.symbol).toUpperCase()}</b><small>{String(item.name || item.displaySymbol || item.symbol).toUpperCase()}</small></span><span className="quote-broker"><span className="quote-exchange-logo-wrap"><img className="quote-exchange-logo" src={makeProviderLogoFallback(item)} alt="" decoding="async" onError={event => {
-  const image=event.currentTarget;
-  const stage=image.dataset.logoStage || '0';
-  image.dataset.logoStage=stage === '0' ? '1' : '2';
-  image.onerror=null;
-  if(stage === '0'){ image.onerror=event2 => { const next=event2.currentTarget; next.onerror=null; next.src=makeLogoFallback(item.providerLabel); }; image.src=makeProviderLogoFallback(item); }
-  else image.src=makeProviderLogoFallback(item);
+  const image = event.currentTarget;
+  image.onerror = null;
+  image.src = makeLogoFallback(item.providerLabel || item.provider);
 }} /></span><b>{String(item.providerLabel || item.provider).toUpperCase()}</b><small>{item.category === 'Crypto' && item.marketType !== 'Spot' ? item.marketType.toLowerCase() : item.category === 'Crypto' && item.marketType === 'Spot' ? 'spot crypto' : String(item.marketType || item.category).toLowerCase()}</small></span></button>)}</div><div style={{height: quoteWindow.bottom}} aria-hidden="true" /></div></aside>
       <section className="native-chart-panel">
         <div className={`sire-chart-grid sire-chart-grid--${chartLayout}${chartLayout === 2 ? ` sire-chart-grid--${multiChartPosition}` : ''}`} onContextMenu={event => event.preventDefault()}>
@@ -501,7 +474,7 @@ export default function App() {
             </div>
             <div className="sire-instrument-search-list">
               {filtered.slice(0, 120).map(item => <button key={item.id} type="button" onClick={() => { if (instrumentSearchMode === 'multi') { setMultiChartInstrument(item.symbol); setSearch(''); setInstrumentSearchOpen(false); } else { selectInstrument(item); setInstrumentSearchOpen(false); } }}>
-                <span className="quote-asset-logo-wrap"><img className="quote-asset-logo" src={item.logoUrl || makeAssetLogoFallback(item)} alt="" onError={event => { const image=event.currentTarget; image.onerror=null; image.src=makeLogoFallback(item.displaySymbol || item.symbol); }} /></span><span className="quote-instrument-name"><b>{String(item.displaySymbol || item.symbol).toUpperCase()}</b><small>{String(item.name || item.displaySymbol || item.symbol).toUpperCase()}</small></span><span className="quote-broker"><span className="quote-exchange-logo-wrap"><img className="quote-exchange-logo" src={makeProviderLogoFallback(item)} alt="" onError={event => { const image=event.currentTarget; image.onerror=null; image.src=makeProviderLogoFallback(item); }} /></span><b>{String(item.providerLabel || item.provider).toUpperCase()}</b><small>{item.category === 'Crypto' && item.marketType !== 'Spot' ? item.marketType.toLowerCase() : item.category === 'Crypto' && item.marketType === 'Spot' ? 'spot crypto' : String(item.marketType || item.category).toLowerCase()}</small></span>
+                <span className="quote-asset-logo-wrap"><img className="quote-asset-logo" src={item.logoUrl || makeAssetLogoFallback(item)} alt="" onError={event => { const image=event.currentTarget; image.onerror=null; image.src=makeLogoFallback(item.displaySymbol || item.symbol); }} /></span><span className="quote-instrument-name"><b>{String(item.displaySymbol || item.symbol).toUpperCase()}</b><small>{String(item.name || item.displaySymbol || item.symbol).toUpperCase()}</small></span><span className="quote-broker"><span className="quote-exchange-logo-wrap"><img className="quote-exchange-logo" src={makeProviderLogoFallback(item)} alt="" onError={event => { const image = event.currentTarget; image.onerror = null; image.src = makeLogoFallback(item.providerLabel || item.provider); }} /></span><b>{String(item.providerLabel || item.provider).toUpperCase()}</b><small>{item.category === 'Crypto' && item.marketType !== 'Spot' ? item.marketType.toLowerCase() : item.category === 'Crypto' && item.marketType === 'Spot' ? 'spot crypto' : String(item.marketType || item.category).toLowerCase()}</small></span>
               </button>)}
             </div>
           </div>
