@@ -234,6 +234,7 @@ export default function App() {
   const [providerFilter, setProviderFilter] = useState<'ALL' | MarketProvider>('ALL');
   const [categoryFilter, setCategoryFilter] = useState<string>('ALL');
   const [quoteScrollTop, setQuoteScrollTop] = useState(0);
+  const [globalCryptoScrollTick, setGlobalCryptoScrollTick] = useState(0);
   const deferredSearch = useDeferredValue(search);
   const [instrumentSearchOpen, setInstrumentSearchOpen] = useState(false);
   const [instrumentSearchMode, setInstrumentSearchMode] = useState<'main' | 'multi'>('main');
@@ -489,6 +490,35 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    if (providerFilter !== 'GLOBALCRYPTO' || !globalCryptoScrollTick) return;
+    let active = true;
+    const refreshGlobalCryptoOnScroll = async () => {
+      try {
+        const response = await fetch('/api/sire/markets/global-crypto', { cache: 'no-store', headers: { 'Cache-Control': 'no-cache' } });
+        const payload = await response.json().catch(() => null);
+        if (!active || !response.ok || !payload?.ok || !Array.isArray(payload?.instruments)) return;
+        const refreshedItems = payload.instruments.map((raw: any) => ({
+          ...raw, provider: 'GLOBALCRYPTO', providerLabel: raw.exchangeName || raw.exchange,
+          marketType: raw.type || 'Crypto', category: 'Crypto', displaySymbol: raw.symbol, name: raw.symbol,
+          exchangeOpen: 1, status: 'online',
+          logoUrl: raw.base ? makeAssetLogoFallback({ ...raw, base: raw.base, displaySymbol: raw.symbol } as Instrument) : '',
+          providerLogoUrl: makeProviderLogoFallback({ ...raw, provider: 'GLOBALCRYPTO' } as Instrument),
+          instrumentType: raw.type || 'crypto',
+        })) as Instrument[];
+        setInstruments(current => {
+          const existing = new Set(current.map(item => item.id));
+          const additions = refreshedItems.filter(item => !existing.has(item.id));
+          return additions.length ? current.concat(additions) : current;
+        });
+      } catch (error) {
+        console.warn('[SIRE GLOBAL CRYPTO] scroll refresh failed:', error);
+      }
+    };
+    void refreshGlobalCryptoOnScroll();
+    return () => { active = false; };
+  }, [providerFilter, globalCryptoScrollTick]);
+
+  useEffect(() => {
     if (!instruments.length) return;
     setChartSymbols(current => Array.from(
       { length: chartLayout },
@@ -644,7 +674,7 @@ export default function App() {
           {(['ALL','Forex','Stocks','Funds','Commodities','Indices','Bonds','Options','Futures','Crypto','Synthetic Indices','Baskets'] as const).map(category => (
             <button key={category} type="button" className={categoryFilter === category ? 'active' : ''} onClick={() => setCategoryFilter(category)}>{category}</button>
           ))}
-        </div>{derivError && <div className="sire-deriv-error">{derivError}</div>}<div className="native-symbol-list symbol-list" onScroll={event => setQuoteScrollTop(event.currentTarget.scrollTop)}><div style={{height: quoteWindow.top}} aria-hidden="true" /><div className="sire-quote-window">{quoteWindow.items.map(item => <button key={item.id} className={`symbol-row ${selected?.id === item.id ? 'active' : ''}`} data-provider={item.provider} onClick={() => selectInstrument(item)}><span className="quote-asset-logo-wrap"><img className="quote-asset-logo" src={item.logoUrl || item.providerLogoUrl} alt="" decoding="async" onError={event => { const image = event.currentTarget; image.style.display='none'; }} /></span><span className="quote-instrument-name"><b>{item.displaySymbol || item.symbol}</b><small>{item.name}</small></span><span className="quote-broker"><img className="quote-broker-logo" src={item.providerLogoUrl} alt="" decoding="async" onError={event => {
+        </div>{derivError && <div className="sire-deriv-error">{derivError}</div>}<div className="native-symbol-list symbol-list" onScroll={event => { const el = event.currentTarget; setQuoteScrollTop(el.scrollTop); if (providerFilter === 'GLOBALCRYPTO' && el.scrollTop + el.clientHeight >= el.scrollHeight - 700) setGlobalCryptoScrollTick(tick => tick + 1); }}><div style={{height: quoteWindow.top}} aria-hidden="true" /><div className="sire-quote-window">{quoteWindow.items.map(item => <button key={item.id} className={`symbol-row ${selected?.id === item.id ? 'active' : ''}`} data-provider={item.provider} onClick={() => selectInstrument(item)}><span className="quote-asset-logo-wrap"><img className="quote-asset-logo" src={item.logoUrl || item.providerLogoUrl} alt="" decoding="async" onError={event => { const image = event.currentTarget; image.style.display='none'; }} /></span><span className="quote-instrument-name"><b>{item.displaySymbol || item.symbol}</b><small>{item.name}</small></span><span className="quote-broker"><img className="quote-broker-logo" src={item.providerLogoUrl} alt="" decoding="async" onError={event => {
   const image=event.currentTarget;
   const stage=image.dataset.logoStage || '0';
   image.dataset.logoStage=stage === '0' ? '1' : '2';
