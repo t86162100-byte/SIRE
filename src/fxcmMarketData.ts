@@ -13,12 +13,6 @@ export function createFxcmDataFeed(onQuote?:Handler,onDiagnostic?:(e:any)=>void)
     onDiagnostic?.({level:'info',code:'HISTORY_LOADED',message:'Loaded '+bars.length+' FXCM candles for '+symbol+' '+interval+'.'});
     return bars;
   };
-  const poll=async(symbol:string)=>{
-    if(stopped)return;
-    try{const r=await fetch('/api/sire/fxcm/quote?symbol='+encodeURIComponent(symbol),{cache:'no-store'});const p=await r.json();if(!r.ok||!p?.ok)throw new Error(p?.error||'FXCM quote failed');const q=p.quote;if(Number.isFinite(q?.price)&&Number.isFinite(q?.epoch)){last={symbol,price:Number(q.price),epoch:Number(q.epoch)};onQuote?.(last);}}
-    catch(e){onDiagnostic?.({level:'warning',code:'LIVE_PRICE_NOT_RECEIVED',message:'FXCM live price request failed.',detail:e instanceof Error?e.message:String(e)});}
-    timer=window.setTimeout(()=>void poll(symbol),2000);
-  };
   return {
     getBars,
     async getBarsPage({symbol,interval,before,countBack}:{symbol:string;interval:string;before:number;countBack:number}){return getBars({symbol,interval,countBack});},
@@ -34,7 +28,6 @@ export function createFxcmDataFeed(onQuote?:Handler,onDiagnostic?:(e:any)=>void)
       void run(); return ()=>{stopped=true;if(timer)window.clearTimeout(timer);timer=undefined;};
     },
     getLiveState(){return last?{connectionStatus:'polling',subscriptionStatus:stopped?'stopped':'active',latestTick:{...last},dataTimestamp:last.epoch,dataAgeMs:Math.max(0,Date.now()-last.epoch*1000),stale:Date.now()-last.epoch*1000>10000,staleThresholdMs:10000,checkedAt:Date.now()}: {connectionStatus:'idle',subscriptionStatus:'idle',latestTick:null,dataTimestamp:null,dataAgeMs:null,stale:false,staleThresholdMs:10000,checkedAt:Date.now()};},
-    close(){stopped=true;if(timer)window.clearTimeout(timer);timer=undefined;},
-    getLiveState(){return last;}
+    close(){stopped=true;if(timer)window.clearTimeout(timer);timer=undefined;}
   };
 }
