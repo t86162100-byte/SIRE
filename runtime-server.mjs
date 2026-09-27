@@ -15,6 +15,7 @@ import { runSireDiagnostics } from './backend/sire-diagnostics.ts';
 import { runAutonomousCycle } from './autonomous/sire-autonomous-cycle.ts';
 import { recordIssue, getRecentIssues } from './backend/sire-issue-tracker.ts';
 import { getUnifiedMarketCatalogue } from './backend/market-catalog.ts';
+import { loadGlobalCryptoUniverse } from './backend/ccxt-universe-loader.ts';
 
 const PORT = Number(process.env.PORT || 10000);
 const HOST = '0.0.0.0';
@@ -605,6 +606,16 @@ const server = http.createServer(async (req,res) => {
   if (await serveStatic(req,res)) return;
   let body=''; req.on('data',chunk=>{body+=chunk;}); req.on('end',async()=>{ try {
     const pathname = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`).pathname;
+    if (pathname === '/api/sire/markets/global-crypto' && req.method === 'GET') {
+      try {
+        const instruments = await loadGlobalCryptoUniverse();
+        return res.writeHead(200,{ 'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store','Access-Control-Allow-Origin':'*' }).end(JSON.stringify({ok:true,source:'ccxt',count:instruments.length,instruments}));
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        return res.writeHead(503,{ 'Content-Type':'application/json; charset=utf-8','Access-Control-Allow-Origin':'*' }).end(JSON.stringify({ok:false,error:message}));
+      }
+    }
+
     if (pathname === '/api/auth/google' && req.method === 'GET') {
       try { const result = await googleStart(req); return res.writeHead(302,{Location:result.url,'Set-Cookie':result.setCookie,'Cache-Control':'no-store'}).end(); }
       catch (cause) { const message=cause instanceof Error?cause.message:String(cause); return res.writeHead(503,{'Content-Type':'text/plain; charset=utf-8'}).end(message); }
