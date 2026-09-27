@@ -17,8 +17,8 @@ const providerLogo='https://www.binance.com/favicon.ico';
 
 function item(raw:any,marketType:string):BinanceInstrument|null{
   const symbol=String(raw?.symbol||'').trim(); if(!symbol)return null;
-  const base=String(raw?.baseAsset||raw?.baseCoin||'').trim()||undefined;
-  const quote=String(raw?.quoteAsset||raw?.quoteCoin||raw?.quoteCurrency||'').trim()||undefined;
+  const base=String(raw?.baseAsset||raw?.baseCoin||raw?.base||'').trim()||undefined;
+  const quote=String(raw?.quoteAsset||raw?.quoteCoin||raw?.quoteCurrency||raw?.quote||'').trim()||undefined;
   const status=String(raw?.status||raw?.contractStatus||'TRADING').toUpperCase();
   if(!['TRADING','PENDING_TRADING'].includes(status))return null;
   const contractType=String(raw?.contractType||'').trim()||undefined;
@@ -34,6 +34,8 @@ export async function getBinanceCatalogue():Promise<BinanceInstrument[]>{
   const add=(rows:any[],mt:string)=>{for(const r of rows||[]){const x=item(r,mt);if(x)out.push(x)}};
   const spot=await getJson('https://api.binance.com/api/v3/exchangeInfo');
   add(spot?.symbols,'Spot');
+  try{const margin=await getJson('https://api.binance.com/sapi/v1/margin/allPairs');add(margin,'Margin')}catch(e){console.warn('[SIRE BINANCE] Cross Margin catalogue unavailable:',e)}
+  try{const isolated=await getJson('https://api.binance.com/sapi/v1/margin/isolated/allPairs');add(isolated,'Isolated Margin')}catch(e){console.warn('[SIRE BINANCE] Isolated Margin catalogue unavailable:',e)}
   // USD-M futures: PERPETUAL and dated delivery contracts are both exposed by the
   // official exchangeInfo endpoint and must remain distinct in SIRE.
   const usd=await getJson('https://fapi.binance.com/fapi/v1/exchangeInfo');
