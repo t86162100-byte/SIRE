@@ -1,4 +1,4 @@
-export type MarketProvider = 'FXCM' | 'YFINANCE' | 'SP' | 'DERIV' | 'BITGET' | 'BYBIT' | 'OKX' | 'KRAKEN' | 'COINBASE' | 'GATEIO' | 'KUCOIN' | 'GEMINI' | 'BITSO' | 'BITFINEX' | 'BITVAVO' | 'COINEX' | 'LBANK' | 'WOOX' | 'CRYPTOCOM' | 'HTX' | 'BITKUB' | 'UPBIT' | 'PIONEX' | 'POLONIEX' | 'BITHUMB' | 'MEXC' | 'PHEMEX' | 'WHITEBIT' | 'TWELVEDATA' | 'NASDAQTRADER' | 'CME' | 'CBOT' | 'NYMEX' | 'COMEX' | 'NYSEAMERICAN' | 'XETR' | 'HKEX' | 'BSE' | 'TSE' | 'XFRA' | 'EUREX' | 'ASX' | 'TWSE' | 'PSX' | 'IDX' | 'NSE' | 'BITSTAMP' | 'OANDA' | 'TRADINGVIEW' | 'FOREXCOM' | 'INTERACTIVEBROKERS' | 'TRADESTATION' | 'WEBULL' | 'MOOMOO' | 'NINJATRADER' | 'TRADOVATE' | 'AMPFUTURES' | 'TASTYTRADE' | 'TASTYFX' | 'CRYPTOCOMEXCHANGE' | 'COINBASEADVANCED' | 'ALPACA' | 'TRADIERBROKERAGE' | 'TRADEZERO' | 'COBRATRADING' | 'CLEARSTREET' | 'INVESTRADE' | 'PUBLIC' | 'PLUS500US' | 'OPTIMUSFUTURES' | 'EDGECLEAR' | 'IRONBEAM' | 'STONEX' | 'DORMANTRADING' | 'TRADIERFUTURES';
+export type MarketProvider = 'BINANCE' | 'FXCM' | 'YFINANCE' | 'SP' | 'DERIV' | 'BITGET' | 'BYBIT' | 'OKX' | 'KRAKEN' | 'COINBASE' | 'GATEIO' | 'KUCOIN' | 'GEMINI' | 'BITSO' | 'BITFINEX' | 'BITVAVO' | 'COINEX' | 'LBANK' | 'WOOX' | 'CRYPTOCOM' | 'HTX' | 'BITKUB' | 'UPBIT' | 'PIONEX' | 'POLONIEX' | 'BITHUMB' | 'MEXC' | 'PHEMEX' | 'WHITEBIT' | 'TWELVEDATA' | 'NASDAQTRADER' | 'CME' | 'CBOT' | 'NYMEX' | 'COMEX' | 'NYSEAMERICAN' | 'XETR' | 'HKEX' | 'BSE' | 'TSE' | 'XFRA' | 'EUREX' | 'ASX' | 'TWSE' | 'PSX' | 'IDX' | 'NSE' | 'BITSTAMP' | 'OANDA' | 'TRADINGVIEW' | 'FOREXCOM' | 'INTERACTIVEBROKERS' | 'TRADESTATION' | 'WEBULL' | 'MOOMOO' | 'NINJATRADER' | 'TRADOVATE' | 'AMPFUTURES' | 'TASTYTRADE' | 'TASTYFX' | 'CRYPTOCOMEXCHANGE' | 'COINBASEADVANCED' | 'ALPACA' | 'TRADIERBROKERAGE' | 'TRADEZERO' | 'COBRATRADING' | 'CLEARSTREET' | 'INVESTRADE' | 'PUBLIC' | 'PLUS500US' | 'OPTIMUSFUTURES' | 'EDGECLEAR' | 'IRONBEAM' | 'STONEX' | 'DORMANTRADING' | 'TRADIERFUTURES';
 
 export interface UnifiedInstrument {
   id: string;
@@ -162,6 +162,70 @@ async function coinbase(): Promise<UnifiedInstrument[]> {
     return [];
   }
 }
+
+async function binance(): Promise<UnifiedInstrument[]> {
+  const out: UnifiedInstrument[] = [];
+  const loadFamily = async (label: string, urls: string[], marketType: string) => {
+    try {
+      const response = await getJsonAny(urls, 12000);
+      const rows = marketType === 'Options'
+        ? (Array.isArray(response?.optionSymbols) ? response.optionSymbols : [])
+        : (Array.isArray(response?.symbols) ? response.symbols : []);
+      for (const raw of rows) {
+        const status = String(raw?.status || raw?.contractStatus || '').toUpperCase();
+        if (status && status !== 'TRADING') continue;
+        const normalized = marketType === 'Options'
+          ? { ...raw, baseAsset: String(raw?.underlying || '').replace(/USDT$|USDC$|USD$/i, ''), quoteAsset: raw?.quoteAsset || 'USDT' }
+          : raw;
+        const item = cryptoItem('BINANCE', marketType, 'Crypto', normalized);
+        if (item) out.push(item);
+      }
+      console.log('[SIRE BINANCE] ' + label + ': ' + out.filter(item => item.marketType === marketType).length);
+    } catch (error) {
+      console.warn('[SIRE BINANCE] ' + label + ' failed:', error);
+    }
+  };
+
+  await loadFamily('Spot', [
+    'https://data-api.binance.vision/api/v3/exchangeInfo?symbolStatus=TRADING',
+    'https://api.binance.com/api/v3/exchangeInfo?symbolStatus=TRADING',
+    'https://api1.binance.com/api/v3/exchangeInfo?symbolStatus=TRADING',
+    'https://api2.binance.com/api/v3/exchangeInfo?symbolStatus=TRADING'
+  ], 'Spot');
+
+  // Margin availability is published on Spot exchangeInfo. We do not invent
+  // Cross/Isolated distinctions when the public response does not expose them.
+  try {
+    const response = await getJsonAny([
+      'https://data-api.binance.vision/api/v3/exchangeInfo?symbolStatus=TRADING',
+      'https://api.binance.com/api/v3/exchangeInfo?symbolStatus=TRADING'
+    ], 12000);
+    const rows = Array.isArray(response?.symbols) ? response.symbols : [];
+    for (const raw of rows.filter((item: any) => item?.isMarginTradingAllowed === true)) {
+      const item = cryptoItem('BINANCE', 'Margin', 'Crypto', raw);
+      if (item) out.push(item);
+    }
+    console.log('[SIRE BINANCE] Margin: ' + out.filter(item => item.marketType === 'Margin').length);
+  } catch (error) {
+    console.warn('[SIRE BINANCE] Margin failed:', error);
+  }
+
+  await loadFamily('USD-M Perpetuals', ['https://fapi.binance.com/fapi/v1/exchangeInfo'], 'USD-M Perpetuals');
+  await loadFamily('USD-M Futures', ['https://fapi.binance.com/fapi/v1/exchangeInfo'], 'USD-M Futures');
+  await loadFamily('COIN-M Perpetuals', ['https://dapi.binance.com/dapi/v1/exchangeInfo'], 'COIN-M Perpetuals');
+  await loadFamily('COIN-M Futures', ['https://dapi.binance.com/dapi/v1/exchangeInfo'], 'COIN-M Futures');
+  await loadFamily('Options', ['https://eapi.binance.com/eapi/v1/exchangeInfo'], 'Options');
+
+  // The same public symbol can appear in more than one family only when Binance
+  // actually exposes it as such. Deduplicate by SIRE instrument id.
+  const seen = new Set<string>();
+  return out.filter(item => {
+    if (seen.has(item.id)) return false;
+    seen.add(item.id);
+    return true;
+  });
+}
+
 async function gateio(): Promise<UnifiedInstrument[]> { const out:UnifiedInstrument[]=[];try{const r=await getJson('https://api.gateio.ws/api/v4/spot/currency_pairs',15000);for(const raw of r||[]){if(String(raw?.trade_status||'').toLowerCase()!=='tradable')continue;const i=cryptoItem('GATEIO','Spot','Crypto',{symbol:raw?.id,baseAsset:raw?.base,quoteAsset:raw?.quote,status:'online'});if(i)out.push(i)}}catch(e){console.warn('[SIRE GATEIO] Spot failed:',e)}for(const settle of ['usdt','usdc','btc','usd'])for(const kind of ['futures','delivery'])try{const r=await getJson('https://api.gateio.ws/api/v4/'+kind+'/'+settle+'/contracts',15000);for(const raw of r||[]){const i=cryptoItem('GATEIO',kind==='futures'?'Perpetuals':'Futures','Crypto',{...raw,symbol:raw?.name,baseAsset:String(raw?.underlying||'').split('_')[0],quoteAsset:settle.toUpperCase()});if(i)out.push(i)}}catch(e){console.warn('[SIRE GATEIO] '+kind+'/'+settle+' failed:',e)}try{const us=await getJson('https://api.gateio.ws/api/v4/options/underlyings',15000);for(const u of us||[]){const underlying=String(u?.name||'');if(!underlying)continue;const r=await getJson('https://api.gateio.ws/api/v4/options/contracts?underlying='+encodeURIComponent(underlying),15000);for(const raw of r||[]){const i=cryptoItem('GATEIO','Options','Crypto',{...raw,symbol:raw?.name,baseAsset:underlying.split('_')[0],quoteAsset:underlying.split('_')[1]||'USDT'});if(i)out.push(i)}}}catch(e){console.warn('[SIRE GATEIO] Options failed:',e)}return out; }
 
 async function kucoin(): Promise<UnifiedInstrument[]> { const out:UnifiedInstrument[]=[];try{const r=await getJson('https://api.kucoin.com/api/v2/symbols',15000);for(const raw of r?.data||[]){if(raw?.enableTrading===false)continue;const i=cryptoItem('KUCOIN','Spot','Crypto',{symbol:raw?.symbol,baseAsset:raw?.baseCurrency,quoteAsset:raw?.quoteCurrency,status:'online'});if(i)out.push(i)}}catch(e){console.warn('[SIRE KUCOIN] Spot failed:',e)}for(const u of ['https://api.kucoin.com/api/v3/margin/symbols','https://api.kucoin.com/api/v1/isolated/symbols'])try{const r=await getJson(u,15000);const rows=Array.isArray(r?.data)?r.data:r?.data?.items||[];for(const raw of rows){if(raw?.enableTrading===false||raw?.tradeEnable===false)continue;const i=cryptoItem('KUCOIN','Margin','Crypto',{symbol:raw?.symbol,baseAsset:raw?.baseCurrency,quoteAsset:raw?.quoteCurrency,status:'online',isMarginEnabled:true});if(i&&!out.some(x=>x.marketType==='Margin'&&x.symbol===i.symbol))out.push(i)}}catch(e){console.warn('[SIRE KUCOIN] Margin failed:',e)}try{const r=await getJson('https://api-futures.kucoin.com/api/v1/contracts/active',15000);for(const raw of r?.data||[]){const i=cryptoItem('KUCOIN',raw?.expireDate?'Futures':'Perpetuals','Crypto',raw);if(i)out.push(i)}}catch(e){console.warn('[SIRE KUCOIN] Futures failed:',e)}return out; }
@@ -1839,6 +1903,7 @@ export async function getUnifiedMarketCatalogue(fetchDeriv: () => Promise<any[]>
     const providers: Array<[MarketProvider, Promise<UnifiedInstrument[]>]> = [
       // Deriv remains on its dedicated implementation and is intentionally untouched.
       ['DERIV', fetchDeriv().then(items => items.map(derivItem).filter(Boolean) as UnifiedInstrument[])],
+      ['BINANCE', binance()],
       ['FXCM', fxcm()],
       // Nasdaq Trader supplies the public instrument master for Nasdaq-listed,
       // other U.S.-listed, bonds, NOM options, mutual funds and additional
