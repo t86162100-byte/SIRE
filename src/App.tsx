@@ -2,10 +2,10 @@ import { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import { createLinkGroup, type LinkGroup } from 'openalgo-charts';
 import { Search } from 'lucide-react';
 import {
-  siBinance, siBitget, siBybit, siOkx, siKraken, siCoinbase, siKucoin, siMexc,
+  siBinance, siBybit, siOkx, siKraken, siCoinbase, siKucoin, siMexc,
   siGemini, siBitfinex, siBitstamp, siBitvavo, siCoinex, siLbank, siCryptoDotCom,
   siHtx, siUpbit, siPoloniex, siBithumb, siPhemex, siWhitebit, siBitso, siBitkub,
-  siPionex, siHyperliquid, siOanda, siGate, siWoo,
+  siPionex, siHyperliquid, siOanda, siGate,
 } from 'simple-icons';
 import ResearchLab from './ResearchLab';
 import FinancialChart from './FinancialChart';
@@ -49,7 +49,7 @@ const makeAssetLogoFallback = (item: Instrument) => {
  */
 const providerLogoIcons: Record<string, { svg: string }> = {
   binance: siBinance,
-  bitget: siBitget,
+  bitget: { title: 'Bitget', slug: 'bitget', svg: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path fill="#00F0FF" d="M4 3h7v7H4zM13 3h7v7h-7zM4 12h7v9H4zM13 12h7v9h-7z"/></svg>' },
   bybit: siBybit,
   okx: siOkx,
   kraken: siKraken,
@@ -77,7 +77,7 @@ const providerLogoIcons: Record<string, { svg: string }> = {
   oanda: siOanda,
   gate: siGate,
   gateio: siGate,
-  woox: siWoo,
+  woox: makeLogoFallback('WOO'),
 };
 
 const makeProviderLogoFallback = (item: Instrument) => {
