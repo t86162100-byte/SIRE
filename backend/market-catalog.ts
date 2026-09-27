@@ -1,4 +1,4 @@
-export type MarketProvider = 'DERIV' | 'BINANCE' | 'BITGET' | 'BYBIT' | 'OKX' | 'KRAKEN' | 'COINBASE' | 'GATEIO' | 'KUCOIN' | 'GEMINI' | 'BITSO' | 'BITFINEX' | 'BITVAVO' | 'COINEX' | 'LBANK' | 'WOOX' | 'CRYPTOCOM' | 'HTX' | 'BITKUB' | 'UPBIT' | 'PIONEX' | 'POLONIEX' | 'BITHUMB' | 'MEXC' | 'PHEMEX' | 'WHITEBIT' | 'TWELVEDATA' | 'NASDAQTRADER' | 'XETR' | 'HKEX' | 'BSE' | 'TSE' | 'NSE' | 'BITSTAMP' | 'OANDA' | 'TRADINGVIEW' | 'FOREXCOM' | 'INTERACTIVEBROKERS' | 'TRADESTATION' | 'WEBULL' | 'MOOMOO' | 'NINJATRADER' | 'TRADOVATE' | 'AMPFUTURES' | 'TASTYTRADE' | 'TASTYFX' | 'CRYPTOCOMEXCHANGE' | 'COINBASEADVANCED' | 'ALPACA' | 'TRADIERBROKERAGE' | 'TRADEZERO' | 'COBRATRADING' | 'CLEARSTREET' | 'INVESTRADE' | 'PUBLIC' | 'PLUS500US' | 'OPTIMUSFUTURES' | 'EDGECLEAR' | 'IRONBEAM' | 'STONEX' | 'DORMANTRADING' | 'TRADIERFUTURES';
+export type MarketProvider = 'DERIV' | 'BINANCE' | 'BITGET' | 'BYBIT' | 'OKX' | 'KRAKEN' | 'COINBASE' | 'GATEIO' | 'KUCOIN' | 'GEMINI' | 'BITSO' | 'BITFINEX' | 'BITVAVO' | 'COINEX' | 'LBANK' | 'WOOX' | 'CRYPTOCOM' | 'HTX' | 'BITKUB' | 'UPBIT' | 'PIONEX' | 'POLONIEX' | 'BITHUMB' | 'MEXC' | 'PHEMEX' | 'WHITEBIT' | 'TWELVEDATA' | 'NASDAQTRADER' | 'XETR' | 'HKEX' | 'BSE' | 'TSE' | 'XFRA' | 'EUREX' | 'NSE' | 'BITSTAMP' | 'OANDA' | 'TRADINGVIEW' | 'FOREXCOM' | 'INTERACTIVEBROKERS' | 'TRADESTATION' | 'WEBULL' | 'MOOMOO' | 'NINJATRADER' | 'TRADOVATE' | 'AMPFUTURES' | 'TASTYTRADE' | 'TASTYFX' | 'CRYPTOCOMEXCHANGE' | 'COINBASEADVANCED' | 'ALPACA' | 'TRADIERBROKERAGE' | 'TRADEZERO' | 'COBRATRADING' | 'CLEARSTREET' | 'INVESTRADE' | 'PUBLIC' | 'PLUS500US' | 'OPTIMUSFUTURES' | 'EDGECLEAR' | 'IRONBEAM' | 'STONEX' | 'DORMANTRADING' | 'TRADIERFUTURES';
 
 export interface UnifiedInstrument {
   id: string;
@@ -1271,6 +1271,76 @@ async function xetra(): Promise<UnifiedInstrument[]> {
   }
 }
 
+async function xfra(): Promise<UnifiedInstrument[]> {
+  const url = 'https://www.cashmarket.deutsche-boerse.com/resource/blob/2289108/83a7c4e6eaa467595e3199d9ddb69ebd/data/t7-xfra-BF-allTradableInstruments.csv';
+  try {
+    const text = await getText(url, 12000);
+    const lines = text.replace(/^\uFEFF/, '').split(/\r?\n/).filter(Boolean);
+    if (lines.length < 4) throw new Error('XFRA feed returned no instrument rows');
+    const headers = lines[2].split(';').map(v => v.trim().replace(/^"|"$/g, ''));
+    const out: UnifiedInstrument[] = [];
+    const seen = new Set<string>();
+    for (const line of lines.slice(3)) {
+      const values = line.split(';').map(v => v.trim().replace(/^"|"$/g, ''));
+      const raw: Record<string,string> = {};
+      headers.forEach((header, index) => { raw[header] = values[index] ?? ''; });
+      const status = String(raw['Instrument Status'] || raw['Product Status'] || '').trim();
+      if (status && !/^active$/i.test(status)) continue;
+      const symbol = String(raw['Mnemonic'] || raw['Instrument'] || raw['ISIN'] || '').trim();
+      const name = String(raw['Instrument'] || raw['Mnemonic'] || raw['ISIN'] || symbol).trim();
+      const isin = String(raw['ISIN'] || '').trim();
+      if (!symbol || !name) continue;
+      const type = String(raw['Instrument Type'] || '').toUpperCase();
+      const category = /ETF|ETP|ETN|ETC|FUND/i.test(type + ' ' + name)
+        ? 'Funds'
+        : /BOND|FIXED/i.test(type + ' ' + name)
+          ? 'Bonds'
+          : /WARRANT|OPTION|RIGHT|CERTIFICATE/i.test(type + ' ' + name)
+            ? 'Derivatives'
+            : 'Stocks';
+      const key = 'XFRA:' + (isin || symbol);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      const item = cryptoItem('XFRA', 'Frankfurt', category, { symbol, fullName: name, status: 'online' });
+      if (!item) continue;
+      item.name = name; item.displaySymbol = symbol; item.marketType = 'Frankfurt';
+      item.category = category; item.quote = String(raw['Settlement Currency'] || raw['Currency'] || '').trim() || undefined;
+      item.status = status || 'Active'; item.logoUrl = providerLogo('XFRA'); item.providerLogoUrl = providerLogo('XFRA');
+      if (isin) item.id = 'XFRA:Frankfurt:' + isin;
+      out.push(item);
+    }
+    console.log('[SIRE XFRA] Tradable instruments: ' + out.length);
+    return out;
+  } catch (error) { console.warn('[SIRE XFRA] failed:', error); return []; }
+}
+
+async function eurex(): Promise<UnifiedInstrument[]> {
+  const url = 'https://api.developer.deutsche-boerse.com/eurex-prod-graphql/';
+  const query = `query { Products { date data { Product } } }`;
+  try {
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-DBP-APIKEY': '68cdafd2-c5c1-49be-8558-37244ab4f513' },
+      body: JSON.stringify({ query }),
+      signal: AbortSignal.timeout(12000)
+    });
+    if (!response.ok) throw new Error('HTTP ' + response.status);
+    const payload: any = await response.json();
+    const rows = Array.isArray(payload?.data?.Products?.data) ? payload.data.Products.data : [];
+    const out: UnifiedInstrument[] = [];
+    const seen = new Set<string>();
+    for (const raw of rows) {
+      const symbol = String(raw?.Product || '').trim();
+      if (!symbol || seen.has(symbol)) continue;
+      seen.add(symbol);
+      const item = cryptoItem('EUREX', 'Eurex', 'Futures', { symbol, fullName: symbol, status: 'online' });
+      if (item) { item.name = symbol; item.displaySymbol = symbol; item.marketType = 'Eurex'; item.category = 'Futures'; item.quote = 'EUR'; item.logoUrl = providerLogo('EUREX'); item.providerLogoUrl = providerLogo('EUREX'); out.push(item); }
+    }
+    console.log('[SIRE EUREX] Products: ' + out.length);
+    return out;
+  } catch (error) { console.warn('[SIRE EUREX] failed:', error); return []; }
+}
+
 async function hkex(): Promise<UnifiedInstrument[]> {
   const url = 'https://www.hkex.com.hk/eng/services/trading/securities/securitieslists/ListOfSecurities.xlsx';
   try {
@@ -1496,6 +1566,8 @@ export async function getUnifiedMarketCatalogue(fetchDeriv: () => Promise<any[]>
       ['TWELVEDATA', twelveData()],
       ['NASDAQTRADER', nasdaqTrader()],
       ['XETR', xetra()],
+      ['XFRA', xfra()],
+      ['EUREX', eurex()],
       ['HKEX', hkex()],
       ['BSE', bse()],
       ['TSE', tse()],
@@ -1530,7 +1602,7 @@ export async function getUnifiedMarketCatalogue(fetchDeriv: () => Promise<any[]>
       ['OANDA', oanda()],
     ];
     const results = await Promise.allSettled(
-      providers.map(([provider, promise]) => withProviderTimeout(provider, promise, provider === 'DERIV' || provider === 'NASDAQTRADER' || provider === 'XETR' ? 12000 : 7000))
+      providers.map(([provider, promise]) => withProviderTimeout(provider, promise, provider === 'DERIV' || provider === 'NASDAQTRADER' || provider === 'XETR' || provider === 'XFRA' || provider === 'EUREX' ? 12000 : 7000))
     );
     results.forEach((result, index) => {
       if (result.status === 'rejected') console.warn('[SIRE MARKET CATALOG] provider failed:', providers[index][0], result.reason);
