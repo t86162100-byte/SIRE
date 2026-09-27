@@ -205,37 +205,56 @@ async function twelveData(): Promise<UnifiedInstrument[]> {
     console.warn('[SIRE TWELVEDATA] TWELVE_DATA_API_KEY not configured; skipping optional global catalogue.');
     return [];
   }
-  const response = await getJsonAny([
-    'https://api.twelvedata.com/stocks?exchange=NYSE,NASDAQ,AMEX,OTC&country=United%20States&apikey=' + encodeURIComponent(apiKey),
-    'https://api.twelvedata.com/stocks?apikey=' + encodeURIComponent(apiKey)
-  ], 15000);
-  const rows = Array.isArray(response?.data) ? response.data : [];
+
+  const sources: Array<{ endpoint: string; category: string; marketType: string; rows: (payload: any) => any[] }> = [
+    { endpoint: '/stocks', category: 'Stocks', marketType: 'Equities', rows: p => Array.isArray(p?.data) ? p.data : [] },
+    { endpoint: '/etfs', category: 'Funds', marketType: 'ETF', rows: p => Array.isArray(p?.data) ? p.data : Array.isArray(p?.result?.list) ? p.result.list : [] },
+    { endpoint: '/funds', category: 'Funds', marketType: 'Funds', rows: p => Array.isArray(p?.data) ? p.data : Array.isArray(p?.result?.list) ? p.result.list : [] },
+    { endpoint: '/mutual_funds/list', category: 'Funds', marketType: 'Mutual Funds', rows: p => Array.isArray(p?.data) ? p.data : Array.isArray(p?.result?.list) ? p.result.list : [] },
+    { endpoint: '/money_market_funds/list', category: 'Funds', marketType: 'Money Market Funds', rows: p => Array.isArray(p?.data) ? p.data : Array.isArray(p?.result?.list) ? p.result.list : [] },
+    { endpoint: '/forex_pairs', category: 'Forex', marketType: 'Spot FX', rows: p => Array.isArray(p?.data) ? p.data : [] },
+    { endpoint: '/commodities', category: 'Commodities', marketType: 'Spot Commodities', rows: p => Array.isArray(p?.data) ? p.data : [] },
+    { endpoint: '/indices', category: 'Indices', marketType: 'Indices', rows: p => Array.isArray(p?.data) ? p.data : Array.isArray(p?.result?.list) ? p.result.list : [] },
+    { endpoint: '/cryptocurrencies', category: 'Crypto', marketType: 'Aggregated Crypto', rows: p => Array.isArray(p?.data) ? p.data : [] },
+  ];
+
   const out: UnifiedInstrument[] = [];
-  for (const raw of rows) {
-    const symbol = String(raw?.symbol || '').trim();
-    if (!symbol) continue;
-    const type = String(raw?.type || raw?.instrument_type || 'Common Stock').toLowerCase();
-    const exchange = String(raw?.exchange || '').trim();
-    const category = type.includes('fund') || type.includes('etf') ? 'Funds' : 'Stocks';
-    const item = cryptoItem('TWELVEDATA', category, category, {
-      symbol,
-      baseAsset: symbol,
-      fullName: String(raw?.name || symbol),
-      status: 'online'
-    });
-    if (item) {
-      item.name = String(raw?.name || symbol);
-      item.marketType = exchange || 'US Market';
-      item.category = category;
-      item.logoUrl = providerLogo('TWELVEDATA');
-      item.providerLogoUrl = providerLogo('TWELVEDATA');
-      out.push(item);
+  for (const source of sources) {
+    try {
+      const response = await getJsonAny([
+        'https://api.twelvedata.com' + source.endpoint + '?apikey=' + encodeURIComponent(apiKey)
+      ], 15000);
+      if (String(response?.status || '').toLowerCase() === 'error') {
+        throw new Error(String(response?.message || 'Twelve Data API error'));
+      }
+      for (const raw of source.rows(response)) {
+        const symbol = String(raw?.symbol || raw?.ticker || '').trim();
+        if (!symbol) continue;
+        const base = String(raw?.currency_base || raw?.base_currency || raw?.base || raw?.symbol || '').trim() || undefined;
+        const quote = String(raw?.currency_quote || raw?.quote_currency || raw?.quote || '').trim() || undefined;
+        const item = cryptoItem('TWELVEDATA', source.marketType, source.category, {
+          symbol,
+          baseAsset: base,
+          quoteAsset: quote,
+          fullName: String(raw?.name || raw?.description || symbol),
+          status: String(raw?.status || 'online')
+        });
+        if (!item) continue;
+        item.name = String(raw?.name || raw?.description || symbol);
+        item.category = source.category;
+        item.marketType = String(raw?.exchange || raw?.country || source.marketType);
+        item.logoUrl = providerLogo('TWELVEDATA');
+        item.providerLogoUrl = providerLogo('TWELVEDATA');
+        out.push(item);
+      }
+      console.log('[SIRE TWELVEDATA] ' + source.endpoint + ': ' + source.rows(response).length);
+    } catch (error) {
+      console.warn('[SIRE TWELVEDATA] ' + source.endpoint + ' failed:', error);
     }
   }
-  console.log('[SIRE TWELVEDATA] Stocks/Funds: ' + out.length);
+  console.log('[SIRE TWELVEDATA] Total catalogue: ' + out.length);
   return out;
 }
-
 async function finnhub(): Promise<UnifiedInstrument[]> {
   const apiKey = String(process.env.FINNHUB_API_KEY || '').trim();
   if (!apiKey) {
