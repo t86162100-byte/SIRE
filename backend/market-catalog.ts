@@ -1,4 +1,4 @@
-export type MarketProvider = 'DERIV' | 'BINANCE' | 'BITGET' | 'BYBIT' | 'OKX' | 'KRAKEN' | 'COINBASE' | 'GATEIO' | 'KUCOIN' | 'GEMINI' | 'BITSO' | 'BITFINEX' | 'BITVAVO' | 'COINEX' | 'LBANK' | 'WOOX' | 'CRYPTOCOM' | 'HTX' | 'BITKUB' | 'UPBIT' | 'PIONEX' | 'POLONIEX' | 'BITHUMB' | 'MEXC' | 'PHEMEX' | 'WHITEBIT' | 'TWELVEDATA' | 'NASDAQTRADER' | 'NSE' | 'BITSTAMP' | 'OANDA' | 'TRADINGVIEW' | 'FOREXCOM' | 'INTERACTIVEBROKERS' | 'TRADESTATION' | 'WEBULL' | 'MOOMOO' | 'NINJATRADER' | 'TRADOVATE' | 'AMPFUTURES' | 'TASTYTRADE' | 'TASTYFX' | 'CRYPTOCOMEXCHANGE' | 'COINBASEADVANCED' | 'ALPACA' | 'TRADIERBROKERAGE' | 'TRADEZERO' | 'COBRATRADING' | 'CLEARSTREET' | 'INVESTRADE' | 'PUBLIC' | 'PLUS500US' | 'OPTIMUSFUTURES' | 'EDGECLEAR' | 'IRONBEAM' | 'STONEX' | 'DORMANTRADING' | 'TRADIERFUTURES';
+export type MarketProvider = 'DERIV' | 'BINANCE' | 'BITGET' | 'BYBIT' | 'OKX' | 'KRAKEN' | 'COINBASE' | 'GATEIO' | 'KUCOIN' | 'GEMINI' | 'BITSO' | 'BITFINEX' | 'BITVAVO' | 'COINEX' | 'LBANK' | 'WOOX' | 'CRYPTOCOM' | 'HTX' | 'BITKUB' | 'UPBIT' | 'PIONEX' | 'POLONIEX' | 'BITHUMB' | 'MEXC' | 'PHEMEX' | 'WHITEBIT' | 'TWELVEDATA' | 'NASDAQTRADER' | 'XETR' | 'NSE' | 'BITSTAMP' | 'OANDA' | 'TRADINGVIEW' | 'FOREXCOM' | 'INTERACTIVEBROKERS' | 'TRADESTATION' | 'WEBULL' | 'MOOMOO' | 'NINJATRADER' | 'TRADOVATE' | 'AMPFUTURES' | 'TASTYTRADE' | 'TASTYFX' | 'CRYPTOCOMEXCHANGE' | 'COINBASEADVANCED' | 'ALPACA' | 'TRADIERBROKERAGE' | 'TRADEZERO' | 'COBRATRADING' | 'CLEARSTREET' | 'INVESTRADE' | 'PUBLIC' | 'PLUS500US' | 'OPTIMUSFUTURES' | 'EDGECLEAR' | 'IRONBEAM' | 'STONEX' | 'DORMANTRADING' | 'TRADIERFUTURES';
 
 export interface UnifiedInstrument {
   id: string;
@@ -36,6 +36,21 @@ const assetLogo = (base?: string) => {
   return value ? 'https://cdn.jsdelivr.net/gh/spothq/cryptocurrency-icons@master/128/color/' + encodeURIComponent(value) + '.png' : '';
 };
 
+
+async function getText(url: string, timeoutMs = 12000) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const response = await fetch(url, {
+      signal: controller.signal,
+      headers: { Accept: 'text/csv,text/plain,*/*', 'User-Agent': 'SIRE-market-catalog/1.0' }
+    });
+    if (!response.ok) throw new Error('HTTP ' + response.status);
+    return await response.text();
+  } finally {
+    clearTimeout(timer);
+  }
+}
 
 async function getJson(url: string, timeoutMs = 12000) {
   const controller = new AbortController();
@@ -1204,6 +1219,58 @@ async function nasdaqTrader(): Promise<UnifiedInstrument[]> {
   console.log('[SIRE NASDAQTRADER] Total catalogue: ' + out.length);
   return out;
 }
+async function xetra(): Promise<UnifiedInstrument[]> {
+  const url = 'https://www.cashmarket.deutsche-boerse.com/resource/blob/1528/684b31b077a5de5d5777352984c7a7df/data/t7-xetr-allTradableInstruments.csv';
+  try {
+    const text = await getText(url, 12000);
+    const lines = text.replace(/^\uFEFF/, '').split(/\r?\n/).filter(Boolean);
+    if (lines.length < 4) throw new Error('XETR feed returned no instrument rows');
+    const headers = lines[2].split(';').map(v => v.trim().replace(/^"|"$/g, ''));
+    const out: UnifiedInstrument[] = [];
+    const seen = new Set<string>();
+    for (const line of lines.slice(3)) {
+      const values = line.split(';').map(v => v.trim().replace(/^"|"$/g, ''));
+      const raw: Record<string,string> = {};
+      headers.forEach((header, index) => { raw[header] = values[index] ?? ''; });
+      const status = String(raw['Instrument Status'] || raw['Product Status'] || '').trim();
+      if (status && !/^active$/i.test(status)) continue;
+      const symbol = String(raw['Mnemonic'] || raw['Instrument'] || raw['ISIN'] || raw['Instrument ID'] || '').trim();
+      const name = String(raw['Instrument'] || raw['Mnemonic'] || raw['ISIN'] || symbol).trim();
+      const isin = String(raw['ISIN'] || '').trim();
+      if (!symbol || !name) continue;
+      const type = String(raw['Instrument Type'] || '').toUpperCase();
+      const category = /ETF|ETP|ETN|ETC|FUND/i.test(type + ' ' + name)
+        ? 'Funds'
+        : /BOND|FIXED/i.test(type + ' ' + name)
+          ? 'Bonds'
+          : /WARRANT|OPTION|RIGHT|CERTIFICATE/i.test(type + ' ' + name)
+            ? 'Derivatives'
+            : 'Stocks';
+      const key = 'XETR:' + (isin || symbol);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      const item = cryptoItem('XETR', 'Xetra', category, { symbol, fullName: name, status: 'online' });
+      if (!item) continue;
+      item.name = name;
+      item.displaySymbol = symbol;
+      item.marketType = 'Xetra';
+      item.category = category;
+      item.base = undefined;
+      item.quote = String(raw['Settlement Currency'] || raw['Currency'] || '').trim() || undefined;
+      item.status = status || 'Active';
+      item.logoUrl = providerLogo('XETR');
+      item.providerLogoUrl = providerLogo('XETR');
+      if (isin) item.id = 'XETR:Xetra:' + isin;
+      out.push(item);
+    }
+    console.log('[SIRE XETR] Tradable instruments: ' + out.length);
+    return out;
+  } catch (error) {
+    console.warn('[SIRE XETR] failed:', error);
+    return [];
+  }
+}
+
 async function okx(): Promise<UnifiedInstrument[]> {
   const types = ['SPOT', 'SWAP', 'FUTURES', 'OPTION'];
   const out: UnifiedInstrument[] = [];
@@ -1283,6 +1350,7 @@ export async function getUnifiedMarketCatalogue(fetchDeriv: () => Promise<any[]>
       ['KRAKEN', kraken()],
       ['TWELVEDATA', twelveData()],
       ['NASDAQTRADER', nasdaqTrader()],
+      ['XETR', xetra()],
       ['NSE', nseIndia()],
       ['BITSTAMP', bitstamp()],
       ['FOREXCOM', brokerCatalogue('FOREXCOM')],
@@ -1314,7 +1382,7 @@ export async function getUnifiedMarketCatalogue(fetchDeriv: () => Promise<any[]>
       ['OANDA', oanda()],
     ];
     const results = await Promise.allSettled(
-      providers.map(([provider, promise]) => withProviderTimeout(provider, promise, provider === 'DERIV' || provider === 'NASDAQTRADER' ? 8000 : 7000))
+      providers.map(([provider, promise]) => withProviderTimeout(provider, promise, provider === 'DERIV' || provider === 'NASDAQTRADER' || provider === 'XETR' ? 12000 : 7000))
     );
     results.forEach((result, index) => {
       if (result.status === 'rejected') console.warn('[SIRE MARKET CATALOG] provider failed:', providers[index][0], result.reason);
