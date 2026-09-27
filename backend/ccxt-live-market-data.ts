@@ -49,7 +49,7 @@ async function loadMarkets(exchange: any) {
 
 function validQuote(exchange: any, symbol: string, raw: any, source: LiveQuote['source']): LiveQuote | null {
   const price = Number(raw?.last ?? raw?.close ?? raw?.price);
-  const timestamp = Number(raw?.timestamp ?? raw?.datetime ? Date.parse(raw.datetime) : NaN);
+  const timestamp = Number.isFinite(Number(raw?.timestamp)) ? Number(raw.timestamp) : (raw?.datetime ? Date.parse(raw.datetime) : NaN);
   const epoch = Number.isFinite(timestamp) && timestamp > 0 ? timestamp / 1000 : Date.now() / 1000;
   if (!Number.isFinite(price) || price <= 0) return null;
   return {
