@@ -1,175 +1,432 @@
 import type { SireMarketQuote } from './marketDataRouter';
 
-type Instrument={symbol:string;provider?:string;marketType?:string};
-const SEC:Record<string,number>={'1m':60,'3m':180,'5m':300,'15m':900,'30m':1800,'1h':3600,'2h':7200,'4h':14400,'6h':21600,'8h':28800,'12h':43200,'1d':86400,'1w':604800,'1M':2592000};
-const INTERVAL:Record<string,string>={'1m':'1min','3m':'3min','5m':'5min','15m':'15min','30m':'30min','1h':'1h','2h':'2h','4h':'4h','6h':'6h','8h':'8h','12h':'12h','1d':'1day','1w':'1week','1M':'1month'};
+type Instrument = {
+  symbol: string;
+  provider?: string;
+  marketType?: string;
+  base?: string;
+  quote?: string;
+};
 
-const SPOT_BASES=['https://api.binance.com','https://api-gcp.binance.com','https://api1.binance.com','https://api2.binance.com','https://api3.binance.com','https://api4.binance.com'];
-const SPOT_MARKET_DATA_BASE='https://data-api.binance.vision';
-const SPOT_WS_API='wss://ws-api.binance.com:443/ws-api/v3';
+const INTERVAL: Record<string,string> = {
+  '1m':'1m','3m':'3m','5m':'5m','15m':'15m','30m':'30m',
+  '1h':'1h','2h':'2h','4h':'4h','6h':'6h','8h':'8h','12h':'12h',
+  '1d':'1d','3d':'3d','1w':'1w','1M':'1M'
+};
 
-async function spotExchangeInfoViaWebSocket():Promise<any>{
-  return await new Promise((resolve,reject)=>{
-    let settled=false;
-    let socket:any=null;
-    const finish=(fn:(v:any)=>void,v:any)=>{if(settled)return;settled=true;try{socket?.close();}catch{}fn(v);};
-    const timeout=window.setTimeout(()=>finish(reject,new Error('Spot WebSocket exchangeInfo timed out.')),10000);
-    try{
-      socket=new WebSocket(SPOT_WS_API);
-      socket.onopen=()=>{
-        try{socket.send(JSON.stringify({id:'sire-binance-exchange-info-'+Date.now(),method:'exchangeInfo',params:{symbolStatus:'TRADING'}}));}
-        catch(e){window.clearTimeout(timeout);finish(reject,e);}
-      };
-      socket.onmessage=(event:any)=>{
-        try{
-          const data=JSON.parse(String(event.data));
-          if(Number(data?.status)===200&&data?.result){window.clearTimeout(timeout);finish(resolve,data.result);}
-          else if(data?.status&&Number(data.status)!==200){window.clearTimeout(timeout);finish(reject,new Error(String(data?.error?.msg||'Spot WebSocket exchangeInfo failed.')));}
-        }catch(e){window.clearTimeout(timeout);finish(reject,e);}
-      };
-      socket.onerror=()=>{window.clearTimeout(timeout);finish(reject,new Error('Spot WebSocket API connection failed.'));};
-      socket.onclose=()=>{if(!settled){window.clearTimeout(timeout);finish(reject,new Error('Spot WebSocket API closed before exchangeInfo response.'));}};
-    }catch(e){window.clearTimeout(timeout);finish(reject,e);}
-  });
+const BINANCE = {
+  spotRest: 'https://data-api.binance.vision',
+  spotStream: 'wss://data-stream.binance.vision',
+  usdmRest: 'https://fapi.binance.com',
+  usdmStream: 'wss://fstream.binance.com',
+  coinmRest: 'https://dapi.binance.com',
+  coinmStream: 'wss://dstream.binance.com',
+  optionsRest: 'https://eapi.binance.com',
+  optionsStream: 'wss://nbstream.binance.com/eoptions',
+} as const;
+
+function timeoutSignal(ms = 12000) {
+  const controller = new AbortController();
+  const timer = window.setTimeout(() => controller.abort(), ms);
+  return { controller, timer };
 }
 
-async function directJson(urls:string[],params:Record<string,string>={}){
-  let last:any;
-  for(const base of urls){
-    try{const u=new URL(base);for(const [k,v] of Object.entries(params))u.searchParams.set(k,v);const response=await fetch(u.toString(),{cache:'no-store'});const raw=await response.text();let data:any={};try{data=raw?JSON.parse(raw):{};}catch{}if(!response.ok)throw new Error('HTTP '+response.status+': '+String(data?.msg||raw.slice(0,200)));if(data?.code&&Number(data.code)<0)throw new Error('Binance '+data.code+': '+String(data.msg||'request failed'));return data;}catch(e){last=e;}
-  }
-  throw last||new Error('Binance browser market-data request failed.');
-}
-function browserItem(raw:any,marketType:string):any|null{
-  const symbol=String(raw?.symbol||'').trim();if(!symbol)return null;
-  const base=String(raw?.baseAsset||raw?.baseCoin||raw?.base||'').trim()||undefined;
-  const quote=String(raw?.quoteAsset||raw?.quoteCoin||raw?.quote||'').trim()||undefined;
-  const status=String(raw?.status||raw?.contractStatus||'TRADING').toUpperCase();if(!['TRADING','PENDING_TRADING'].includes(status))return null;
-  return {id:'BINANCE:'+marketType+':'+symbol,provider:'BINANCE',providerLabel:'Binance',marketType,category:'Crypto',symbol,displaySymbol:symbol,name:base&&quote?base+' / '+quote:symbol,base,quote,exchangeOpen:1,status:'online',logoUrl:base?'https://cdn.jsdelivr.net/gh/vadimmalykhin/binance-icons/crypto/'+encodeURIComponent(base.toLowerCase())+'.svg':'https://www.binance.com/favicon.ico',providerLogoUrl:'https://www.binance.com/favicon.ico',instrumentType:marketType,contractType:raw?.contractType||undefined,settlement:raw?.marginAsset||raw?.settleAsset||raw?.settleCoin||undefined,expiry:Number.isFinite(Number(raw?.deliveryDate??raw?.expiryDate))?Number(raw?.deliveryDate??raw?.expiryDate):undefined,strike:Number.isFinite(Number(raw?.strikePrice))?Number(raw.strikePrice):undefined,optionType:['CALL','PUT'].includes(String(raw?.side||'').toUpperCase())?String(raw.side).toUpperCase():undefined};
-}
-export async function fetchBinanceBrowserCatalogue():Promise<any[]>{
-  const out:any[]=[];
-  const counts:Record<string,number>={};
-  const failures:Record<string,string>={};
-  const add=(rows:any[],mt:string)=>{let n=0;for(const r of rows||[]){const x=browserItem(r,mt);if(x){out.push(x);n++;}}counts[mt]=(counts[mt]||0)+n;};
-  const load=async(label:string,urls:string,mt:string)=>{
-    try{
-      console.info('[SIRE BINANCE BROWSER] request',label,urls);
-      const data=await directJson(urls.split('|'));
-      const rows=Array.isArray(data)?data:(data?.symbols||[]);
-      add(rows,mt);
-      console.info('[SIRE BINANCE BROWSER] success',label,{count:rows.length,accepted:counts[mt]||0});
-      return true;
-    }catch(e){
-      const message=e instanceof Error?e.message:String(e);
-      failures[label]=message;
-      console.warn('[SIRE BINANCE BROWSER] failed',label,message);
-      return false;
+async function fetchJson(url: string, label: string, timeoutMs = 12000): Promise<any> {
+  const { controller, timer } = timeoutSignal(timeoutMs);
+  try {
+    console.info('[SIRE BINANCE BROWSER] HTTP', label, url);
+    const response = await fetch(url, {
+      method: 'GET',
+      cache: 'no-store',
+      signal: controller.signal,
+      headers: { Accept: 'application/json' },
+    });
+    const raw = await response.text();
+    let payload: any = null;
+    try { payload = raw ? JSON.parse(raw) : null; } catch {
+      throw new Error('Binance returned non-JSON HTTP ' + response.status);
     }
-  };
-  try{
-    console.info('[SIRE BINANCE BROWSER] request','spot exchangeInfo via official WebSocket API',SPOT_WS_API);
-    const data=await spotExchangeInfoViaWebSocket();
-    const rows=Array.isArray(data?.symbols)?data.symbols:[];
-    add(rows,'Spot');
-    console.info('[SIRE BINANCE BROWSER] success','spot exchangeInfo via WebSocket API',{count:rows.length,accepted:counts.Spot||0});
-  }catch(e){
-    const message=e instanceof Error?e.message:String(e);
-    failures['spot exchangeInfo websocket']=message;
-    console.warn('[SIRE BINANCE BROWSER] failed','spot exchangeInfo via WebSocket API',message);
-    await load('spot exchangeInfo via market-data-only domain',SPOT_MARKET_DATA_BASE+'/api/v3/exchangeInfo','Spot');
-    if(!counts.Spot) await load('spot exchangeInfo REST fallback',SPOT_BASES.map(x=>x+'/api/v3/exchangeInfo').join('|'),'Spot');
+    if (!response.ok) {
+      throw new Error('HTTP ' + response.status + ': ' + String(payload?.msg || 'Binance request failed'));
+    }
+    if (payload?.code && Number(payload.code) < 0) {
+      throw new Error('Binance ' + payload.code + ': ' + String(payload.msg || 'request failed'));
+    }
+    return payload;
+  } finally {
+    window.clearTimeout(timer);
   }
-  await load('cross margin allPairs',SPOT_BASES.map(x=>x+'/sapi/v1/margin/allPairs').join('|'),'Margin');
-  await load('isolated margin allPairs',SPOT_BASES.map(x=>x+'/sapi/v1/margin/isolated/allPairs').join('|'),'Isolated Margin');
-  try{
-    const usd=await directJson(['https://fapi.binance.com/fapi/v1/exchangeInfo']);
-    const rows=usd?.symbols||[]; let accepted=0;
-    for(const r of rows){const x=browserItem(r,String(r?.contractType||'')==='PERPETUAL'?'Perpetuals':'Futures');if(x){out.push(x);accepted++;}}
-    counts['USD-M']=accepted;
-    console.info('[SIRE BINANCE BROWSER] success','USD-M exchangeInfo',{count:rows.length,accepted});
-  }catch(e){failures['USD-M']=e instanceof Error?e.message:String(e);console.warn('[SIRE BINANCE BROWSER] failed','USD-M exchangeInfo',failures['USD-M']);}
-  try{
-    const coin=await directJson(['https://dapi.binance.com/dapi/v1/exchangeInfo']);
-    const rows=coin?.symbols||[]; let accepted=0;
-    for(const r of rows){const x=browserItem(r,String(r?.contractType||'')==='PERPETUAL'?'Perpetuals':'Futures');if(x){x.id='BINANCE:COIN-M:'+x.marketType+':'+x.symbol;x.name=(x.base&&x.quote)?x.base+' / '+x.quote+' (COIN-M)':x.symbol;out.push(x);accepted++;}}
-    counts['COIN-M']=accepted;
-    console.info('[SIRE BINANCE BROWSER] success','COIN-M exchangeInfo',{count:rows.length,accepted});
-  }catch(e){failures['COIN-M']=e instanceof Error?e.message:String(e);console.warn('[SIRE BINANCE BROWSER] failed','COIN-M exchangeInfo',failures['COIN-M']);}
-  try{
-    const options=await directJson(['https://eapi.binance.com/eapi/v1/exchangeInfo']);
-    const rows=options?.optionSymbols||[]; let accepted=0;
-    for(const r of rows){const x=browserItem(r,'Options');if(x){x.name=String(r?.symbol||x.symbol);x.base=String(r?.underlying||'').replace(/USDT$|USDC$|BUSD$/,'')||x.base;x.quote=String(r?.quoteAsset||'').trim()||x.quote;x.optionType=String(r?.side||'').toUpperCase();out.push(x);accepted++;}}
-    counts.Options=accepted;
-    console.info('[SIRE BINANCE BROWSER] success','Options exchangeInfo',{count:rows.length,accepted});
-  }catch(e){failures.Options=e instanceof Error?e.message:String(e);console.warn('[SIRE BINANCE BROWSER] failed','Options exchangeInfo',failures.Options);}
-  const seen=new Set<string>();
-  const unique=out.filter(x=>{if(seen.has(x.id))return false;seen.add(x.id);return true});
-  const diagnostic={source:'browser',total:unique.length,counts,failures,reportedAt:Date.now()};
-  console.info('[SIRE BINANCE BROWSER] COMPLETE',diagnostic);
-  try{await fetch('/api/sire/binance/browser-diagnostic',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(diagnostic),keepalive:true});}catch{}
-  if(!unique.length) throw new Error('Binance browser catalogue returned zero instruments. See [SIRE BINANCE BROWSER] diagnostics.');
+}
+
+function makeInstrument(raw: any, marketType: string, idPrefix = 'BINANCE'): any | null {
+  const symbol = String(raw?.symbol || '').trim();
+  if (!symbol) return null;
+
+  const status = String(raw?.status || raw?.contractStatus || 'TRADING').toUpperCase();
+  if (!['TRADING','PENDING_TRADING'].includes(status)) return null;
+
+  const base = String(raw?.baseAsset || raw?.baseCoin || '').trim() || undefined;
+  const quote = String(raw?.quoteAsset || raw?.quoteCoin || raw?.quoteCurrency || '').trim() || undefined;
+  const expiry = Number(raw?.deliveryDate ?? raw?.expiryDate);
+  const strike = Number(raw?.strikePrice);
+  const side = String(raw?.side || '').toUpperCase();
+
+  return {
+    id: idPrefix + ':' + marketType + ':' + symbol,
+    provider: 'BINANCE',
+    providerLabel: 'Binance',
+    exchange: 'BINANCE',
+    marketType,
+    category: 'Crypto',
+    symbol,
+    displaySymbol: symbol,
+    name: base && quote ? base + ' / ' + quote : symbol,
+    base,
+    quote,
+    exchangeOpen: 1,
+    status: 'online',
+    logoUrl: base
+      ? 'https://cdn.jsdelivr.net/gh/vadimmalykhin/binance-icons/crypto/' + encodeURIComponent(base.toLowerCase()) + '.svg'
+      : 'https://www.binance.com/favicon.ico',
+    providerLogoUrl: 'https://www.binance.com/favicon.ico',
+    instrumentType: marketType,
+    contractType: raw?.contractType || undefined,
+    settlement: raw?.marginAsset || raw?.settleAsset || raw?.settleCoin || undefined,
+    expiry: Number.isFinite(expiry) ? expiry : undefined,
+    strike: Number.isFinite(strike) ? strike : undefined,
+    optionType: side === 'CALL' || side === 'PUT' ? side : undefined,
+  };
+}
+
+async function postBrowserDiagnostic(diagnostic: any) {
+  try {
+    await fetch('/api/sire/binance/browser-diagnostic', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(diagnostic),
+      keepalive: true,
+    });
+  } catch (error) {
+    console.warn('[SIRE BINANCE BROWSER] diagnostic POST failed', error);
+  }
+}
+
+export async function fetchBinanceBrowserCatalogue(): Promise<any[]> {
+  const out: any[] = [];
+  const counts: Record<string, number> = {};
+  const failures: Record<string, string> = {};
+
+  const addRows = (rows: any[], marketType: string, idPrefix = 'BINANCE') => {
+    let accepted = 0;
+    for (const raw of rows || []) {
+      const item = makeInstrument(raw, marketType, idPrefix);
+      if (item) { out.push(item); accepted += 1; }
+    }
+    counts[marketType] = (counts[marketType] || 0) + accepted;
+  };
+
+  console.info('[SIRE BINANCE BROWSER] START official public market-data catalogue');
+
+  // Spot: Binance explicitly documents data-api.binance.vision for public market data.
+  try {
+    const data = await fetchJson(BINANCE.spotRest + '/api/v3/exchangeInfo?symbolStatus=TRADING', 'Spot exchangeInfo');
+    const rows = Array.isArray(data?.symbols) ? data.symbols : [];
+    addRows(rows, 'Spot');
+    // Binance's Spot exchangeInfo carries margin-trading availability on symbols.
+    addRows(rows.filter((r: any) => r?.isMarginTradingAllowed === true), 'Margin');
+    addRows(rows.filter((r: any) => r?.isMarginTradingAllowed === true), 'Isolated Margin');
+    console.info('[SIRE BINANCE BROWSER] Spot exchangeInfo OK', { returned: rows.length, spot: counts.Spot || 0, margin: counts.Margin || 0 });
+  } catch (error) {
+    failures.Spot = error instanceof Error ? error.message : String(error);
+    console.warn('[SIRE BINANCE BROWSER] Spot exchangeInfo FAILED', failures.Spot);
+  }
+
+  // USD-M: official public exchange information contains both perpetual and delivery contracts.
+  try {
+    const data = await fetchJson(BINANCE.usdmRest + '/fapi/v1/exchangeInfo', 'USD-M exchangeInfo');
+    const rows = Array.isArray(data?.symbols) ? data.symbols : [];
+    for (const raw of rows) {
+      const type = String(raw?.contractType || '').toUpperCase() === 'PERPETUAL' ? 'Perpetuals' : 'Futures';
+      const item = makeInstrument(raw, type);
+      if (item) out.push(item);
+      if (item) counts[type] = (counts[type] || 0) + 1;
+    }
+    console.info('[SIRE BINANCE BROWSER] USD-M exchangeInfo OK', { returned: rows.length, perpetuals: counts.Perpetuals || 0, futures: counts.Futures || 0 });
+  } catch (error) {
+    failures['USD-M'] = error instanceof Error ? error.message : String(error);
+    console.warn('[SIRE BINANCE BROWSER] USD-M exchangeInfo FAILED', failures['USD-M']);
+  }
+
+  // COIN-M: official public exchange information contains perpetual and delivery contracts.
+  try {
+    const data = await fetchJson(BINANCE.coinmRest + '/dapi/v1/exchangeInfo', 'COIN-M exchangeInfo');
+    const rows = Array.isArray(data?.symbols) ? data.symbols : [];
+    for (const raw of rows) {
+      const type = String(raw?.contractType || '').toUpperCase() === 'PERPETUAL' ? 'Perpetuals' : 'Futures';
+      const item = makeInstrument(raw, type, 'BINANCE:COIN-M');
+      if (item) {
+        item.name = item.base && item.quote ? item.base + ' / ' + item.quote + ' (COIN-M)' : item.symbol;
+        out.push(item);
+        counts['COIN-M ' + type] = (counts['COIN-M ' + type] || 0) + 1;
+      }
+    }
+    console.info('[SIRE BINANCE BROWSER] COIN-M exchangeInfo OK', { returned: rows.length });
+  } catch (error) {
+    failures['COIN-M'] = error instanceof Error ? error.message : String(error);
+    console.warn('[SIRE BINANCE BROWSER] COIN-M exchangeInfo FAILED', failures['COIN-M']);
+  }
+
+  // Options: official eapi exchangeInfo exposes every currently trading option symbol.
+  try {
+    const data = await fetchJson(BINANCE.optionsRest + '/eapi/v1/exchangeInfo', 'Options exchangeInfo');
+    const rows = Array.isArray(data?.optionSymbols) ? data.optionSymbols : [];
+    for (const raw of rows) {
+      const item = makeInstrument(raw, 'Options');
+      if (!item) continue;
+      item.name = String(raw?.symbol || item.symbol);
+      item.base = String(raw?.underlying || '').replace(/USDT$|USDC$|BUSD$/i, '') || item.base;
+      item.quote = String(raw?.quoteAsset || '').trim() || item.quote;
+      item.optionType = String(raw?.side || '').toUpperCase();
+      out.push(item);
+      counts.Options = (counts.Options || 0) + 1;
+    }
+    console.info('[SIRE BINANCE BROWSER] Options exchangeInfo OK', { returned: rows.length, options: counts.Options || 0 });
+  } catch (error) {
+    failures.Options = error instanceof Error ? error.message : String(error);
+    console.warn('[SIRE BINANCE BROWSER] Options exchangeInfo FAILED', failures.Options);
+  }
+
+  const seen = new Set<string>();
+  const unique = out.filter(item => {
+    if (seen.has(item.id)) return false;
+    seen.add(item.id);
+    return true;
+  });
+
+  const diagnostic = {
+    source: 'browser-official-binance-public-market-data',
+    total: unique.length,
+    counts,
+    failures,
+    reportedAt: Date.now(),
+    endpoints: {
+      spot: BINANCE.spotRest + '/api/v3/exchangeInfo',
+      usdm: BINANCE.usdmRest + '/fapi/v1/exchangeInfo',
+      coinm: BINANCE.coinmRest + '/dapi/v1/exchangeInfo',
+      options: BINANCE.optionsRest + '/eapi/v1/exchangeInfo',
+    },
+  };
+
+  console.info('[SIRE BINANCE BROWSER] COMPLETE', diagnostic);
+  void postBrowserDiagnostic(diagnostic);
+
+  if (!unique.length) {
+    throw new Error('Binance official browser catalogue returned zero instruments.');
+  }
   return unique;
 }
 
-export function createBinanceDataFeed(instrument:Instrument,onQuote?:(q:SireMarketQuote)=>void,onDiagnostic?:(e:any)=>void){
-  let stopped=false,timer:any,last:any=null,current:any=null;
-  const request=async(path:string,params:Record<string,string>)=>{try{const u=new URL(path,window.location.origin);for(const [k,v] of Object.entries(params))u.searchParams.set(k,v);const r=await fetch(u.toString(),{cache:'no-store'});const p=await r.json();if(r.ok&&p?.ok)return p;}catch{} const mt=String(params.marketType||'Spot');const symbol=String(params.symbol||''); if(path.includes('/history')){const iv=String(params.interval||'1min'),limit=String(params.count||'500');let base='https://api.binance.com';let endpoint='/api/v3/klines';if(mt==='Options'){base='https://eapi.binance.com';endpoint='/eapi/v1/klines';}else if(mt==='Perpetuals'||mt==='Futures'){if(symbol.includes('_')){base='https://dapi.binance.com';endpoint='/dapi/v1/klines';}else{base='https://fapi.binance.com';endpoint='/fapi/v1/klines';}}const p=await directJson([base+endpoint],{symbol,interval:iv,limit,...(params.from?{startTime:String(Math.floor(Number(params.from)*1000))}:{}),...(params.to?{endTime:String(Math.floor(Number(params.to)*1000))}: {})});return {ok:true,bars:(p||[]).map((r:any[])=>({time:Number(r[0])/1000,open:Number(r[1]),high:Number(r[2]),low:Number(r[3]),close:Number(r[4]),volume:Number(r[5])||0}))};}if(path.includes('/quote')){let base='https://api.binance.com',endpoint='/api/v3/ticker/24hr';if(mt==='Options'){base='https://eapi.binance.com';endpoint='/eapi/v1/mark';}else if(mt==='Perpetuals'||mt==='Futures'){base=symbol.includes('_')?'https://dapi.binance.com':'https://fapi.binance.com';endpoint=(symbol.includes('_')?'/dapi/v1/ticker/price':'/fapi/v1/ticker/price');}const p=await directJson([base+endpoint],{symbol});const row=Array.isArray(p)?(p[0]||{}):p;const price=Number(row?.lastPrice??row?.price??row?.markPrice);return {ok:true,quote:{symbol,epoch:Number(row?.closeTime||row?.time||Date.now())/1000,price,bid:Number(row?.bidPrice),ask:Number(row?.askPrice),volume:Number(row?.volume)||0}};}throw new Error('Unsupported Binance browser request.');};
-  const getBars=async({symbol,interval,countBack=500,from,to}:{symbol:string;interval:string;countBack?:number;from?:number;to?:number})=>{
-    const params:Record<string,string>={symbol,marketType:String(instrument.marketType||'Spot'),interval:INTERVAL[interval]||interval,count:String(Math.min(1500,Math.max(2,countBack)))};
-    if(Number.isFinite(from)) params.from=String(from);
-    if(Number.isFinite(to)) params.to=String(to);
-    const p=await request('/api/sire/binance/history',params);
-    const bars=(p.bars||[]).filter((b:any)=>[b.time,b.open,b.high,b.low,b.close].every(Number.isFinite)).sort((a:any,b:any)=>a.time-b.time);
-    if(!bars.length)throw new Error('No Binance historical candles returned for '+symbol+'.'); return bars;
+async function backendJson(path: string, params: Record<string,string>) {
+  const url = new URL(path, window.location.origin);
+  for (const [key, value] of Object.entries(params)) url.searchParams.set(key, value);
+  const response = await fetch(url.toString(), { cache: 'no-store' });
+  const payload = await response.json().catch(() => null);
+  if (!response.ok || !payload?.ok) throw new Error(payload?.error || 'SIRE Binance backend request failed');
+  return payload;
+}
+
+function restTarget(marketType: string, symbol: string) {
+  const mt = String(marketType || 'Spot');
+  if (mt === 'Options') return { base: BINANCE.optionsRest, klines: '/eapi/v1/klines', ticker: '/eapi/v1/ticker' };
+  if (mt === 'Perpetuals') return { base: symbol.includes('_') ? BINANCE.coinmRest : BINANCE.usdmRest, klines: symbol.includes('_') ? '/dapi/v1/klines' : '/fapi/v1/klines', ticker: symbol.includes('_') ? '/dapi/v1/ticker/price' : '/fapi/v1/ticker/price' };
+  if (mt === 'Futures') return { base: symbol.includes('_') ? BINANCE.coinmRest : BINANCE.usdmRest, klines: symbol.includes('_') ? '/dapi/v1/klines' : '/fapi/v1/klines', ticker: symbol.includes('_') ? '/dapi/v1/ticker/price' : '/fapi/v1/ticker/price' };
+  return { base: BINANCE.spotRest, klines: '/api/v3/klines', ticker: '/api/v3/ticker/24hr' };
+}
+
+async function publicRest(path: string, params: Record<string,string>) {
+  const u = new URL(path);
+  for (const [key, value] of Object.entries(params)) u.searchParams.set(key, value);
+  return fetchJson(u.toString(), 'public market data');
+}
+
+export function createBinanceDataFeed(
+  instrument: Instrument,
+  onQuote?: (quote: SireMarketQuote) => void,
+  onDiagnostic?: (event: any) => void,
+) {
+  let stopped = false;
+  let reconnectTimer: number | undefined;
+  let pollTimer: number | undefined;
+  let socket: WebSocket | null = null;
+  let last: any = null;
+  let currentBar: any = null;
+
+  const marketType = String(instrument.marketType || 'Spot');
+  const symbol = String(instrument.symbol || '');
+
+  const getBars = async ({ symbol: requestedSymbol, interval, countBack = 500, from, to }: { symbol:string; interval:string; countBack?:number; from?:number; to?:number }) => {
+    const target = restTarget(marketType, requestedSymbol);
+    const params: Record<string,string> = {
+      symbol: requestedSymbol,
+      interval: INTERVAL[interval] || interval,
+      limit: String(Math.min(1500, Math.max(2, countBack))),
+    };
+    if (Number.isFinite(from)) params.startTime = String(Math.floor(Number(from) * 1000));
+    if (Number.isFinite(to)) params.endTime = String(Math.floor(Number(to) * 1000));
+
+    let payload: any;
+    try {
+      payload = await publicRest(target.base + target.klines, params);
+    } catch {
+      payload = await backendJson('/api/sire/binance/history', {
+        symbol: requestedSymbol,
+        marketType,
+        interval: params.interval,
+        count: params.limit,
+        ...(params.startTime ? { from: String(Number(params.startTime) / 1000) } : {}),
+        ...(params.endTime ? { to: String(Number(params.endTime) / 1000) } : {}),
+      });
+      return payload.bars || [];
+    }
+
+    return (payload || []).map((row: any[]) => ({
+      time: Number(row[0]) / 1000,
+      open: Number(row[1]),
+      high: Number(row[2]),
+      low: Number(row[3]),
+      close: Number(row[4]),
+      volume: Number(row[5]) || 0,
+    })).filter((bar: any) => [bar.time,bar.open,bar.high,bar.low,bar.close].every(Number.isFinite));
   };
+
+  const getBarsPage = async ({ symbol: requestedSymbol, interval, before, countBack }: { symbol:string; interval:string; before:number; countBack:number }) => {
+    const bars = await getBars({ symbol: requestedSymbol, interval, countBack, to: before - 1 });
+    return { bars: bars.filter((bar:any) => bar.time < before), hasMore: bars.length > 0, nextBefore: bars[0]?.time };
+  };
+
+  const emit = (epochMs: number, price: number, volume = 0) => {
+    if (!Number.isFinite(epochMs) || !Number.isFinite(price)) return;
+    const seconds = intervalSeconds(String(instrument.marketType || 'Spot'));
+    const epoch = epochMs / 1000;
+    const bucket = Math.floor(epoch / seconds) * seconds;
+    if (!currentBar || bucket > currentBar.time) {
+      currentBar = { time: bucket, open: price, high: price, low: price, close: price, volume };
+    } else if (bucket === currentBar.time) {
+      currentBar = { ...currentBar, high: Math.max(currentBar.high, price), low: Math.min(currentBar.low, price), close: price, volume: volume || currentBar.volume || 0 };
+    }
+    last = { symbol, price, epoch, volume };
+    onQuote?.(last);
+    onDiagnostic?.({ level:'info', code:'LIVE_PRICE_RECEIVED', message:'Binance live price received.', detail:{ symbol, price, epoch } });
+  };
+
+  function intervalSeconds(interval: string) {
+    const map: Record<string,number> = {'1m':60,'3m':180,'5m':300,'15m':900,'30m':1800,'1h':3600,'2h':7200,'4h':14400,'6h':21600,'8h':28800,'12h':43200,'1d':86400,'1w':604800,'1M':2592000};
+    return map[interval] || 60;
+  }
+
+  const connect = () => {
+    if (stopped) return;
+    const s = symbol.toLowerCase();
+    let url = '';
+    if (marketType === 'Spot' || marketType === 'Margin' || marketType === 'Isolated Margin') url = BINANCE.spotStream + '/ws/' + s + '@aggTrade';
+    else if (marketType === 'Perpetuals' || marketType === 'Futures') {
+      url = (s.includes('_') ? BINANCE.coinmStream : BINANCE.usdmStream) + '/ws/' + s + '@aggTrade';
+    } else if (marketType === 'Options') {
+      url = BINANCE.optionsStream + '/ws/' + s + '@ticker';
+    }
+
+    if (!url) return;
+
+    try {
+      socket = new WebSocket(url);
+      onDiagnostic?.({ level:'info', code:'LIVE_STREAM_CONNECTING', message:'Connecting to Binance official market-data stream.', detail:{url} });
+      socket.onopen = () => onDiagnostic?.({ level:'info', code:'LIVE_STREAM_CONNECTED', message:'Connected to Binance official market-data stream.', detail:{url} });
+      socket.onmessage = (event) => {
+        try {
+          const message = JSON.parse(String(event.data));
+          const price = Number(message?.p ?? message?.c);
+          const timestamp = Number(message?.T ?? message?.E ?? Date.now());
+          const volume = Number(message?.q ?? message?.v) || 0;
+          emit(timestamp, price, volume);
+        } catch (error) {
+          onDiagnostic?.({ level:'warning', code:'LIVE_STREAM_PARSE_ERROR', message:'Could not parse Binance stream message.', detail:String(error) });
+        }
+      };
+      socket.onerror = () => onDiagnostic?.({ level:'warning', code:'LIVE_STREAM_ERROR', message:'Binance official market-data stream reported an error.', detail:{url} });
+      socket.onclose = () => {
+        if (!stopped) {
+          onDiagnostic?.({ level:'warning', code:'LIVE_STREAM_RECONNECTING', message:'Binance official market-data stream disconnected; reconnecting.', detail:{url} });
+          reconnectTimer = window.setTimeout(connect, 1500);
+        }
+      };
+    } catch (error) {
+      onDiagnostic?.({ level:'warning', code:'LIVE_STREAM_CONNECT_FAILED', message:'Could not open Binance official market-data stream.', detail:String(error) });
+      reconnectTimer = window.setTimeout(connect, 1500);
+    }
+  };
+
+  const pollQuote = async () => {
+    if (stopped) return;
+    const target = restTarget(marketType, symbol);
+    try {
+      const payload = await publicRest(target.base + target.ticker, { symbol });
+      const row = Array.isArray(payload) ? (payload[0] || {}) : payload;
+      const price = Number(row?.lastPrice ?? row?.price ?? row?.markPrice);
+      const epoch = Number(row?.closeTime ?? row?.time ?? Date.now());
+      if (Number.isFinite(price)) emit(epoch, price, Number(row?.volume) || 0);
+    } catch (error) {
+      try {
+        const payload = await backendJson('/api/sire/binance/quote', { symbol, marketType });
+        const q = payload.quote;
+        if (Number.isFinite(Number(q?.price))) emit(Number(q.epoch) * 1000, Number(q.price), Number(q.volume) || 0);
+      } catch (fallbackError) {
+        onDiagnostic?.({ level:'warning', code:'LIVE_PRICE_NOT_RECEIVED', message:'Binance live REST fallback failed.', detail:String(fallbackError) });
+      }
+    }
+    if (!stopped) pollTimer = window.setTimeout(pollQuote, 3000);
+  };
+
+  connect();
+  void pollQuote();
+
   return {
     getBars,
-    async getBarsPage({symbol,interval,before,countBack}:{symbol:string;interval:string;before:number;countBack:number}){const bars=await getBars({symbol,interval,countBack,to:before-1});return {bars:bars.filter((b:any)=>b.time<before),hasMore:bars.length>0,nextBefore:bars[0]?.time};},
-    subscribeBars({symbol,interval}:{symbol:string;interval:string},onBar:(bar:any)=>void,options?:{seedFrom?:any}){
-      stopped=false;current=options?.seedFrom?{...options.seedFrom}:null;
-      const seconds=SEC[interval]||60;
-      let socket:any=null;
-      let reconnect:any=null;
-      const emit=(epoch:number,price:number,volume=0)=>{
-        if(!Number.isFinite(epoch)||!Number.isFinite(price))return;
-        const t=Math.floor(epoch/seconds)*seconds;
-        if(!current||t>current.time)current={time:t,open:price,high:price,low:price,close:price,volume};
-        else if(t===current.time)current={...current,high:Math.max(current.high,price),low:Math.min(current.low,price),close:price,volume:volume||current.volume||0};
-        last={symbol,price,epoch};
-        onQuote?.(last);onBar({...current});
+    getBarsPage,
+    subscribeBars({ symbol: requestedSymbol, interval: requestedInterval }: { symbol:string; interval:string }, onBar:(bar:any)=>void, options?:{seedFrom?:any}) {
+      if (requestedSymbol !== symbol) return () => {};
+      currentBar = options?.seedFrom ? { ...options.seedFrom } : null;
+      const originalOnQuote = onQuote;
+      const stopPolling = () => {
+        stopped = true;
+        if (pollTimer) window.clearTimeout(pollTimer);
+        if (reconnectTimer) window.clearTimeout(reconnectTimer);
+        try { socket?.close(); } catch {}
+        socket = null;
       };
-      const useSocket=mt=>{
-        const s=symbol.toLowerCase();
-        if(mt==='Spot'||mt==='Margin')return 'wss://stream.binance.com:9443/ws/'+s+'@aggTrade';
-        if(mt==='Perpetuals'||mt==='Futures')return s.includes('_')?'wss://dstream.binance.com/ws/'+s+'@aggTrade':'wss://fstream.binance.com/ws/'+s+'@aggTrade';
-        return '';
+      // The feed already maintains the official live stream; bars are emitted from it below.
+      const originalEmit = emit;
+      void originalOnQuote;
+      void originalEmit;
+      onBar({ ...(currentBar || {}) });
+      const barTimer = window.setInterval(() => {
+        if (currentBar) onBar({ ...currentBar });
+      }, 1000);
+      return () => {
+        window.clearInterval(barTimer);
+        stopPolling();
       };
-      const connect=()=>{
-        if(stopped)return;
-        const mt=String(instrument.marketType||'Spot');
-        const url=useSocket(mt);
-        if(!url){void poll();return;}
-        try{
-          socket=new WebSocket(url);
-          socket.onopen=()=>onDiagnostic?.({level:'info',code:'LIVE_STREAM_CONNECTED',message:'Binance WebSocket live stream connected for '+symbol+'.'});
-          socket.onmessage=(event:any)=>{
-            try{const m=JSON.parse(String(event.data));const price=Number(m?.p);const epoch=Number(m?.T??m?.E??Date.now())/1000;const volume=Number(m?.q)||0;if(Number.isFinite(price))emit(epoch,price,volume);}catch{}
-          };
-          socket.onerror=()=>onDiagnostic?.({level:'warning',code:'LIVE_STREAM_ERROR',message:'Binance WebSocket live stream error for '+symbol+'.'});
-          socket.onclose=()=>{if(!stopped){onDiagnostic?.({level:'warning',code:'LIVE_STREAM_RECONNECTING',message:'Binance WebSocket disconnected; reconnecting '+symbol+'.'});reconnect=setTimeout(connect,1000);}};
-        }catch{reconnect=setTimeout(connect,1000);}
-      };
-      const poll=async()=>{
-        if(stopped)return;
-        try{const p=await request('/api/sire/binance/quote',{symbol,marketType:String(instrument.marketType||'Spot')});const q=p.quote;emit(Number(q.epoch),Number(q.price),Number(q.volume));}
-        catch(e){onDiagnostic?.({level:'warning',code:'LIVE_PRICE_NOT_RECEIVED',message:'Binance live price request failed for '+symbol+'.',detail:e instanceof Error?e.message:String(e)});}
-        if(!stopped)timer=window.setTimeout(poll,1500);
-      };
-      connect();
-      return()=>{stopped=true;if(timer)clearTimeout(timer);if(reconnect)clearTimeout(reconnect);try{socket?.close();}catch{}socket=null;timer=undefined;};
     },
-    getLiveState(){return last?{connectionStatus:'polling',subscriptionStatus:stopped?'stopped':'active',latestTick:{...last},dataTimestamp:last.epoch,dataAgeMs:Math.max(0,Date.now()-last.epoch*1000),stale:Date.now()-last.epoch*1000>10000,staleThresholdMs:10000,checkedAt:Date.now()}:{connectionStatus:'idle',subscriptionStatus:'idle',latestTick:null,dataTimestamp:null,dataAgeMs:null,stale:false,staleThresholdMs:10000,checkedAt:Date.now()};},
-    close(){stopped=true;if(timer)clearTimeout(timer);timer=undefined;}
+    getLiveState() {
+      return last
+        ? { connectionStatus:'live', subscriptionStatus:stopped?'stopped':'active', latestTick:{...last}, dataTimestamp:last.epoch, dataAgeMs:Math.max(0,Date.now()-last.epoch*1000), stale:Date.now()-last.epoch*1000>10000, staleThresholdMs:10000, checkedAt:Date.now() }
+        : { connectionStatus:'connecting', subscriptionStatus:stopped?'stopped':'active', latestTick:null, dataTimestamp:null, dataAgeMs:null, stale:false, staleThresholdMs:10000, checkedAt:Date.now() };
+    },
+    close() {
+      stopped = true;
+      if (pollTimer) window.clearTimeout(pollTimer);
+      if (reconnectTimer) window.clearTimeout(reconnectTimer);
+      try { socket?.close(); } catch {}
+      socket = null;
+    },
   };
 }
