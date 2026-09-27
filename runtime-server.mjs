@@ -601,11 +601,61 @@ async function checkDerivPublicMarketData() {
   };
 }
 
+async function fxcmRequest(path, options = {}) {
+  const token=String(process.env.FXCM_ACCESS_TOKEN||'').trim();
+  if(!token) throw new Error('FXCM_ACCESS_TOKEN is not configured on Render.');
+  const host=String(process.env.FXCM_ENV||'demo').toLowerCase()==='real'?'https://api.fxcm.com':'https://api-demo.fxcm.com';
+  const response=await fetch(host+path,{...options,headers:{Accept:'application/json',Authorization:'Bearer '+token,'Content-Type':'application/x-www-form-urlencoded',...(options.headers||{})},signal:AbortSignal.timeout(15000)});
+  const text=await response.text(); let data={}; try{data=text?JSON.parse(text):{};}catch{data={raw:text};}
+  if(!response.ok) throw new Error('FXCM HTTP '+response.status+': '+(data?.response?.error||data?.error||text.slice(0,300)));
+  return data;
+}
+async function fxcmGetInstruments(){
+  const data=await fxcmRequest('/trading/get_instruments');
+  return Array.isArray(data?.data?.instrument)?data.data.instrument:[];
+}
+async function fxcmSubscribe(symbol){
+  await fxcmRequest('/trading/update_subscriptions',{method:'POST',body:new URLSearchParams({symbol,visible:'true'})});
+  await fxcmRequest('/subscribe',{method:'POST',body:new URLSearchParams({pairs:symbol})});
+}
+async function fxcmOffer(symbol){
+  const data=await fxcmRequest('/trading/get_model?models=Offer');
+  const rows=Array.isArray(data?.offers)?data.offers:[];
+  return rows.find(row=>String(row?.currency||'').toUpperCase()===symbol.toUpperCase())||null;
+}
+async function fxcmCandles(symbol, period, count){
+  await fxcmSubscribe(symbol);
+  const offer=await fxcmOffer(symbol);
+  if(!offer?.offerId) throw new Error('FXCM offerId not found for '+symbol);
+  const safeCount=Math.max(1,Math.min(10000,Number(count)||500));
+  const data=await fxcmRequest('/candles/'+encodeURIComponent(String(offer.offerId))+'/'+encodeURIComponent(period)+'/?num='+safeCount);
+  return Array.isArray(data?.candles)?data.candles:[];
+}
+async function fxcmQuote(symbol){
+  await fxcmSubscribe(symbol);
+  const offer=await fxcmOffer(symbol);
+  if(!offer) throw new Error('FXCM live offer not found for '+symbol);
+  const bid=Number(offer.sell), ask=Number(offer.buy);
+  return {symbol,epoch:Math.floor(new Date(offer.time||Date.now()).getTime()/1000),price:Number.isFinite(bid)&&Number.isFinite(ask)?(bid+ask)/2:Number.isFinite(bid)?bid:ask,bid,ask,high:Number(offer.high),low:Number(offer.low)};
+}
+
 const server = http.createServer(async (req,res) => {
   if (req.method === 'OPTIONS') { res.writeHead(204,{ 'Access-Control-Allow-Origin':'*','Access-Control-Allow-Methods':'GET,POST,PUT,DELETE,OPTIONS','Access-Control-Allow-Headers':'Content-Type, Authorization' }); return res.end(); }
   if (await serveStatic(req,res)) return;
   let body=''; req.on('data',chunk=>{body+=chunk;}); req.on('end',async()=>{ try {
     const pathname = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`).pathname;
+    if (req.method === 'GET' && pathname === '/api/sire/fxcm/instruments') {
+      try { const instruments=await fxcmGetInstruments(); return res.writeHead(200,{'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify({ok:true,instruments})); }
+      catch(e){ return res.writeHead(502,{'Access-Control-Allow-Origin':'*','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify({ok:false,error:e instanceof Error?e.message:String(e)})); }
+    }
+    if (req.method === 'GET' && pathname === '/api/sire/fxcm/candles') {
+      try { const u=new URL(req.url||'/',`http://${req.headers.host||'localhost'}`); const symbol=String(u.searchParams.get('symbol')||'').trim(); const period=String(u.searchParams.get('period')||'m1'); const count=Math.max(1,Math.min(10000,Number(u.searchParams.get('count')||500))); if(!symbol) throw new Error('symbol is required'); const allowed=new Set(['m1','m5','m15','m30','H1','H2','H3','H4','H6','H8','D1','W1','M1']); if(!allowed.has(period)) throw new Error('Unsupported FXCM period: '+period); const candles=await fxcmCandles(symbol,period,count); return res.writeHead(200,{'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify({ok:true,symbol,period,candles})); }
+      catch(e){ return res.writeHead(502,{'Access-Control-Allow-Origin':'*','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify({ok:false,error:e instanceof Error?e.message:String(e)})); }
+    }
+    if (req.method === 'GET' && pathname === '/api/sire/fxcm/quote') {
+      try { const u=new URL(req.url||'/',`http://${req.headers.host||'localhost'}`); const symbol=String(u.searchParams.get('symbol')||'').trim(); if(!symbol) throw new Error('symbol is required'); const quote=await fxcmQuote(symbol); return res.writeHead(200,{'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify({ok:true,quote})); }
+      catch(e){ return res.writeHead(502,{'Access-Control-Allow-Origin':'*','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify({ok:false,error:e instanceof Error?e.message:String(e)})); }
+    }
     if (pathname === '/api/sire/markets/global-crypto' && req.method === 'GET') {
       try {
         const instruments = await loadGlobalCryptoUniverse();
