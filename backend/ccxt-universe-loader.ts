@@ -8,9 +8,8 @@ export type GlobalCryptoMarket = {
 };
 
 const exchangeOptions = { enableRateLimit: true, timeout: 15000 };
-const priorityExchanges = ['binance', 'bybit', 'okx', 'coinbase', 'kraken', 'bitget', 'gateio', 'kucoin', 'mexc'];
 let cachedMarkets: GlobalCryptoMarket[] = [];
-let backgroundLoad: Promise<void> | null = null;
+let fullLoad: Promise<GlobalCryptoMarket[]> | null = null;
 
 function mergeMarkets(markets: GlobalCryptoMarket[]) {
   const byId = new Map(cachedMarkets.map(m => [m.id, m]));
@@ -37,69 +36,51 @@ async function loadExchange(id: string): Promise<GlobalCryptoMarket[]> {
     }));
 }
 
-async function loadPriorityMarkets() {
-  const settled = await Promise.allSettled(priorityExchanges.map(loadExchange));
-  for (const result of settled) {
-    if (result.status === 'fulfilled' && result.value.length) mergeMarkets(result.value);
-  }
-}
-
-async function loadAllMarkets() {
+async function loadEveryExchangeAtOnce(): Promise<GlobalCryptoMarket[]> {
   const exchangeIds = Object.keys(ccxt.exchanges);
-  const concurrency = 4;
-  const failed = new Set<string>();
+  console.info('[SIRE GLOBAL CRYPTO] loading ALL CCXT exchanges and markets', { exchanges: exchangeIds.length });
+  const concurrency = 8;
+  const failed: string[] = [];
+
+  // All exchanges participate in this one catalogue build. Concurrency limits
+  // protect Render and exchange APIs, but the HTTP response waits for the
+  // complete catalogue instead of returning a partial priority snapshot.
   for (let i = 0; i < exchangeIds.length; i += concurrency) {
     const batch = exchangeIds.slice(i, i + concurrency);
     const settled = await Promise.allSettled(batch.map(loadExchange));
     settled.forEach((result, index) => {
       const id = batch[index];
-      if (result.status === 'fulfilled' && result.value.length) {
-        mergeMarkets(result.value);
-      } else {
-        failed.add(id);
-        console.warn('[SIRE GLOBAL CRYPTO] exchange load failed:', id, result.status === 'rejected' ? String(result.reason) : 'empty catalogue');
-      }
+      if (result.status === 'fulfilled' && result.value.length) mergeMarkets(result.value);
+      else failed.push(id);
     });
   }
-  // Retry failed exchanges once after the full pass, so transient API failures
-  // do not permanently exclude an exchange from the scrolling catalogue.
-  if (failed.size) {
-    const retryIds = [...failed];
-    for (let i = 0; i < retryIds.length; i += concurrency) {
-      const batch = retryIds.slice(i, i + concurrency);
+
+  if (failed.length) {
+    console.warn('[SIRE GLOBAL CRYPTO] retrying failed exchanges', { count: failed.length, exchanges: failed });
+    for (let i = 0; i < failed.length; i += concurrency) {
+      const batch = failed.slice(i, i + concurrency);
       const settled = await Promise.allSettled(batch.map(loadExchange));
       settled.forEach((result, index) => {
-        const id = batch[index];
         if (result.status === 'fulfilled' && result.value.length) mergeMarkets(result.value);
-        else console.warn('[SIRE GLOBAL CRYPTO] exchange retry failed:', id);
       });
     }
   }
+
+  console.info('[SIRE GLOBAL CRYPTO] ALL CCXT markets loaded', {
+    exchanges: exchangeIds.length,
+    markets: cachedMarkets.length,
+    failedExchanges: failed.length,
+  });
+  return cachedMarkets;
 }
 
 export async function loadGlobalCryptoUniverse(): Promise<GlobalCryptoMarket[]> {
-  // Return the last-known-good cache immediately on every request.
-  if (cachedMarkets.length) {
-    if (!backgroundLoad) {
-      backgroundLoad = loadAllMarkets().catch(error => {
-        console.warn('[SIRE GLOBAL CRYPTO] background refresh failed:', error);
-      }).finally(() => { backgroundLoad = null; });
-    }
-    return cachedMarkets;
-  }
-
-  // The first request gets a useful catalogue from major exchanges instead of
-  // waiting for every CCXT exchange (many of which can be slow/unreachable).
-  await loadPriorityMarkets();
-  if (!cachedMarkets.length) {
-    throw new Error('CCXT global crypto catalogue returned no active markets from priority exchanges.');
-  }
-
-  // Continue expanding the universe after the first response is available.
-  if (!backgroundLoad) {
-    backgroundLoad = loadAllMarkets().catch(error => {
-      console.warn('[SIRE GLOBAL CRYPTO] background refresh failed:', error);
-    }).finally(() => { backgroundLoad = null; });
-  }
-  return cachedMarkets;
+  // One complete catalogue build. Every caller shares the same promise, so
+  // SIRE never serves separate partial snapshots to different clients.
+  if (cachedMarkets.length) return cachedMarkets;
+  if (!fullLoad) fullLoad = loadEveryExchangeAtOnce().catch(error => {
+    fullLoad = null;
+    throw error;
+  });
+  return fullLoad;
 }
