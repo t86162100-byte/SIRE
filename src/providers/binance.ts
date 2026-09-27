@@ -3,7 +3,7 @@ export type BinanceCatalogueItem = {
   provider: 'BINANCE';
   providerLabel: 'Binance';
   marketType: string;
-  category: any;
+  category: 'crypto';
   market: string;
   submarket: string;
   subgroup: string;
@@ -118,7 +118,7 @@ async function fetchSource(source: Source): Promise<BinanceCatalogueItem[]> {
           provider: 'BINANCE',
           providerLabel: 'Binance',
           marketType,
-          category: 'Crypto',
+          category: 'crypto',
           market: 'Crypto',
           submarket: marketType,
           subgroup: 'Binance',
