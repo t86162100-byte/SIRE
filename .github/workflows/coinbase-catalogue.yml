@@ -3,6 +3,8 @@ name: Coinbase catalogue verification
 on:
   push:
     branches: [coinbase-complete-instruments]
+  pull_request:
+    branches: [main]
 
 permissions:
   contents: read
