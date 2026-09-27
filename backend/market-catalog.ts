@@ -1,4 +1,4 @@
-export type MarketProvider = 'DERIV' | 'BINANCE' | 'BITGET' | 'BYBIT' | 'OKX' | 'KRAKEN' | 'COINBASE' | 'GATEIO' | 'KUCOIN' | 'GEMINI' | 'BITSO' | 'BITFINEX' | 'BITVAVO' | 'COINEX' | 'LBANK' | 'WOOX' | 'CRYPTOCOM' | 'HTX' | 'BITKUB' | 'UPBIT' | 'PIONEX' | 'POLONIEX' | 'BITHUMB' | 'MEXC' | 'PHEMEX' | 'WHITEBIT' | 'TWELVEDATA' | 'NASDAQTRADER' | 'OANDA' | 'TRADINGVIEW';
+export type MarketProvider = 'DERIV' | 'BINANCE' | 'BITGET' | 'BYBIT' | 'OKX' | 'KRAKEN' | 'COINBASE' | 'GATEIO' | 'KUCOIN' | 'GEMINI' | 'BITSO' | 'BITFINEX' | 'BITVAVO' | 'COINEX' | 'LBANK' | 'WOOX' | 'CRYPTOCOM' | 'HTX' | 'BITKUB' | 'UPBIT' | 'PIONEX' | 'POLONIEX' | 'BITHUMB' | 'MEXC' | 'PHEMEX' | 'WHITEBIT' | 'TWELVEDATA' | 'NASDAQTRADER' | 'OANDA' | 'TRADINGVIEW' | 'FOREXCOM' | 'INTERACTIVEBROKERS' | 'TRADESTATION' | 'WEBULL' | 'MOOMOO' | 'NINJATRADER' | 'TRADOVATE' | 'AMPFUTURES' | 'TASTYTRADE' | 'TASTYFX' | 'CRYPTOCOMEXCHANGE' | 'COINBASEADVANCED' | 'ALPACA' | 'TRADIERBROKERAGE' | 'TRADEZERO' | 'COBRATRADING' | 'CLEARSTREET' | 'INVESTRADE' | 'PUBLIC' | 'PLUS500US' | 'OPTIMUSFUTURES' | 'EDGECLEAR' | 'IRONBEAM' | 'STONEX' | 'DORMANTRADING' | 'TRADIERFUTURES';
 
 export interface UnifiedInstrument {
   id: string;
@@ -869,6 +869,102 @@ async function oanda(): Promise<UnifiedInstrument[]> {
   return out;
 }
 
+
+// TradingView's broker directory is a broker/execution integration directory,
+// not a universal public symbol feed. These broker adapters therefore never
+// manufacture symbols. A broker is populated only from its documented API
+// when the required credentials are configured.
+const BROKER_REQUIREMENTS: Record<string, string> = {
+  FOREXCOM: 'FOREXCOM_API credentials',
+  INTERACTIVEBROKERS: 'IBKR Client Portal API credentials/session',
+  TRADESTATION: 'TRADESTATION API OAuth credentials',
+  WEBULL: 'WEBULL OpenAPI credentials',
+  MOOMOO: 'MOOMOO OpenAPI credentials',
+  NINJATRADER: 'NINJATRADER Trader API credentials',
+  TRADOVATE: 'TRADOVATE API credentials',
+  AMPFUTURES: 'AMP/CQG or supported market-data credentials',
+  TASTYTRADE: 'TASTYTRADE OAuth access token',
+  TASTYFX: 'TASTYFX API credentials',
+  CRYPTOCOMEXCHANGE: 'No API key for public exchange instrument discovery',
+  COINBASEADVANCED: 'No API key for public exchange product discovery',
+  ALPACA: 'ALPACA API key + secret',
+  TRADIERBROKERAGE: 'TRADIER API token',
+  TRADEZERO: 'TRADEZERO API key + secret',
+  COBRATRADING: 'COBRA/partner market-data credentials',
+  CLEARSTREET: 'CLEAR STREET OAuth access token',
+  INVESTRADE: 'Broker/market-data credentials',
+  PUBLIC: 'PUBLIC API credentials',
+  PLUS500US: 'PLUS500US broker data access',
+  OPTIMUSFUTURES: 'Optimus/CQG or supported market-data credentials',
+  EDGECLEAR: 'EdgeClear/CQG or supported market-data credentials',
+  IRONBEAM: 'Ironbeam/CQG or supported market-data credentials',
+  STONEX: 'StoneX broker/API credentials',
+  DORMANTRADING: 'Dorman/clearing market-data credentials',
+  TRADIERFUTURES: 'Tradier Futures market-data credentials',
+};
+
+function brokerUnavailable(provider: MarketProvider): UnifiedInstrument[] {
+  console.warn('[SIRE ' + provider + '] Exact broker instrument catalogue requires the broker API/data entitlement; no symbols guessed.');
+  return [];
+}
+
+function remapBrokerItems(items: UnifiedInstrument[], provider: MarketProvider, label: string): UnifiedInstrument[] {
+  return items.map(item => ({
+    ...item,
+    id: provider + ':' + item.marketType + ':' + item.symbol,
+    provider,
+    providerLabel: label,
+    logoUrl: providerLogo(provider),
+    providerLogoUrl: providerLogo(provider)
+  }));
+}
+
+async function brokerCatalogue(provider: MarketProvider): Promise<UnifiedInstrument[]> {
+  // Public exchange brokers whose instrument universe is itself the exchange
+  // universe can be sourced without inventing broker-specific symbols.
+  if (provider === 'CRYPTOCOMEXCHANGE') return remapBrokerItems(await cryptocom(), provider, 'Crypto.com Exchange');
+  if (provider === 'COINBASEADVANCED') return remapBrokerItems(await coinbase(), provider, 'Coinbase Advanced');
+  return brokerUnavailable(provider);
+}
+
+async function alpaca(): Promise<UnifiedInstrument[]> {
+  const key = String(process.env.ALPACA_API_KEY || '').trim();
+  const secret = String(process.env.ALPACA_API_SECRET || '').trim();
+  if (!key || !secret) return brokerUnavailable('ALPACA');
+  const out: UnifiedInstrument[] = [];
+  for (const assetClass of ['us_equity', 'crypto']) {
+    try {
+      const payload = await getJsonAuth(
+        'https://paper-api.alpaca.markets/v2/assets?status=active&asset_class=' + assetClass,
+        { 'APCA-API-KEY-ID': key, 'APCA-API-SECRET-KEY': secret },
+        15000
+      );
+      for (const raw of Array.isArray(payload) ? payload : []) {
+        const symbol = String(raw?.symbol || '').trim();
+        if (!symbol) continue;
+        const category = assetClass === 'crypto' ? 'Crypto' : raw?.class === 'us_option' ? 'Options' : raw?.attributes?.includes?.('has_options') ? 'Stocks' : 'Stocks';
+        out.push({
+          id: 'ALPACA:' + assetClass + ':' + symbol,
+          provider: 'ALPACA',
+          providerLabel: 'Alpaca',
+          marketType: assetClass === 'crypto' ? 'Crypto' : 'US Equities',
+          category,
+          symbol,
+          displaySymbol: symbol,
+          name: String(raw?.name || symbol),
+          base: String(raw?.base_currency || '') || undefined,
+          quote: String(raw?.quote_currency || '') || undefined,
+          status: String(raw?.status || 'active'),
+          logoUrl: providerLogo('ALPACA'),
+          providerLogoUrl: providerLogo('ALPACA')
+        });
+      }
+    } catch (error) { console.warn('[SIRE ALPACA] ' + assetClass + ' failed:', error); }
+  }
+  console.log('[SIRE ALPACA] Total catalogue: ' + out.length);
+  return out;
+}
+
 async function twelveData(): Promise<UnifiedInstrument[]> {
   const apiKey = String(process.env.TWELVE_DATA_API_KEY || '').trim();
   if (!apiKey) {
@@ -1104,6 +1200,32 @@ export async function getUnifiedMarketCatalogue(fetchDeriv: () => Promise<any[]>
       ['KRAKEN', kraken()],
       ['TWELVEDATA', twelveData()],
       ['NASDAQTRADER', nasdaqTrader()],
+      ['FOREXCOM', brokerCatalogue('FOREXCOM')],
+      ['INTERACTIVEBROKERS', brokerCatalogue('INTERACTIVEBROKERS')],
+      ['TRADESTATION', brokerCatalogue('TRADESTATION')],
+      ['WEBULL', brokerCatalogue('WEBULL')],
+      ['MOOMOO', brokerCatalogue('MOOMOO')],
+      ['NINJATRADER', brokerCatalogue('NINJATRADER')],
+      ['TRADOVATE', brokerCatalogue('TRADOVATE')],
+      ['AMPFUTURES', brokerCatalogue('AMPFUTURES')],
+      ['TASTYTRADE', brokerCatalogue('TASTYTRADE')],
+      ['TASTYFX', brokerCatalogue('TASTYFX')],
+      ['CRYPTOCOMEXCHANGE', brokerCatalogue('CRYPTOCOMEXCHANGE')],
+      ['COINBASEADVANCED', brokerCatalogue('COINBASEADVANCED')],
+      ['ALPACA', alpaca()],
+      ['TRADIERBROKERAGE', brokerCatalogue('TRADIERBROKERAGE')],
+      ['TRADEZERO', brokerCatalogue('TRADEZERO')],
+      ['COBRATRADING', brokerCatalogue('COBRATRADING')],
+      ['CLEARSTREET', brokerCatalogue('CLEARSTREET')],
+      ['INVESTRADE', brokerCatalogue('INVESTRADE')],
+      ['PUBLIC', brokerCatalogue('PUBLIC')],
+      ['PLUS500US', brokerCatalogue('PLUS500US')],
+      ['OPTIMUSFUTURES', brokerCatalogue('OPTIMUSFUTURES')],
+      ['EDGECLEAR', brokerCatalogue('EDGECLEAR')],
+      ['IRONBEAM', brokerCatalogue('IRONBEAM')],
+      ['STONEX', brokerCatalogue('STONEX')],
+      ['DORMANTRADING', brokerCatalogue('DORMANTRADING')],
+      ['TRADIERFUTURES', brokerCatalogue('TRADIERFUTURES')],
       ['OANDA', oanda()],
     ];
     const results = await Promise.allSettled(
