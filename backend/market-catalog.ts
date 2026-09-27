@@ -137,30 +137,113 @@ function cryptoItem(provider: MarketProvider, marketType: string, category: stri
 }
 
 async function coinbase(): Promise<UnifiedInstrument[]> {
+  const out: UnifiedInstrument[] = [];
+  const seen = new Set<string>();
+
+  const add = (raw: any, marketType: string, category: string, idOverride?: string) => {
+    const productId = String(idOverride || raw?.product_id || raw?.id || '').trim();
+    if (!productId || seen.has(productId)) return;
+    const base = String(raw?.base_currency_id || raw?.baseAsset || raw?.base_currency || '').trim();
+    const quote = String(raw?.quote_currency_id || raw?.quoteAsset || raw?.quote_currency || '').trim();
+    const item = cryptoItem('COINBASE', marketType, category, {
+      ...raw,
+      symbol: productId,
+      baseAsset: base,
+      quoteAsset: quote,
+      fullName: raw?.display_name || raw?.name || productId,
+      status: raw?.status || raw?.state || 'online',
+      type: marketType,
+      contractType: raw?.future_product_details?.contract_expiry_type || raw?.contractType || undefined,
+      settleCoin: raw?.future_product_details?.contract_root_unit || raw?.settle_currency || undefined,
+      deliveryTime: raw?.future_product_details?.contract_expiry || undefined,
+    });
+    if (!item) return;
+    item.id = 'COINBASE:' + marketType + ':' + productId;
+    item.providerLabel = 'Coinbase';
+    item.marketType = marketType;
+    item.category = category;
+    item.instrumentType = marketType;
+    seen.add(productId);
+    out.push(item);
+  };
+
+  // Coinbase Exchange's public products endpoint supplies the full spot product
+  // universe. Do not discard non-online rows: they are still Coinbase products
+  // and the Quote catalogue must not silently lose them.
   try {
     const response = await getJson('https://api.exchange.coinbase.com/products', 15000);
     const rows = Array.isArray(response) ? response : [];
-    const out: UnifiedInstrument[] = [];
-    for (const raw of rows) {
-      const id = String(raw?.id || '').trim();
-      const status = String(raw?.status || '').toLowerCase();
-      if (!id || (status && !['online', 'active'].includes(status))) continue;
-      const [base, quote] = id.split('-');
-      const item = cryptoItem('COINBASE', 'Spot', 'Crypto', {
-        symbol: id,
-        baseAsset: base,
-        quoteAsset: quote,
-        fullName: String(raw?.display_name || raw?.name || id),
-        status: raw?.status || 'online'
-      });
-      if (item) out.push(item);
-    }
-    console.log('[SIRE COINBASE] Spot: ' + out.length);
-    return out;
+    for (const raw of rows) add(raw, 'Spot', 'Crypto', raw?.id);
+    console.log('[SIRE COINBASE] Exchange products: ' + rows.length);
   } catch (error) {
-    console.warn('[SIRE COINBASE] failed:', error);
-    return [];
+    console.warn('[SIRE COINBASE] Exchange products failed:', error);
   }
+
+  // Coinbase Advanced public product catalogue includes derivative products.
+  // Walk every cursor page and also issue explicit product-type queries so a
+  // filtered endpoint response can never hide a product from the unified list.
+  const advancedQueries: Array<Record<string, string>> = [
+    {},
+    { product_type: 'SPOT' },
+    { product_type: 'FUTURE' },
+    { product_type: 'FUTURE', contract_expiry_type: 'PERPETUAL' },
+  ];
+
+  const fetchAdvanced = async (params: Record<string, string>) => {
+    const rows: any[] = [];
+    let cursor = '';
+    for (let page = 0; page < 100; page += 1) {
+      const query = new URLSearchParams({ limit: '1000', ...params });
+      if (cursor) query.set('cursor', cursor);
+      const response = await getJson(
+        'https://api.coinbase.com/api/v3/brokerage/market/products?' + query.toString(),
+        20000,
+      );
+      const pageRows = Array.isArray(response?.products) ? response.products : [];
+      rows.push(...pageRows);
+      const next = String(response?.pagination?.next_cursor || '').trim();
+      if (!next || next === cursor) break;
+      cursor = next;
+    }
+    return rows;
+  };
+
+  for (const params of advancedQueries) {
+    try {
+      const rows = await fetchAdvanced(params);
+      for (const raw of rows) {
+        const productType = String(raw?.product_type || '').toUpperCase();
+        const expiryType = String(raw?.future_product_details?.contract_expiry_type || '').toUpperCase();
+        const display = String(
+          (raw?.display_name || '') + ' ' +
+          (raw?.product_id || '') + ' ' +
+          (raw?.future_product_details?.contract_display_name || '')
+        ).toLowerCase();
+
+        let marketType = 'Other';
+        let category = 'Crypto';
+        if (productType === 'SPOT') marketType = 'Spot';
+        else if (productType === 'FUTURE' && expiryType === 'PERPETUAL') marketType = 'Perpetual Futures';
+        else if (productType === 'FUTURE' || expiryType === 'EXPIRING') marketType = 'Futures';
+        else if (display.includes('perpetual') || /(^|[-_])perp([-_]|$)/i.test(display)) marketType = 'Perpetual Futures';
+
+        add(raw, marketType, category, raw?.product_id);
+      }
+      console.log('[SIRE COINBASE] Advanced products', JSON.stringify({ params, count: rows.length }));
+    } catch (error) {
+      console.warn('[SIRE COINBASE] Advanced query failed:', params, error);
+    }
+  }
+
+  console.log('[SIRE COINBASE] COMPLETE', JSON.stringify({
+    total: out.length,
+    spot: out.filter(item => item.marketType === 'Spot').length,
+    perpetuals: out.filter(item => item.marketType === 'Perpetual Futures').length,
+    futures: out.filter(item => item.marketType === 'Futures').length,
+    other: out.filter(item => item.marketType === 'Other').length,
+  }));
+
+  return out;
 }
 
 async function binance(): Promise<UnifiedInstrument[]> {
@@ -1919,6 +2002,7 @@ export async function getUnifiedMarketCatalogue(fetchDeriv: () => Promise<any[]>
       // Deriv remains on its dedicated implementation and is intentionally untouched.
       ['DERIV', fetchDeriv().then(items => items.map(derivItem).filter(Boolean) as UnifiedInstrument[])],
       ['BINANCE', binance()],
+      ['COINBASE', coinbase()],
       ['FXCM', fxcm()],
       // Nasdaq Trader supplies the public instrument master for Nasdaq-listed,
       // other U.S.-listed, bonds, NOM options, mutual funds and additional
