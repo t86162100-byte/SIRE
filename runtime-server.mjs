@@ -14,7 +14,7 @@ import { signup, login, logout, currentUser, googleStart, googleCallback } from 
 import { runSireDiagnostics } from './backend/sire-diagnostics.ts';
 import { runAutonomousCycle } from './autonomous/sire-autonomous-cycle.ts';
 import { recordIssue, getRecentIssues } from './backend/sire-issue-tracker.ts';
-import { getUnifiedMarketCatalogue, getCmeCatalogueForDiagnostics } from './backend/market-catalog.ts';
+import { getUnifiedMarketCatalogue, getCmeCatalogueForDiagnostics, getNyseAmericanCatalogueForDiagnostics } from './backend/market-catalog.ts';
 import { loadGlobalCryptoUniverse } from './backend/ccxt-universe-loader.ts';
 
 const PORT = Number(process.env.PORT || 10000);
@@ -854,4 +854,4 @@ server.on('upgrade',(req,socket,head)=>{
   });
 });
 
-server.listen(PORT,HOST,async()=>{ console.log(`SIRE server listening on ${HOST}:${PORT}`); console.log('[DERIV HISTORY STORE]', JSON.stringify(await historyStoreStatus())); setTimeout(async()=>{ try { const cme=await getCmeCatalogueForDiagnostics(); const counts={CME:0,CBOT:0,NYMEX:0,COMEX:0}; for(const item of cme){ if(item.providerLabel in counts) counts[item.providerLabel]++; } console.log('[SIRE CME RUNTIME VERIFY]', JSON.stringify({...counts,total:cme.length})); } catch(error) { console.error('[SIRE CME RUNTIME VERIFY] failed:', error); } }, 3000); });
+server.listen(PORT,HOST,async()=>{ console.log(`SIRE server listening on ${HOST}:${PORT}`); console.log('[DERIV HISTORY STORE]', JSON.stringify(await historyStoreStatus())); setTimeout(async()=>{ try { const cme=await getCmeCatalogueForDiagnostics(); const counts={CME:0,CBOT:0,NYMEX:0,COMEX:0}; for(const item of cme){ if(item.providerLabel in counts) counts[item.providerLabel]++; } console.log('[SIRE CME RUNTIME VERIFY]', JSON.stringify({...counts,total:cme.length})); } catch(error) { console.error('[SIRE CME RUNTIME VERIFY] failed:', error); } }, 3000); setTimeout(async()=>{ try { const nyse=await getNyseAmericanCatalogueForDiagnostics(); console.log('[SIRE NYSE AMERICAN RUNTIME VERIFY]', JSON.stringify({count:nyse.length})); } catch(error) { console.error('[SIRE NYSE AMERICAN RUNTIME VERIFY] failed:', error); } }, 6000); });
