@@ -1,4 +1,4 @@
-export type MarketProvider = 'DERIV' | 'BINANCE' | 'BITGET' | 'BYBIT' | 'OKX' | 'KRAKEN' | 'COINBASE' | 'GATEIO' | 'KUCOIN' | 'GEMINI' | 'BITSO' | 'BITFINEX' | 'BITVAVO' | 'COINEX' | 'LBANK' | 'WOOX' | 'CRYPTOCOM' | 'HTX' | 'BITKUB' | 'UPBIT' | 'PIONEX' | 'POLONIEX' | 'BITHUMB' | 'MEXC' | 'PHEMEX' | 'WHITEBIT' | 'TWELVEDATA' | 'NASDAQTRADER' | 'XETR' | 'HKEX' | 'NSE' | 'BITSTAMP' | 'OANDA' | 'TRADINGVIEW' | 'FOREXCOM' | 'INTERACTIVEBROKERS' | 'TRADESTATION' | 'WEBULL' | 'MOOMOO' | 'NINJATRADER' | 'TRADOVATE' | 'AMPFUTURES' | 'TASTYTRADE' | 'TASTYFX' | 'CRYPTOCOMEXCHANGE' | 'COINBASEADVANCED' | 'ALPACA' | 'TRADIERBROKERAGE' | 'TRADEZERO' | 'COBRATRADING' | 'CLEARSTREET' | 'INVESTRADE' | 'PUBLIC' | 'PLUS500US' | 'OPTIMUSFUTURES' | 'EDGECLEAR' | 'IRONBEAM' | 'STONEX' | 'DORMANTRADING' | 'TRADIERFUTURES';
+export type MarketProvider = 'DERIV' | 'BINANCE' | 'BITGET' | 'BYBIT' | 'OKX' | 'KRAKEN' | 'COINBASE' | 'GATEIO' | 'KUCOIN' | 'GEMINI' | 'BITSO' | 'BITFINEX' | 'BITVAVO' | 'COINEX' | 'LBANK' | 'WOOX' | 'CRYPTOCOM' | 'HTX' | 'BITKUB' | 'UPBIT' | 'PIONEX' | 'POLONIEX' | 'BITHUMB' | 'MEXC' | 'PHEMEX' | 'WHITEBIT' | 'TWELVEDATA' | 'NASDAQTRADER' | 'XETR' | 'HKEX' | 'BSE' | 'NSE' | 'BITSTAMP' | 'OANDA' | 'TRADINGVIEW' | 'FOREXCOM' | 'INTERACTIVEBROKERS' | 'TRADESTATION' | 'WEBULL' | 'MOOMOO' | 'NINJATRADER' | 'TRADOVATE' | 'AMPFUTURES' | 'TASTYTRADE' | 'TASTYFX' | 'CRYPTOCOMEXCHANGE' | 'COINBASEADVANCED' | 'ALPACA' | 'TRADIERBROKERAGE' | 'TRADEZERO' | 'COBRATRADING' | 'CLEARSTREET' | 'INVESTRADE' | 'PUBLIC' | 'PLUS500US' | 'OPTIMUSFUTURES' | 'EDGECLEAR' | 'IRONBEAM' | 'STONEX' | 'DORMANTRADING' | 'TRADIERFUTURES';
 
 export interface UnifiedInstrument {
   id: string;
@@ -1316,6 +1316,64 @@ async function hkex(): Promise<UnifiedInstrument[]> {
   } catch (error) { console.warn('[SIRE HKEX] failed:', error); return []; }
 }
 
+async function bse(): Promise<UnifiedInstrument[]> {
+  const base = 'https://api.bseindia.com/BseIndiaAPI/api/ListofScripData/w';
+  const groups = ['A','B','E','F','FC','GC','I','IF','IP','M','MS','MT','P','R','T','TS','W','X','XD','XT','Y','Z','ZP','ZY'];
+  const segments = ['Equity','Preference Shares','Debentures and Bonds','Commercial Papers','MF','Equity - Institutional Series'];
+  const out: UnifiedInstrument[] = [];
+  const seen = new Set<string>();
+  for (const segment of segments) {
+    for (const group of groups) {
+      try {
+        const url = new URL(base);
+        url.searchParams.set('scripcode','');
+        url.searchParams.set('Group',group);
+        url.searchParams.set('industry','');
+        url.searchParams.set('segment',segment);
+        url.searchParams.set('status','Active');
+        const response = await fetch(url, {
+          headers: {
+            Accept: 'application/json, text/plain, */*',
+            'User-Agent': 'SIRE-market-catalog/1.0',
+            Referer: 'https://www.bseindia.com/'
+          },
+          signal: AbortSignal.timeout(9000)
+        });
+        if (!response.ok) continue;
+        const data = await response.json();
+        const rows = Array.isArray(data) ? data : (data?.Table || data?.data || []);
+        if (!Array.isArray(rows)) continue;
+        for (const row of rows) {
+          const code = String(row.scripcode ?? row.Scripcode ?? row.ScripCode ?? '').trim();
+          const symbol = String(row.scrip_id ?? row.Scrip_Id ?? row.Symbol ?? row.symbol ?? '').trim();
+          const name = String(row.scrip_name ?? row.Scrip_Name ?? row.CompanyName ?? row.companyName ?? '').trim();
+          const isin = String(row.ISIN ?? row.isin ?? '').trim();
+          if (!code || !name || (!symbol && !isin)) continue;
+          const key = 'BSE:' + (isin || code);
+          if (seen.has(key)) continue;
+          seen.add(key);
+          const category = /BOND|DEBENTURE|COMMERCIAL PAPER/i.test(segment + ' ' + name) ? 'Bonds' : /MF|MUTUAL/i.test(segment + ' ' + name) ? 'Funds' : 'Stocks';
+          const item = cryptoItem('BSE','BSE India',category,{symbol:symbol || code,fullName:name,status:'online'});
+          if (!item) continue;
+          item.id = 'BSE:BSE:' + (isin || code);
+          item.symbol = symbol || code;
+          item.displaySymbol = symbol || code;
+          item.name = name;
+          item.marketType = 'BSE';
+          item.category = category;
+          item.quote = String(row.Currency ?? row.currency ?? 'INR').trim() || 'INR';
+          item.status = 'Active';
+          item.logoUrl = providerLogo('BSE');
+          item.providerLogoUrl = providerLogo('BSE');
+          out.push(item);
+        }
+      } catch {}
+    }
+  }
+  console.log('[SIRE BSE] Securities: ' + out.length);
+  return out;
+}
+
 async function okx(): Promise<UnifiedInstrument[]> {
   const types = ['SPOT', 'SWAP', 'FUTURES', 'OPTION'];
   const out: UnifiedInstrument[] = [];
@@ -1397,6 +1455,7 @@ export async function getUnifiedMarketCatalogue(fetchDeriv: () => Promise<any[]>
       ['NASDAQTRADER', nasdaqTrader()],
       ['XETR', xetra()],
       ['HKEX', hkex()],
+      ['BSE', bse()],
       ['NSE', nseIndia()],
       ['BITSTAMP', bitstamp()],
       ['FOREXCOM', brokerCatalogue('FOREXCOM')],
