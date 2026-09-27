@@ -63,9 +63,56 @@ const exchangeDomains: Record<string, string> = {
   bitvavo: 'bitvavo.com', coinex: 'coinex.com', lbank: 'lbank.com', woox: 'woo.org', cryptocom: 'crypto.com', htx: 'htx.com', upbit: 'upbit.com',
   poloniex: 'poloniex.com', bithumb: 'bithumb.com', phemex: 'phemex.com', whitebit: 'whitebit.com', bitso: 'bitso.com', bitkub: 'bitkub.com', pionex: 'pionex.com', oanda: 'oanda.com',
 };
+
+/*
+ * Exchange logos are resolved from stable brand slugs instead of Google favicons.
+ * That matters because a favicon is not the exchange's actual brand mark and can
+ * fall back to a generic/white icon. TradingView's datafeed model likewise expects
+ * a real exchange_logo URL supplied with each symbol result.
+ */
+const exchangeLogoSlugs: Record<string, string> = {
+  binance: 'binance',
+  bitget: 'bitget',
+  bybit: 'bybit',
+  okx: 'okx',
+  kraken: 'kraken',
+  coinbase: 'coinbase',
+  kucoin: 'kucoin',
+  mexc: 'mexc',
+  gemini: 'gemini',
+  bitfinex: 'bitfinex',
+  bitstamp: 'bitstamp',
+  bitvavo: 'bitvavo',
+  coinex: 'coinex',
+  lbank: 'lbank',
+  cryptocom: 'crypto-dot-com',
+  'crypto.com': 'crypto-dot-com',
+  htx: 'htx',
+  upbit: 'upbit',
+  poloniex: 'poloniex',
+  bithumb: 'bithumb',
+  phemex: 'phemex',
+  whitebit: 'whitebit',
+  bitso: 'bitso',
+  bitkub: 'bitkub',
+  pionex: 'pionex',
+  hyperliquid: 'hyperliquid',
+  oanda: 'oanda',
+  gate: 'gate',
+  gateio: 'gate',
+  woox: 'woo',
+};
+
 const makeProviderLogoFallback = (item: Instrument) => {
-  const key = String(item.exchange || item.providerLabel || item.provider || '').trim().toLowerCase();
-  const domain = item.provider === 'DERIV' ? 'deriv.com' : (exchangeDomains[key] || (key.replace(/\\s+/g, '').replace(/\\.com$/,'') + '.com'));
+  const key = String(item.exchange || item.providerLabel || item.provider || '')
+    .trim()
+    .toLowerCase()
+    .replace(/\\s+/g, '');
+  const slug = exchangeLogoSlugs[key];
+  if (slug) {
+    return 'https://cdn.simpleicons.org/' + slug;
+  }
+  const domain = item.provider === 'DERIV' ? 'deriv.com' : (exchangeDomains[key] || (key + '.com'));
   return 'https://www.google.com/s2/favicons?domain=' + encodeURIComponent(domain) + '&sz=128';
 };
 
@@ -403,7 +450,7 @@ export default function App() {
           {(['ALL','Forex','Stocks','Funds','Commodities','Indices','Bonds','Options','Futures','Crypto','Synthetic Indices','Baskets'] as const).map(category => (
             <button key={category} type="button" className={categoryFilter === category ? 'active' : ''} onClick={() => setCategoryFilter(category)}>{category}</button>
           ))}
-        </div>{derivError && <div className="sire-deriv-error">{derivError}</div>}<div className="native-symbol-list symbol-list" onScroll={event => setQuoteScrollTop(event.currentTarget.scrollTop)}><div style={{height: quoteWindow.top}} aria-hidden="true" /><div className="sire-quote-window">{quoteWindow.items.map(item => <button key={item.id} className={`symbol-row ${selected?.id === item.id ? 'active' : ''}`} data-provider={item.provider} onClick={() => selectInstrument(item)}><span className="quote-asset-logo-wrap"><img className="quote-asset-logo" src={item.logoUrl || makeAssetLogoFallback(item)} alt="" decoding="async" onError={event => { const image = event.currentTarget; image.onerror = null; image.src = makeLogoFallback(item.displaySymbol || item.symbol); }} /></span><span className="quote-instrument-name"><b>{String(item.displaySymbol || item.symbol).toUpperCase()}</b><small>{String(item.name || item.displaySymbol || item.symbol).toUpperCase()}</small></span><span className="quote-broker"><span className="quote-exchange-logo-wrap"><img className="quote-exchange-logo" src={item.providerLogoUrl || makeProviderLogoFallback(item)} alt="" decoding="async" onError={event => {
+        </div>{derivError && <div className="sire-deriv-error">{derivError}</div>}<div className="native-symbol-list symbol-list" onScroll={event => setQuoteScrollTop(event.currentTarget.scrollTop)}><div style={{height: quoteWindow.top}} aria-hidden="true" /><div className="sire-quote-window">{quoteWindow.items.map(item => <button key={item.id} className={`symbol-row ${selected?.id === item.id ? 'active' : ''}`} data-provider={item.provider} onClick={() => selectInstrument(item)}><span className="quote-asset-logo-wrap"><img className="quote-asset-logo" src={item.logoUrl || makeAssetLogoFallback(item)} alt="" decoding="async" onError={event => { const image = event.currentTarget; image.onerror = null; image.src = makeLogoFallback(item.displaySymbol || item.symbol); }} /></span><span className="quote-instrument-name"><b>{String(item.displaySymbol || item.symbol).toUpperCase()}</b><small>{String(item.name || item.displaySymbol || item.symbol).toUpperCase()}</small></span><span className="quote-broker"><span className="quote-exchange-logo-wrap"><img className="quote-exchange-logo" src={makeProviderLogoFallback(item)} alt="" decoding="async" onError={event => {
   const image=event.currentTarget;
   const stage=image.dataset.logoStage || '0';
   image.dataset.logoStage=stage === '0' ? '1' : '2';
@@ -454,7 +501,7 @@ export default function App() {
             </div>
             <div className="sire-instrument-search-list">
               {filtered.slice(0, 120).map(item => <button key={item.id} type="button" onClick={() => { if (instrumentSearchMode === 'multi') { setMultiChartInstrument(item.symbol); setSearch(''); setInstrumentSearchOpen(false); } else { selectInstrument(item); setInstrumentSearchOpen(false); } }}>
-                <span className="quote-asset-logo-wrap"><img className="quote-asset-logo" src={item.logoUrl || makeAssetLogoFallback(item)} alt="" onError={event => { const image=event.currentTarget; image.onerror=null; image.src=makeLogoFallback(item.displaySymbol || item.symbol); }} /></span><span className="quote-instrument-name"><b>{String(item.displaySymbol || item.symbol).toUpperCase()}</b><small>{String(item.name || item.displaySymbol || item.symbol).toUpperCase()}</small></span><span className="quote-broker"><span className="quote-exchange-logo-wrap"><img className="quote-exchange-logo" src={item.providerLogoUrl || makeProviderLogoFallback(item)} alt="" onError={event => { const image=event.currentTarget; image.onerror=null; image.src=makeProviderInitialFallback(item); }} /></span><b>{String(item.providerLabel || item.provider).toUpperCase()}</b><small>{item.category === 'Crypto' && item.marketType !== 'Spot' ? item.marketType.toLowerCase() : item.category === 'Crypto' && item.marketType === 'Spot' ? 'spot crypto' : String(item.marketType || item.category).toLowerCase()}</small></span>
+                <span className="quote-asset-logo-wrap"><img className="quote-asset-logo" src={item.logoUrl || makeAssetLogoFallback(item)} alt="" onError={event => { const image=event.currentTarget; image.onerror=null; image.src=makeLogoFallback(item.displaySymbol || item.symbol); }} /></span><span className="quote-instrument-name"><b>{String(item.displaySymbol || item.symbol).toUpperCase()}</b><small>{String(item.name || item.displaySymbol || item.symbol).toUpperCase()}</small></span><span className="quote-broker"><span className="quote-exchange-logo-wrap"><img className="quote-exchange-logo" src={makeProviderLogoFallback(item)} alt="" onError={event => { const image=event.currentTarget; image.onerror=null; image.src=makeProviderInitialFallback(item); }} /></span><b>{String(item.providerLabel || item.provider).toUpperCase()}</b><small>{item.category === 'Crypto' && item.marketType !== 'Spot' ? item.marketType.toLowerCase() : item.category === 'Crypto' && item.marketType === 'Spot' ? 'spot crypto' : String(item.marketType || item.category).toLowerCase()}</small></span>
               </button>)}
             </div>
           </div>
