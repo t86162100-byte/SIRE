@@ -418,7 +418,12 @@ export default function App() {
     const q = deferredSearch.trim().toLowerCase();
     return instruments.filter(item => {
       const providerMatch = providerFilter === 'ALL' || item.provider === providerFilter;
-      const categoryMatch = categoryFilter === 'ALL' || item.category === categoryFilter;
+      const marketType = String(item.marketType || '').toLowerCase();
+      const categoryMatch = categoryFilter === 'ALL'
+        || item.category === categoryFilter
+        || (categoryFilter === 'Options' && marketType.includes('option'))
+        || (categoryFilter === 'Futures' && (marketType.includes('future') || marketType.includes('perpetual') || marketType.includes('swap')))
+        || (categoryFilter === 'Crypto' && item.category === 'Crypto' && !marketType.includes('future') && !marketType.includes('option') && !marketType.includes('perpetual') && !marketType.includes('swap'));
       const searchMatch = !q || `${item.name} ${item.symbol} ${item.providerLabel} ${item.marketType} ${item.category}`.toLowerCase().includes(q);
       return providerMatch && categoryMatch && searchMatch;
     });
