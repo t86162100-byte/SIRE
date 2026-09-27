@@ -509,7 +509,7 @@ export default function App() {
     <div className="native-terminal-body">
       <aside className="native-symbol-sidebar symbol-sidebar"><div className="sidebar-search"><Search size={15} /><input value={search} onChange={event => setSearch(event.target.value)} placeholder="Search" /></div><div className="sidebar-meta"><span>{derivLoading ? "LOADING MARKETS" : derivError ? "MARKET ERROR" : "ALL MARKETS"}</span><b>{instruments.length}</b></div>
         <div className="sire-market-providers">
-          {(['ALL','DERIV','BINANCE','BITGET','BYBIT','OKX','KRAKEN','COINBASE','GATEIO','KUCOIN','GEMINI','BITSO','BITFINEX','BITVAVO','COINEX','LBANK','WOOX','CRYPTOCOM','HTX','BITKUB','UPBIT','PIONEX','POLONIEX','BITHUMB','MEXC','PHEMEX','WHITEBIT','TWELVEDATA','FINNHUB','OANDA','IG'] as const).map(provider => (
+          {(['ALL','DERIV','BINANCE','BITGET','BYBIT','OKX','KRAKEN','COINBASE','GATEIO','KUCOIN','GEMINI','BITSO','BITFINEX','BITVAVO','COINEX','LBANK','WOOX','CRYPTOCOM','HTX','BITKUB','UPBIT','PIONEX','POLONIEX','BITHUMB','MEXC','PHEMEX','WHITEBIT','TWELVEDATA','FINNHUB','OANDA','TRADINGVIEW'] as const).map(provider => (
             <button key={provider} type="button" className={providerFilter === provider ? 'active' : ''} onClick={() => setProviderFilter(provider)}>{provider === 'ALL' ? 'All' : provider[0] + provider.slice(1).toLowerCase()}</button>
           ))}
         </div><div className="sire-market-providers sire-market-categories">
