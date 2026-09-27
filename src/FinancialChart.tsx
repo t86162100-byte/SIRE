@@ -12,7 +12,7 @@ import 'openalgo-charts/webgl';
 import { createWidget, type Widget } from 'openalgo-charts/widget';
 import './financialChart.css';
 
-type Instrument = { symbol: string; name: string; pipSize?: number; provider?: 'DERIV' | 'FXCM' | string; marketType?: string; category?: string };
+type Instrument = { symbol: string; name: string; pipSize?: number; provider?: 'DERIV' | 'FXCM' | string; exchange?: string; marketType?: string; category?: string };
 type Props = {
   symbol: string;
   isActive?: boolean;
@@ -337,7 +337,7 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
   replayStartInputRef.current = replayStartInput;
   replayEndInputRef.current = replayEndInput;
 
-  const marketInstrument = instruments.find(item => item.symbol === symbol);
+  const marketInstrument = instruments.find(item => item.symbol === symbol && (!item.provider || item.provider === (instruments.find(candidate => candidate.symbol === symbol)?.provider))) || instruments.find(item => item.symbol === symbol);
   const marketInstrumentName = marketInstrument?.name || symbol;
 
   const reportDiagnostic = (event: DerivFeedDiagnostic & { stack?: string; location?: DiagnosticLocation; operation?: string }) => {
