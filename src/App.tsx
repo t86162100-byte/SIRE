@@ -125,14 +125,9 @@ export default function App() {
       } catch {}
     };
     const onChartOpen = async () => {
-      if (!auditStartedRef.current) {
-        auditStartedRef.current = true;
-        try {
-          await fetch('/api/sire/instrument-audit/start', { method:'POST', cache:'no-store', headers:{'Cache-Control':'no-cache'} });
-        } catch (error) {
-          setInstrumentAudit(current => ({ ...current, error:error instanceof Error ? error.message : 'Instrument audit could not start.' }));
-        }
-      }
+      // Exchange-by-exchange verification now owns the initial Chart audit.
+      // The much larger instrument audit remains available through its API and is
+      // intentionally not launched concurrently, to avoid hammering exchange APIs.
       void poll();
       if (timer === null) timer = window.setInterval(() => void poll(), 3000);
     };
