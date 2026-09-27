@@ -134,7 +134,6 @@ export async function fetchBinanceBrowserCatalogue(): Promise<any[]> {
     addRows(rows, 'Spot');
     // Binance's Spot exchangeInfo carries margin-trading availability on symbols.
     addRows(rows.filter((r: any) => r?.isMarginTradingAllowed === true), 'Margin');
-    addRows(rows.filter((r: any) => r?.isMarginTradingAllowed === true), 'Isolated Margin');
     console.info('[SIRE BINANCE BROWSER] Spot exchangeInfo OK', { returned: rows.length, spot: counts.Spot || 0, margin: counts.Margin || 0 });
   } catch (error) {
     failures.Spot = error instanceof Error ? error.message : String(error);
@@ -260,6 +259,7 @@ export function createBinanceDataFeed(
   let socket: WebSocket | null = null;
   let last: any = null;
   let currentBar: any = null;
+  let activeBarCallback: ((bar:any)=>void) | null = null;
 
   const marketType = String(instrument.marketType || 'Spot');
   const symbol = String(instrument.symbol || '');
@@ -316,6 +316,7 @@ export function createBinanceDataFeed(
     }
     last = { symbol, price, epoch, volume };
     onQuote?.(last);
+    activeBarCallback?.({ ...currentBar });
     onDiagnostic?.({ level:'info', code:'LIVE_PRICE_RECEIVED', message:'Binance live price received.', detail:{ symbol, price, epoch } });
   };
 
@@ -395,7 +396,7 @@ export function createBinanceDataFeed(
     subscribeBars({ symbol: requestedSymbol, interval: requestedInterval }: { symbol:string; interval:string }, onBar:(bar:any)=>void, options?:{seedFrom?:any}) {
       if (requestedSymbol !== symbol) return () => {};
       currentBar = options?.seedFrom ? { ...options.seedFrom } : null;
-      const originalOnQuote = onQuote;
+      activeBarCallback = onBar;
       const stopPolling = () => {
         stopped = true;
         if (pollTimer) window.clearTimeout(pollTimer);
@@ -404,15 +405,13 @@ export function createBinanceDataFeed(
         socket = null;
       };
       // The feed already maintains the official live stream; bars are emitted from it below.
-      const originalEmit = emit;
-      void originalOnQuote;
-      void originalEmit;
-      onBar({ ...(currentBar || {}) });
+      if (currentBar) onBar({ ...currentBar });
       const barTimer = window.setInterval(() => {
         if (currentBar) onBar({ ...currentBar });
       }, 1000);
       return () => {
         window.clearInterval(barTimer);
+        activeBarCallback = null;
         stopPolling();
       };
     },
