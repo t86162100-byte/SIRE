@@ -1,4 +1,4 @@
-export type MarketProvider = 'DERIV' | 'BINANCE' | 'BITGET' | 'BYBIT' | 'OKX' | 'KRAKEN' | 'COINBASE' | 'GATEIO' | 'KUCOIN' | 'GEMINI' | 'BITSO' | 'BITFINEX' | 'BITVAVO' | 'COINEX' | 'LBANK' | 'WOOX' | 'CRYPTOCOM' | 'HTX' | 'BITKUB' | 'UPBIT' | 'PIONEX' | 'POLONIEX' | 'BITHUMB' | 'MEXC' | 'PHEMEX' | 'WHITEBIT' | 'TWELVEDATA' | 'NASDAQTRADER' | 'XETR' | 'HKEX' | 'BSE' | 'TSE' | 'XFRA' | 'EUREX' | 'NSE' | 'BITSTAMP' | 'OANDA' | 'TRADINGVIEW' | 'FOREXCOM' | 'INTERACTIVEBROKERS' | 'TRADESTATION' | 'WEBULL' | 'MOOMOO' | 'NINJATRADER' | 'TRADOVATE' | 'AMPFUTURES' | 'TASTYTRADE' | 'TASTYFX' | 'CRYPTOCOMEXCHANGE' | 'COINBASEADVANCED' | 'ALPACA' | 'TRADIERBROKERAGE' | 'TRADEZERO' | 'COBRATRADING' | 'CLEARSTREET' | 'INVESTRADE' | 'PUBLIC' | 'PLUS500US' | 'OPTIMUSFUTURES' | 'EDGECLEAR' | 'IRONBEAM' | 'STONEX' | 'DORMANTRADING' | 'TRADIERFUTURES';
+export type MarketProvider = 'DERIV' | 'BINANCE' | 'BITGET' | 'BYBIT' | 'OKX' | 'KRAKEN' | 'COINBASE' | 'GATEIO' | 'KUCOIN' | 'GEMINI' | 'BITSO' | 'BITFINEX' | 'BITVAVO' | 'COINEX' | 'LBANK' | 'WOOX' | 'CRYPTOCOM' | 'HTX' | 'BITKUB' | 'UPBIT' | 'PIONEX' | 'POLONIEX' | 'BITHUMB' | 'MEXC' | 'PHEMEX' | 'WHITEBIT' | 'TWELVEDATA' | 'NASDAQTRADER' | 'XETR' | 'HKEX' | 'BSE' | 'TSE' | 'XFRA' | 'EUREX' | 'ASX' | 'NSE' | 'BITSTAMP' | 'OANDA' | 'TRADINGVIEW' | 'FOREXCOM' | 'INTERACTIVEBROKERS' | 'TRADESTATION' | 'WEBULL' | 'MOOMOO' | 'NINJATRADER' | 'TRADOVATE' | 'AMPFUTURES' | 'TASTYTRADE' | 'TASTYFX' | 'CRYPTOCOMEXCHANGE' | 'COINBASEADVANCED' | 'ALPACA' | 'TRADIERBROKERAGE' | 'TRADEZERO' | 'COBRATRADING' | 'CLEARSTREET' | 'INVESTRADE' | 'PUBLIC' | 'PLUS500US' | 'OPTIMUSFUTURES' | 'EDGECLEAR' | 'IRONBEAM' | 'STONEX' | 'DORMANTRADING' | 'TRADIERFUTURES';
 
 export interface UnifiedInstrument {
   id: string;
@@ -1219,6 +1219,48 @@ async function nasdaqTrader(): Promise<UnifiedInstrument[]> {
   console.log('[SIRE NASDAQTRADER] Total catalogue: ' + out.length);
   return out;
 }
+async function asx(): Promise<UnifiedInstrument[]> {
+  const url = 'https://www.asx.com.au/content/dam/asx/issuers/ISIN.xls';
+  try {
+    const response = await fetch(url, { signal: AbortSignal.timeout(12000) });
+    if (!response.ok) throw new Error('HTTP ' + response.status);
+    const bytes = Buffer.from(await response.arrayBuffer());
+    const xlsx = await import('xlsx');
+    const workbook = xlsx.read(bytes, { type: 'buffer' });
+    const rows: any[][] = [];
+    for (const sheetName of workbook.SheetNames) {
+      const sheetRows = xlsx.utils.sheet_to_json(workbook.Sheets[sheetName], { header: 1, defval: '' }) as any[][];
+      rows.push(...sheetRows);
+    }
+    const out: UnifiedInstrument[] = [];
+    const seen = new Set<string>();
+    for (const row of rows) {
+      const cells = row.map(v => String(v ?? '').trim());
+      const isinIndex = cells.findIndex(v => /^AU[A-Z0-9]{9}[0-9]$/i.test(v));
+      if (isinIndex < 0) continue;
+      const isin = cells[isinIndex];
+      const code = cells.find(v => /^[A-Z0-9]{2,6}$/.test(v) && v !== isin && !/^AU[A-Z0-9]{9}[0-9]$/i.test(v)) || '';
+      const name = cells.find(v => /[A-Za-z]/.test(v) && v.length > 2 && v !== code && v !== isin) || code;
+      if (!code || seen.has(isin)) continue;
+      seen.add(isin);
+      const item = cryptoItem('ASX', 'ASX', 'Stocks', { symbol: code, fullName: name, quoteAsset: 'AUD', status: 'online' });
+      if (!item) continue;
+      item.id = 'ASX:ASX:' + isin;
+      item.name = name;
+      item.displaySymbol = code;
+      item.marketType = 'ASX';
+      item.category = 'Stocks';
+      item.quote = 'AUD';
+      item.status = 'Active';
+      item.logoUrl = providerLogo('ASX');
+      item.providerLogoUrl = providerLogo('ASX');
+      out.push(item);
+    }
+    console.log('[SIRE ASX] ISIN catalogue: ' + out.length);
+    return out;
+  } catch (error) { console.warn('[SIRE ASX] failed:', error); return []; }
+}
+
 async function xetra(): Promise<UnifiedInstrument[]> {
   const url = 'https://www.cashmarket.deutsche-boerse.com/resource/blob/1528/684b31b077a5de5d5777352984c7a7df/data/t7-xetr-allTradableInstruments.csv';
   try {
@@ -1566,6 +1608,7 @@ export async function getUnifiedMarketCatalogue(fetchDeriv: () => Promise<any[]>
       ['TWELVEDATA', twelveData()],
       ['NASDAQTRADER', nasdaqTrader()],
       ['XETR', xetra()],
+      ['ASX', asx()],
       ['XFRA', xfra()],
       ['EUREX', eurex()],
       ['HKEX', hkex()],
@@ -1602,7 +1645,7 @@ export async function getUnifiedMarketCatalogue(fetchDeriv: () => Promise<any[]>
       ['OANDA', oanda()],
     ];
     const results = await Promise.allSettled(
-      providers.map(([provider, promise]) => withProviderTimeout(provider, promise, provider === 'DERIV' || provider === 'NASDAQTRADER' || provider === 'XETR' || provider === 'XFRA' || provider === 'EUREX' ? 12000 : 7000))
+      providers.map(([provider, promise]) => withProviderTimeout(provider, promise, provider === 'DERIV' || provider === 'NASDAQTRADER' || provider === 'XETR' || provider === 'XFRA' || provider === 'EUREX' || provider === 'ASX' ? 12000 : 7000))
     );
     results.forEach((result, index) => {
       if (result.status === 'rejected') console.warn('[SIRE MARKET CATALOG] provider failed:', providers[index][0], result.reason);
