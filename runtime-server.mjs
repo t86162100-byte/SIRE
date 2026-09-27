@@ -18,6 +18,7 @@ import { getUnifiedMarketCatalogue, getCmeCatalogueForDiagnostics, getNyseAmeric
 import { loadGlobalCryptoUniverse } from './backend/ccxt-universe-loader.ts';
 import { ccxtMarketHistory, ccxtMarketQuote, ccxtMarketCapabilities } from './backend/ccxt-market-data.ts';
 import { getCcxtLiveQuote, getCcxtLiveStatus, getCcxtExchangeRuntime } from './backend/ccxt-live-market-data.ts';
+import { startCcxtExchangeAudit, getCcxtExchangeAuditStatus, getCcxtExchangeAuditResults } from './backend/ccxt-exchange-audit.ts';
 import { startInstrumentAudit, getInstrumentAuditStatus, getInstrumentAuditResults } from './backend/instrument-auditor.ts';
 
 const PORT = Number(process.env.PORT || 10000);
@@ -838,6 +839,18 @@ const server = http.createServer(async (req,res) => {
     if (req.method === 'GET' && pathname === '/api/sire/ccxt/live-status') {
       const u=new URL(req.url||'/',`http://${req.headers.host||'localhost'}`);
       return res.writeHead(200,{'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify({ok:true,...getCcxtLiveStatus(u.searchParams.get('exchange')||undefined,u.searchParams.get('symbol')||undefined)}));
+    }
+    if (req.method === 'POST' && pathname === '/api/sire/ccxt/exchange-audit/start') {
+      return res.writeHead(200,{'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify({ok:true,audit:startCcxtExchangeAudit()}));
+    }
+    if (req.method === 'GET' && pathname === '/api/sire/ccxt/exchange-audit/status') {
+      return res.writeHead(200,{'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify({ok:true,audit:getCcxtExchangeAuditStatus()}));
+    }
+    if (req.method === 'GET' && pathname === '/api/sire/ccxt/exchange-audit/results') {
+      const u=new URL(req.url||'/',`http://${req.headers.host||'localhost'}`);
+      const failedOnly=u.searchParams.get('failedOnly')==='true';
+      const rows=getCcxtExchangeAuditResults(failedOnly);
+      return res.writeHead(200,{'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify({ok:true,count:rows.length,rows}));
     }
     if (req.method === 'GET' && pathname === '/api/sire/market-data/history') {
       try {
