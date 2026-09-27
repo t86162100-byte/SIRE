@@ -453,6 +453,71 @@ async function bithumb(): Promise<UnifiedInstrument[]> {
   } catch (error) { console.warn('[SIRE BITHUMB] failed:', error); return []; }
 }
 
+async function mexc(): Promise<UnifiedInstrument[]> {
+  try {
+    const payload = await getJson('https://api.mexc.com/api/v3/exchangeInfo', 15000);
+    const rows = Array.isArray(payload?.symbols) ? payload.symbols : [];
+    const out: UnifiedInstrument[] = [];
+    for (const raw of rows) {
+      if (String(raw?.status || '').toUpperCase() !== 'ENABLED') continue;
+      const item = cryptoItem('MEXC', 'Spot', 'Crypto', {
+        symbol: String(raw?.symbol || ''),
+        baseAsset: String(raw?.baseAsset || ''),
+        quoteAsset: String(raw?.quoteAsset || ''),
+        fullName: String(raw?.symbol || ''),
+        status: raw?.status || 'ENABLED'
+      });
+      if (item) out.push(item);
+    }
+    console.log('[SIRE MEXC] Spot: ' + out.length);
+    return out;
+  } catch (error) { console.warn('[SIRE MEXC] failed:', error); return []; }
+}
+
+async function phemex(): Promise<UnifiedInstrument[]> {
+  try {
+    const payload = await getJson('https://api.phemex.com/public/products', 15000);
+    const rows = Array.isArray(payload?.result?.products) ? payload.result.products : [];
+    const out: UnifiedInstrument[] = [];
+    for (const raw of rows) {
+      const symbol = String(raw?.symbol || '').trim();
+      if (!symbol) continue;
+      const type = String(raw?.type || '').toLowerCase();
+      const marketType = type === 'spot' ? 'Spot' : 'Perpetual';
+      const item = cryptoItem('PHEMEX', marketType, 'Crypto', {
+        symbol,
+        baseAsset: String(raw?.baseCurrency || raw?.baseCcy || ''),
+        quoteAsset: String(raw?.quoteCurrency || raw?.quoteCcy || ''),
+        fullName: symbol,
+        status: String(raw?.status || 'online')
+      });
+      if (item) out.push(item);
+    }
+    console.log('[SIRE PHEMEX] Markets: ' + out.length);
+    return out;
+  } catch (error) { console.warn('[SIRE PHEMEX] failed:', error); return []; }
+}
+
+async function whitebit(): Promise<UnifiedInstrument[]> {
+  try {
+    const rows = await getJson('https://whitebit.com/api/v4/public/markets', 15000);
+    const out: UnifiedInstrument[] = [];
+    for (const raw of Array.isArray(rows) ? rows : []) {
+      if (raw?.tradesEnabled === false) continue;
+      const item = cryptoItem('WHITEBIT', String(raw?.type || 'spot'), 'Crypto', {
+        symbol: String(raw?.name || ''),
+        baseAsset: String(raw?.stock || ''),
+        quoteAsset: String(raw?.money || ''),
+        fullName: String(raw?.name || ''),
+        status: raw?.tradesEnabled === false ? 'offline' : 'online'
+      });
+      if (item) out.push(item);
+    }
+    console.log('[SIRE WHITEBIT] Markets: ' + out.length);
+    return out;
+  } catch (error) { console.warn('[SIRE WHITEBIT] failed:', error); return []; }
+}
+
 async function binance(): Promise<UnifiedInstrument[]> {
   const families: Array<[string, string[]]> = [
     ['Spot', ['https://data-api.binance.vision/api/v3/exchangeInfo','https://api.binance.com/api/v3/exchangeInfo','https://api-gcp.binance.com/api/v3/exchangeInfo','https://api1.binance.com/api/v3/exchangeInfo','https://api2.binance.com/api/v3/exchangeInfo']],
@@ -891,6 +956,9 @@ export async function getUnifiedMarketCatalogue(fetchDeriv: () => Promise<any[]>
       ['PIONEX', pionex()],
       ['POLONIEX', poloniex()],
       ['BITHUMB', bithumb()],
+      ['MEXC', mexc()],
+      ['PHEMEX', phemex()],
+      ['WHITEBIT', whitebit()],
       ['COINBASE', coinbase()],
       ['BITGET', bitget()],
       ['BYBIT', bybit()],
