@@ -43,6 +43,8 @@ const chooseInitialDerivInstrument = (items: Instrument[]) =>
 
 export default function App() {
   const [instruments, setInstruments] = useState<Instrument[]>([]);
+  // One random seed per page load keeps the mixed order stable during browsing.
+  const catalogueShuffleSeedRef = useRef<number>(Math.floor(Math.random() * 0xffffffff));
   const [selected, setSelected] = useState<Instrument | null>(null);
   const [derivLoading, setDerivLoading] = useState(true);
   const [derivError, setDerivError] = useState('');
@@ -257,9 +259,27 @@ export default function App() {
     return () => window.removeEventListener('sire:agent-chart-action', onAgentChartAction);
   }, [instruments, selected?.symbol]);
 
+  const randomizedInstruments = useMemo(() => {
+    const seed = catalogueShuffleSeedRef.current >>> 0;
+    const score = (id: string) => {
+      let hash = (seed ^ 0x9e3779b9) >>> 0;
+      for (let i = 0; i < id.length; i += 1) {
+        hash ^= id.charCodeAt(i);
+        hash = Math.imul(hash, 0x85ebca6b) >>> 0;
+        hash ^= hash >>> 13;
+      }
+      hash = Math.imul(hash ^ (hash >>> 16), 0xc2b2ae35) >>> 0;
+      return (hash ^ (hash >>> 16)) >>> 0;
+    };
+    return instruments
+      .map((item, index) => ({ item, index, randomScore: score(item.id || (item.provider + ':' + item.symbol + ':' + index)) }))
+      .sort((a, b) => a.randomScore - b.randomScore || a.index - b.index)
+      .map(entry => entry.item);
+  }, [instruments]);
+
   const filtered = useMemo(() => {
     const q = deferredSearch.trim().toLowerCase();
-    return instruments.filter(item => {
+    return randomizedInstruments.filter(item => {
       const providerMatch = providerFilter === 'ALL' || item.provider === providerFilter;
       const marketType = String(item.marketType || '').toLowerCase();
       const categoryMatch = categoryFilter === 'ALL'
@@ -270,7 +290,7 @@ export default function App() {
       const searchMatch = !q || `${item.name} ${item.symbol} ${item.providerLabel} ${item.marketType} ${item.category}`.toLowerCase().includes(q);
       return providerMatch && categoryMatch && searchMatch;
     });
-  }, [instruments, search, providerFilter, categoryFilter]);
+  }, [randomizedInstruments, search, providerFilter, categoryFilter]);
 
   const chartableInstruments = useMemo(() => instruments.filter(item => item.provider === 'DERIV'), [instruments]);
   const quoteWindow = useMemo(() => {
