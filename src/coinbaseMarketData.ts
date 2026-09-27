@@ -12,6 +12,8 @@ export type CoinbaseInstrument = {
   baseCurrency?: string;
   quoteCurrency?: string;
   status?: string;
+  exchangeOpen?: number;
+  tradingSuspended?: number;
   tradingDisabled?: boolean;
   contractExpiry?: string;
   contractExpiryType?: string;
