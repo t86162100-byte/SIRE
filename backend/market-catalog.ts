@@ -863,42 +863,80 @@ async function finnhub(): Promise<UnifiedInstrument[]> {
     console.warn('[SIRE FINNHUB] FINNHUB_API_KEY not configured; skipping optional global catalogue.');
     return [];
   }
-  const exchanges = ['US', 'GB', 'DE', 'FR', 'HK', 'JP', 'CA', 'AU'];
+
   const out: UnifiedInstrument[] = [];
-  for (const exchange of exchanges) {
-    try {
-      const response = await getJsonAny([
-        'https://finnhub.io/api/v1/stock/symbol?exchange=' + exchange + '&token=' + encodeURIComponent(apiKey)
-      ], 15000);
-      const rows = Array.isArray(response) ? response : [];
-      for (const raw of rows) {
-        const symbol = String(raw?.symbol || '').trim();
-        if (!symbol) continue;
-        const type = String(raw?.type || '').toUpperCase();
-        const category = type.includes('ETF') || type.includes('FUND') ? 'Funds' : 'Stocks';
-        const item = cryptoItem('FINNHUB', category, category, {
-          symbol,
-          baseAsset: symbol,
-          fullName: String(raw?.description || symbol),
-          status: 'online'
-        });
-        if (item) {
-          item.name = String(raw?.description || symbol);
-          item.marketType = exchange;
-          item.category = category;
-          item.logoUrl = providerLogo('FINNHUB');
-          item.providerLogoUrl = providerLogo('FINNHUB');
-          out.push(item);
-        }
+  const seen = new Set<string>();
+  const addRows = (rows: any[], category: string, marketType: string) => {
+    for (const raw of rows) {
+      const symbol = String(raw?.symbol || raw?.displaySymbol || '').trim();
+      if (!symbol) continue;
+      const id = 'FINNHUB:' + marketType + ':' + symbol;
+      if (seen.has(id)) continue;
+      seen.add(id);
+      const item = cryptoItem('FINNHUB', marketType, category, {
+        symbol,
+        baseAsset: String(raw?.baseCurrency || raw?.base || symbol),
+        quoteAsset: String(raw?.quoteCurrency || raw?.quote || ''),
+        fullName: String(raw?.description || raw?.displaySymbol || symbol),
+        status: 'online'
+      });
+      if (!item) continue;
+      item.name = String(raw?.description || raw?.displaySymbol || symbol);
+      item.category = category;
+      item.marketType = marketType;
+      item.logoUrl = providerLogo('FINNHUB');
+      item.providerLogoUrl = providerLogo('FINNHUB');
+      out.push(item);
+    }
+  };
+
+  // Finnhub exposes stock, forex and crypto symbol catalogues. Pull the
+  // complete public symbol lists for every exchange returned by its exchange
+  // metadata instead of hard-coding only a few countries.
+  try {
+    const exchangesPayload = await getJsonAny([
+      'https://finnhub.io/api/v1/stock/exchange?token=' + encodeURIComponent(apiKey)
+    ], 15000);
+    const exchanges = Array.isArray(exchangesPayload) ? exchangesPayload : [];
+    for (const exchange of exchanges) {
+      const code = String(exchange?.code || exchange?.mic || '').trim();
+      if (!code) continue;
+      try {
+        const rows = await getJsonAny([
+          'https://finnhub.io/api/v1/stock/symbol?exchange=' + encodeURIComponent(code) + '&token=' + encodeURIComponent(apiKey)
+        ], 15000);
+        addRows(Array.isArray(rows) ? rows : [], 'Stocks', code);
+      } catch (error) {
+        console.warn('[SIRE FINNHUB] stock exchange failed:', code, error);
       }
+    }
+  } catch (error) {
+    console.warn('[SIRE FINNHUB] exchange discovery failed:', error);
+  }
+
+  for (const exchange of ['oanda', 'fxcm', 'fxcm2', 'forexcom']) {
+    try {
+      const rows = await getJsonAny([
+        'https://finnhub.io/api/v1/forex/symbol?exchange=' + encodeURIComponent(exchange) + '&token=' + encodeURIComponent(apiKey)
+      ], 15000);
+      addRows(Array.isArray(rows) ? rows : [], 'Forex', exchange);
     } catch (error) {
-      console.warn('[SIRE FINNHUB] ' + exchange + ' failed:', error);
+      console.warn('[SIRE FINNHUB] forex exchange failed:', exchange, error);
     }
   }
-  console.log('[SIRE FINNHUB] Stocks/Funds: ' + out.length);
+
+  try {
+    const rows = await getJsonAny([
+      'https://finnhub.io/api/v1/crypto/symbol?exchange=binance&token=' + encodeURIComponent(apiKey)
+    ], 15000);
+    addRows(Array.isArray(rows) ? rows : [], 'Crypto', 'binance');
+  } catch (error) {
+    console.warn('[SIRE FINNHUB] crypto catalogue failed:', error);
+  }
+
+  console.log('[SIRE FINNHUB] Complete available catalogue: ' + out.length);
   return out;
 }
-
 async function okx(): Promise<UnifiedInstrument[]> {
   const types = ['SPOT', 'SWAP', 'FUTURES', 'OPTION'];
   const out: UnifiedInstrument[] = [];
