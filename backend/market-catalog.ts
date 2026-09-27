@@ -1006,110 +1006,117 @@ async function nseIndia(): Promise<UnifiedInstrument[]> {
 }
 
 async function cme(): Promise<UnifiedInstrument[]> {
-  // CME Group has four separate Designated Contract Markets: CME, CBOT,
-  // NYMEX and COMEX. SIRE keeps these as four separate catalogue providers.
-  const url = 'https://www.cmegroup.com/tools-information/files/quote-vendor-codes.xlsx?lastUpdated-2026-09-18=';
-  const exchanges = new Set(['CME', 'CBOT', 'NYMEX', 'COMEX']);
+  // CME's public Product Slate is the catalogue source. CME documents the
+  // exchange values as CME/CBOT(CBT)/NYMEX(NYM)/COMEX(CMX).
+  const exchanges = new Map([
+    ['CME', 'CME'], ['CBOT', 'CBOT'], ['CBT', 'CBOT'],
+    ['NYMEX', 'NYMEX'], ['NYM', 'NYMEX'],
+    ['COMEX', 'COMEX'], ['CMX', 'COMEX'],
+  ]);
+
+  const category = (value: any) => {
+    const s = String(value || '').toLowerCase();
+    if (s.includes('option')) return 'Options';
+    if (s.includes('future')) return 'Futures';
+    if (s.includes('energy')) return 'Energy';
+    if (s.includes('metal')) return 'Metals';
+    if (s.includes('agric')) return 'Agriculture';
+    if (s.includes('equity')) return 'Equities';
+    if (s.includes('interest')) return 'Interest Rates';
+    if (s.includes('fx') || s.includes('currency')) return 'Forex';
+    return 'Derivatives';
+  };
+
+  const scalar = (o: any, keys: string[]) => {
+    for (const key of keys) {
+      const v = o?.[key];
+      if (v !== undefined && v !== null && String(v).trim()) return String(v).trim();
+    }
+    return '';
+  };
+
+  const collectObjects = (value: any, out: any[] = []) => {
+    if (!value || typeof value !== 'object') return out;
+    if (Array.isArray(value)) {
+      for (const item of value) collectObjects(item, out);
+      return out;
+    }
+    const exchange = scalar(value, ['exchange', 'exchangeName', 'exchangeCode', 'dcm', 'venueName']);
+    const symbol = scalar(value, ['globex', 'globexSymbol', 'globexCode', 'symbol', 'productCode', 'code']);
+    const name = scalar(value, ['productName', 'name', 'description', 'displayName']);
+    if (exchange && symbol && name) out.push(value);
+    for (const child of Object.values(value)) collectObjects(child, out);
+    return out;
+  };
 
   try {
-    const response = await fetch(url, {
-      headers: { 'User-Agent': 'SIRE-market-catalog/1.0', Accept: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' },
-      signal: AbortSignal.timeout(20000)
-    });
-    if (!response.ok) throw new Error('HTTP ' + response.status);
-    const bytes = Buffer.from(await response.arrayBuffer());
-    const XLSX = await import('xlsx');
-    const workbook = XLSX.read(bytes, { type: 'buffer' });
     const out: UnifiedInstrument[] = [];
     const seen = new Set<string>();
+    const kinds = ['Futures', 'Options'];
 
-    const categoryFromSheet = (sheetName: string) => {
-      const s = sheetName.toLowerCase();
-      if (s.includes('agric')) return 'Agriculture';
-      if (s.includes('equity')) return 'Equities';
-      if (s.includes('metal')) return 'Metals';
-      if (s.includes('fx') || s.includes('foreign')) return 'Forex';
-      if (s.includes('interest')) return 'Interest Rates';
-      if (s.includes('energy')) return 'Energy';
-      return 'Derivatives';
-    };
-
-    for (const sheetName of workbook.SheetNames) {
-      const rows = XLSX.utils.sheet_to_json<any[]>(workbook.Sheets[sheetName], { header: 1, defval: '' });
-      if (!rows.length) continue;
-      const headerIndex = rows.findIndex((row: any[]) =>
-        row.some(v => /product\s*name/i.test(String(v))) &&
-        row.some(v => /globex/i.test(String(v)))
-      );
-      if (headerIndex < 0) continue;
-
-      const headers = rows[headerIndex].map(v => String(v).trim());
-      const find = (patterns: RegExp[]) =>
-        headers.findIndex(h => patterns.some(p => p.test(h)));
-
-      const nameI = find([/product\s*name/i, /^name$/i]);
-      const globexI = find([/^globex$/i, /globex\s*(symbol|code)/i]);
-      const clearingI = find([/^clearing$/i, /clearing\s*(symbol|code)/i]);
-      const exchangeI = find([/^exchange$/i, /^dcm$/i, /designated\s*contract\s*market/i]);
-      const groupI = find([/^product\s*group$/i, /^asset\s*class$/i]);
-      const typeI = find([/^cleared\s*as$/i, /^type$/i]);
-
-      // Separation is mandatory: never put an unclassified product into a
-      // generic "CME Group" bucket.
-      if (nameI < 0 || exchangeI < 0 || (globexI < 0 && clearingI < 0)) continue;
-
-      for (const row of rows.slice(headerIndex + 1)) {
-        const name = String(row[nameI] ?? '').trim();
-        const globex = String(globexI >= 0 ? row[globexI] ?? '' : '').trim();
-        const clearing = String(clearingI >= 0 ? row[clearingI] ?? '' : '').trim();
-        const symbol = globex || clearing;
-        const rawExchange = String(row[exchangeI] ?? '').trim().toUpperCase();
-        const exchange = rawExchange.replace(/\s+EXCHANGE$|\s+DCM$/i, '').trim();
-
-        if (!symbol || !name || /^(?:-|n\/a)$/i.test(symbol)) continue;
-        if (!exchanges.has(exchange)) continue;
-
-        const productGroup = String(groupI >= 0 ? row[groupI] ?? '' : '').trim();
-        const clearedAs = String(typeI >= 0 ? row[typeI] ?? '' : '').trim();
-        const category = /option/i.test(clearedAs)
-          ? 'Options'
-          : /future/i.test(clearedAs)
-            ? 'Futures'
-            : categoryFromSheet(sheetName);
-
-        const key = exchange + ':' + symbol;
-        if (seen.has(key)) continue;
-        seen.add(key);
-
-        const item = cryptoItem(exchange, exchange, category, {
-          symbol,
-          fullName: name,
-          status: 'online'
+    for (const cleared of kinds) {
+      for (let page = 1; page <= 20; page++) {
+        const url = 'https://www.cmegroup.com/services/product-slate?sortAsc=false&sortField=vol&pageNumber=' + page + '&venues=3&cleared=' + cleared;
+        const response = await fetch(url, {
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (compatible; SIRE-market-catalog/1.0)',
+            Accept: 'application/json,text/plain,*/*'
+          },
+          signal: AbortSignal.timeout(20000)
         });
-        if (!item) continue;
+        if (!response.ok) throw new Error('Product Slate HTTP ' + response.status + ' (' + cleared + ', page ' + page + ')');
+        const payload = await response.json();
+        const rows = collectObjects(payload);
+        if (!rows.length) break;
 
-        item.id = exchange + ':' + symbol;
-        item.providerLabel = exchange;
-        item.marketType = exchange;
-        item.category = category;
-        item.name = name;
-        item.symbol = symbol;
-        item.displaySymbol = symbol;
-        item.status = 'Active';
-        item.quote = undefined;
-        item.instrumentType = clearedAs || category;
-        item.contractType = clearedAs || undefined;
-        item.logoUrl = providerLogo('CME');
-        item.providerLogoUrl = providerLogo('CME');
-        if (productGroup) item.base = productGroup;
-        out.push(item);
+        let added = 0;
+        for (const row of rows) {
+          const rawExchange = scalar(row, ['exchange', 'exchangeName', 'exchangeCode', 'dcm', 'venueName']).toUpperCase();
+          const exchange = exchanges.get(rawExchange) || exchanges.get(rawExchange.split(/\s|[-:]/)[0]);
+          if (!exchange) continue;
+
+          const symbol = scalar(row, ['globex', 'globexSymbol', 'globexCode', 'symbol', 'productCode', 'code']);
+          const name = scalar(row, ['productName', 'name', 'description', 'displayName']);
+          if (!symbol || !name) continue;
+
+          const key = exchange + ':' + symbol;
+          if (seen.has(key)) continue;
+          seen.add(key);
+
+          const item = cryptoItem(exchange as MarketProvider, exchange, category(scalar(row, ['clearedAs', 'instrumentType', 'type']) || cleared), {
+            symbol,
+            fullName: name,
+            status: 'online'
+          });
+          if (!item) continue;
+          item.id = exchange + ':' + symbol;
+          item.providerLabel = exchange;
+          item.marketType = exchange;
+          item.category = category(scalar(row, ['clearedAs', 'instrumentType', 'type']) || cleared);
+          item.name = name;
+          item.symbol = symbol;
+          item.displaySymbol = symbol;
+          item.status = 'Active';
+          item.instrumentType = scalar(row, ['clearedAs', 'instrumentType', 'type']) || cleared;
+          item.contractType = item.instrumentType;
+          item.logoUrl = providerLogo('CME');
+          item.providerLogoUrl = providerLogo('CME');
+          out.push(item);
+          added++;
+        }
+
+        // Product Slate pages are ranked results. Stop once a page produces no
+        // new catalogue entries; this prevents looping through repeated pages.
+        if (added === 0) break;
+        if (rows.length < 500) break;
       }
     }
 
     const counts = ['CME', 'CBOT', 'NYMEX', 'COMEX']
       .map(exchange => exchange + '=' + out.filter(item => item.providerLabel === exchange).length)
       .join(' ');
-    console.log('[SIRE CME GROUP] Separate DCM catalogue: ' + counts + ' total=' + out.length);
+    console.log('[SIRE CME GROUP] Product Slate catalogue: ' + counts + ' total=' + out.length);
+    if (!out.length) throw new Error('CME Product Slate returned no supported DCM instruments');
     return out;
   } catch (error) {
     console.warn('[SIRE CME GROUP] failed:', error);
