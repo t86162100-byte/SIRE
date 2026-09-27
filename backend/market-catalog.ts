@@ -114,6 +114,92 @@ async function coinbase(): Promise<UnifiedInstrument[]> {
     return [];
   }
 }
+async function gateio(): Promise<UnifiedInstrument[]> {
+  try {
+    const rows = await getJson('https://api.gateio.ws/api/v4/spot/currency_pairs', 15000);
+    const out: UnifiedInstrument[] = [];
+    for (const raw of Array.isArray(rows) ? rows : []) {
+      if (String(raw?.trade_status || '').toLowerCase() !== 'tradable') continue;
+      const item = cryptoItem('GATEIO', 'Spot', 'Crypto', {
+        symbol: String(raw?.id || ''),
+        baseAsset: String(raw?.base || ''),
+        quoteAsset: String(raw?.quote || ''),
+        fullName: String(raw?.base_name || raw?.id || ''),
+        status: raw?.trade_status || 'tradable'
+      });
+      if (item) out.push(item);
+    }
+    console.log('[SIRE GATEIO] Spot: ' + out.length);
+    return out;
+  } catch (error) { console.warn('[SIRE GATEIO] failed:', error); return []; }
+}
+
+async function kucoin(): Promise<UnifiedInstrument[]> {
+  try {
+    const payload = await getJson('https://api.kucoin.com/api/v2/symbols', 15000);
+    const rows = Array.isArray(payload?.data) ? payload.data : [];
+    const out: UnifiedInstrument[] = [];
+    for (const raw of rows) {
+      if (raw?.enableTrading === false) continue;
+      const item = cryptoItem('KUCOIN', 'Spot', 'Crypto', {
+        symbol: String(raw?.symbol || ''),
+        baseAsset: String(raw?.baseCurrency || ''),
+        quoteAsset: String(raw?.quoteCurrency || ''),
+        fullName: String(raw?.symbol || ''),
+        status: raw?.enableTrading === false ? 'offline' : 'online'
+      });
+      if (item) out.push(item);
+    }
+    console.log('[SIRE KUCOIN] Spot: ' + out.length);
+    return out;
+  } catch (error) { console.warn('[SIRE KUCOIN] failed:', error); return []; }
+}
+
+async function gemini(): Promise<UnifiedInstrument[]> {
+  try {
+    const rows = await getJson('https://api.gemini.com/v1/symbols', 15000);
+    const out: UnifiedInstrument[] = [];
+    for (const symbolRaw of Array.isArray(rows) ? rows : []) {
+      const symbol = String(symbolRaw || '').trim().toUpperCase();
+      if (!symbol) continue;
+      const knownQuotes = ['USDT','USDC','GUSD','USD','EUR','GBP','SGD','BTC','ETH'];
+      const quote = knownQuotes.find(q => symbol.endsWith(q));
+      const base = quote ? symbol.slice(0, -quote.length) : undefined;
+      const item = cryptoItem('GEMINI', 'Spot', 'Crypto', {
+        symbol,
+        baseAsset: base,
+        quoteAsset: quote,
+        fullName: symbol
+      });
+      if (item) out.push(item);
+    }
+    console.log('[SIRE GEMINI] Spot: ' + out.length);
+    return out;
+  } catch (error) { console.warn('[SIRE GEMINI] failed:', error); return []; }
+}
+
+async function bitso(): Promise<UnifiedInstrument[]> {
+  try {
+    const payload = await getJson('https://api.bitso.com/api/v3/available_books', 15000);
+    const rows = Array.isArray(payload?.payload) ? payload.payload : [];
+    const out: UnifiedInstrument[] = [];
+    for (const raw of rows) {
+      const symbol = String(raw?.book || '').trim().toUpperCase();
+      if (!symbol) continue;
+      const parts = symbol.split('_');
+      const item = cryptoItem('BITSO', 'Spot', 'Crypto', {
+        symbol,
+        baseAsset: parts[0] || '',
+        quoteAsset: parts[1] || '',
+        fullName: symbol
+      });
+      if (item) out.push(item);
+    }
+    console.log('[SIRE BITSO] Spot: ' + out.length);
+    return out;
+  } catch (error) { console.warn('[SIRE BITSO] failed:', error); return []; }
+}
+
 async function binance(): Promise<UnifiedInstrument[]> {
   const families: Array<[string, string[]]> = [
     ['Spot', ['https://data-api.binance.vision/api/v3/exchangeInfo','https://api.binance.com/api/v3/exchangeInfo','https://api-gcp.binance.com/api/v3/exchangeInfo','https://api1.binance.com/api/v3/exchangeInfo','https://api2.binance.com/api/v3/exchangeInfo']],
@@ -536,6 +622,10 @@ export async function getUnifiedMarketCatalogue(fetchDeriv: () => Promise<any[]>
     const providers: Array<[MarketProvider, Promise<UnifiedInstrument[]>]> = [
       ['DERIV', fetchDeriv().then(items => items.map(derivItem).filter(Boolean) as UnifiedInstrument[])],
       ['BINANCE', binance()],
+      ['GATEIO', gateio()],
+      ['KUCOIN', kucoin()],
+      ['GEMINI', gemini()],
+      ['BITSO', bitso()],
       ['COINBASE', coinbase()],
       ['BITGET', bitget()],
       ['BYBIT', bybit()],
