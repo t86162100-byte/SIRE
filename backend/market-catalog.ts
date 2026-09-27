@@ -165,33 +165,30 @@ async function coinbase(): Promise<UnifiedInstrument[]> {
 
 async function binance(): Promise<UnifiedInstrument[]> {
   const out: UnifiedInstrument[] = [];
-  const loadFamily = async (label: string, urls: string[], marketType: string) => {
+
+  const loadSymbols = async (label: string, urls: string[], marketTypeForRow: (raw: any) => string) => {
     try {
       const response = await getJsonAny(urls, 12000);
-      const rows = marketType === 'Options'
-        ? (Array.isArray(response?.optionSymbols) ? response.optionSymbols : [])
-        : (Array.isArray(response?.symbols) ? response.symbols : []);
+      const rows = Array.isArray(response?.symbols) ? response.symbols : [];
       for (const raw of rows) {
         const status = String(raw?.status || raw?.contractStatus || '').toUpperCase();
         if (status && status !== 'TRADING') continue;
-        const normalized = marketType === 'Options'
-          ? { ...raw, baseAsset: String(raw?.underlying || '').replace(/USDT$|USDC$|USD$/i, ''), quoteAsset: raw?.quoteAsset || 'USDT' }
-          : raw;
-        const item = cryptoItem('BINANCE', marketType, 'Crypto', normalized);
+        const marketType = marketTypeForRow(raw);
+        const item = cryptoItem('BINANCE', marketType, 'Crypto', raw);
         if (item) out.push(item);
       }
-      console.log('[SIRE BINANCE] ' + label + ': ' + out.filter(item => item.marketType === marketType).length);
+      console.log('[SIRE BINANCE] ' + label + ': ' + rows.length);
     } catch (error) {
       console.warn('[SIRE BINANCE] ' + label + ' failed:', error);
     }
   };
 
-  await loadFamily('Spot', [
+  await loadSymbols('Spot', [
     'https://data-api.binance.vision/api/v3/exchangeInfo?symbolStatus=TRADING',
     'https://api.binance.com/api/v3/exchangeInfo?symbolStatus=TRADING',
     'https://api1.binance.com/api/v3/exchangeInfo?symbolStatus=TRADING',
     'https://api2.binance.com/api/v3/exchangeInfo?symbolStatus=TRADING'
-  ], 'Spot');
+  ], () => 'Spot');
 
   // Margin availability is published on Spot exchangeInfo. We do not invent
   // Cross/Isolated distinctions when the public response does not expose them.
@@ -210,14 +207,32 @@ async function binance(): Promise<UnifiedInstrument[]> {
     console.warn('[SIRE BINANCE] Margin failed:', error);
   }
 
-  await loadFamily('USD-M Perpetuals', ['https://fapi.binance.com/fapi/v1/exchangeInfo'], 'USD-M Perpetuals');
-  await loadFamily('USD-M Futures', ['https://fapi.binance.com/fapi/v1/exchangeInfo'], 'USD-M Futures');
-  await loadFamily('COIN-M Perpetuals', ['https://dapi.binance.com/dapi/v1/exchangeInfo'], 'COIN-M Perpetuals');
-  await loadFamily('COIN-M Futures', ['https://dapi.binance.com/dapi/v1/exchangeInfo'], 'COIN-M Futures');
-  await loadFamily('Options', ['https://eapi.binance.com/eapi/v1/exchangeInfo'], 'Options');
+  await loadSymbols('USD-M', ['https://fapi.binance.com/fapi/v1/exchangeInfo'], raw =>
+    String(raw?.contractType || '').toUpperCase() === 'PERPETUAL' ? 'USD-M Perpetuals' : 'USD-M Futures'
+  );
 
-  // The same public symbol can appear in more than one family only when Binance
-  // actually exposes it as such. Deduplicate by SIRE instrument id.
+  await loadSymbols('COIN-M', ['https://dapi.binance.com/dapi/v1/exchangeInfo'], raw =>
+    String(raw?.contractType || '').toUpperCase() === 'PERPETUAL' ? 'COIN-M Perpetuals' : 'COIN-M Futures'
+  );
+
+  try {
+    const response = await getJsonAny(['https://eapi.binance.com/eapi/v1/exchangeInfo'], 12000);
+    const rows = Array.isArray(response?.optionSymbols) ? response.optionSymbols : [];
+    for (const raw of rows) {
+      if (String(raw?.status || '').toUpperCase() !== 'TRADING') continue;
+      const normalized = {
+        ...raw,
+        baseAsset: String(raw?.underlying || '').replace(/USDT$|USDC$|USD$/i, ''),
+        quoteAsset: raw?.quoteAsset || 'USDT'
+      };
+      const item = cryptoItem('BINANCE', 'Options', 'Crypto', normalized);
+      if (item) out.push(item);
+    }
+    console.log('[SIRE BINANCE] Options: ' + rows.length);
+  } catch (error) {
+    console.warn('[SIRE BINANCE] Options failed:', error);
+  }
+
   const seen = new Set<string>();
   return out.filter(item => {
     if (seen.has(item.id)) return false;
