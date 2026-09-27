@@ -59,7 +59,7 @@ async function readLive(state:StreamState){
           const ts=number(trade?.timestamp);
           if(ts!==undefined&&ts>=now-60_000) applyTrade(state,trade);
         }
-        const q=applyTrade(state,latest);
+        const q=latest ? applyTrade(state,latest) : null;
         if(q) return q;
       }
     }catch(error){ state.error='trades: '+(error instanceof Error?error.message:String(error)); }
