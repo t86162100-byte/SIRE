@@ -1098,11 +1098,10 @@ async function nyseAmerican(): Promise<UnifiedInstrument[]> {
       const rows=Array.isArray(payload)?payload:(Array.isArray(payload?.data?.rows)?payload.data.rows:Array.isArray(payload?.data)?payload.data:[]);
       if(!rows.length) break;
       let added=0;
-      if(page<=2){ const prefixes=rows.map((x:any)=>String(x?.url||'').split(':')[1]||'').reduce((a:string,k:string)=>{a[k]=(a[k]||0)+1;return a;},{} as Record<string,number>); console.log('[SIRE NYSE URL CODES] page '+page,JSON.stringify(prefixes)); }
       for(const raw of rows){
         const exchange=String(raw?.exchange||raw?.exchangeName||raw?.listingExchange||raw?.market||raw?.marketName||raw?.exchangeCode||'').trim();
         const listingUrl=String(raw?.url||'').trim();
-        if(!/NYSE\s*AMERICAN|AMEX|NYSE\s*MKT/i.test(exchange) && !/XNYSAMERICAN:|XASE:|AMEX:/i.test(listingUrl)) continue;
+        if(!/NYSE\s*AMERICAN|AMEX|NYSE\s*MKT/i.test(exchange) && !/\/XASE(?:[:\/]|$)|\/AMEX(?:[:\/]|$)|NYSE\s*AMERICAN/i.test(listingUrl)) continue;
         const symbol=String(raw?.symbolTicker||raw?.symbol||raw?.ticker||'').trim();
         const name=String(raw?.instrumentName||raw?.securityName||raw?.name||raw?.companyName||symbol).trim();
         if(!symbol||seen.has(symbol)) continue;
