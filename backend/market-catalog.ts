@@ -1640,79 +1640,30 @@ export async function getUnifiedMarketCatalogue(fetchDeriv: () => Promise<any[]>
   if (cached && Date.now() - cached.at < CACHE_MS) return cached.instruments;
   if (loading) return loading;
   loading = (async () => {
+    // Keep the startup catalogue small and deterministic. Large exchange master files
+    // (ASX/XETR/Nasdaq/HKEX/BSE/TSE/etc.) are not allowed to compete with the
+    // core live-market venues during the initial request. The quote UI can then
+    // reliably receive DERIV + the major crypto venues instead of whichever
+    // public file happens to finish first.
     const providers: Array<[MarketProvider, Promise<UnifiedInstrument[]>]> = [
       ['DERIV', fetchDeriv().then(items => items.map(derivItem).filter(Boolean) as UnifiedInstrument[])],
-      ['TRADINGVIEW', tradingviewFeedRegistry()],
       ['BINANCE', binance()],
-      ['GATEIO', gateio()],
-      ['KUCOIN', kucoin()],
-      ['GEMINI', gemini()],
-      ['BITSO', bitso()],
-      ['BITFINEX', bitfinex()],
-      ['BITVAVO', bitvavo()],
-      ['COINEX', coinex()],
-      ['LBANK', lbank()],
-      ['WOOX', woox()],
-      ['CRYPTOCOM', cryptocom()],
-      ['HTX', htx()],
-      ['BITKUB', bitkub()],
-      ['UPBIT', upbit()],
-      ['PIONEX', pionex()],
-      ['POLONIEX', poloniex()],
-      ['BITHUMB', bithumb()],
-      ['MEXC', mexc()],
-      ['PHEMEX', phemex()],
-      ['WHITEBIT', whitebit()],
-      ['COINBASE', coinbase()],
       ['BITGET', bitget()],
       ['BYBIT', bybit()],
       ['OKX', okx()],
       ['KRAKEN', kraken()],
-      ['TWELVEDATA', twelveData()],
-      ['NASDAQTRADER', nasdaqTrader()],
-      ['XETR', xetra()],
-      ['ASX', asx()],
-      ['TWSE', twse()],
-      ['PSX', psx()],
-      ['IDX', idx()],
-      // Frankfurt's full public T7 file is too large to materialize in the startup catalogue.
-      // Keep it out of the all-markets payload so core/crypto venues cannot be starved of memory.
-      ['EUREX', eurex()],
-      ['HKEX', hkex()],
-      ['BSE', bse()],
-      ['TSE', tse()],
-      ['NSE', nseIndia()],
-      ['BITSTAMP', bitstamp()],
-      ['FOREXCOM', brokerCatalogue('FOREXCOM')],
-      ['INTERACTIVEBROKERS', brokerCatalogue('INTERACTIVEBROKERS')],
-      ['TRADESTATION', brokerCatalogue('TRADESTATION')],
-      ['WEBULL', brokerCatalogue('WEBULL')],
-      ['MOOMOO', brokerCatalogue('MOOMOO')],
-      ['NINJATRADER', brokerCatalogue('NINJATRADER')],
-      ['TRADOVATE', brokerCatalogue('TRADOVATE')],
-      ['AMPFUTURES', brokerCatalogue('AMPFUTURES')],
-      ['TASTYTRADE', brokerCatalogue('TASTYTRADE')],
-      ['TASTYFX', brokerCatalogue('TASTYFX')],
-      ['CRYPTOCOMEXCHANGE', brokerCatalogue('CRYPTOCOMEXCHANGE')],
-      ['COINBASEADVANCED', brokerCatalogue('COINBASEADVANCED')],
-      ['ALPACA', alpaca()],
-      ['TRADIERBROKERAGE', brokerCatalogue('TRADIERBROKERAGE')],
-      ['TRADEZERO', brokerCatalogue('TRADEZERO')],
-      ['COBRATRADING', brokerCatalogue('COBRATRADING')],
-      ['CLEARSTREET', brokerCatalogue('CLEARSTREET')],
-      ['INVESTRADE', brokerCatalogue('INVESTRADE')],
-      ['PUBLIC', brokerCatalogue('PUBLIC')],
-      ['PLUS500US', brokerCatalogue('PLUS500US')],
-      ['OPTIMUSFUTURES', brokerCatalogue('OPTIMUSFUTURES')],
-      ['EDGECLEAR', brokerCatalogue('EDGECLEAR')],
-      ['IRONBEAM', brokerCatalogue('IRONBEAM')],
-      ['STONEX', brokerCatalogue('STONEX')],
-      ['DORMANTRADING', brokerCatalogue('DORMANTRADING')],
-      ['TRADIERFUTURES', brokerCatalogue('TRADIERFUTURES')],
+      ['COINBASE', coinbase()],
+      ['GATEIO', gateio()],
+      ['KUCOIN', kucoin()],
+      ['GEMINI', gemini()],
+      ['COINEX', coinex()],
+      ['UPBIT', upbit()],
       ['OANDA', oanda()],
     ];
     const results = await Promise.allSettled(
-      providers.map(([provider, promise]) => withProviderTimeout(provider, promise, provider === 'DERIV' || provider === 'NASDAQTRADER' || provider === 'XETR' || provider === 'XFRA' || provider === 'EUREX' || provider === 'ASX' || provider === 'TWSE' || provider === 'PSX' || provider === 'IDX' ? 12000 : 7000))
+      providers.map(([provider, promise]) =>
+        withProviderTimeout(provider, promise, provider === 'DERIV' ? 20000 : 15000)
+      )
     );
     results.forEach((result, index) => {
       if (result.status === 'rejected') console.warn('[SIRE MARKET CATALOG] provider failed:', providers[index][0], result.reason);
