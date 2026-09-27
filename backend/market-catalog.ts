@@ -1,4 +1,4 @@
-export type MarketProvider = 'DERIV' | 'BINANCE' | 'BITGET' | 'BYBIT' | 'OKX' | 'KRAKEN' | 'COINBASE' | 'GATEIO' | 'KUCOIN' | 'GEMINI' | 'BITSO' | 'BITFINEX' | 'BITVAVO' | 'COINEX' | 'LBANK' | 'WOOX' | 'CRYPTOCOM' | 'HTX' | 'BITKUB' | 'UPBIT' | 'PIONEX' | 'POLONIEX' | 'BITHUMB' | 'MEXC' | 'PHEMEX' | 'WHITEBIT' | 'TWELVEDATA' | 'NASDAQTRADER' | 'CME' | 'CBOT' | 'NYMEX' | 'COMEX' | 'NYSEAMERICAN' | 'XETR' | 'HKEX' | 'BSE' | 'TSE' | 'XFRA' | 'EUREX' | 'ASX' | 'TWSE' | 'PSX' | 'IDX' | 'NSE' | 'BITSTAMP' | 'OANDA' | 'TRADINGVIEW' | 'FOREXCOM' | 'INTERACTIVEBROKERS' | 'TRADESTATION' | 'WEBULL' | 'MOOMOO' | 'NINJATRADER' | 'TRADOVATE' | 'AMPFUTURES' | 'TASTYTRADE' | 'TASTYFX' | 'CRYPTOCOMEXCHANGE' | 'COINBASEADVANCED' | 'ALPACA' | 'TRADIERBROKERAGE' | 'TRADEZERO' | 'COBRATRADING' | 'CLEARSTREET' | 'INVESTRADE' | 'PUBLIC' | 'PLUS500US' | 'OPTIMUSFUTURES' | 'EDGECLEAR' | 'IRONBEAM' | 'STONEX' | 'DORMANTRADING' | 'TRADIERFUTURES';
+export type MarketProvider = 'SP' | 'DERIV' | 'BINANCE' | 'BITGET' | 'BYBIT' | 'OKX' | 'KRAKEN' | 'COINBASE' | 'GATEIO' | 'KUCOIN' | 'GEMINI' | 'BITSO' | 'BITFINEX' | 'BITVAVO' | 'COINEX' | 'LBANK' | 'WOOX' | 'CRYPTOCOM' | 'HTX' | 'BITKUB' | 'UPBIT' | 'PIONEX' | 'POLONIEX' | 'BITHUMB' | 'MEXC' | 'PHEMEX' | 'WHITEBIT' | 'TWELVEDATA' | 'NASDAQTRADER' | 'CME' | 'CBOT' | 'NYMEX' | 'COMEX' | 'NYSEAMERICAN' | 'XETR' | 'HKEX' | 'BSE' | 'TSE' | 'XFRA' | 'EUREX' | 'ASX' | 'TWSE' | 'PSX' | 'IDX' | 'NSE' | 'BITSTAMP' | 'OANDA' | 'TRADINGVIEW' | 'FOREXCOM' | 'INTERACTIVEBROKERS' | 'TRADESTATION' | 'WEBULL' | 'MOOMOO' | 'NINJATRADER' | 'TRADOVATE' | 'AMPFUTURES' | 'TASTYTRADE' | 'TASTYFX' | 'CRYPTOCOMEXCHANGE' | 'COINBASEADVANCED' | 'ALPACA' | 'TRADIERBROKERAGE' | 'TRADEZERO' | 'COBRATRADING' | 'CLEARSTREET' | 'INVESTRADE' | 'PUBLIC' | 'PLUS500US' | 'OPTIMUSFUTURES' | 'EDGECLEAR' | 'IRONBEAM' | 'STONEX' | 'DORMANTRADING' | 'TRADIERFUTURES';
 
 export interface UnifiedInstrument {
   id: string;
@@ -1669,6 +1669,36 @@ async function tse(): Promise<UnifiedInstrument[]> {
   } catch (error) { console.warn('[SIRE TSE] failed:', error); return []; }
 }
 
+async function sp(): Promise<UnifiedInstrument[]> {
+  // S&P DJI publishes the S&P 500 as an index, not as an exchange. Keep this
+  // provider separate from Nasdaq/NYSE/CME so the catalogue preserves the
+  // distinction between an index and the venues where its constituents trade.
+  const items: UnifiedInstrument[] = [];
+  const add = (symbol: string, name: string, category = 'Indices') => {
+    items.push({
+      id: 'SP:' + symbol,
+      provider: 'SP',
+      providerLabel: 'S&P',
+      marketType: 'S&P',
+      category,
+      symbol,
+      displaySymbol: symbol,
+      name,
+      quote: 'USD',
+      status: 'Active',
+      logoUrl: 'https://cdn.simpleicons.org/spglobal',
+      providerLogoUrl: 'https://cdn.simpleicons.org/spglobal',
+      instrumentType: 'Index',
+    });
+  };
+  // S&P DJI's public S&P 500 page identifies SPX as the price-return ticker.
+  add('SPX', 'S&P 500');
+  add('SPTR500N', 'S&P 500 Net Total Return');
+  add('SPXT', 'S&P 500 Total Return');
+  console.log('[SIRE S&P] Public index catalogue: ' + items.length);
+  return items;
+}
+
 async function okx(): Promise<UnifiedInstrument[]> { const out:UnifiedInstrument[]=[];for(const t of ['SPOT','MARGIN','SWAP','FUTURES','OPTION'])try{const r=await getJsonAny(['https://www.okx.com/api/v5/public/instruments?instType='+t,'https://app.okx.com/api/v5/public/instruments?instType='+t],15000);for(const raw of r?.data||[]){if(String(raw?.state||'').toLowerCase()!=='live')continue;const mt=t==='SPOT'?'Spot':t==='MARGIN'?'Margin':t==='SWAP'?'Perpetuals':t==='FUTURES'?'Futures':'Options';const i=cryptoItem('OKX',mt,'Crypto',raw);if(i)out.push(i)}}catch(e){console.warn('[SIRE OKX] '+t+' failed:',e)}return out; }
 
 
@@ -1749,6 +1779,7 @@ export async function getUnifiedMarketCatalogue(fetchDeriv: () => Promise<any[]>
       // Nasdaq Trader supplies the public instrument master for Nasdaq-listed,
       // other U.S.-listed, bonds, NOM options, mutual funds and additional
       // Nasdaq-published derivatives directories.
+      ['SP', sp()],
       ['NASDAQTRADER', nasdaqTrader()],
       // NYSE American (formerly NYSE Amex) is a separate exchange universe.
       ['NYSEAMERICAN', nyseAmerican()],
