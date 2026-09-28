@@ -2,6 +2,7 @@ import { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import { createLinkGroup, type LinkGroup } from 'openalgo-charts';
 import { Search } from 'lucide-react';
 import ResearchLab from './ResearchLab';
+import HomeView from './HomeView';
 import FinancialChart from './FinancialChart';
 import { fetchDerivInstruments, type DerivInstrument } from './derivMarketData';
 import { fetchBinanceBrowserCatalogue } from './binanceMarketData';
@@ -116,6 +117,7 @@ export default function App() {
   const [instrumentSearchOpen, setInstrumentSearchOpen] = useState(false);
   const [instrumentSearchMode, setInstrumentSearchMode] = useState<'main' | 'multi'>('main');
   const [researchLabOpen, setResearchLabOpen] = useState(false);
+  const [homeOpen, setHomeOpen] = useState(false);
   const [chartLayout, setChartLayout] = useState<1 | 2>(1);
   const [activeChartIndex, setActiveChartIndex] = useState(0);
   const [linked, setLinked] = useState(false);
@@ -361,6 +363,17 @@ export default function App() {
   useEffect(() => () => { linkGroupRef.current?.destroy(); linkGroupRef.current = null; }, []);
 
   useEffect(() => {
+    const openHome = () => setHomeOpen(true);
+    const closeHome = () => setHomeOpen(false);
+    window.addEventListener('sire:open-home', openHome);
+    window.addEventListener('sire:close-home', closeHome);
+    return () => {
+      window.removeEventListener('sire:open-home', openHome);
+      window.removeEventListener('sire:close-home', closeHome);
+    };
+  }, []);
+
+  useEffect(() => {
     const openMultiChart = () => setMultiChartOpen(true);
     window.addEventListener('sire:open-multichart', openMultiChart);
     return () => window.removeEventListener('sire:open-multichart', openMultiChart);
@@ -497,6 +510,10 @@ export default function App() {
     setSelected(chartableInstruments.find(item => item.symbol === chartSymbols[1]) || selected);
     setMultiChartOpen(false);
   };
+  if (homeOpen) {
+    return <HomeView instruments={instruments} onSelectInstrument={selectInstrument} />;
+  }
+
   return <main className={`native-terminal-shell${researchLabOpen ? ' sire-research-open' : ''}`}>
 
     <div className="native-terminal-body">
