@@ -584,66 +584,173 @@ async function coinex(): Promise<UnifiedInstrument[]> {
   return out;
 }
 
+async function lbank(): Promise<UnifiedInstrument[]> {
+  const out: UnifiedInstrument[] = [];
+  const seen = new Set<string>();
+
+  const add = (raw: any, marketType: string, instrumentType: string, symbolOverride?: string) => {
+    const symbol = String(symbolOverride || raw?.symbol || raw?.instId || raw?.name || '').trim().toUpperCase();
+    if (!symbol) return;
+    const key = marketType + ':' + symbol;
+    if (seen.has(key)) return;
+
+    const base = String(raw?.baseCurrency || raw?.baseAsset || raw?.baseCoin || '').trim().toUpperCase();
+    const quote = String(raw?.priceCurrency || raw?.quoteCurrency || raw?.quoteAsset || raw?.quoteCoin || '').trim().toUpperCase();
+    const item = cryptoItem('LBANK', marketType, 'Crypto', {
+      ...raw,
+      symbol,
+      baseAsset: base,
+      quoteAsset: quote,
+      fullName: raw?.symbolName || raw?.displayName || symbol,
+      status: raw?.status || raw?.state || 'online',
+      type: instrumentType,
+      contractType: raw?.contractType || raw?.contract_type || instrumentType,
+      settleCoin: raw?.clearCurrency || raw?.settleCoin || raw?.settleCurrency || quote,
+    });
+    if (!item) return;
+
+    item.id = 'LBANK:' + marketType + ':' + symbol;
+    item.providerLabel = 'LBank';
+    item.marketType = marketType;
+    item.category = 'Crypto';
+    item.instrumentType = instrumentType;
+    item.contractType = String(raw?.contractType || raw?.contract_type || instrumentType);
+    item.settlement = String(raw?.clearCurrency || raw?.settleCoin || raw?.settleCurrency || '').trim() || item.settlement;
+    item.supportsMargin = marketType === 'Margin' || Boolean(raw?.marginAvailable || raw?.isMargin);
+    seen.add(key);
+    out.push(item);
+  };
+
+  // LBank's current public V2 API is authoritative for the complete spot pair universe.
+  try {
+    const payload = await getJsonAny([
+      'https://api.lbank.info/v2/currencyPairs.do',
+      'https://api.lbkex.com/v2/currencyPairs.do',
+    ], 15000);
+    const rows = Array.isArray(payload?.data) ? payload.data : Array.isArray(payload) ? payload : [];
+    for (const raw of rows) {
+      const symbol = String(raw || '').trim().toUpperCase();
+      const parts = symbol.split('_');
+      add({ symbol, baseCurrency: parts[0], priceCurrency: parts[1], symbolName: symbol }, 'Spot', 'SPOT', symbol);
+    }
+    console.log('[SIRE LBANK] Spot: ' + rows.length);
+  } catch (error) {
+    console.warn('[SIRE LBANK] Spot failed:', error);
+  }
+
+  // LBank contract market data is public and exposes the current contract instrument master.
+  try {
+    const payload = await getJsonAny([
+      'https://lbkperp.lbank.com/cfd/openApi/v1/pub/instrument?productGroup=SwapU',
+      'https://lbkperp.lbank.com/cfd/openApi/v1/pub/instrument?productGroup=Swap',
+    ], 15000);
+    const rows = Array.isArray(payload?.data) ? payload.data : Array.isArray(payload?.result) ? payload.result : [];
+    for (const raw of rows) add(raw, 'Perpetuals', 'SWAP', raw?.symbol || raw?.instId);
+    console.log('[SIRE LBANK] Perpetuals: ' + rows.length);
+  } catch (error) {
+    console.warn('[SIRE LBANK] Perpetuals failed:', error);
+  }
+
+  console.log('[SIRE LBANK] COMPLETE', JSON.stringify({
+    total: out.length,
+    spot: out.filter(x => x.marketType === 'Spot').length,
+    perpetuals: out.filter(x => x.marketType === 'Perpetuals').length,
+    futures: out.filter(x => x.marketType === 'Futures').length,
+    margin: out.filter(x => x.marketType === 'Margin').length,
+  }));
+  return out;
+}
+
 async function phemex(): Promise<UnifiedInstrument[]> {
   const out: UnifiedInstrument[] = [];
   const seen = new Set<string>();
 
   const add = (raw: any, marketType: string) => {
-    const symbol = String(raw?.symbol || '').trim();
-    if (!symbol) return;
-    const type = String(raw?.type || '').trim();
-    const base = String(raw?.baseCurrency || raw?.baseCcy || raw?.baseCurrencyCode || '').trim();
-    const quote = String(raw?.quoteCurrency || raw?.quoteCcy || raw?.quoteCurrencyCode || '').trim();
+    const symbol = String(raw?.symbol || raw?.symbolName || raw?.instId || raw?.name || '').trim().toUpperCase();
+    if (!symbol || !marketType) return;
+    const key = marketType + ':' + symbol;
+    if (seen.has(key)) return;
+
+    const base = String(raw?.baseCurrency || raw?.baseCcy || raw?.baseCoin || raw?.baseAsset || '').trim().toUpperCase();
+    const quote = String(raw?.quoteCurrency || raw?.quoteCcy || raw?.quoteCoin || raw?.quoteAsset || '').trim().toUpperCase();
+    const type = String(raw?.type || raw?.productType || raw?.instrumentType || raw?.contractType || '').trim();
+
     const item = cryptoItem('PHEMEX', marketType, 'Crypto', {
       ...raw,
       symbol,
       baseAsset: base,
       quoteAsset: quote,
-      fullName: symbol,
-      status: raw?.status || 'online',
-      contractType: raw?.type || raw?.contractType,
-      settleCoin: raw?.settleCurrency || raw?.settleCcy || undefined,
-      deliveryTime: raw?.expiryTime || raw?.endTimestamp || undefined,
+      fullName: raw?.displayName || raw?.symbolName || symbol,
+      status: raw?.status || raw?.state || 'online',
+      type,
+      contractType: raw?.contractType || raw?.type || raw?.productType,
+      settleCoin: raw?.settleCurrency || raw?.settleCcy || raw?.settleCoin || raw?.quoteCurrency,
+      deliveryTime: raw?.expiryTime || raw?.endTimestamp || raw?.deliveryTime || raw?.deliveryTimeNs,
     });
     if (!item) return;
+
     item.id = 'PHEMEX:' + marketType + ':' + symbol;
     item.providerLabel = 'Phemex';
     item.marketType = marketType;
     item.category = 'Crypto';
     item.instrumentType = type || marketType;
-    item.contractType = String(raw?.type || raw?.contractType || '').trim() || item.contractType;
-    item.settlement = String(raw?.settleCurrency || raw?.settleCcy || '').trim() || item.settlement;
-    item.expiry = raw?.expiryTime || raw?.endTimestamp || item.expiry;
-    if (!seen.has(item.id)) { seen.add(item.id); out.push(item); }
+    item.contractType = String(raw?.contractType || raw?.type || raw?.productType || '').trim() || item.contractType;
+    item.settlement = String(raw?.settleCurrency || raw?.settleCcy || raw?.settleCoin || '').trim() || item.settlement;
+    item.expiry = raw?.expiryTime || raw?.endTimestamp || raw?.deliveryTime || item.expiry;
+    if (!seen.has(item.id)) {
+      seen.add(item.id);
+      out.push(item);
+    }
   };
 
-  // Phemex publishes spot and contract products from the public product
-  // catalogue. Use both products and products-plus so listing metadata such as
-  // delist timelines is not lost.
-  for (const endpoint of ['https://api.phemex.com/exchange/public/cfg/v2/products','https://api.phemex.com/exchange/public/products','https://api.phemex.com/public/products-plus','https://api.phemex.com/public/products']) {
+  const classify = (raw: any, familyHint = ''): string => {
+    const text = [
+      raw?.type, raw?.productType, raw?.instrumentType, raw?.contractType,
+      raw?.symbolType, raw?.contractStatus, familyHint, raw?.symbol
+    ].map(v => String(v || '').toLowerCase()).join(' ');
+    if (text.includes('option')) return 'Options';
+    if (text.includes('spot')) return 'Spot';
+    if (text.includes('perpetual') || text.includes('perp') || text.includes('swap')) return 'Perpetuals';
+    if (text.includes('future') || text.includes('delivery') || raw?.expiryTime || raw?.deliveryTime) return 'Futures';
+    return '';
+  };
+
+  const walk = (value: any, familyHint = '') => {
+    if (!value) return;
+    if (Array.isArray(value)) {
+      for (const row of value) walk(row, familyHint);
+      return;
+    }
+    if (typeof value !== 'object') return;
+
+    // Phemex uses several product-family arrays whose names are more reliable
+    // than the individual row type when the API omits type metadata.
+    const keys = ['spotProducts','spotProductsV2','perpProducts','perpProductsV2','products','futureProducts','futuresProducts','optionProducts','optionsProducts'];
+    for (const key of keys) {
+      if (Array.isArray(value[key])) walk(value[key], key);
+    }
+
+    if (value.symbol || value.symbolName || value.instId || value.name) {
+      const marketType = classify(value, familyHint);
+      if (marketType) add(value, marketType);
+    }
+  };
+
+  const endpoints = [
+    'https://api.phemex.com/exchange/public/cfg/v2/products',
+    'https://api.phemex.com/exchange/public/products',
+    'https://api.phemex.com/v1/exchange/public/products',
+    'https://api.phemex.com/public/products-plus',
+    'https://api.phemex.com/public/products',
+  ];
+
+  for (const endpoint of endpoints) {
     try {
       const payload = await getJson(endpoint, 20000);
-      const result = payload?.result || payload;
-      const rows = [
-        ...(Array.isArray(result?.spotProducts) ? result.spotProducts : []),
-        ...(Array.isArray(result?.spotProductsV2) ? result.spotProductsV2 : []),
-        ...(Array.isArray(result?.products) ? result.products : []),
-        ...(Array.isArray(result?.perpProductsV2) ? result.perpProductsV2 : []),
-        ...(Array.isArray(result?.perpProducts) ? result.perpProducts : []),
-        ...(Array.isArray(result?.data) ? result.data : []),
-      ];
-      for (const raw of rows) {
-        const type = String(raw?.type || '').toLowerCase();
-        const marketType =
-          type === 'spot' ? 'Spot' :
-          type === 'perpetual' || type === 'perpetual_swap' || type === 'perpetual contract' ? 'Perpetuals' :
-          type === 'future' || type === 'futures' || type === 'delivery' ? 'Futures' :
-          type.includes('option') ? 'Options' : '';
-        if (marketType) add(raw, marketType);
-      }
-      console.log('[SIRE PHEMEX] ' + endpoint.split('/').pop() + ': ' + rows.length);
-    } catch (e) {
-      console.warn('[SIRE PHEMEX] ' + endpoint + ' failed:', e);
+      walk(payload);
+      console.log('[SIRE PHEMEX] ' + endpoint.replace('https://api.phemex.com/','') + ': catalogue scanned');
+    } catch (error) {
+      console.warn('[SIRE PHEMEX] ' + endpoint + ' failed:', error);
     }
   }
 
@@ -656,7 +763,6 @@ async function phemex(): Promise<UnifiedInstrument[]> {
   }));
   return out;
 }
-
 async function blank(): Promise<UnifiedInstrument[]> {
   // "Blank" is not an exchange/provider currently present in SIRE's provider
   // registry and no public instrument API could be identified. Do not fabricate
