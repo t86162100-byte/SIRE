@@ -926,6 +926,21 @@ async function coinw(): Promise<UnifiedInstrument[]> {
   return out;
 }
 
+async function bitrue(): Promise<UnifiedInstrument[]> {
+ const out: UnifiedInstrument[]=[]; const seen=new Set<string>();
+ const add=(raw:any,mt:string,symbol:string,base?:string,quote?:string)=>{const item=cryptoItem('BITRUE',mt,'Crypto',{...raw,symbol,baseAsset:base||raw?.baseAsset,quoteAsset:quote||raw?.quoteAsset});if(item&&!seen.has(item.id)){seen.add(item.id);out.push(item);}};
+ try{const p=await getJson('https://api.bitrue.com/api/v1/exchangeInfo',15000);const rows=Array.isArray(p?.symbols)?p.symbols:[];for(const r of rows){const z=String(r?.symbol||'').trim();if(z)add(r,'Spot',z,r?.baseAsset,r?.quoteAsset);}console.log('[SIRE BITRUE] Spot: '+rows.length);}catch(e){console.warn('[SIRE BITRUE] Spot failed:',e);}
+ for(const [label,url] of [['USDT-M','https://fapi.bitrue.com/fapi/v1/contracts'],['COIN-M','https://fapi.bitrue.com/dapi/v1/contracts']] as const){try{const p=await getJson(url,15000);const rows=Array.isArray(p)?p:Array.isArray(p?.data)?p.data:[];for(const r of rows){const z=String(r?.symbol||r?.contractName||'').trim();if(!z)continue;const typ=String(r?.contractType||r?.type||'').toLowerCase();const exp=r?.deliveryTime??r?.expireTime??r?.expiryTime;const mt=exp||typ.includes('delivery')||typ==='future'||typ==='futures'?'Futures':'Perpetuals';add(r,mt,z,r?.baseAsset||r?.baseCoin,r?.quoteAsset||r?.quoteCoin||r?.settleCoin,{contractType:typ||mt.toLowerCase(),settlement:r?.settleCoin||r?.marginCoin||r?.settlementAsset,expiry:exp});}console.log('[SIRE BITRUE] '+label+': '+rows.length);}catch(e){console.warn('[SIRE BITRUE] '+label+' failed:',e);}}
+ console.log('[SIRE BITRUE] COMPLETE',JSON.stringify({total:out.length,spot:out.filter(x=>x.marketType==='Spot').length,perpetuals:out.filter(x=>x.marketType==='Perpetuals').length,futures:out.filter(x=>x.marketType==='Futures').length})); return out;
+}
+async function ascendex(): Promise<UnifiedInstrument[]> {
+ const out: UnifiedInstrument[]=[]; const seen=new Set<string>();
+ const add=(raw:any,mt:string,symbol:string,base?:string,quote?:string)=>{const item=cryptoItem('ASCENDEX',mt,'Crypto',{...raw,symbol,baseAsset:base||raw?.baseAsset,quoteAsset:quote||raw?.quoteAsset});if(item&&!seen.has(item.id)){seen.add(item.id);out.push(item);}};
+ for(const [account,mt] of [['cash','Spot'],['margin','Margin']] as const){try{const p=await getJson('https://ascendex.com/api/pro/v1/'+account+'/products',15000);const rows=Array.isArray(p?.data)?p.data:[];for(const r of rows){const z=String(r?.symbol||r?.displayName||'').trim();if(z){const q=z.split('/');add(r,mt,z,r?.baseAsset||q[0],r?.quoteAsset||q[1]);}}console.log('[SIRE ASCENDEX] '+mt+': '+rows.length);}catch(e){console.warn('[SIRE ASCENDEX] '+mt+' failed:',e);}}
+ try{const p=await getJson('https://ascendex.com/api/pro/v2/futures/contract',15000);const rows=Array.isArray(p?.data)?p.data:[];for(const r of rows){const z=String(r?.symbol||r?.displayName||'').trim();if(!z)continue;const typ=String(r?.contractType||'').toLowerCase();const exp=r?.deliveryTime??r?.expireTime??r?.expiryTime;const perp=!exp&&(z.includes('PERP')||typ.includes('perpetual'));add(r,perp?'Perpetuals':'Futures',z,r?.baseAsset,r?.quoteAsset||r?.settlementAsset,{contractType:perp?'perpetual':'delivery',expiry:exp});}console.log('[SIRE ASCENDEX] Futures: '+rows.length);}catch(e){console.warn('[SIRE ASCENDEX] Futures failed:',e);}
+ console.log('[SIRE ASCENDEX] COMPLETE',JSON.stringify({total:out.length,spot:out.filter(x=>x.marketType==='Spot').length,margin:out.filter(x=>x.marketType==='Margin').length,perpetuals:out.filter(x=>x.marketType==='Perpetuals').length,futures:out.filter(x=>x.marketType==='Futures').length}));return out;
+}
+
 export async function getStandaloneMarketProviderCatalogue(
   provider: MarketProvider,
   fetchDeriv: () => Promise<any[]>,
