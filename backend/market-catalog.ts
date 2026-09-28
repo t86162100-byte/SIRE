@@ -1,4 +1,4 @@
-export type MarketProvider = 'BITRUE' | 'ASCENDEX' | 'COINW' | 'BINGX' | 'BINANCE' | 'FXCM' | 'YFINANCE' | 'SP' | 'DERIV' | 'BITGET' | 'BYBIT' | 'OKX' | 'KRAKEN' | 'COINBASE' | 'GATEIO' | 'KUCOIN' | 'GEMINI' | 'BITSO' | 'BITFINEX' | 'BITVAVO' | 'COINEX' | 'LBANK' | 'WOOX' | 'CRYPTOCOM' | 'HTX' | 'BITKUB' | 'UPBIT' | 'PIONEX' | 'POLONIEX' | 'BITHUMB' | 'MEXC' | 'PHEMEX' | 'WHITEBIT' | 'TWELVEDATA' | 'NASDAQTRADER' | 'CME' | 'CBOT' | 'NYMEX' | 'COMEX' | 'NYSEAMERICAN' | 'XETR' | 'HKEX' | 'BSE' | 'TSE' | 'XFRA' | 'EUREX' | 'ASX' | 'TWSE' | 'PSX' | 'IDX' | 'NSE' | 'BITSTAMP' | 'OANDA' | 'TRADINGVIEW' | 'FOREXCOM' | 'INTERACTIVEBROKERS' | 'TRADESTATION' | 'WEBULL' | 'MOOMOO' | 'NINJATRADER' | 'TRADOVATE' | 'AMPFUTURES' | 'TASTYTRADE' | 'TASTYFX' | 'CRYPTOCOMEXCHANGE' | 'COINBASEADVANCED' | 'ALPACA' | 'TRADIERBROKERAGE' | 'TRADEZERO' | 'COBRATRADING' | 'CLEARSTREET' | 'INVESTRADE' | 'PUBLIC' | 'PLUS500US' | 'OPTIMUSFUTURES' | 'EDGECLEAR' | 'IRONBEAM' | 'STONEX' | 'DORMANTRADING' | 'TRADIERFUTURES' | 'BITTREX' | 'BITMART' | 'BLANK' | 'XT' | 'DEEPCOIN' | 'TOOBIT' | 'WEEX' | 'BITUNIX' | 'BLOFIN';
+export type MarketProvider = 'BITRUE' | 'ASCENDEX' | 'COINW' | 'BINGX' | 'BINANCE' | 'FXCM' | 'YFINANCE' | 'SP' | 'DERIV' | 'BITGET' | 'BYBIT' | 'OKX' | 'KRAKEN' | 'COINBASE' | 'GATEIO' | 'KUCOIN' | 'GEMINI' | 'BITSO' | 'BITFINEX' | 'BITVAVO' | 'COINEX' | 'LBANK' | 'WOOX' | 'CRYPTOCOM' | 'HTX' | 'BITKUB' | 'UPBIT' | 'PIONEX' | 'POLONIEX' | 'BITHUMB' | 'MEXC' | 'PHEMEX' | 'WHITEBIT' | 'TWELVEDATA' | 'NASDAQTRADER' | 'CME' | 'CBOT' | 'NYMEX' | 'COMEX' | 'NYSEAMERICAN' | 'XETR' | 'HKEX' | 'BSE' | 'TSE' | 'XFRA' | 'EUREX' | 'ASX' | 'TWSE' | 'PSX' | 'IDX' | 'NSE' | 'BITSTAMP' | 'OANDA' | 'TRADINGVIEW' | 'FOREXCOM' | 'INTERACTIVEBROKERS' | 'TRADESTATION' | 'WEBULL' | 'MOOMOO' | 'NINJATRADER' | 'TRADOVATE' | 'AMPFUTURES' | 'TASTYTRADE' | 'TASTYFX' | 'CRYPTOCOMEXCHANGE' | 'COINBASEADVANCED' | 'ALPACA' | 'TRADIERBROKERAGE' | 'TRADEZERO' | 'COBRATRADING' | 'CLEARSTREET' | 'INVESTRADE' | 'PUBLIC' | 'PLUS500US' | 'OPTIMUSFUTURES' | 'EDGECLEAR' | 'IRONBEAM' | 'STONEX' | 'DORMANTRADING' | 'TRADIERFUTURES' | 'BITTREX' | 'BITMART' | 'BLANK' | 'XT' | 'DEEPCOIN' | 'TOOBIT' | 'WEEX' | 'BITUNIX' | 'BLOFIN' | 'COINCATCH' | 'ZOOMEX' | 'BTCC' | 'DIGIFINEX';
 
 export interface UnifiedInstrument {
   id: string;
@@ -2067,6 +2067,65 @@ async function blofin(): Promise<UnifiedInstrument[]> {
 }
 
 
+async function coincatch(): Promise<UnifiedInstrument[]> {
+  const out: UnifiedInstrument[] = []; const seen = new Set<string>();
+  const add = (raw: any, marketType: string) => {
+    const symbol = String(raw?.symbol || raw?.symbolName || raw?.symbolDisplayName || '').trim(); if (!symbol) return;
+    const base = String(raw?.baseCoin || raw?.baseAsset || '').trim().toUpperCase();
+    const quote = String(raw?.quoteCoin || raw?.quoteAsset || '').trim().toUpperCase();
+    const item = cryptoItem('COINCATCH', marketType, 'Crypto', {...raw, symbol, baseAsset:base, quoteAsset:quote, fullName:raw?.symbolDisplayName || raw?.symbolName || symbol, status:raw?.status || raw?.symbolStatus || 'online', contractType:raw?.symbolType || (marketType==='Perpetuals'?'perpetual':undefined), settleCoin:raw?.supportMarginCoins?.[0] || raw?.marginCoin || quote});
+    if (!item || seen.has(item.id)) return; item.providerLabel='CoinCatch'; item.marketType=marketType; item.instrumentType=marketType; seen.add(item.id); out.push(item);
+  };
+  try { const r=await getJson('https://api.coincatch.com/api/spot/v1/public/products',20000); const rows=Array.isArray(r?.data)?r.data:[]; for(const raw of rows)add(raw,'Spot'); console.log('[SIRE COINCATCH] Spot:',rows.length); } catch(e){console.warn('[SIRE COINCATCH] Spot failed:',e);}
+  for(const productType of ['umcbl','dmcbl','cmcbl']) {
+    try { const r=await getJson('https://api.coincatch.com/api/mix/v1/market/contracts?productType='+productType,20000); const rows=Array.isArray(r?.data)?r.data:[]; for(const raw of rows)add(raw,String(raw?.symbolType||'').toLowerCase()==='delivery'?'Futures':'Perpetuals'); console.log('[SIRE COINCATCH]',productType,rows.length); } catch(e){console.warn('[SIRE COINCATCH]',productType,'failed:',e);}
+  }
+  console.log('[SIRE COINCATCH] COMPLETE',JSON.stringify({total:out.length,spot:out.filter(x=>x.marketType==='Spot').length,perpetuals:out.filter(x=>x.marketType==='Perpetuals').length,futures:out.filter(x=>x.marketType==='Futures').length})); return out;
+}
+
+async function zoomex(): Promise<UnifiedInstrument[]> {
+  const out: UnifiedInstrument[] = []; const seen = new Set<string>();
+  const add=(raw:any,marketType:string)=>{
+    const symbol=String(raw?.symbol||raw?.symbolName||'').trim(); if(!symbol)return;
+    const base=String(raw?.baseCoin||raw?.baseCurrency||'').trim().toUpperCase(); const quote=String(raw?.quoteCoin||raw?.quoteCurrency||'').trim().toUpperCase();
+    const item=cryptoItem('ZOOMEX',marketType,'Crypto',{...raw,symbol,baseAsset:base,quoteAsset:quote,fullName:raw?.displayName||raw?.symbolName||symbol,status:raw?.status||'online',contractType:raw?.contractType||(marketType==='Perpetuals'?'perpetual':undefined),settleCoin:raw?.settleCoin||raw?.settleCurrency||quote});
+    if(!item||seen.has(item.id))return; item.providerLabel='Zoomex'; item.marketType=marketType; item.instrumentType=marketType; seen.add(item.id); out.push(item);
+  };
+  for(const [category,marketType] of [['spot','Spot'],['linear','Perpetuals'],['inverse','Perpetuals']] as const){
+    try { const r=await getJsonAny(['https://openapi.zoomex.com/cloud/trade/v3/market/instruments-info?category='+category,'https://openapi.zoomex.com/v5/market/instruments-info?category='+category],20000); const rows=Array.isArray(r?.result?.list)?r.result.list:Array.isArray(r?.data)?r.data:[]; for(const raw of rows){const s=String(raw?.status||'').toUpperCase(); if(s&&!['TRADING','ONLINE','1'].includes(s))continue; add(raw,marketType);} console.log('[SIRE ZOOMEX]',category,rows.length); } catch(e){console.warn('[SIRE ZOOMEX]',category,'failed:',e);}
+  }
+  console.log('[SIRE ZOOMEX] COMPLETE',JSON.stringify({total:out.length,spot:out.filter(x=>x.marketType==='Spot').length,perpetuals:out.filter(x=>x.marketType==='Perpetuals').length})); return out;
+}
+
+async function btcc(): Promise<UnifiedInstrument[]> {
+  const out: UnifiedInstrument[]=[]; const seen=new Set<string>();
+  const add=(raw:any,marketType='Perpetuals')=>{
+    const symbol=String(raw?.symbol||raw?.symbolName||raw?.instrument_id||raw?.contract||raw?.market||'').trim(); if(!symbol)return;
+    const base=String(raw?.baseCoin||raw?.baseAsset||raw?.base_currency||'').trim().toUpperCase(); const quote=String(raw?.quoteCoin||raw?.quoteAsset||raw?.quote_currency||'').trim().toUpperCase();
+    const item=cryptoItem('BTCC',marketType,'Crypto',{...raw,symbol,baseAsset:base||symbol.replace(/[_-]/g,'').replace(/USDT|USD|USDC$/i,''),quoteAsset:quote||(/USDT/i.test(symbol)?'USDT':'USD'),fullName:raw?.displayName||raw?.name||symbol,status:raw?.status||raw?.state||'online',contractType:raw?.contractType||raw?.contract_type||(marketType==='Perpetuals'?'perpetual':undefined),settleCoin:raw?.settleCoin||raw?.settlement||quote||'USDT'});
+    if(!item||seen.has(item.id))return; item.providerLabel='BTCC'; item.marketType=marketType; item.instrumentType=marketType; seen.add(item.id); out.push(item);
+  };
+  for(const url of ['https://pro-data.btcc.com/data/pro/symbols','https://pro-data.btcc.com/data/pro/markets','https://pro-data.btcc.com/data/pro/products','https://api.btcc.com/data/pro/symbols','https://api.btcc.com/data/pro/markets']){
+    try { const r=await getJson(url,15000); const rows=Array.isArray(r)?r:Array.isArray(r?.symbols)?r.symbols:Array.isArray(r?.markets)?r.markets:Array.isArray(r?.data)?r.data:Array.isArray(r?.data?.symbols)?r.data.symbols:Array.isArray(r?.data?.markets)?r.data.markets:[]; for(const raw of rows)add(raw); if(rows.length){console.log('[SIRE BTCC] catalogue',url,rows.length);break;} } catch(e){console.warn('[SIRE BTCC] catalogue failed:',url,e);}
+  }
+  try { const r=await getJsonAny(['https://pro-data.btcc.com/data/pro/tickers','https://api.btcc.com/data/pro/tickers'],12000); const rows=Array.isArray(r)?r:Array.isArray(r?.data)?r.data:Array.isArray(r?.tickers)?r.tickers:[]; for(const raw of rows)add(raw); console.log('[SIRE BTCC] ticker rows:',rows.length); } catch(e){console.warn('[SIRE BTCC] ticker catalogue failed:',e);}
+  console.log('[SIRE BTCC] COMPLETE',JSON.stringify({total:out.length})); return out;
+}
+
+async function digifinex(): Promise<UnifiedInstrument[]> {
+  const out: UnifiedInstrument[]=[]; const seen=new Set<string>();
+  const add=(raw:any,marketType:string)=>{
+    const symbol=String(raw?.symbol||raw?.market||raw?.instrument_id||'').trim(); if(!symbol)return;
+    const base=String(raw?.base_asset||raw?.baseCurrency||raw?.baseCoin||'').trim().toUpperCase(); const quote=String(raw?.quote_asset||raw?.quoteCurrency||raw?.quoteCoin||'').trim().toUpperCase();
+    const item=cryptoItem('DIGIFINEX',marketType,'Crypto',{...raw,symbol,baseAsset:base,quoteAsset:quote,fullName:raw?.symbol_name||raw?.instrument_name||symbol,status:raw?.status||raw?.state||'online',contractType:raw?.contract_type||(marketType==='Perpetuals'?'perpetual':undefined),settleCoin:raw?.clear_currency||raw?.settleCurrency||quote,deliveryTime:raw?.delivery_time||raw?.deliveryTime});
+    if(!item||seen.has(item.id))return; item.providerLabel='DigiFinex'; item.marketType=marketType; item.instrumentType=marketType; seen.add(item.id); out.push(item);
+  };
+  try { const r=await getJson('https://openapi.digifinex.com/v3/spot/symbols',20000); const rows=Array.isArray(r?.symbol_list)?r.symbol_list:[]; for(const raw of rows)add(raw,'Spot'); console.log('[SIRE DIGIFINEX] Spot:',rows.length); } catch(e){console.warn('[SIRE DIGIFINEX] Spot failed:',e);}
+  try { const r=await getJson('https://openapi.digifinex.com/swap/v2/public/instruments',20000); const rows=Array.isArray(r?.data)?r.data:[]; for(const raw of rows)add(raw,String(raw?.contract_type||'').toUpperCase()==='PERPETUAL'?'Perpetuals':'Futures'); console.log('[SIRE DIGIFINEX] Swap:',rows.length); } catch(e){console.warn('[SIRE DIGIFINEX] Swap failed:',e);}
+  console.log('[SIRE DIGIFINEX] COMPLETE',JSON.stringify({total:out.length,spot:out.filter(x=>x.marketType==='Spot').length,perpetuals:out.filter(x=>x.marketType==='Perpetuals').length,futures:out.filter(x=>x.marketType==='Futures').length})); return out;
+}
+
+
 export async function getStandaloneMarketProviderCatalogue(
   provider: MarketProvider,
   fetchDeriv: () => Promise<any[]>,
@@ -2107,6 +2166,10 @@ export async function getStandaloneMarketProviderCatalogue(
     case 'PHEMEX': return phemex();
     case 'LBANK': return lbank();
     case 'MEXC': return mexc();
+    case 'COINCATCH': return coincatch();
+    case 'ZOOMEX': return zoomex();
+    case 'BTCC': return btcc();
+    case 'DIGIFINEX': return digifinex();
     default: return [];
   }
 }
@@ -2156,6 +2219,10 @@ export async function getUnifiedMarketCatalogue(fetchDeriv: () => Promise<any[]>
       ['LBANK', lbank()],
       ['BITMART', bitmart()],
       ['PHEMEX', phemex()],
+      ['COINCATCH', coincatch()],
+      ['ZOOMEX', zoomex()],
+      ['BTCC', btcc()],
+      ['DIGIFINEX', digifinex()],
       ['FXCM', fxcm()],
       // Nasdaq Trader supplies the public instrument master for Nasdaq-listed,
       // other U.S.-listed, bonds, NOM options, mutual funds and additional
