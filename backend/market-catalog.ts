@@ -1,4 +1,4 @@
-export type MarketProvider = 'BINGX' | 'BINANCE' | 'FXCM' | 'YFINANCE' | 'SP' | 'DERIV' | 'BITGET' | 'BYBIT' | 'OKX' | 'KRAKEN' | 'COINBASE' | 'GATEIO' | 'KUCOIN' | 'GEMINI' | 'BITSO' | 'BITFINEX' | 'BITVAVO' | 'COINEX' | 'LBANK' | 'WOOX' | 'CRYPTOCOM' | 'HTX' | 'BITKUB' | 'UPBIT' | 'PIONEX' | 'POLONIEX' | 'BITHUMB' | 'MEXC' | 'PHEMEX' | 'WHITEBIT' | 'TWELVEDATA' | 'NASDAQTRADER' | 'CME' | 'CBOT' | 'NYMEX' | 'COMEX' | 'NYSEAMERICAN' | 'XETR' | 'HKEX' | 'BSE' | 'TSE' | 'XFRA' | 'EUREX' | 'ASX' | 'TWSE' | 'PSX' | 'IDX' | 'NSE' | 'BITSTAMP' | 'OANDA' | 'TRADINGVIEW' | 'FOREXCOM' | 'INTERACTIVEBROKERS' | 'TRADESTATION' | 'WEBULL' | 'MOOMOO' | 'NINJATRADER' | 'TRADOVATE' | 'AMPFUTURES' | 'TASTYTRADE' | 'TASTYFX' | 'CRYPTOCOMEXCHANGE' | 'COINBASEADVANCED' | 'ALPACA' | 'TRADIERBROKERAGE' | 'TRADEZERO' | 'COBRATRADING' | 'CLEARSTREET' | 'INVESTRADE' | 'PUBLIC' | 'PLUS500US' | 'OPTIMUSFUTURES' | 'EDGECLEAR' | 'IRONBEAM' | 'STONEX' | 'DORMANTRADING' | 'TRADIERFUTURES' | 'BITTREX' | 'BITMART' | 'BLANK';
+export type MarketProvider = 'BITRUE' | 'ASCENDEX' | 'COINW' | BINGX' | 'BINANCE' | 'FXCM' | 'YFINANCE' | 'SP' | 'DERIV' | 'BITGET' | 'BYBIT' | 'OKX' | 'KRAKEN' | 'COINBASE' | 'GATEIO' | 'KUCOIN' | 'GEMINI' | 'BITSO' | 'BITFINEX' | 'BITVAVO' | 'COINEX' | 'LBANK' | 'WOOX' | 'CRYPTOCOM' | 'HTX' | 'BITKUB' | 'UPBIT' | 'PIONEX' | 'POLONIEX' | 'BITHUMB' | 'MEXC' | 'PHEMEX' | 'WHITEBIT' | 'TWELVEDATA' | 'NASDAQTRADER' | 'CME' | 'CBOT' | 'NYMEX' | 'COMEX' | 'NYSEAMERICAN' | 'XETR' | 'HKEX' | 'BSE' | 'TSE' | 'XFRA' | 'EUREX' | 'ASX' | 'TWSE' | 'PSX' | 'IDX' | 'NSE' | 'BITSTAMP' | 'OANDA' | 'TRADINGVIEW' | 'FOREXCOM' | 'INTERACTIVEBROKERS' | 'TRADESTATION' | 'WEBULL' | 'MOOMOO' | 'NINJATRADER' | 'TRADOVATE' | 'AMPFUTURES' | 'TASTYTRADE' | 'TASTYFX' | 'CRYPTOCOMEXCHANGE' | 'COINBASEADVANCED' | 'ALPACA' | 'TRADIERBROKERAGE' | 'TRADEZERO' | 'COBRATRADING' | 'CLEARSTREET' | 'INVESTRADE' | 'PUBLIC' | 'PLUS500US' | 'OPTIMUSFUTURES' | 'EDGECLEAR' | 'IRONBEAM' | 'STONEX' | 'DORMANTRADING' | 'TRADIERFUTURES' | 'BITTREX' | 'BITMART' | 'BLANK';
 
 export interface UnifiedInstrument {
   id: string;
@@ -2718,6 +2718,93 @@ function derivItem(raw: any): UnifiedInstrument | null {
   };
 }
 
+
+async function bitrue(): Promise<UnifiedInstrument[]> {
+  const out: UnifiedInstrument[] = []; const seen = new Set<string>();
+  const add = (raw: any, marketType: string, symbol: string, base?: string, quote?: string, extra: any = {}) => {
+    const item = cryptoItem('BITRUE', marketType, 'Crypto', { ...raw, symbol, baseAsset: base || raw?.baseAsset, quoteAsset: quote || raw?.quoteAsset, status: raw?.status || raw?.state || 'online', ...extra });
+    if (!item || seen.has(item.id)) return; seen.add(item.id); out.push(item);
+  };
+  try {
+    const payload = await getJson('https://api.bitrue.com/api/v1/exchangeInfo', 15000);
+    const rows = Array.isArray(payload?.symbols) ? payload.symbols : [];
+    for (const raw of rows) { const symbol=String(raw?.symbol||'').trim(); if (symbol) add(raw,'Spot',symbol,String(raw?.baseAsset||'').trim(),String(raw?.quoteAsset||'').trim()); }
+    console.log('[SIRE BITRUE] Spot: ' + rows.length);
+  } catch(e){ console.warn('[SIRE BITRUE] Spot failed:',e); }
+  const load=async(label:string,url:string)=>{
+    try {
+      const payload=await getJson(url,15000); const rows=Array.isArray(payload)?payload:(Array.isArray(payload?.data)?payload.data:[]);
+      for(const raw of rows){
+        const symbol=String(raw?.symbol||raw?.contractName||'').trim(); if(!symbol) continue;
+        const parts=String(raw?.contractSymbol||raw?.displayName||symbol).split(/[-_/]/).filter(Boolean);
+        const base=String(raw?.baseAsset||raw?.baseCoin||parts[0]||'').trim()||undefined;
+        const quote=String(raw?.quoteAsset||raw?.quoteCoin||parts[parts.length-1]||'').trim()||undefined;
+        const type=String(raw?.contractType||raw?.contract_type||raw?.type||'').toLowerCase();
+        const expiry=raw?.deliveryTime??raw?.delivery_time??raw?.expireTime??raw?.expiryTime??raw?.expiry;
+        const marketType=expiry||type.includes('delivery')||type==='future'||type==='futures'?'Futures':'Perpetuals';
+        add(raw,marketType,symbol,base,quote,{contractType:type||(marketType==='Perpetuals'?'perpetual':'delivery'),settlement:raw?.marginCoin||raw?.settleCoin||raw?.settlementAsset||undefined,expiry});
+      }
+      console.log('[SIRE BITRUE] '+label+': '+rows.length);
+    } catch(e){ console.warn('[SIRE BITRUE] '+label+' failed:',e); }
+  };
+  await load('USDT-M','https://fapi.bitrue.com/fapi/v1/contracts');
+  await load('COIN-M','https://fapi.bitrue.com/dapi/v1/contracts');
+  console.log('[SIRE BITRUE] COMPLETE',JSON.stringify({total:out.length,spot:out.filter(x=>x.marketType==='Spot').length,perpetuals:out.filter(x=>x.marketType==='Perpetuals').length,futures:out.filter(x=>x.marketType==='Futures').length}));
+  return out;
+}
+
+async function ascendex(): Promise<UnifiedInstrument[]> {
+  const out: UnifiedInstrument[]=[]; const seen=new Set<string>();
+  const add=(raw:any,marketType:string,symbol:string,base?:string,quote?:string)=>{
+    const item=cryptoItem('ASCENDEX',marketType,'Crypto',{...raw,symbol,baseAsset:base||raw?.baseAsset,quoteAsset:quote||raw?.quoteAsset,status:raw?.statusCode||raw?.status||'online'});
+    if(!item||seen.has(item.id)) return; seen.add(item.id); out.push(item);
+  };
+  for(const [account,marketType] of [['cash','Spot'],['margin','Margin']] as const){
+    try{
+      const payload=await getJson('https://ascendex.com/api/pro/v1/'+account+'/products',15000); const rows=Array.isArray(payload?.data)?payload.data:[];
+      for(const raw of rows){const symbol=String(raw?.symbol||raw?.displayName||'').trim();if(!symbol)continue;const p=symbol.split('/');add(raw,marketType,symbol,String(raw?.baseAsset||p[0]||'').trim(),String(raw?.quoteAsset||p[1]||'').trim());}
+      console.log('[SIRE ASCENDEX] '+marketType+': '+rows.length);
+    }catch(e){console.warn('[SIRE ASCENDEX] '+marketType+' failed:',e);}
+  }
+  try{
+    const payload=await getJson('https://ascendex.com/api/pro/v2/futures/contract',15000); const rows=Array.isArray(payload?.data)?payload.data:[];
+    for(const raw of rows){const symbol=String(raw?.symbol||raw?.displayName||'').trim();if(!symbol)continue;const u=String(raw?.underlying||raw?.displayName||symbol);const p=u.split('/');const expiry=raw?.deliveryTime??raw?.delivery_time??raw?.expireTime??raw?.expiryTime;const perp=/(?:^|[-_])PERP(?:$|[-_])/i.test(symbol)||String(raw?.contractType||'').toLowerCase().includes('perpetual');add(raw,perp&&!expiry?'Perpetuals':'Futures',symbol,p[0],p[1]||raw?.settlementAsset,{contractType:perp&&!expiry?'perpetual':'delivery',expiry});}
+    console.log('[SIRE ASCENDEX] Futures: '+rows.length);
+  }catch(e){console.warn('[SIRE ASCENDEX] Futures failed:',e);}
+  console.log('[SIRE ASCENDEX] COMPLETE',JSON.stringify({total:out.length,spot:out.filter(x=>x.marketType==='Spot').length,margin:out.filter(x=>x.marketType==='Margin').length,perpetuals:out.filter(x=>x.marketType==='Perpetuals').length,futures:out.filter(x=>x.marketType==='Futures').length}));
+  return out;
+}
+
+async function whitebit(): Promise<UnifiedInstrument[]> {
+  const out:UnifiedInstrument[]=[]; const seen=new Set<string>(); let collateral=new Set<string>();
+  try{const rows=await getJson('https://whitebit.com/api/v4/public/collateral/markets',12000);if(Array.isArray(rows))collateral=new Set(rows.map((x:any)=>String(x||'').trim()));}catch(e){console.warn('[SIRE WHITEBIT] Collateral markets failed:',e);}
+  const add=(raw:any,marketType:string,symbol:string,base?:string,quote?:string,extra:any={})=>{
+    const item=cryptoItem('WHITEBIT',marketType,'Crypto',{...raw,symbol,baseAsset:base||raw?.stock||raw?.stock_currency,quoteAsset:quote||raw?.money||raw?.money_currency,status:raw?.tradesEnabled===false?'offline':'online',...extra});
+    if(!item||seen.has(item.id))return;seen.add(item.id);out.push(item);
+  };
+  try{
+    const rows=await getJson('https://whitebit.com/api/v4/public/markets',15000);
+    for(const raw of Array.isArray(rows)?rows:[]){const symbol=String(raw?.name||'').trim();if(!symbol)continue;const type=String(raw?.type||'').toLowerCase();const base=String(raw?.stock||'').trim()||undefined;const quote=String(raw?.money||'').trim()||undefined;if(type==='spot')add(raw,'Spot',symbol,base,quote,{supportsMargin:collateral.has(symbol)});else if(type==='futures'){const perp=/(?:^|[_-])PERP(?:$|[_-])/i.test(symbol);add(raw,perp?'Perpetuals':'Futures',symbol,base,quote,{contractType:perp?'perpetual':'delivery',supportsMargin:true});}}
+    console.log('[SIRE WHITEBIT] Market info: '+(Array.isArray(rows)?rows.length:0));
+  }catch(e){console.warn('[SIRE WHITEBIT] Market info failed:',e);}
+  try{
+    const payload=await getJson('https://whitebit.com/api/v4/public/futures',15000);const rows=Array.isArray(payload?.result)?payload.result:[];
+    for(const raw of rows){const symbol=String(raw?.ticker_id||'').trim();if(!symbol)continue;const product=String(raw?.product_type||'').toLowerCase();const mt=product==='perpetual'||/(?:^|[_-])PERP(?:$|[_-])/i.test(symbol)?'Perpetuals':product==='option'||product==='options'?'Options':'Futures';add(raw,mt,symbol,raw?.stock_currency,raw?.money_currency,{contractType:product||undefined,settlement:raw?.money_currency||undefined});}
+    console.log('[SIRE WHITEBIT] Futures: '+rows.length);
+  }catch(e){console.warn('[SIRE WHITEBIT] Futures failed:',e);}
+  console.log('[SIRE WHITEBIT] COMPLETE',JSON.stringify({total:out.length,spot:out.filter(x=>x.marketType==='Spot').length,perpetuals:out.filter(x=>x.marketType==='Perpetuals').length,futures:out.filter(x=>x.marketType==='Futures').length,options:out.filter(x=>x.marketType==='Options').length,margin:out.filter(x=>x.supportsMargin).length}));
+  return out;
+}
+
+async function coinw(): Promise<UnifiedInstrument[]> {
+  const out:UnifiedInstrument[]=[];const seen=new Set<string>();
+  const add=(raw:any,marketType:string,symbol:string,base?:string,quote?:string,extra:any={})=>{const item=cryptoItem('COINW',marketType,'Crypto',{...raw,symbol,baseAsset:base||raw?.baseAsset,quoteAsset:quote||raw?.quoteAsset,status:raw?.state===2?'offline':'online',...extra});if(!item||seen.has(item.id))return;seen.add(item.id);out.push(item);};
+  try{const payload=await getJson('https://api.coinw.com/api/v1/public?command=returnSymbol',15000);const rows=Array.isArray(payload?.data)?payload.data:Array.isArray(payload)?payload:[];for(const raw of rows){const symbol=String(raw?.currencyPair||raw?.symbol||'').trim();if(symbol)add(raw,'Spot',symbol,raw?.currencyBase,raw?.currencyQuote);}console.log('[SIRE COINW] Spot: '+rows.length);}catch(e){console.warn('[SIRE COINW] Spot failed:',e);}
+  try{const payload=await getJson('https://api.coinw.com/v1/perpum/instruments',15000);const rows=Array.isArray(payload?.data)?payload.data:Array.isArray(payload)?payload:[];for(const raw of rows){const base=String(raw?.base||raw?.baseCurrency||'').trim();if(!base)continue;const quote=String(raw?.quote||raw?.quoteCurrency||raw?.settleCurrency||'USDT').trim();const symbol=String(raw?.name||raw?.instrument||raw?.symbol||(quote==='USDT'?base+'USDT':base+'_'+quote)).trim();add(raw,'Perpetuals',symbol,base,quote,{contractType:'perpetual',settlement:raw?.settleCurrency||quote});}console.log('[SIRE COINW] Perpetuals: '+rows.length);}catch(e){console.warn('[SIRE COINW] Perpetuals failed:',e);}
+  console.log('[SIRE COINW] COMPLETE',JSON.stringify({total:out.length,spot:out.filter(x=>x.marketType==='Spot').length,perpetuals:out.filter(x=>x.marketType==='Perpetuals').length}));
+  return out;
+}
+
 export async function getStandaloneMarketProviderCatalogue(
   provider: MarketProvider,
   fetchDeriv: () => Promise<any[]>,
@@ -2728,6 +2815,10 @@ export async function getStandaloneMarketProviderCatalogue(
       return items.map(derivItem).filter(Boolean) as UnifiedInstrument[];
     }
     case 'BINGX': return bingx();
+    case 'BITRUE': return bitrue();
+    case 'ASCENDEX': return ascendex();
+    case 'WHITEBIT': return whitebit();
+    case 'COINW': return coinw();
     case 'BINANCE': return binance();
     case 'COINBASE': return coinbase();
     case 'KRAKEN': return kraken();
@@ -2763,6 +2854,10 @@ export async function getUnifiedMarketCatalogue(fetchDeriv: () => Promise<any[]>
     // public file happens to finish first.
     const providers: Array<[MarketProvider, Promise<UnifiedInstrument[]>]> = [
       ['BINGX', bingx()],
+      ['BITRUE', bitrue()],
+      ['ASCENDEX', ascendex()],
+      ['WHITEBIT', whitebit()],
+      ['COINW', coinw()],
       // Deriv remains on its dedicated implementation and is intentionally untouched.
       ['DERIV', fetchDeriv().then(items => items.map(derivItem).filter(Boolean) as UnifiedInstrument[])],
       ['BINANCE', binance()],
