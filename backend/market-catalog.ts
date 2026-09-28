@@ -2220,7 +2220,7 @@ async function btcc(): Promise<UnifiedInstrument[]> {
       let parsed = false;
 
       // Next.js/React data blobs, if present.
-      const scriptPattern = /<script[^>]*>([\\s\\S]*?)<\\/script>/gi;
+      const scriptPattern = /<script[^>]*>([\\s\\S]*?)<\/script>/gi;
       let match: RegExpExecArray | null;
       while ((match = scriptPattern.exec(html))) {
         const body = match[1].trim();
