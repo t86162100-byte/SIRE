@@ -77,7 +77,6 @@ const exchangeDomains: Record<string, string> = {
   cryptocom: 'crypto.com',
   htx: 'htx.com',
   upbit: 'upbit.com',
-  poloniex: 'poloniex.com',
   bithumb: 'bithumb.com',
   phemex: 'phemex.com',
   bitso: 'bitso.com',
