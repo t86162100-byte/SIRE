@@ -132,16 +132,28 @@ export default function App() {
     const startup = async (): Promise<Instrument[]> => {
       const providers: MarketProvider[] = ['BINGX','BITRUE','ASCENDEX','WHITEBIT','COINW','DERIV','BINANCE','COINBASE','KRAKEN','BYBIT','OKX','BITGET','GATEIO','KUCOIN','MEXC','CRYPTOCOM','BITFINEX','GEMINI','BITSTAMP','COINEX','HTX','LBANK','BITTREX','BITMART','PHEMEX','BLANK','XT','DEEPCOIN','TOOBIT','WEEX','BITUNIX','BLOFIN','COINCATCH','ZOOMEX','BTCC','DIGIFINEX','COINSTORE','PROBIT','POLONIEX','COINDCX','BITHUMB','UPBIT','PIONEX','POLYMARKET','KALSHI','OPINION'];
       const requests = providers.map(async provider => {
-        const response = await fetch('/api/sire/markets/provider/' + encodeURIComponent(provider), {
-          cache: 'no-store',
-          headers: { 'Cache-Control': 'no-cache' },
-        });
-        const payload = await response.json().catch(() => null);
-        if (!response.ok || !payload?.ok || !Array.isArray(payload?.instruments)) {
-          throw new Error(provider + ': ' + (payload?.error || 'provider catalogue unavailable'));
+        const controller = new AbortController();
+        const timer = window.setTimeout(() => controller.abort(), 15000);
+        try {
+          const response = await fetch('/api/sire/markets/provider/' + encodeURIComponent(provider), {
+            cache: 'no-store',
+            headers: { 'Cache-Control': 'no-cache' },
+            signal: controller.signal,
+          });
+          const payload = await response.json().catch(() => null);
+          if (!response.ok || !payload?.ok || !Array.isArray(payload?.instruments)) {
+            throw new Error(provider + ': ' + (payload?.error || 'provider catalogue unavailable'));
+          }
+          console.info('[SIRE MARKET PROVIDER] loaded', { provider, count: payload.instruments.length });
+          return payload.instruments as Instrument[];
+        } catch (error) {
+          const message = error instanceof DOMException && error.name === 'AbortError'
+            ? provider + ': provider catalogue timed out after 15s'
+            : (error instanceof Error ? error.message : String(error));
+          throw new Error(message);
+        } finally {
+          window.clearTimeout(timer);
         }
-        console.info('[SIRE MARKET PROVIDER] loaded', { provider, count: payload.instruments.length });
-        return payload.instruments as Instrument[];
       });
 
       const results = await Promise.allSettled(requests);
@@ -428,7 +440,7 @@ export default function App() {
   if (!instruments.length || !selected) {
     return <SireErrorScreen
       source="SIRE startup validation"
-      message="Deriv startup completed without a usable instrument catalogue or selected instrument."
+      message={derivError || "No market provider returned a usable instrument catalogue yet. Retrying startup."}
     />;
   }
 
