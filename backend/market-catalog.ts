@@ -2598,6 +2598,7 @@ export async function getStandaloneMarketProviderCatalogue(
     case 'BYBIT': return bybit();
     case 'OKX': return okx();
     case 'BITGET': return bitget();
+    case 'GATEIO': return gateio();
     default: return [];
   }
 }
@@ -2624,6 +2625,7 @@ export async function getUnifiedMarketCatalogue(fetchDeriv: () => Promise<any[]>
       ['OKX', okx()],
       // Bitget is independent: Spot, Margin, USDT-M, Coin-M and USDC-M.
       ['BITGET', bitget()],
+      ['GATEIO', gateio()],
       ['FXCM', fxcm()],
       // Nasdaq Trader supplies the public instrument master for Nasdaq-listed,
       // other U.S.-listed, bonds, NOM options, mutual funds and additional
