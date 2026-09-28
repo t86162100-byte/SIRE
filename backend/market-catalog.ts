@@ -446,13 +446,14 @@ async function kucoin(): Promise<UnifiedInstrument[]> {
       const symbol = String(raw?.symbol || '').trim();
       if (!symbol) continue;
       const parts = symbol.split('-');
-      add(raw, 'Margin', 'Crypto', symbol);
-      const item = out[out.length - 1];
-      if (item && item.symbol === symbol) {
-        item.base = parts[0] || item.base;
-        item.quote = parts[1] || item.quote;
-        item.supportsMargin = true;
-      }
+      const knownQuotes = new Set(['USDT','USDC','USD','BTC','ETH','KCS','EUR','GBP','AUD','CAD','BRL','TRY']);
+      const first = String(parts[0] || '').toUpperCase();
+      const second = String(parts[1] || '').toUpperCase();
+      const baseAsset = knownQuotes.has(first) && !knownQuotes.has(second) ? second : first;
+      const quoteAsset = knownQuotes.has(first) && !knownQuotes.has(second) ? first : second;
+      add({ ...raw, baseCurrency: baseAsset, quoteCurrency: quoteAsset, isMarginEnabled: true }, 'Margin', 'Crypto', symbol);
+      const item = out.find(candidate => candidate.id === 'KUCOIN:Margin:' + symbol);
+      if (item) item.supportsMargin = true;
     }
     console.log('[SIRE KUCOIN] Margin: ' + rows.length);
   } catch (e) {
