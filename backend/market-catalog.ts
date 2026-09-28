@@ -851,6 +851,55 @@ async function mexc(): Promise<UnifiedInstrument[]> {
   }));
   return out;
 }
+async function cryptocom(): Promise<UnifiedInstrument[]> {
+  const out: UnifiedInstrument[] = [];
+  const seen = new Set<string>();
+  const add = (raw:any, marketType:string) => {
+    const symbol=String(raw?.instrument_name||raw?.symbol||'').trim(); if(!symbol)return;
+    const item=cryptoItem('CRYPTOCOM',marketType,'Crypto',{...raw,symbol,baseAsset:raw?.base_ccy||raw?.baseCurrency,quoteAsset:raw?.quote_ccy||raw?.quoteCurrency,status:raw?.status||'online',settleCoin:raw?.quote_ccy||raw?.settle_ccy});
+    if(item&&!seen.has(item.id)){seen.add(item.id);out.push(item);}
+  };
+  for(const url of [
+    'https://api.crypto.com/exchange/v1/public/get-instruments',
+    'https://api.crypto.com/exchange/v1/public/get-instruments?instrument_name=ALL'
+  ]) try {
+    const p=await getJson(url,15000); const rows=Array.isArray(p?.result?.data)?p.result.data:[];
+    for(const r of rows){const t=String(r?.instrument_name||''); const type=String(r?.instrument_type||r?.kind||'').toLowerCase(); add(r,type.includes('perpetual')||t.endsWith('PERP')?'Perpetuals':type.includes('future')?'Futures':'Spot');}
+    if(rows.length)break;
+  } catch(e){console.warn('[SIRE CRYPTOCOM] instruments failed:',e);}
+  console.log('[SIRE CRYPTOCOM] COMPLETE',JSON.stringify({total:out.length,spot:out.filter(x=>x.marketType==='Spot').length,perpetuals:out.filter(x=>x.marketType==='Perpetuals').length,futures:out.filter(x=>x.marketType==='Futures').length}));
+  return out;
+}
+
+async function bitfinex(): Promise<UnifiedInstrument[]> {
+  const out: UnifiedInstrument[]=[]; const seen=new Set<string>();
+  const add=(symbol:string,marketType:string)=>{
+    if(!symbol)return; const s=symbol.replace(/^t/,''); const parts=s.split(/:|F0/)[0].split(/(?=[A-Z]{3,5}$)/); 
+    const item=cryptoItem('BITFINEX',marketType,'Crypto',{symbol,baseAsset:parts[0],quoteAsset:parts[1]||'USD',status:'online'});
+    if(item&&!seen.has(item.id)){seen.add(item.id);out.push(item);}
+  };
+  try{const p=await getJson('https://api-pub.bitfinex.com/v2/conf/pub:list:pair:exchange',15000);const groups=Array.isArray(p)?p:[];for(const g of groups)for(const s of (Array.isArray(g)?g:[])){const x=String(s);add(x,x.includes('F0:')?'Perpetuals':'Spot');}}catch(e){console.warn('[SIRE BITFINEX] pairs failed:',e);}
+  console.log('[SIRE BITFINEX] COMPLETE',JSON.stringify({total:out.length,spot:out.filter(x=>x.marketType==='Spot').length,perpetuals:out.filter(x=>x.marketType==='Perpetuals').length}));
+  return out;
+}
+
+async function gemini(): Promise<UnifiedInstrument[]> {
+  const out:UnifiedInstrument[]=[]; const seen=new Set<string>();
+  try{
+    const p=await getJson('https://api.gemini.com/v1/symbols',15000); const rows=Array.isArray(p)?p:[];
+    for(const symbolRaw of rows){const symbol=String(symbolRaw).toUpperCase(); const perp=symbol.endsWith('PERP'); const clean=perp?symbol.slice(0,-4):symbol; const quote=clean.endsWith('GUSD')?'GUSD':clean.endsWith('USDT')?'USDT':clean.endsWith('USDC')?'USDC':clean.endsWith('EUR')?'EUR':clean.endsWith('GBP')?'GBP':clean.endsWith('SGD')?'SGD':'USD'; const base=clean.slice(0,-quote.length); const item=cryptoItem('GEMINI',perp?'Perpetuals':'Spot','Crypto',{symbol,baseAsset:base,quoteAsset:quote,status:'online',product_type:perp?'swap':'spot'}); if(item&&!seen.has(item.id)){seen.add(item.id);out.push(item);}}
+  }catch(e){console.warn('[SIRE GEMINI] symbols failed:',e);}
+  console.log('[SIRE GEMINI] COMPLETE',JSON.stringify({total:out.length,spot:out.filter(x=>x.marketType==='Spot').length,perpetuals:out.filter(x=>x.marketType==='Perpetuals').length}));
+  return out;
+}
+
+async function bitstamp(): Promise<UnifiedInstrument[]> {
+  const out:UnifiedInstrument[]=[]; const seen=new Set<string>();
+  try{const p=await getJson('https://www.bitstamp.net/api/v2/trading-pairs-info/',15000);const rows=Array.isArray(p)?p:[];for(const r of rows){const symbol=String(r?.name||r?.url_symbol||'').toUpperCase();const item=cryptoItem('BITSTAMP','Spot','Crypto',{...r,symbol,baseAsset:r?.base_decimals!=null?String(r?.base_currency||'').toUpperCase():String(symbol).slice(0,3),quoteAsset:String(r?.counter_currency||'').toUpperCase(),status:r?.trading?'online':'offline'});if(item&&!seen.has(item.id)){seen.add(item.id);out.push(item);}}}catch(e){console.warn('[SIRE BITSTAMP] pairs failed:',e);}
+  console.log('[SIRE BITSTAMP] COMPLETE',JSON.stringify({total:out.length,spot:out.length}));
+  return out;
+}
+
 async function phemex(): Promise<UnifiedInstrument[]> {
   try {
     const payload = await getJson('https://api.phemex.com/public/products', 15000);
@@ -2741,6 +2790,10 @@ export async function getStandaloneMarketProviderCatalogue(
     case 'BITGET': return bitget();
     case 'GATEIO': return gateio();
     case 'KUCOIN': return kucoin();
+    case 'CRYPTOCOM': return cryptocom();
+    case 'BITFINEX': return bitfinex();
+    case 'GEMINI': return gemini();
+    case 'BITSTAMP': return bitstamp();
     case 'MEXC': return mexc();
     default: return [];
   }
@@ -2771,6 +2824,10 @@ export async function getUnifiedMarketCatalogue(fetchDeriv: () => Promise<any[]>
       ['GATEIO', gateio()],
       ['KUCOIN', kucoin()],
       ['MEXC', mexc()],
+      ['CRYPTOCOM', cryptocom()],
+      ['BITFINEX', bitfinex()],
+      ['GEMINI', gemini()],
+      ['BITSTAMP', bitstamp()],
       ['FXCM', fxcm()],
       // Nasdaq Trader supplies the public instrument master for Nasdaq-listed,
       // other U.S.-listed, bonds, NOM options, mutual funds and additional
