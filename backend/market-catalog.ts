@@ -1457,7 +1457,7 @@ async function phemex(): Promise<UnifiedInstrument[]> {
   // Phemex publishes spot and contract products from the public product
   // catalogue. Use both products and products-plus so listing metadata such as
   // delist timelines is not lost.
-  for (const endpoint of ['https://api.phemex.com/public/products-plus','https://api.phemex.com/public/products']) {
+  for (const endpoint of ['https://api.phemex.com/exchange/public/cfg/v2/products','https://api.phemex.com/exchange/public/products','https://api.phemex.com/public/products-plus','https://api.phemex.com/public/products']) {
     try {
       const payload = await getJson(endpoint, 20000);
       const result = payload?.result || payload;
