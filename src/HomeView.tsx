@@ -83,17 +83,6 @@ export default function HomeView({ instruments, onSelectInstrument, videoSrc = '
             playsInline
             preload="auto"
           />
-          <div className="sire-home-hero-shade" />
-          <div className="sire-home-hero-copy">
-            <span className="sire-home-eyebrow">SIRE</span>
-            <h1>Trade beyond<br />the market.</h1>
-            <p>AI-powered market intelligence.</p>
-            <div className="sire-home-hero-actions">
-              <button type="button" className="sire-home-primary"><TrendingUp size={16} /> Trade Now <ArrowRight size={15} /></button>
-              <button type="button" className="sire-home-secondary">Explore Markets</button>
-            </div>
-          </div>
-          <button type="button" className="sire-home-play" aria-label="Play SIRE video"><Play size={20} fill="currentColor" /></button>
         </section>
 
         <section className="sire-home-section sire-home-pulse">
