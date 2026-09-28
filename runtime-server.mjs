@@ -13,7 +13,6 @@ import { getStoredHistory, persistHistoryBars, historyStoreStatus } from './back
 import { signup, login, logout, currentUser, googleStart, googleCallback } from './backend/auth.ts';
 import { runSireDiagnostics } from './backend/sire-diagnostics.ts';
 import { recordIssue, getRecentIssues } from './backend/sire-issue-tracker.ts';
-import { fetchExchangeCatalogues } from './backend/exchange-market-data.ts';
 
 const PORT = Number(process.env.PORT || 10000);
 const HOST = '0.0.0.0';
@@ -618,15 +617,6 @@ const server = http.createServer(async (req,res) => {
     }
     if (req.method === 'GET' && pathname === '/api/sire/issues') {
       return res.writeHead(200,{ 'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8' }).end(JSON.stringify({ok:true,issues:getRecentIssues()}));
-    }
-    if (req.method === 'GET' && pathname === '/api/sire/exchanges/catalogue') {
-      try {
-        const catalogues = await fetchExchangeCatalogues();
-        return res.writeHead(200,{ 'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8' }).end(JSON.stringify({ ok:true, catalogues }));
-      } catch (cause) {
-        const message = cause instanceof Error ? cause.message : String(cause);
-        return res.writeHead(502,{ 'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8' }).end(JSON.stringify({ ok:false,error:message,catalogues:[] }));
-      }
     }
     if (req.method === 'GET' && pathname === '/api/sire/diagnostics') { try { const report = await runSireDiagnostics(); return res.writeHead(report.ok ? 200 : 502,{ 'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8' }).end(JSON.stringify(report)); } catch (cause) { const message = cause instanceof Error ? cause.message : String(cause); return res.writeHead(500,{ 'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8' }).end(JSON.stringify({ ok:false, error:message, noSecrets:true })); } }
     if (req.method === 'POST' && pathname === '/api/sire/deriv/history') {
