@@ -3,7 +3,7 @@ import { createLinkGroup, type LinkGroup } from 'openalgo-charts';
 import { Search } from 'lucide-react';
 import ResearchLab from './ResearchLab';
 import FinancialChart from './FinancialChart';
-import type { DerivInstrument } from './derivMarketData';
+import { fetchDerivInstruments, type DerivInstrument } from './derivMarketData';
 import { fetchBinanceBrowserCatalogue } from './binanceMarketData';
 import { SireErrorScreen } from './SireErrorBoundary';
 import './nativeTerminal.css';
@@ -165,6 +165,30 @@ export default function App() {
         });
         return [];
       });
+
+      // Render can occasionally be unable to open Deriv's public WebSocket even though
+      // the user's browser can. If the server-side Deriv provider failed, use the
+      // same no-auth public catalogue directly from the browser rather than hiding Deriv.
+      if (!instruments.some(item => item.provider === 'DERIV')) {
+        try {
+          const directDeriv = await fetchDerivInstruments();
+          const browserDeriv = directDeriv.map(item => ({
+            ...item,
+            id: 'DERIV:' + item.symbol,
+            provider: 'DERIV' as MarketProvider,
+            providerLabel: 'Deriv',
+            marketType: item.category === 'synthetic' ? 'Synthetic Indices' : item.category,
+            category: item.category === 'synthetic' ? 'Synthetic Indices' : item.category,
+            displaySymbol: item.name || item.symbol,
+            logoUrl: makeLogoFallback(item.symbol),
+            providerLogoUrl: 'https://deriv.com/favicon.ico',
+          })) as Instrument[];
+          instruments.push(...browserDeriv);
+          console.info('[SIRE DERIV BROWSER] direct catalogue published', { count: browserDeriv.length });
+        } catch (error) {
+          console.warn('[SIRE DERIV BROWSER] direct catalogue failed:', error);
+        }
+      }
 
       const seen = new Set<string>();
       const unique = instruments.filter(item => {
