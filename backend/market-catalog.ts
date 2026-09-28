@@ -1,4 +1,4 @@
-export type MarketProvider = 'BINANCE' | 'FXCM' | 'YFINANCE' | 'SP' | 'DERIV' | 'BITGET' | 'BYBIT' | 'OKX' | 'KRAKEN' | 'COINBASE' | 'GATEIO' | 'KUCOIN' | 'GEMINI' | 'BITSO' | 'BITFINEX' | 'BITVAVO' | 'COINEX' | 'LBANK' | 'WOOX' | 'CRYPTOCOM' | 'HTX' | 'BITKUB' | 'UPBIT' | 'PIONEX' | 'POLONIEX' | 'BITHUMB' | 'MEXC' | 'PHEMEX' | 'WHITEBIT' | 'TWELVEDATA' | 'NASDAQTRADER' | 'CME' | 'CBOT' | 'NYMEX' | 'COMEX' | 'NYSEAMERICAN' | 'XETR' | 'HKEX' | 'BSE' | 'TSE' | 'XFRA' | 'EUREX' | 'ASX' | 'TWSE' | 'PSX' | 'IDX' | 'NSE' | 'BITSTAMP' | 'OANDA' | 'TRADINGVIEW' | 'FOREXCOM' | 'INTERACTIVEBROKERS' | 'TRADESTATION' | 'WEBULL' | 'MOOMOO' | 'NINJATRADER' | 'TRADOVATE' | 'AMPFUTURES' | 'TASTYTRADE' | 'TASTYFX' | 'CRYPTOCOMEXCHANGE' | 'COINBASEADVANCED' | 'ALPACA' | 'TRADIERBROKERAGE' | 'TRADEZERO' | 'COBRATRADING' | 'CLEARSTREET' | 'INVESTRADE' | 'PUBLIC' | 'PLUS500US' | 'OPTIMUSFUTURES' | 'EDGECLEAR' | 'IRONBEAM' | 'STONEX' | 'DORMANTRADING' | 'TRADIERFUTURES' | 'BITTREX' | 'BITMART' | 'BLANK';
+export type MarketProvider = 'BINGX' | 'BINANCE' | 'FXCM' | 'YFINANCE' | 'SP' | 'DERIV' | 'BITGET' | 'BYBIT' | 'OKX' | 'KRAKEN' | 'COINBASE' | 'GATEIO' | 'KUCOIN' | 'GEMINI' | 'BITSO' | 'BITFINEX' | 'BITVAVO' | 'COINEX' | 'LBANK' | 'WOOX' | 'CRYPTOCOM' | 'HTX' | 'BITKUB' | 'UPBIT' | 'PIONEX' | 'POLONIEX' | 'BITHUMB' | 'MEXC' | 'PHEMEX' | 'WHITEBIT' | 'TWELVEDATA' | 'NASDAQTRADER' | 'CME' | 'CBOT' | 'NYMEX' | 'COMEX' | 'NYSEAMERICAN' | 'XETR' | 'HKEX' | 'BSE' | 'TSE' | 'XFRA' | 'EUREX' | 'ASX' | 'TWSE' | 'PSX' | 'IDX' | 'NSE' | 'BITSTAMP' | 'OANDA' | 'TRADINGVIEW' | 'FOREXCOM' | 'INTERACTIVEBROKERS' | 'TRADESTATION' | 'WEBULL' | 'MOOMOO' | 'NINJATRADER' | 'TRADOVATE' | 'AMPFUTURES' | 'TASTYTRADE' | 'TASTYFX' | 'CRYPTOCOMEXCHANGE' | 'COINBASEADVANCED' | 'ALPACA' | 'TRADIERBROKERAGE' | 'TRADEZERO' | 'COBRATRADING' | 'CLEARSTREET' | 'INVESTRADE' | 'PUBLIC' | 'PLUS500US' | 'OPTIMUSFUTURES' | 'EDGECLEAR' | 'IRONBEAM' | 'STONEX' | 'DORMANTRADING' | 'TRADIERFUTURES' | 'BITTREX' | 'BITMART' | 'BLANK';
 
 export interface UnifiedInstrument {
   id: string;
@@ -580,6 +580,93 @@ async function coinex(): Promise<UnifiedInstrument[]> {
     spot: out.filter(x => x.marketType === 'Spot').length,
     margin: out.filter(x => x.marketType === 'Margin').length,
     perpetuals: out.filter(x => x.marketType === 'Perpetuals').length,
+  }));
+  return out;
+}
+
+async function bingx(): Promise<UnifiedInstrument[]> {
+  const out: UnifiedInstrument[] = [];
+  const seen = new Set<string>();
+
+  const add = (raw: any, marketType: string) => {
+    const symbol = String(raw?.symbol || raw?.symbolName || raw?.contractName || raw?.instId || raw?.name || '').trim().toUpperCase();
+    if (!symbol) return;
+    const key = marketType + ':' + symbol;
+    if (seen.has(key)) return;
+
+    const base = String(raw?.baseAsset || raw?.baseCoin || raw?.baseCurrency || raw?.base || '').trim().toUpperCase() || undefined;
+    const quote = String(raw?.quoteAsset || raw?.quoteCoin || raw?.quoteCurrency || raw?.quote || '').trim().toUpperCase() || undefined;
+    const item = cryptoItem('BINGX', marketType, 'Crypto', {
+      ...raw,
+      symbol,
+      baseAsset: base,
+      quoteAsset: quote,
+      fullName: raw?.symbolName || raw?.contractName || symbol,
+      status: raw?.status ?? raw?.state ?? 'online',
+      type: raw?.contractType || raw?.type || marketType,
+      contractType: raw?.contractType || raw?.type || marketType,
+      settleCoin: raw?.currency || raw?.settleCoin || raw?.settleCurrency || raw?.marginAsset || quote,
+      deliveryTime: raw?.deliveryDate || raw?.expiryTime || raw?.deliveryTime,
+    });
+    if (!item) return;
+
+    item.id = 'BINGX:' + marketType + ':' + symbol;
+    item.providerLabel = 'BingX';
+    item.marketType = marketType;
+    item.category = 'Crypto';
+    item.instrumentType = String(raw?.contractType || raw?.type || marketType);
+    item.contractType = String(raw?.contractType || raw?.type || '').trim() || item.contractType;
+    item.settlement = String(raw?.currency || raw?.settleCoin || raw?.settleCurrency || raw?.marginAsset || '').trim() || item.settlement;
+    item.expiry = raw?.deliveryDate || raw?.expiryTime || raw?.deliveryTime || item.expiry;
+    seen.add(key);
+    out.push(item);
+  };
+
+  // BingX documents this endpoint as the public spot trading-symbol master.
+  try {
+    const payload = await getJsonAny([
+      'https://open-api.bingx.com/openApi/spot/v1/common/symbols',
+      'https://api.bingx.com/openApi/spot/v1/common/symbols',
+    ], 15000);
+    const rows = Array.isArray(payload?.data) ? payload.data : Array.isArray(payload) ? payload : [];
+    for (const raw of rows) add(raw, 'Spot');
+    console.log('[SIRE BINGX] Spot: ' + rows.length);
+  } catch (error) {
+    console.warn('[SIRE BINGX] Spot failed:', error);
+  }
+
+  // BingX exposes the futures contract master through this public endpoint.
+  // Classify perpetuals from the contract metadata and retain delivery futures
+  // separately when BingX publishes an expiry/delivery contract.
+  try {
+    const payload = await getJsonAny([
+      'https://open-api.bingx.com/openApi/swap/v2/quote/contracts',
+      'https://api.bingx.com/openApi/swap/v2/quote/contracts',
+    ], 15000);
+    const rows = Array.isArray(payload?.data) ? payload.data : Array.isArray(payload) ? payload : [];
+    for (const raw of rows) {
+      const text = [
+        raw?.contractType, raw?.type, raw?.contractName, raw?.symbol,
+        raw?.deliveryDate, raw?.expiryTime, raw?.deliveryTime
+      ].map(v => String(v || '').toLowerCase()).join(' ');
+      const marketType =
+        text.includes('perpetual') || text.includes('perp') || (!raw?.deliveryDate && !raw?.expiryTime && !raw?.deliveryTime)
+          ? 'Perpetuals'
+          : 'Futures';
+      add(raw, marketType);
+    }
+    console.log('[SIRE BINGX] Contracts: ' + rows.length);
+  } catch (error) {
+    console.warn('[SIRE BINGX] Contracts failed:', error);
+  }
+
+  console.log('[SIRE BINGX] COMPLETE', JSON.stringify({
+    total: out.length,
+    spot: out.filter(x => x.marketType === 'Spot').length,
+    perpetuals: out.filter(x => x.marketType === 'Perpetuals').length,
+    futures: out.filter(x => x.marketType === 'Futures').length,
+    margin: out.filter(x => x.marketType === 'Margin').length,
+    options: out.filter(x => x.marketType === 'Options').length,
   }));
   return out;
 }
@@ -2618,6 +2705,7 @@ export async function getStandaloneMarketProviderCatalogue(
       const items = await fetchDeriv();
       return items.map(derivItem).filter(Boolean) as UnifiedInstrument[];
     }
+    case 'BINGX': return bingx();
     case 'BINANCE': return binance();
     case 'COINBASE': return coinbase();
     case 'KRAKEN': return kraken();
@@ -2652,6 +2740,7 @@ export async function getUnifiedMarketCatalogue(fetchDeriv: () => Promise<any[]>
     // reliably receive DERIV + the major crypto venues instead of whichever
     // public file happens to finish first.
     const providers: Array<[MarketProvider, Promise<UnifiedInstrument[]>]> = [
+      ['BINGX', bingx()],
       // Deriv remains on its dedicated implementation and is intentionally untouched.
       ['DERIV', fetchDeriv().then(items => items.map(derivItem).filter(Boolean) as UnifiedInstrument[])],
       ['BINANCE', binance()],
