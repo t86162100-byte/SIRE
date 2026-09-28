@@ -588,87 +588,109 @@ async function bingx(): Promise<UnifiedInstrument[]> {
   const out: UnifiedInstrument[] = [];
   const seen = new Set<string>();
 
-  const add = (raw: any, marketType: string) => {
+  const add = (raw: any, marketType: string, category = 'Crypto') => {
     const symbol = String(raw?.symbol || raw?.symbolName || raw?.contractName || raw?.instId || raw?.name || '').trim().toUpperCase();
     if (!symbol) return;
+
     const key = marketType + ':' + symbol;
     if (seen.has(key)) return;
 
     const base = String(raw?.baseAsset || raw?.baseCoin || raw?.baseCurrency || raw?.base || '').trim().toUpperCase() || undefined;
     const quote = String(raw?.quoteAsset || raw?.quoteCoin || raw?.quoteCurrency || raw?.quote || '').trim().toUpperCase() || undefined;
-    const item = cryptoItem('BINGX', marketType, 'Crypto', {
+    const settlement = String(raw?.currency || raw?.settleCoin || raw?.settleCurrency || raw?.marginAsset || '').trim().toUpperCase() || quote;
+    const status = raw?.status ?? raw?.state ?? raw?.contractStatus ?? 'online';
+
+    const item = cryptoItem('BINGX', marketType, category, {
       ...raw,
       symbol,
       baseAsset: base,
       quoteAsset: quote,
       fullName: raw?.symbolName || raw?.contractName || symbol,
-      status: raw?.status ?? raw?.state ?? 'online',
+      status,
       type: raw?.contractType || raw?.type || marketType,
       contractType: raw?.contractType || raw?.type || marketType,
-      settleCoin: raw?.currency || raw?.settleCoin || raw?.settleCurrency || raw?.marginAsset || quote,
-      deliveryTime: raw?.deliveryDate || raw?.expiryTime || raw?.deliveryTime,
+      settleCoin: settlement,
+      deliveryTime: raw?.deliveryDate || raw?.expiryTime || raw?.deliveryTime || raw?.expireTime,
     });
     if (!item) return;
 
     item.id = 'BINGX:' + marketType + ':' + symbol;
     item.providerLabel = 'BingX';
     item.marketType = marketType;
-    item.category = 'Crypto';
-    item.instrumentType = String(raw?.contractType || raw?.type || marketType);
-    item.contractType = String(raw?.contractType || raw?.type || '').trim() || item.contractType;
-    item.settlement = String(raw?.currency || raw?.settleCoin || raw?.settleCurrency || raw?.marginAsset || '').trim() || item.settlement;
-    item.expiry = raw?.deliveryDate || raw?.expiryTime || raw?.deliveryTime || item.expiry;
+    item.category = category;
+    item.instrumentType = marketType;
+    item.contractType = String(raw?.contractType || raw?.type || marketType).trim();
+    item.settlement = settlement;
+    item.expiry = raw?.deliveryDate || raw?.expiryTime || raw?.deliveryTime || raw?.expireTime || undefined;
     seen.add(key);
     out.push(item);
   };
 
-  // BingX documents this endpoint as the public spot trading-symbol master.
+  // BingX Spot symbol master: this is the authoritative public Spot catalogue.
   try {
     const payload = await getJsonAny([
       'https://open-api.bingx.com/openApi/spot/v1/common/symbols',
+      'https://open-api.bingx.pro/openApi/spot/v1/common/symbols',
       'https://api.bingx.com/openApi/spot/v1/common/symbols',
     ], 15000);
     const rows = Array.isArray(payload?.data) ? payload.data : Array.isArray(payload) ? payload : [];
     for (const raw of rows) add(raw, 'Spot');
-    console.log('[SIRE BINGX] Spot: ' + rows.length);
+    console.log('[SIRE BINGX] Spot', JSON.stringify({ published: rows.length, loaded: out.filter(x => x.marketType === 'Spot').length }));
   } catch (error) {
     console.warn('[SIRE BINGX] Spot failed:', error);
   }
 
-  // BingX exposes the futures contract master through this public endpoint.
-  // Classify perpetuals from the contract metadata and retain delivery futures
-  // separately when BingX publishes an expiry/delivery contract.
+  // BingX's documented swap contract endpoint returns USDT-M perpetual swap
+  // specifications. Do not guess delivery futures from missing expiry fields:
+  // every row from this endpoint is explicitly a perpetual contract.
   try {
     const payload = await getJsonAny([
       'https://open-api.bingx.com/openApi/swap/v2/quote/contracts',
+      'https://open-api.bingx.pro/openApi/swap/v2/quote/contracts',
       'https://api.bingx.com/openApi/swap/v2/quote/contracts',
     ], 15000);
     const rows = Array.isArray(payload?.data) ? payload.data : Array.isArray(payload) ? payload : [];
-    for (const raw of rows) {
-      const text = [
-        raw?.contractType, raw?.type, raw?.contractName, raw?.symbol,
-        raw?.deliveryDate, raw?.expiryTime, raw?.deliveryTime
-      ].map(v => String(v || '').toLowerCase()).join(' ');
-      const marketType =
-        text.includes('perpetual') || text.includes('perp') || (!raw?.deliveryDate && !raw?.expiryTime && !raw?.deliveryTime)
-          ? 'Perpetuals'
-          : 'Futures';
-      add(raw, marketType);
-    }
-    console.log('[SIRE BINGX] Contracts: ' + rows.length);
+    for (const raw of rows) add(raw, 'Perpetuals');
+    console.log('[SIRE BINGX] USDT-M perpetuals', JSON.stringify({ published: rows.length, loaded: out.filter(x => x.marketType === 'Perpetuals').length }));
   } catch (error) {
-    console.warn('[SIRE BINGX] Contracts failed:', error);
+    console.warn('[SIRE BINGX] USDT-M perpetuals failed:', error);
   }
 
+  // BingX also exposes a separate Coin-M perpetual market API. Enumerate it
+  // independently so Coin-M contracts are not lost inside the USDT-M catalogue.
+  try {
+    const payload = await getJsonAny([
+      'https://open-api.bingx.com/openApi/cswap/v1/market/contracts',
+      'https://open-api.bingx.pro/openApi/cswap/v1/market/contracts',
+      'https://api.bingx.com/openApi/cswap/v1/market/contracts',
+    ], 15000);
+    const rows = Array.isArray(payload?.data) ? payload.data : Array.isArray(payload) ? payload : [];
+    for (const raw of rows) add(raw, 'Perpetuals', 'Crypto');
+    console.log('[SIRE BINGX] Coin-M perpetuals', JSON.stringify({ published: rows.length, loaded: out.filter(x => x.marketType === 'Perpetuals').length }));
+  } catch (error) {
+    console.warn('[SIRE BINGX] Coin-M perpetuals failed:', error);
+  }
+
+  // Standard Futures are a separate BingX product. BingX's public standard
+  // contract documentation exposes authenticated trading/account operations,
+  // but does not publish a public unauthenticated instrument-master endpoint.
+  // Therefore SIRE deliberately does NOT fabricate a Standard Futures list.
+  // This keeps the catalogue sourced only from authoritative live endpoints.
+
+  const unique = out.filter((item, index, all) =>
+    all.findIndex(other => other.id === item.id) === index
+  );
+
   console.log('[SIRE BINGX] COMPLETE', JSON.stringify({
-    total: out.length,
-    spot: out.filter(x => x.marketType === 'Spot').length,
-    perpetuals: out.filter(x => x.marketType === 'Perpetuals').length,
-    futures: out.filter(x => x.marketType === 'Futures').length,
-    margin: out.filter(x => x.marketType === 'Margin').length,
-    options: out.filter(x => x.marketType === 'Options').length,
+    total: unique.length,
+    spot: unique.filter(x => x.marketType === 'Spot').length,
+    perpetuals: unique.filter(x => x.marketType === 'Perpetuals').length,
+    futures: unique.filter(x => x.marketType === 'Futures').length,
+    options: unique.filter(x => x.marketType === 'Options').length,
+    standardFutures: unique.filter(x => x.marketType === 'Standard Futures').length,
   }));
-  return out;
+
+  return unique;
 }
 
 async function lbank(): Promise<UnifiedInstrument[]> {
