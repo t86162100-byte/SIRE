@@ -1767,6 +1767,8 @@ export async function getUnifiedMarketCatalogue(fetchDeriv: () => Promise<any[]>
       ['BITFINEX', bitfinex()],
       ['GEMINI', gemini()],
       ['BITSTAMP', bitstamp()],
+      ['HTX', htx()],
+      ['BITTREX', bittrex()],
       ['LBANK', lbank()],
       ['BITMART', bitmart()],
       ['PHEMEX', phemex()],
