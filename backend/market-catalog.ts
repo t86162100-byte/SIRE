@@ -2008,7 +2008,7 @@ async function bybit(): Promise<UnifiedInstrument[]> {
   // Render's default US runtime can be rejected by Bybit's API edge. The
   // Frankfurt relay is the primary path; direct Bybit endpoints remain a
   // fallback for deployments whose source region is accepted by Bybit.
-  const relay = String(process.env.SIRE_BYBIT_RELAY_URL || '').replace(/\\/+$/, '');
+  const relay = String(process.env.SIRE_BYBIT_RELAY_URL || '').replace(/\/+$/, '');
   const bybitEndpoints = (pathAndQuery: string) => [
     ...(relay ? [relay + pathAndQuery] : []),
     'https://api.bybit.com' + pathAndQuery,
