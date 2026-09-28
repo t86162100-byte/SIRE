@@ -2590,105 +2590,73 @@ async function opinion(): Promise<UnifiedInstrument[]> {
 
 async function uniswap(): Promise<UnifiedInstrument[]> {
   const out: UnifiedInstrument[] = [];
-  const apiKey = String(process.env.THE_GRAPH_API_KEY || process.env.UNISWAP_GRAPH_API_KEY || '').trim();
-  if (!apiKey) {
-    console.warn('[SIRE UNISWAP] THE_GRAPH_API_KEY/UNISWAP_GRAPH_API_KEY is not configured; Uniswap official subgraph gateway requires a Graph API key.');
+  const key = String(process.env.UNISWAP_API_KEY || '').trim();
+  if (!key) {
+    console.warn('[SIRE UNISWAP] UNISWAP_API_KEY is not configured.');
     return out;
   }
 
-  const deployments = [
-    {
-      version: 'V2',
-      id: 'A3Np3RQbaBA6oKJgiwDJeo5T3zrYfGHPWFYayMwtNDum',
-      entity: 'pairs',
-      query: `query($skip:Int!){pairs(first:1000,skip:$skip,orderBy:reserveUSD,orderDirection:desc){id token0{id symbol name decimals} token1{id symbol name decimals} reserve0 reserve1 reserveUSD token0Price token1Price volumeUSD txCount}}`
-    },
-    {
-      version: 'V3',
-      id: '5zvR82QoaXYFyDEKLZ9t6v9adgnptxYpKpSbxtgVENFV',
-      entity: 'pools',
-      query: `query($skip:Int!){pools(first:1000,skip:$skip,orderBy:totalValueLockedUSD,orderDirection:desc){id token0{id symbol name decimals} token1{id symbol name decimals} feeTier liquidity sqrtPrice tick token0Price token1Price totalValueLockedUSD volumeUSD txCount}}`
-    },
-    {
-      version: 'V4',
-      id: 'DiYPVdygkfjDWhbxGSqAQxwBKmfKnkWQojqeM2rkLb3G',
-      entity: 'pools',
-      query: `query($skip:Int!){pools(first:1000,skip:$skip,orderBy:totalValueLockedUSD,orderDirection:desc){id token0{id symbol name decimals} token1{id symbol name decimals} feeTier tickSpacing hooks liquidity sqrtPrice tick token0Price token1Price totalValueLockedUSD volumeUSD txCount}}`
-    }
-  ];
+  // Uniswap's official token endpoint returns the full default token list
+  // across the API's supported chains when sort=default.
+  const endpoint = 'https://trade-api.gateway.uniswap.org/v1/tokens?sort=default';
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 30000);
+  try {
+    const headers: Record<string,string> = {
+      Accept: 'application/json',
+      'User-Agent': 'SIRE-market-catalog/1.0'
+    };
+    headers['x-api-key'] = key;
+    const response = await fetch(endpoint, { signal: controller.signal, headers });
+    if (!response.ok) throw new Error('HTTP ' + response.status);
+    const payload = await response.json();
+    const rows = Array.isArray(payload?.tokens) ? payload.tokens : [];
 
-  const graphPost = async (endpoint:string, query:string, variables:Record<string,unknown>) => {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 30000);
-    try {
-      const response = await fetch(endpoint, {
-        method:'POST',
-        signal:controller.signal,
-        headers:{
-          'Content-Type':'application/json',
-          'Accept':'application/json',
-          'Authorization':'Bearer ' + apiKey,
-          'User-Agent':'SIRE-market-catalog/1.0'
-        },
-        body:JSON.stringify({query,variables})
+    for (const raw of rows) {
+      const address = String(raw?.address || '').trim();
+      const symbol = String(raw?.symbol || '').trim();
+      const name = String(raw?.name || symbol || address).trim();
+      const chainId = Number(raw?.chainId);
+      if (!address || !symbol || !Number.isFinite(chainId)) continue;
+
+      const item = cryptoItem('UNISWAP', 'Spot', 'Crypto', {
+        symbol,
+        baseAsset: symbol,
+        quoteAsset: 'N/A',
+        fullName: name,
+        status: 'online'
       });
-      if (!response.ok) throw new Error('HTTP ' + response.status);
-      const payload = await response.json();
-      if (Array.isArray(payload?.errors) && payload.errors.length) throw new Error(String(payload.errors[0]?.message || 'GraphQL error'));
-      return payload?.data || {};
-    } finally { clearTimeout(timer); }
-  };
+      if (!item) continue;
 
-  for (const deployment of deployments) {
-    const endpoint = 'https://gateway.thegraph.com/api/' + encodeURIComponent(apiKey) + '/subgraphs/id/' + deployment.id;
-    let total = 0;
-    for (let skip = 0; skip < 100000; skip += 1000) {
-      try {
-        const data = await graphPost(endpoint, deployment.query, {skip});
-        const rows = Array.isArray(data?.[deployment.entity]) ? data[deployment.entity] : [];
-        for (const raw of rows) {
-          const token0 = raw?.token0 || {};
-          const token1 = raw?.token1 || {};
-          const symbol0 = String(token0?.symbol || token0?.id || '').trim();
-          const symbol1 = String(token1?.symbol || token1?.id || '').trim();
-          if (!raw?.id || !symbol0 || !symbol1) continue;
-          const symbol = symbol0 + '/' + symbol1;
-          const marketType = 'AMM ' + deployment.version + ' Pool';
-          const item = cryptoItem('UNISWAP', marketType, 'Crypto', {
-            symbol: String(raw.id),
-            baseAsset: symbol0,
-            quoteAsset: symbol1,
-            fullName: 'Uniswap ' + deployment.version + ' · ' + symbol,
-            status: 'online',
-            contractType: deployment.version === 'V2' ? 'constant-product' : 'concentrated-liquidity',
-            settleCoin: 'N/A'
-          }, {last: Number(raw?.token0Price) || undefined});
-          if (!item) continue;
-          item.id = 'UNISWAP:' + deployment.version + ':' + String(raw.id);
-          item.providerLabel = 'Uniswap';
-          item.marketType = marketType;
-          item.category = 'Crypto';
-          item.instrumentType = 'AMM Pool';
-          item.contractType = deployment.version === 'V2' ? 'constant-product' : 'concentrated-liquidity';
-          item.settlement = 'On-chain';
-          item.price = Number.isFinite(Number(raw?.token0Price)) ? Number(raw.token0Price) : undefined;
-          item.exchangeOpen = 1;
-          out.push(item);
-          total += 1;
-        }
-        if (rows.length < 1000) break;
-      } catch (error) {
-        console.warn('[SIRE UNISWAP] ' + deployment.version + ' page failed at skip=' + skip + ':', error);
-        break;
-      }
+      item.id = 'UNISWAP:TOKEN:' + chainId + ':' + address.toLowerCase();
+      item.providerLabel = 'Uniswap';
+      item.marketType = 'Spot';
+      item.category = 'Crypto';
+      item.instrumentType = 'Token';
+      item.contractType = 'ERC-20';
+      item.settlement = 'On-chain';
+      item.exchangeOpen = 1;
+      item.displaySymbol = symbol + ' · Chain ' + chainId;
+      item.name = name;
+      item.symbol = symbol;
+      item.logoUrl = String(raw?.logoURI || assetLogo(symbol));
+      item.providerLogoUrl = providerLogo('uniswap');
+      out.push(item);
     }
-    console.log('[SIRE UNISWAP] ' + deployment.version + ': ' + total);
-  }
 
-  const seen = new Set<string>();
-  const unique = out.filter(item => !seen.has(item.id) && (seen.add(item.id), true));
-  console.log('[SIRE UNISWAP] COMPLETE', JSON.stringify({total:unique.length, v2:unique.filter(x=>x.id.startsWith('UNISWAP:V2:')).length, v3:unique.filter(x=>x.id.startsWith('UNISWAP:V3:')).length, v4:unique.filter(x=>x.id.startsWith('UNISWAP:V4:')).length}));
-  return unique;
+    const seen = new Set<string>();
+    const unique = out.filter(item => !seen.has(item.id) && (seen.add(item.id), true));
+    console.log('[SIRE UNISWAP] COMPLETE', JSON.stringify({
+      total: unique.length,
+      endpoint: 'official-api-token-catalogue'
+    }));
+    return unique;
+  } catch (error) {
+    console.warn('[SIRE UNISWAP] official API catalogue failed:', error);
+    return [];
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 async function coinstore(): Promise<UnifiedInstrument[]> {
