@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import './home.css';
 import {
   ArrowRight, Bell, BrainCircuit, ChevronRight, CircleUserRound, Flame,
-  Grid2X2, LineChart, Play, Search, Sparkles, TrendingUp, Wallet,
+  Grid2X2, LineChart, Search, Sparkles, TrendingUp, Wallet,
 } from 'lucide-react';
 
 type HomeInstrument = {
@@ -73,11 +73,6 @@ export default function HomeView({ instruments, onSelectInstrument, videoSrc = '
       </header>
 
       <div className="sire-home-scroll">
-        <section className="sire-home-greeting">
-          <div><strong>Good evening, Trader</strong><span>Your market, your intelligence.</span></div>
-          <div className="sire-home-live"><i /> Markets Live</div>
-        </section>
-
         <section className="sire-home-hero">
           <video
             className="sire-home-video"
