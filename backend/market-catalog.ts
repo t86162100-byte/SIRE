@@ -2646,15 +2646,35 @@ async function uniswap(): Promise<UnifiedInstrument[]> {
 async function curve(): Promise<UnifiedInstrument[]> {
   const out: UnifiedInstrument[] = [];
   try {
-    const response = await getJson('https://api-core.curve.finance/v1/getPools/all', 60000);
-    const rows = Array.isArray(response?.data) ? response.data : Array.isArray(response) ? response : [];
+    const response = await getJson('https://api.curve.finance/v1/getPools/all', 60000);
+    // Curve's documented /getPools/all response is wrapped as { success, data }.
+    // Depending on the API deployment/version, data may be an array or a chain-keyed object.
+    const payload = response?.data ?? response;
+    const candidates: any[] = Array.isArray(payload)
+      ? payload
+      : Array.isArray(payload?.poolData)
+        ? payload.poolData
+        : Object.values(payload || {}).flatMap((value: any) => {
+            if (Array.isArray(value)) return value;
+            if (Array.isArray(value?.poolData)) return value.poolData;
+            if (Array.isArray(value?.data)) return value.data;
+            return [];
+          });
+    const rows = candidates.filter(Boolean);
     const seen = new Set<string>();
     for (const raw of rows) {
       const address = String(raw?.address || raw?.swap_address || raw?.pool_address || '').trim();
-      const chain = String(raw?.blockchainId || raw?.blockchain_id || raw?.chain || 'unknown').trim();
-      const name = String(raw?.name || raw?.plain_name || raw?.symbol || '').trim();
-      const coins = Array.isArray(raw?.coins) ? raw.coins : [];
-      const symbols = coins.map((coin: any) => String(coin?.symbol || coin?.name || '').trim()).filter(Boolean);
+      const chain = String(raw?.blockchainId || raw?.blockchain_id || raw?.chain || raw?.network || 'unknown').trim();
+      const name = String(raw?.name || raw?.plain_name || raw?.symbol || raw?.full_name || '').trim();
+      const coins = Array.isArray(raw?.coins)
+        ? raw.coins
+        : Array.isArray(raw?.underlying_coins)
+          ? raw.underlying_coins
+          : [];
+      const symbols = coins.map((coin: any) => {
+        if (typeof coin === 'string') return coin.trim();
+        return String(coin?.symbol || coin?.name || '').trim();
+      }).filter(Boolean);
       const symbol = symbols.length ? symbols.join('/') : (name || address);
       if (!address || !symbol) continue;
       const id = 'CURVE:POOL:' + chain + ':' + address.toLowerCase();
@@ -2665,7 +2685,7 @@ async function curve(): Promise<UnifiedInstrument[]> {
         baseAsset: symbols[0] || symbol,
         quoteAsset: symbols[1] || 'LP',
         fullName: name || symbol,
-        status: 'online'
+        status: raw?.isBroken ? 'offline' : 'online'
       });
       if (!item) continue;
       item.id = id;
@@ -2673,14 +2693,14 @@ async function curve(): Promise<UnifiedInstrument[]> {
       item.marketType = 'Spot';
       item.category = 'Crypto';
       item.instrumentType = 'AMM Pool';
-      item.contractType = String(raw?.pool_type || raw?.registry_id || 'Curve Pool');
+      item.contractType = String(raw?.pool_type || raw?.registry_id || raw?.poolType || 'Curve Pool');
       item.settlement = 'On-chain';
       item.displaySymbol = symbol + ' · ' + chain;
       item.logoUrl = assetLogo(symbols[0]) || providerLogo('curve');
       item.providerLogoUrl = providerLogo('curve');
       out.push(item);
     }
-    console.log('[SIRE CURVE] COMPLETE', JSON.stringify({ total: out.length, endpoint: 'official-api-getPools-all' }));
+    console.log('[SIRE CURVE] COMPLETE', JSON.stringify({ total: out.length, rawCandidates: rows.length, endpoint: 'official-api-getPools-all' }));
   } catch (error) {
     console.warn('[SIRE CURVE] official pool API failed:', error);
   }
