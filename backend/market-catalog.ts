@@ -726,8 +726,24 @@ async function phemex(): Promise<UnifiedInstrument[]> {
     // Phemex uses several product-family arrays whose names are more reliable
     // than the individual row type when the API omits type metadata.
     const keys = ['spotProducts','spotProductsV2','perpProducts','perpProductsV2','products','futureProducts','futuresProducts','optionProducts','optionsProducts'];
+    const handled = new Set<string>();
+
+    // Phemex responses commonly wrap the product-family arrays under data/result
+    // before reaching the named family keys. Descend through those wrappers so
+    // the standalone provider does not report zero merely because the payload is
+    // nested one or more levels deep.
     for (const key of keys) {
-      if (Array.isArray(value[key])) walk(value[key], key);
+      if (value[key] !== undefined) {
+        handled.add(key);
+        walk(value[key], key);
+      }
+    }
+
+    for (const [key, child] of Object.entries(value)) {
+      if (handled.has(key)) continue;
+      if (child && typeof child === 'object') {
+        walk(child, familyHint || key);
+      }
     }
 
     if (value.symbol || value.symbolName || value.instId || value.name) {
