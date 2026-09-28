@@ -1355,6 +1355,72 @@ async function bitmart(): Promise<UnifiedInstrument[]> {
   return out;
 }
 
+async function lbank(): Promise<UnifiedInstrument[]> {
+  const out: UnifiedInstrument[] = [];
+  const seen = new Set<string>();
+  const add = (raw: any, marketType: string) => {
+    const symbol = String(typeof raw === 'string' ? raw : (raw?.symbol || raw?.contractCode || '')).trim();
+    if (!symbol) return;
+    const id = 'LBANK:' + marketType + ':' + symbol;
+    if (seen.has(id)) return;
+    seen.add(id);
+    const base = String(raw?.baseCurrency || raw?.baseCcy || '').trim();
+    const quote = String(raw?.priceCurrency || raw?.quoteCurrency || raw?.quoteCcy || raw?.clearCurrency || '').trim();
+    const item = cryptoItem('LBANK', marketType, 'Crypto', {
+      ...((typeof raw === 'object' && raw) || {}),
+      symbol,
+      baseAsset: base,
+      quoteAsset: quote,
+      fullName: String(raw?.symbolName || symbol),
+      status: raw?.status || 'online',
+      contractType: marketType,
+      settleCoin: raw?.clearCurrency || undefined
+    });
+    if (!item) return;
+    item.id = id;
+    item.providerLabel = 'LBank';
+    item.marketType = marketType;
+    item.category = 'Crypto';
+    item.instrumentType = marketType;
+    out.push(item);
+  };
+
+  try {
+    const payload = await getJson('https://api.lbkex.com/v2/currencyPairs.do', 15000);
+    const rows = Array.isArray(payload?.data) ? payload.data : Array.isArray(payload) ? payload : [];
+    for (const raw of rows) add(raw, 'Spot');
+    console.log('[SIRE LBANK] Spot: ' + rows.length);
+  } catch (error) {
+    console.warn('[SIRE LBANK] Spot failed:', error);
+  }
+
+  // LBank's contract API requires productGroup. Query the documented SwapU
+  // group explicitly; this is the public instrument master for USDT-margined
+  // perpetual contracts. Add any other public groups returned by the venue.
+  for (const productGroup of ['SwapU', 'SwapC']) {
+    try {
+      const payload = await getJson(
+        'https://lbkperp.lbank.com/cfd/openApi/v1/pub/instrument?productGroup=' + encodeURIComponent(productGroup),
+        15000
+      );
+      const rows = Array.isArray(payload?.data) ? payload.data : Array.isArray(payload) ? payload : [];
+      for (const raw of rows) add(raw, 'Perpetuals');
+      console.log('[SIRE LBANK] ' + productGroup + ': ' + rows.length);
+    } catch (error) {
+      console.warn('[SIRE LBANK] ' + productGroup + ' failed:', error);
+    }
+  }
+
+  const unique = out.filter((item, index, all) => all.findIndex(other => other.id === item.id) === index);
+  console.log('[SIRE LBANK] COMPLETE', JSON.stringify({
+    total: unique.length,
+    spot: unique.filter(x => x.marketType === 'Spot').length,
+    perpetuals: unique.filter(x => x.marketType === 'Perpetuals').length,
+    futures: unique.filter(x => x.marketType === 'Futures').length,
+  }));
+  return unique;
+}
+
 async function phemex(): Promise<UnifiedInstrument[]> {
   const out: UnifiedInstrument[] = [];
   const seen = new Set<string>();
@@ -3282,6 +3348,7 @@ export async function getStandaloneMarketProviderCatalogue(
     case 'BITMART': return bitmart();
     case 'BLANK': return blank();
     case 'PHEMEX': return phemex();
+    case 'LBANK': return lbank();
     case 'MEXC': return mexc();
     default: return [];
   }
