@@ -308,3 +308,6 @@
 @keyframes sirePortalReflection{0%{transform:translateX(-2%)}100%{transform:translateX(4%)}}
 @keyframes sireCorePulse{0%,100%{transform:scale(.96);opacity:.82}50%{transform:scale(1.04);opacity:1}}
 @media(prefers-reduced-motion:reduce){.sire-home:before,.sire-home:after,.sire-home-hero:before,.sire-home-market-card:before,.sire-home-intelligence:before,.sire-home-watchlist:before,.sire-home-actions-grid button:before,.sire-home-copy-card:before,.sire-home-ai-card:before,.sire-home-earn-grid button:before,.sire-home-new-grid button:before,.sire-home-brief:before,.sire-home-copy-orbit div:nth-child(3){animation:none}}
+/* SIRE primary connected emblem */
+.sire-home-brand{width:42px;height:42px;display:flex;align-items:center;justify-content:flex-start;gap:0}
+.sire-home-logo{display:block;width:39px;height:39px;object-fit:contain;object-position:center;filter:drop-shadow(0 0 12px rgba(126,78,244,.28))}

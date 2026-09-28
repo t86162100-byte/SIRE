@@ -62,8 +62,7 @@ export default function HomeView({ instruments, onSelectInstrument, videoSrc = '
     <main className="sire-home">
       <header className="sire-home-header">
         <div className="sire-home-brand">
-          <span className="sire-home-mark">S</span>
-          <span>SIRE</span>
+          <img className="sire-home-logo" src="/sire-logo.svg" alt="SIRE" />
         </div>
         <div className="sire-home-header-actions">
           <button type="button" className="sire-home-icon" onClick={() => setSearchOpen(true)} aria-label="Search markets"><Search size={20} /></button>
