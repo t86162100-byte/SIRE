@@ -338,22 +338,19 @@ async function gateio(): Promise<UnifiedInstrument[]> {
   try {
     const rows = await getJson('https://api.gateio.ws/api/v4/spot/currency_pairs', 15000);
     for (const raw of Array.isArray(rows) ? rows : []) {
-      const status = String(raw?.trade_status || '').toLowerCase();
-      if (status && status !== 'tradable') continue;
       add(raw, 'Spot', String(raw?.id || ''), raw?.base, raw?.quote);
     }
     console.log('[SIRE GATEIO] Spot: ' + out.filter(x => x.marketType === 'Spot').length);
   } catch (e) { console.warn('[SIRE GATEIO] Spot failed:', e); }
 
-  for (const settle of ['usdt', 'usdc', 'usd', 'btc']) {
+  for (const settle of ['usdt', 'usd1', 'btc']) {
     try {
       const rows = await getJson('https://api.gateio.ws/api/v4/futures/' + settle + '/contracts', 15000);
       for (const raw of Array.isArray(rows) ? rows : []) {
         const name = String(raw?.name || '');
         const underlying = String(raw?.underlying || name).split('_')[0];
-        const type = String(raw?.type || '').toLowerCase();
-        add(raw, type === 'delivery' || raw?.expire_time ? 'Futures' : 'Perpetuals', name, underlying, settle.toUpperCase(), {
-          contractType: type || 'perpetual',
+        add(raw, 'Perpetuals', name, underlying, settle.toUpperCase(), {
+          contractType: 'perpetual',
           settlement: settle.toUpperCase(),
           expiry: raw?.expire_time || raw?.expiry_time || undefined,
         });
@@ -361,7 +358,7 @@ async function gateio(): Promise<UnifiedInstrument[]> {
     } catch (e) { console.warn('[SIRE GATEIO] Perpetual/' + settle + ' failed:', e); }
   }
 
-  for (const settle of ['usdt', 'btc', 'usd']) {
+  for (const settle of ['usdt']) {
     try {
       const rows = await getJson('https://api.gateio.ws/api/v4/delivery/' + settle + '/contracts', 15000);
       for (const raw of Array.isArray(rows) ? rows : []) {
