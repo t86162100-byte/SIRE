@@ -324,8 +324,86 @@ async function binance(): Promise<UnifiedInstrument[]> {
   });
 }
 
-async function gateio(): Promise<UnifiedInstrument[]> { const out:UnifiedInstrument[]=[];try{const r=await getJson('https://api.gateio.ws/api/v4/spot/currency_pairs',15000);for(const raw of r||[]){if(String(raw?.trade_status||'').toLowerCase()!=='tradable')continue;const i=cryptoItem('GATEIO','Spot','Crypto',{symbol:raw?.id,baseAsset:raw?.base,quoteAsset:raw?.quote,status:'online'});if(i)out.push(i)}}catch(e){console.warn('[SIRE GATEIO] Spot failed:',e)}for(const settle of ['usdt','usdc','btc','usd'])for(const kind of ['futures','delivery'])try{const r=await getJson('https://api.gateio.ws/api/v4/'+kind+'/'+settle+'/contracts',15000);for(const raw of r||[]){const i=cryptoItem('GATEIO',kind==='futures'?'Perpetuals':'Futures','Crypto',{...raw,symbol:raw?.name,baseAsset:String(raw?.underlying||'').split('_')[0],quoteAsset:settle.toUpperCase()});if(i)out.push(i)}}catch(e){console.warn('[SIRE GATEIO] '+kind+'/'+settle+' failed:',e)}try{const us=await getJson('https://api.gateio.ws/api/v4/options/underlyings',15000);for(const u of us||[]){const underlying=String(u?.name||'');if(!underlying)continue;const r=await getJson('https://api.gateio.ws/api/v4/options/contracts?underlying='+encodeURIComponent(underlying),15000);for(const raw of r||[]){const i=cryptoItem('GATEIO','Options','Crypto',{...raw,symbol:raw?.name,baseAsset:underlying.split('_')[0],quoteAsset:underlying.split('_')[1]||'USDT'});if(i)out.push(i)}}}catch(e){console.warn('[SIRE GATEIO] Options failed:',e)}return out; }
+async function gateio(): Promise<UnifiedInstrument[]> {
+  const out: UnifiedInstrument[] = [];
+  const seen = new Set<string>();
+  const add = (raw: any, marketType: string, symbol: string, base?: string, quote?: string, extra: any = {}) => {
+    const normalized = { ...raw, symbol, baseAsset: base, quoteAsset: quote, status: raw?.trade_status || raw?.status || 'online', ...extra };
+    const item = cryptoItem('GATEIO', marketType, 'Crypto', normalized);
+    if (!item || seen.has(item.id)) return;
+    seen.add(item.id);
+    out.push(item);
+  };
 
+  try {
+    const rows = await getJson('https://api.gateio.ws/api/v4/spot/currency_pairs', 15000);
+    for (const raw of Array.isArray(rows) ? rows : []) {
+      const status = String(raw?.trade_status || '').toLowerCase();
+      if (status && status !== 'tradable') continue;
+      add(raw, 'Spot', String(raw?.id || ''), raw?.base, raw?.quote);
+    }
+    console.log('[SIRE GATEIO] Spot: ' + out.filter(x => x.marketType === 'Spot').length);
+  } catch (e) { console.warn('[SIRE GATEIO] Spot failed:', e); }
+
+  for (const settle of ['usdt', 'usdc', 'usd', 'btc']) {
+    try {
+      const rows = await getJson('https://api.gateio.ws/api/v4/futures/' + settle + '/contracts', 15000);
+      for (const raw of Array.isArray(rows) ? rows : []) {
+        const name = String(raw?.name || '');
+        const underlying = String(raw?.underlying || name).split('_')[0];
+        const type = String(raw?.type || '').toLowerCase();
+        add(raw, type === 'delivery' || raw?.expire_time ? 'Futures' : 'Perpetuals', name, underlying, settle.toUpperCase(), {
+          contractType: type || 'perpetual',
+          settlement: settle.toUpperCase(),
+          expiry: raw?.expire_time || raw?.expiry_time || undefined,
+        });
+      }
+    } catch (e) { console.warn('[SIRE GATEIO] Perpetual/' + settle + ' failed:', e); }
+  }
+
+  for (const settle of ['usdt', 'btc', 'usd']) {
+    try {
+      const rows = await getJson('https://api.gateio.ws/api/v4/delivery/' + settle + '/contracts', 15000);
+      for (const raw of Array.isArray(rows) ? rows : []) {
+        const name = String(raw?.name || '');
+        const underlying = String(raw?.underlying || name).split('_')[0];
+        add(raw, 'Futures', name, underlying, settle.toUpperCase(), {
+          contractType: 'delivery',
+          settlement: settle.toUpperCase(),
+          expiry: raw?.expire_time || raw?.expiry_time || undefined,
+        });
+      }
+    } catch (e) { console.warn('[SIRE GATEIO] Delivery/' + settle + ' failed:', e); }
+  }
+
+  try {
+    const underlyings = await getJson('https://api.gateio.ws/api/v4/options/underlyings', 15000);
+    for (const u of Array.isArray(underlyings) ? underlyings : []) {
+      const underlying = String(u?.name || '');
+      if (!underlying) continue;
+      try {
+        const rows = await getJson('https://api.gateio.ws/api/v4/options/contracts?underlying=' + encodeURIComponent(underlying), 15000);
+        for (const raw of Array.isArray(rows) ? rows : []) {
+          const parts = underlying.split('_');
+          add(raw, 'Options', String(raw?.name || ''), parts[0], parts[1] || 'USDT', {
+            expiry: raw?.expiration_time || raw?.expire_time || undefined,
+            strike: raw?.strike_price,
+            optionType: raw?.put_call || raw?.option_type || undefined,
+          });
+        }
+      } catch (e) { console.warn('[SIRE GATEIO] Options underlying failed:', underlying, e); }
+    }
+  } catch (e) { console.warn('[SIRE GATEIO] Options failed:', e); }
+
+  console.log('[SIRE GATEIO] COMPLETE', JSON.stringify({
+    total: out.length,
+    spot: out.filter(x => x.marketType === 'Spot').length,
+    perpetuals: out.filter(x => x.marketType === 'Perpetuals').length,
+    futures: out.filter(x => x.marketType === 'Futures').length,
+    options: out.filter(x => x.marketType === 'Options').length,
+  }));
+  return out;
+}
 async function kucoin(): Promise<UnifiedInstrument[]> { const out:UnifiedInstrument[]=[];try{const r=await getJson('https://api.kucoin.com/api/v2/symbols',15000);for(const raw of r?.data||[]){if(raw?.enableTrading===false)continue;const i=cryptoItem('KUCOIN','Spot','Crypto',{symbol:raw?.symbol,baseAsset:raw?.baseCurrency,quoteAsset:raw?.quoteCurrency,status:'online'});if(i)out.push(i)}}catch(e){console.warn('[SIRE KUCOIN] Spot failed:',e)}for(const u of ['https://api.kucoin.com/api/v3/margin/symbols','https://api.kucoin.com/api/v1/isolated/symbols'])try{const r=await getJson(u,15000);const rows=Array.isArray(r?.data)?r.data:r?.data?.items||[];for(const raw of rows){if(raw?.enableTrading===false||raw?.tradeEnable===false)continue;const i=cryptoItem('KUCOIN','Margin','Crypto',{symbol:raw?.symbol,baseAsset:raw?.baseCurrency,quoteAsset:raw?.quoteCurrency,status:'online',isMarginEnabled:true});if(i&&!out.some(x=>x.marketType==='Margin'&&x.symbol===i.symbol))out.push(i)}}catch(e){console.warn('[SIRE KUCOIN] Margin failed:',e)}try{const r=await getJson('https://api-futures.kucoin.com/api/v1/contracts/active',15000);for(const raw of r?.data||[]){const i=cryptoItem('KUCOIN',raw?.expireDate?'Futures':'Perpetuals','Crypto',raw);if(i)out.push(i)}}catch(e){console.warn('[SIRE KUCOIN] Futures failed:',e)}return out; }
 
 async function gemini(): Promise<UnifiedInstrument[]> {
