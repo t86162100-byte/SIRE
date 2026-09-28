@@ -113,47 +113,43 @@ export default function App() {
     let globalCryptoRefresh: number | null = null;
 
     const startup = async (): Promise<Instrument[]> => {
-      const maxAttempts = 3;
-      const retryDelaysMs = [0, 2500, 5000];
-
-      let lastError = 'SIRE market catalogue failed to load.';
-      for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
-        if (cancelled) throw new Error('SIRE startup cancelled.');
-        if (retryDelaysMs[attempt - 1] > 0) {
-          await new Promise<void>(resolve => {
-            retryTimer = window.setTimeout(() => {
-              retryTimer = null;
-              resolve();
-            }, retryDelaysMs[attempt - 1]);
-          });
+      const providers: MarketProvider[] = ['DERIV','BINANCE','COINBASE','KRAKEN','BYBIT','OKX'];
+      const requests = providers.map(async provider => {
+        const response = await fetch('/api/sire/markets/provider/' + encodeURIComponent(provider), {
+          cache: 'no-store',
+          headers: { 'Cache-Control': 'no-cache' },
+        });
+        const payload = await response.json().catch(() => null);
+        if (!response.ok || !payload?.ok || !Array.isArray(payload?.instruments)) {
+          throw new Error(provider + ': ' + (payload?.error || 'provider catalogue unavailable'));
         }
+        console.info('[SIRE MARKET PROVIDER] loaded', { provider, count: payload.instruments.length });
+        return payload.instruments as Instrument[];
+      });
 
-        try {
-          console.info('[SIRE MARKET STARTUP] requesting unified market catalogue', { attempt, maxAttempts });
-          const response = await fetch('/api/sire/markets/catalog', {
-            cache: 'no-store',
-            headers: { 'Cache-Control': 'no-cache' },
-          });
-          let payload: any = null;
-          try { payload = await response.json(); } catch {}
-          if (!response.ok || !payload?.ok || !Array.isArray(payload?.instruments)) {
-            lastError = payload?.error || `SIRE market catalogue returned HTTP ${response.status}`;
-            console.warn('[SIRE MARKET STARTUP] attempt failed', { attempt, maxAttempts, error: lastError });
-            continue;
-          }
-          const items = payload.instruments as Instrument[];
-          if (!items.length) {
-            lastError = 'SIRE market catalogue returned no instruments.';
-            continue;
-          }
-          return items;
-        } catch (error) {
-          lastError = error instanceof Error ? error.message : 'Deriv market catalogue failed to load.';
-          console.warn('[DERIV STARTUP] health request failed', { attempt, maxAttempts, error: lastError });
-        }
-      }
+      const results = await Promise.allSettled(requests);
+      const instruments = results.flatMap((result, index) => {
+        if (result.status === 'fulfilled') return result.value;
+        console.warn('[SIRE MARKET PROVIDER] unavailable', {
+          provider: providers[index],
+          error: result.reason instanceof Error ? result.reason.message : String(result.reason),
+        });
+        return [];
+      });
 
-      throw new Error(lastError);
+      const seen = new Set<string>();
+      const unique = instruments.filter(item => {
+        if (!item?.id || seen.has(item.id)) return false;
+        seen.add(item.id);
+        return true;
+      });
+
+      if (!unique.length) throw new Error('All standalone market providers failed to return instruments.');
+      console.info('[SIRE MARKET STARTUP] standalone providers published', {
+        total: unique.length,
+        providers: providers.filter(provider => unique.some(item => item.provider === provider)),
+      });
+      return unique;
     };
 
     // Binance discovery must be independent of the unified catalogue. It is an
@@ -270,9 +266,9 @@ export default function App() {
       setDerivLoading(false);
       setDerivError(error instanceof Error ? error.message : 'Deriv market catalogue failed to load.');
       setInstruments(current => {
-        const preserved = current.filter(item => item.provider === 'BINANCE');
-        console.info('[SIRE MARKET STARTUP] preserving Binance catalogue after unified startup failure', {
-          binance: preserved.length,
+        const preserved = current;
+        console.info('[SIRE MARKET STARTUP] preserving already-loaded standalone provider catalogues after startup failure', {
+          total: preserved.length,
         });
         return preserved;
       });
@@ -452,7 +448,7 @@ export default function App() {
     <div className="native-terminal-body">
       <aside className="native-symbol-sidebar symbol-sidebar"><div className="sidebar-search"><Search size={15} /><input value={search} onChange={event => setSearch(event.target.value)} placeholder="Search" /></div><div className="sidebar-meta"><span>{derivLoading ? "LOADING MARKETS" : derivError ? "MARKET ERROR" : "ALL MARKETS"}</span><b>{instruments.length}</b></div>
         <div className="sire-market-providers">
-          {(['ALL','DERIV','COINBASE','KRAKEN','FXCM','TWELVEDATA','NASDAQTRADER','XETR','XFRA','EUREX','ASX','TWSE','PSX','IDX','HKEX','BSE','TSE','NSE','BITSTAMP','OANDA','FOREXCOM','INTERACTIVEBROKERS','TRADESTATION','WEBULL','MOOMOO','NINJATRADER','TRADOVATE','AMPFUTURES','TASTYTRADE','TASTYFX','ALPACA','TRADIERBROKERAGE','TRADEZERO','COBRATRADING','CLEARSTREET','INVESTRADE','PUBLIC','PLUS500US','OPTIMUSFUTURES','EDGECLEAR','IRONBEAM','STONEX','DORMANTRADING','TRADIERFUTURES','TRADINGVIEW'] as const).map(provider => (
+          {(['ALL','DERIV','BINANCE','COINBASE','KRAKEN','BYBIT','OKX','FXCM','TWELVEDATA','NASDAQTRADER','XETR','XFRA','EUREX','ASX','TWSE','PSX','IDX','HKEX','BSE','TSE','NSE','BITSTAMP','OANDA','FOREXCOM','INTERACTIVEBROKERS','TRADESTATION','WEBULL','MOOMOO','NINJATRADER','TRADOVATE','AMPFUTURES','TASTYTRADE','TASTYFX','ALPACA','TRADIERBROKERAGE','TRADEZERO','COBRATRADING','CLEARSTREET','INVESTRADE','PUBLIC','PLUS500US','OPTIMUSFUTURES','EDGECLEAR','IRONBEAM','STONEX','DORMANTRADING','TRADIERFUTURES','TRADINGVIEW'] as const).map(provider => (
             <button key={provider} type="button" className={providerFilter === provider ? 'active' : ''} onClick={() => setProviderFilter(provider)}>{provider === 'ALL' ? 'All' : provider[0] + provider.slice(1).toLowerCase()}</button>
           ))}
         </div><div className="sire-market-providers sire-market-categories">
