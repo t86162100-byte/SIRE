@@ -1285,10 +1285,10 @@ async function bitmart(): Promise<UnifiedInstrument[]> {
   const seen = new Set<string>();
 
   const add = (raw: any, marketType: string) => {
-    const symbol = String(raw?.symbol || raw?.contract_symbol || '').trim().toUpperCase();
+    const symbol = String(typeof raw === 'string' ? raw : (raw?.symbol || raw?.contract_symbol || '')).trim().toUpperCase();
     if (!symbol) return;
-    const base = String(raw?.base_currency || raw?.baseCoin || raw?.base_asset || '').trim().toUpperCase();
-    const quote = String(raw?.quote_currency || raw?.quoteCoin || raw?.quote_asset || '').trim().toUpperCase();
+    const base = String(raw?.base_currency || raw?.baseCoin || raw?.base_asset || (typeof raw === 'string' ? raw.split('_')[0] : '')).trim().toUpperCase();
+    const quote = String(raw?.quote_currency || raw?.quoteCoin || raw?.quote_asset || (typeof raw === 'string' ? raw.split('_')[1] : '')).trim().toUpperCase();
     const item = cryptoItem('BITMART', marketType, 'Crypto', {
       ...raw,
       symbol,
@@ -1395,9 +1395,11 @@ async function phemex(): Promise<UnifiedInstrument[]> {
     try {
       const payload = await getJson(endpoint, 20000);
       const result = payload?.result || payload;
-      const rows = Array.isArray(result?.products) ? result.products :
-        Array.isArray(result?.perpProductsV2) ? result.perpProductsV2 :
-        Array.isArray(result?.data) ? result.data : [];
+      const rows = [
+        ...(Array.isArray(result?.products) ? result.products : []),
+        ...(Array.isArray(result?.perpProductsV2) ? result.perpProductsV2 : []),
+        ...(Array.isArray(result?.data) ? result.data : []),
+      ];
       for (const raw of rows) {
         const type = String(raw?.type || '').toLowerCase();
         const marketType =
