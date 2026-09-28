@@ -585,26 +585,61 @@ async function coinex(): Promise<UnifiedInstrument[]> {
 }
 
 async function lbank(): Promise<UnifiedInstrument[]> {
+  const out: UnifiedInstrument[] = [];
+  const seen = new Set<string>();
+  const add = (raw: any, marketType: string, instrumentType: string, symbolOverride?: string) => {
+    const symbol = String(symbolOverride || raw?.symbol || '').trim().toUpperCase();
+    if (!symbol) return;
+    const key = marketType + ':' + symbol;
+    if (seen.has(key)) return;
+    const base = String(raw?.baseCurrency || raw?.baseAsset || '').trim().toUpperCase() || undefined;
+    const quote = String(raw?.priceCurrency || raw?.quoteCurrency || raw?.quoteAsset || '').trim().toUpperCase() || undefined;
+    const item = cryptoItem('LBANK', marketType, 'Crypto', {
+      ...raw, symbol, baseAsset: base, quoteAsset: quote,
+      fullName: raw?.symbolName || symbol, status: raw?.status || 'online',
+      type: instrumentType, contractType: raw?.contractType || instrumentType,
+      settleCoin: raw?.clearCurrency || raw?.settleCoin || quote,
+    });
+    if (!item) return;
+    item.id = 'LBANK:' + marketType + ':' + symbol;
+    item.providerLabel = 'LBank';
+    item.marketType = marketType;
+    item.category = 'Crypto';
+    item.instrumentType = instrumentType;
+    item.contractType = String(raw?.contractType || instrumentType);
+    item.settlement = String(raw?.clearCurrency || '').trim() || item.settlement;
+    item.supportsMargin = false;
+    seen.add(key);
+    out.push(item);
+  };
+
   try {
-    const payload = await getJson('https://api.lbank.info/v2/currencyPairs.do', 15000);
+    const payload = await getJson('https://api.lbkex.com/v2/currencyPairs.do', 15000);
     const rows = Array.isArray(payload?.data) ? payload.data : [];
-    const out: UnifiedInstrument[] = [];
     for (const raw of rows) {
       const symbol = String(raw || '').trim().toUpperCase();
       const parts = symbol.split('_');
-      const item = cryptoItem('LBANK', 'Spot', 'Crypto', {
-        symbol,
-        baseAsset: parts[0] || '',
-        quoteAsset: parts[1] || '',
-        fullName: symbol
-      });
-      if (item) out.push(item);
+      add({ symbol, baseCurrency: parts[0], priceCurrency: parts[1], symbolName: symbol }, 'Spot', 'SPOT', symbol);
     }
-    console.log('[SIRE LBANK] Spot: ' + out.length);
-    return out;
-  } catch (error) { console.warn('[SIRE LBANK] failed:', error); return []; }
-}
+    console.log('[SIRE LBANK] Spot published: ' + rows.length);
+  } catch (error) { console.warn('[SIRE LBANK] Spot failed:', error); }
 
+  try {
+    const payload = await getJson('https://lbkperp.lbank.com/cfd/openApi/v1/pub/instrument?productGroup=SwapU', 15000);
+    const rows = Array.isArray(payload?.data) ? payload.data : [];
+    for (const raw of rows) add(raw, 'Perpetuals', 'SWAP', raw?.symbol);
+    console.log('[SIRE LBANK] SwapU perpetuals published: ' + rows.length);
+  } catch (error) { console.warn('[SIRE LBANK] SwapU perpetuals failed:', error); }
+
+  console.log('[SIRE LBANK] COMPLETE', JSON.stringify({
+    total: out.length,
+    spot: out.filter(x => x.marketType === 'Spot').length,
+    perpetuals: out.filter(x => x.marketType === 'Perpetuals').length,
+    futures: out.filter(x => x.marketType === 'Futures').length,
+    margin: out.filter(x => x.marketType === 'Margin').length,
+  }));
+  return out;
+}
 async function woox(): Promise<UnifiedInstrument[]> {
   try {
     const payload = await getJson('https://api-pub.woox.io/v1/public/info', 15000);
@@ -3279,6 +3314,7 @@ export async function getUnifiedMarketCatalogue(fetchDeriv: () => Promise<any[]>
       ['BITFINEX', bitfinex()],
       ['GEMINI', gemini()],
       ['BITSTAMP', bitstamp()],
+      ['LBANK', lbank()],
       ['BITMART', bitmart()],
       ['PHEMEX', phemex()],
       ['FXCM', fxcm()],
