@@ -2476,44 +2476,64 @@ async function polymarket(): Promise<UnifiedInstrument[]> {
 
 async function kalshi(): Promise<UnifiedInstrument[]> {
   const out: UnifiedInstrument[] = [];
-  let cursor = '';
-  for (let page = 0; page < 100; page++) {
-    try {
-      const query = cursor ? '&cursor=' + encodeURIComponent(cursor) : '';
-      const response = await getJson('https://external-api.kalshi.com/trade-api/v2/markets?limit=200&status=open' + query, 20000);
-      const rows = Array.isArray(response?.markets) ? response.markets : [];
-      for (const m of rows) {
-        const ticker = String(m?.ticker || '').trim();
-        const title = String(m?.title || m?.subtitle || ticker).trim();
-        if (!ticker) continue;
-        const outcomes = [
-          ['YES', m?.yes_bid ?? m?.yes_ask ?? m?.last_price],
-          ['NO', m?.no_bid ?? m?.no_ask ?? (Number.isFinite(Number(m?.last_price)) ? 100 - Number(m.last_price) : undefined)]
-        ] as const;
-        for (const [side, rawPrice] of outcomes) {
-          const cents = Number(rawPrice);
-          const price = Number.isFinite(cents) ? cents / 100 : undefined;
-          const item = cryptoItem('KALSHI', 'Prediction', 'Prediction Markets', {
-            symbol: ticker + '-' + side, baseAsset: side, quoteAsset: 'USD',
-            fullName: title + ' · ' + side,
-            status: m?.status || 'open'
-          }, price !== undefined ? { last: price } : undefined);
-          if (item) {
-            item.id = 'KALSHI:Prediction:' + ticker + ':' + side;
-            item.providerLabel = 'Kalshi';
-            item.instrumentType = 'Prediction';
-            item.contractType = 'binary';
-            item.settlement = 'USD';
-            out.push(item);
+  // Kalshi's public market-data API is available without authentication.
+  // Prefer the current production market-data host, with the legacy host as a fallback.
+  const hosts = [
+    'https://api.elections.kalshi.com/trade-api/v2/markets',
+    'https://external-api.kalshi.com/trade-api/v2/markets'
+  ];
+  for (const baseUrl of hosts) {
+    let cursor = '';
+    let hostWorked = false;
+    for (let page = 0; page < 100; page++) {
+      try {
+        const query = cursor ? '&cursor=' + encodeURIComponent(cursor) : '';
+        const response = await getJson(baseUrl + '?limit=100&status=open' + query, 20000);
+        const rows = Array.isArray(response?.markets) ? response.markets : [];
+        if (rows.length) hostWorked = true;
+        for (const m of rows) {
+          const ticker = String(m?.ticker || '').trim();
+          const title = String(m?.title || m?.subtitle || ticker).trim();
+          if (!ticker) continue;
+
+          // Current Kalshi responses expose *_dollars fields; older responses may
+          // expose integer-cent fields. Support both without double-converting.
+          const toUsd = (raw: unknown, dollarRaw: unknown): number | undefined => {
+            const dollars = Number(dollarRaw);
+            if (Number.isFinite(dollars)) return dollars;
+            const cents = Number(raw);
+            return Number.isFinite(cents) ? cents / 100 : undefined;
+          };
+          const lastUsd = toUsd(m?.last_price, m?.last_price_dollars);
+          const yesUsd = toUsd(m?.yes_bid, m?.yes_bid_dollars) ?? toUsd(m?.yes_ask, m?.yes_ask_dollars) ?? lastUsd;
+          const noUsd = toUsd(m?.no_bid, m?.no_bid_dollars) ?? toUsd(m?.no_ask, m?.no_ask_dollars)
+            ?? (lastUsd !== undefined ? 1 - lastUsd : undefined);
+          const outcomes = [['YES', yesUsd], ['NO', noUsd]] as const;
+
+          for (const [side, price] of outcomes) {
+            const item = cryptoItem('KALSHI', 'Prediction', 'Prediction Markets', {
+              symbol: ticker + '-' + side, baseAsset: side, quoteAsset: 'USD',
+              fullName: title + ' · ' + side,
+              status: m?.status || 'open'
+            }, price !== undefined ? { last: price } : undefined);
+            if (item) {
+              item.id = 'KALSHI:Prediction:' + ticker + ':' + side;
+              item.providerLabel = 'Kalshi';
+              item.instrumentType = 'Prediction';
+              item.contractType = 'binary';
+              item.settlement = 'USD';
+              out.push(item);
+            }
           }
         }
+        cursor = String(response?.cursor || '').trim();
+        if (!cursor || !rows.length) break;
+      } catch (e) {
+        console.warn('[SIRE KALSHI] page failed on ' + baseUrl + ':', e);
+        break;
       }
-      cursor = String(response?.cursor || '').trim();
-      if (!cursor || !rows.length) break;
-    } catch (e) {
-      console.warn('[SIRE KALSHI] page failed:', e);
-      break;
     }
+    if (hostWorked && out.length) break;
   }
   console.log('[SIRE KALSHI] COMPLETE', JSON.stringify({ total: out.length }));
   return out;
