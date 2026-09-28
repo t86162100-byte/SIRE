@@ -44,7 +44,6 @@ function money(value?: number) {
 }
 
 export default function HomeView({ instruments, onSelectInstrument, videoSrc = '/sire-home-hero-preview.mp4' }: Props) {
-  const [videoReady, setVideoReady] = useState(true);
   const [searchOpen, setSearchOpen] = useState(false);
   const [query, setQuery] = useState('');
 
@@ -80,23 +79,15 @@ export default function HomeView({ instruments, onSelectInstrument, videoSrc = '
         </section>
 
         <section className="sire-home-hero">
-          {videoReady ? (
-            <video
-              className="sire-home-video"
-              src={videoSrc}
-              autoPlay
-              muted
-              loop
-              playsInline
-              preload="metadata"
-              onError={() => setVideoReady(false)}
-            />
-          ) : (
-            <div className="sire-home-video-fallback">
-              <div className="sire-home-fallback-grid" />
-              <div className="sire-home-fallback-glow" />
-            </div>
-          )}
+          <video
+            className="sire-home-video"
+            src={videoSrc}
+            autoPlay
+            muted
+            loop
+            playsInline
+            preload="auto"
+          />
           <div className="sire-home-hero-shade" />
           <div className="sire-home-hero-copy">
             <span className="sire-home-eyebrow">SIRE</span>
