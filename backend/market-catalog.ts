@@ -2400,6 +2400,24 @@ function derivItem(raw: any): UnifiedInstrument | null {
   };
 }
 
+export async function getStandaloneMarketProviderCatalogue(
+  provider: MarketProvider,
+  fetchDeriv: () => Promise<any[]>,
+): Promise<UnifiedInstrument[]> {
+  switch (provider) {
+    case 'DERIV': {
+      const items = await fetchDeriv();
+      return items.map(derivItem).filter(Boolean) as UnifiedInstrument[];
+    }
+    case 'BINANCE': return binance();
+    case 'COINBASE': return coinbase();
+    case 'KRAKEN': return kraken();
+    case 'BYBIT': return bybit();
+    case 'OKX': return okx();
+    default: return [];
+  }
+}
+
 export async function getUnifiedMarketCatalogue(fetchDeriv: () => Promise<any[]>): Promise<UnifiedInstrument[]> {
   if (cached && Date.now() - cached.at < CACHE_MS) return cached.instruments;
   if (loading) return loading;
