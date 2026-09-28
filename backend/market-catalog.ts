@@ -2006,7 +2006,7 @@ async function sp(): Promise<UnifiedInstrument[]> {
 
 async function okx(): Promise<UnifiedInstrument[]> {
   const out: UnifiedInstrument[] = [];
-  const endpointTypes = ['SPOT', 'MARGIN', 'SWAP', 'FUTURES', 'OPTION', 'EVENTS'] as const;
+  const endpointTypes = ['SPOT', 'MARGIN', 'SWAP', 'FUTURES'] as const;
 
   const categoryFromInstCategory = (raw: any): string => {
     const key = String(raw?.instCategory || '').trim();
@@ -2094,6 +2094,45 @@ async function okx(): Promise<UnifiedInstrument[]> {
     }
   }
 
+  // OKX requires an underlying (uly) or instrument family when querying
+  // OPTION instruments. Discover every option underlying first, then query each
+  // family so the catalog does not silently return zero options.
+  try {
+    const underlyingResponse = await getJsonAny([
+      'https://www.okx.com/api/v5/public/underlying?instType=OPTION',
+      'https://app.okx.com/api/v5/public/underlying?instType=OPTION',
+    ], 15000);
+    const families = new Set<string>();
+    for (const row of Array.isArray(underlyingResponse?.data) ? underlyingResponse.data : []) {
+      const values = Array.isArray(row?.uly) ? row.uly : [];
+      for (const value of values) {
+        const family = String(value || '').trim();
+        if (family) families.add(family);
+      }
+    }
+
+    for (const family of families) {
+      try {
+        const response = await getJsonAny([
+          'https://www.okx.com/api/v5/public/instruments?instType=OPTION&uly=' + encodeURIComponent(family),
+          'https://app.okx.com/api/v5/public/instruments?instType=OPTION&uly=' + encodeURIComponent(family),
+        ], 15000);
+        const rows = Array.isArray(response?.data) ? response.data : [];
+        for (const raw of rows) {
+          if (String(raw?.state || '').toLowerCase() !== 'live') continue;
+          const item = normalize('OPTION', raw);
+          if (item) out.push(item);
+        }
+      } catch (error) {
+        console.warn('[SIRE OKX] OPTION family ' + family + ' failed:', error);
+      }
+    }
+    console.log('[SIRE OKX] OPTION families: ' + families.size + ' / live instruments: ' +
+      out.filter(item => item.instrumentType === 'OPTION').length);
+  } catch (error) {
+    console.warn('[SIRE OKX] OPTION underlying discovery failed:', error);
+  }
+
   const seen = new Set<string>();
   const unique = out.filter(item => {
     if (seen.has(item.id)) return false;
@@ -2108,7 +2147,6 @@ async function okx(): Promise<UnifiedInstrument[]> {
     perpetuals: unique.filter(item => item.marketType === 'Perpetuals').length,
     futures: unique.filter(item => item.instrumentType === 'FUTURES' && item.marketType === 'Futures').length,
     options: unique.filter(item => item.instrumentType === 'OPTION').length,
-    events: unique.filter(item => item.instrumentType === 'EVENTS').length,
   }));
 
   return unique;
