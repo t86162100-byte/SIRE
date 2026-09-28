@@ -113,7 +113,7 @@ export default function App() {
     let globalCryptoRefresh: number | null = null;
 
     const startup = async (): Promise<Instrument[]> => {
-      const providers: MarketProvider[] = ['DERIV','BINANCE','COINBASE','KRAKEN','BYBIT','OKX','BITGET','GATEIO','KUCOIN','MEXC','CRYPTOCOM','BITFINEX','GEMINI','BITSTAMP','COINEX','HTX','BITTREX'];
+      const providers: MarketProvider[] = ['DERIV','BINANCE','COINBASE','KRAKEN','BYBIT','OKX','BITGET','GATEIO','KUCOIN','MEXC','CRYPTOCOM','BITFINEX','GEMINI','BITSTAMP','COINEX','HTX','BITTREX','BITMART','PHEMEX','BLANK'];
       const requests = providers.map(async provider => {
         const response = await fetch('/api/sire/markets/provider/' + encodeURIComponent(provider), {
           cache: 'no-store',
