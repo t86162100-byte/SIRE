@@ -1462,8 +1462,11 @@ async function phemex(): Promise<UnifiedInstrument[]> {
       const payload = await getJson(endpoint, 20000);
       const result = payload?.result || payload;
       const rows = [
+        ...(Array.isArray(result?.spotProducts) ? result.spotProducts : []),
+        ...(Array.isArray(result?.spotProductsV2) ? result.spotProductsV2 : []),
         ...(Array.isArray(result?.products) ? result.products : []),
         ...(Array.isArray(result?.perpProductsV2) ? result.perpProductsV2 : []),
+        ...(Array.isArray(result?.perpProducts) ? result.perpProducts : []),
         ...(Array.isArray(result?.data) ? result.data : []),
       ];
       for (const raw of rows) {
