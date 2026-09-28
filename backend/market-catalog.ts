@@ -1,4 +1,4 @@
-export type MarketProvider = 'BITRUE' | 'ASCENDEX' | 'COINW' | 'BINGX' | 'BINANCE' | 'FXCM' | 'YFINANCE' | 'SP' | 'DERIV' | 'BITGET' | 'BYBIT' | 'OKX' | 'KRAKEN' | 'COINBASE' | 'GATEIO' | 'KUCOIN' | 'GEMINI' | 'BITSO' | 'BITFINEX' | 'BITVAVO' | 'COINEX' | 'LBANK' | 'WOOX' | 'CRYPTOCOM' | 'HTX' | 'BITKUB' | 'UPBIT' | 'PIONEX' | 'POLONIEX' | 'BITHUMB' | 'MEXC' | 'PHEMEX' | 'WHITEBIT' | 'TWELVEDATA' | 'NASDAQTRADER' | 'CME' | 'CBOT' | 'NYMEX' | 'COMEX' | 'NYSEAMERICAN' | 'XETR' | 'HKEX' | 'BSE' | 'TSE' | 'XFRA' | 'EUREX' | 'ASX' | 'TWSE' | 'PSX' | 'IDX' | 'NSE' | 'BITSTAMP' | 'OANDA' | 'TRADINGVIEW' | 'FOREXCOM' | 'INTERACTIVEBROKERS' | 'TRADESTATION' | 'WEBULL' | 'MOOMOO' | 'NINJATRADER' | 'TRADOVATE' | 'AMPFUTURES' | 'TASTYTRADE' | 'TASTYFX' | 'CRYPTOCOMEXCHANGE' | 'COINBASEADVANCED' | 'ALPACA' | 'TRADIERBROKERAGE' | 'TRADEZERO' | 'COBRATRADING' | 'CLEARSTREET' | 'INVESTRADE' | 'PUBLIC' | 'PLUS500US' | 'OPTIMUSFUTURES' | 'EDGECLEAR' | 'IRONBEAM' | 'STONEX' | 'DORMANTRADING' | 'TRADIERFUTURES' | 'BITTREX' | 'BITMART' | 'BLANK' | 'XT' | 'DEEPCOIN' | 'TOOBIT' | 'WEEX' | 'BITUNIX' | 'BLOFIN' | 'COINCATCH' | 'ZOOMEX' | 'BTCC' | 'DIGIFINEX' | 'COINSTORE' | 'PROBIT' | 'POLONIEX' | 'COINDCX' | 'POLYMARKET' | 'KALSHI' | 'OPINION' | 'UNISWAP' | 'CURVE';
+export type MarketProvider = 'BITRUE' | 'ASCENDEX' | 'COINW' | 'BINGX' | 'BINANCE' | 'FXCM' | 'YFINANCE' | 'SP' | 'DERIV' | 'BITGET' | 'BYBIT' | 'OKX' | 'KRAKEN' | 'COINBASE' | 'GATEIO' | 'KUCOIN' | 'GEMINI' | 'BITSO' | 'BITFINEX' | 'BITVAVO' | 'COINEX' | 'LBANK' | 'WOOX' | 'CRYPTOCOM' | 'HTX' | 'BITKUB' | 'UPBIT' | 'PIONEX' | 'POLONIEX' | 'BITHUMB' | 'MEXC' | 'PHEMEX' | 'WHITEBIT' | 'TWELVEDATA' | 'NASDAQTRADER' | 'CME' | 'CBOT' | 'NYMEX' | 'COMEX' | 'NYSEAMERICAN' | 'XETR' | 'HKEX' | 'BSE' | 'TSE' | 'XFRA' | 'EUREX' | 'ASX' | 'TWSE' | 'PSX' | 'IDX' | 'NSE' | 'BITSTAMP' | 'OANDA' | 'TRADINGVIEW' | 'FOREXCOM' | 'INTERACTIVEBROKERS' | 'TRADESTATION' | 'WEBULL' | 'MOOMOO' | 'NINJATRADER' | 'TRADOVATE' | 'AMPFUTURES' | 'TASTYTRADE' | 'TASTYFX' | 'CRYPTOCOMEXCHANGE' | 'COINBASEADVANCED' | 'ALPACA' | 'TRADIERBROKERAGE' | 'TRADEZERO' | 'COBRATRADING' | 'CLEARSTREET' | 'INVESTRADE' | 'PUBLIC' | 'PLUS500US' | 'OPTIMUSFUTURES' | 'EDGECLEAR' | 'IRONBEAM' | 'STONEX' | 'DORMANTRADING' | 'TRADIERFUTURES' | 'BITTREX' | 'BITMART' | 'BLANK' | 'XT' | 'DEEPCOIN' | 'TOOBIT' | 'WEEX' | 'BITUNIX' | 'BLOFIN' | 'COINCATCH' | 'ZOOMEX' | 'BTCC' | 'DIGIFINEX' | 'COINSTORE' | 'PROBIT' | 'POLONIEX' | 'COINDCX' | 'POLYMARKET' | 'KALSHI' | 'OPINION' | 'UNISWAP' | 'CURVE' | 'PANCAKESWAP';
 
 export interface UnifiedInstrument {
   id: string;
@@ -49,6 +49,7 @@ const providerLogo = (name: string) => {
   if (value === 'opinion') return 'https://opinion.trade/favicon.ico';
   if (value === 'uniswap') return 'https://app.uniswap.org/favicon.ico';
   if (value === 'curve') return 'https://curve.fi/favicon.ico';
+  if (value === 'pancakeswap') return 'https://pancakeswap.finance/favicon.ico';
   if (value === 'nasdaq' || value === 'nasdaqtrader') return 'https://cdn.simpleicons.org/nasdaq';
   return 'https://cdn.simpleicons.org/' + value;
 };
@@ -2707,6 +2708,50 @@ async function curve(): Promise<UnifiedInstrument[]> {
   return out;
 }
 
+async function pancakeswap(): Promise<UnifiedInstrument[]> {
+  const out: UnifiedInstrument[] = [];
+  const seen = new Set<string>();
+  try {
+    const [tokensResponse, pairsResponse] = await Promise.all([
+      getJson('https://api.pancakeswap.info/api/v2/tokens', 60000),
+      getJson('https://api.pancakeswap.info/api/v2/pairs', 60000),
+    ]);
+    const tokens = tokensResponse?.data && typeof tokensResponse.data === 'object' ? tokensResponse.data : {};
+    const pairs = pairsResponse?.data && typeof pairsResponse.data === 'object' ? pairsResponse.data : {};
+    for (const [addressKey, raw] of Object.entries(tokens as Record<string, any>)) {
+      const address = String(addressKey || '').trim();
+      const symbol = String(raw?.symbol || '').trim();
+      const name = String(raw?.name || symbol || address).trim();
+      if (!address || !symbol) continue;
+      const item = cryptoItem('PANCAKESWAP', 'Spot', 'Crypto', {symbol, baseAsset:symbol, quoteAsset:'N/A', fullName:name, status:'online'}, {last:Number(raw?.price)});
+      if (!item) continue;
+      item.id='PANCAKESWAP:TOKEN:BSC:'+address.toLowerCase();
+      item.providerLabel='PancakeSwap'; item.marketType='Spot'; item.category='Crypto';
+      item.instrumentType='Token'; item.contractType='BEP-20'; item.settlement='On-chain';
+      item.exchangeOpen=1; item.displaySymbol=symbol+' · BSC'; item.name=name; item.symbol=symbol;
+      item.logoUrl=assetLogo(symbol)||providerLogo('pancakeswap'); item.providerLogoUrl=providerLogo('pancakeswap');
+      if(!seen.has(item.id)){seen.add(item.id);out.push(item);}
+    }
+    for (const raw of Object.values(pairs as Record<string, any>)) {
+      const pairAddress=String(raw?.pair_address||'').trim();
+      const baseSymbol=String(raw?.base_symbol||'').trim();
+      const quoteSymbol=String(raw?.quote_symbol||'').trim();
+      if(!pairAddress||!baseSymbol||!quoteSymbol) continue;
+      const symbol=baseSymbol+'/'+quoteSymbol;
+      const item=cryptoItem('PANCAKESWAP','Spot','Crypto',{symbol,baseAsset:baseSymbol,quoteAsset:quoteSymbol,fullName:String(raw?.base_name||baseSymbol)+' / '+String(raw?.quote_name||quoteSymbol),status:'online'},{last:Number(raw?.price)});
+      if(!item) continue;
+      item.id='PANCAKESWAP:POOL:BSC:'+pairAddress.toLowerCase();
+      item.providerLabel='PancakeSwap'; item.marketType='Spot'; item.category='Crypto';
+      item.instrumentType='AMM Pool'; item.contractType='PancakeSwap V2 Pair'; item.settlement='On-chain';
+      item.exchangeOpen=1; item.displaySymbol=symbol+' · BSC'; item.name=symbol;
+      item.logoUrl=assetLogo(baseSymbol)||providerLogo('pancakeswap'); item.providerLogoUrl=providerLogo('pancakeswap');
+      if(!seen.has(item.id)){seen.add(item.id);out.push(item);}
+    }
+    console.log('[SIRE PANCAKESWAP] COMPLETE',JSON.stringify({total:out.length,tokens:Object.keys(tokens).length,pairs:Object.keys(pairs).length,endpoint:'pancakeswap-info-v2'}));
+  } catch(error) { console.warn('[SIRE PANCAKESWAP] catalogue failed:',error); }
+  return out;
+}
+
 async function coinstore(): Promise<UnifiedInstrument[]> {
  const out:UnifiedInstrument[]=[]; const seen=new Set<string>();
  const add=(r:any)=>{const symbol=String(r?.symbolCode||r?.symbol||r?.symbolName||'').trim(); if(!symbol)return; const base=String(r?.tradeCurrencyCode||r?.baseCurrencyCode||r?.baseCoin||'').toUpperCase(); const quote=String(r?.quoteCurrencyCode||r?.quoteCoin||'').toUpperCase(); const x=cryptoItem('COINSTORE','Spot','Crypto',{...r,symbol,baseAsset:base,quoteAsset:quote,fullName:r?.displayName||symbol,status:r?.openTrade===false?'offline':'online'}); if(!x||seen.has(x.id))return; x.providerLabel='Coinstore';seen.add(x.id);out.push(x);};
@@ -2799,6 +2844,7 @@ export async function getStandaloneMarketProviderCatalogue(
     case 'OPINION': return opinion();
     case 'UNISWAP': return uniswap();
     case 'CURVE': return curve();
+    case 'PANCAKESWAP': return pancakeswap();
     default: return [];
   }
 }
@@ -2876,6 +2922,7 @@ export async function getUnifiedMarketCatalogue(fetchDeriv: () => Promise<any[]>
       ['CME', cme()],
       // Crypto market discovery is owned exclusively by the CCXT global universe.
       ['OANDA', oanda()],
+      ['PANCAKESWAP', pancakeswap()],
     ];
     const results = await Promise.allSettled(
       providers.map(([provider, promise]) =>
