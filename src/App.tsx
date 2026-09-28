@@ -5,6 +5,7 @@ import ResearchLab from './ResearchLab';
 import FinancialChart from './FinancialChart';
 import { normalizeDerivInstrument, sortDerivInstruments, type DerivInstrument } from './derivMarketData';
 import { SireErrorScreen } from './SireErrorBoundary';
+import ExchangeQuotes from './ExchangeQuotes';
 import './nativeTerminal.css';
 
 type Instrument = DerivInstrument;
@@ -298,6 +299,7 @@ export default function App() {
           </div>
         </div>}      </section>
     </div>
+    <ExchangeQuotes />
     {researchLabOpen && <ResearchLab symbol={chartSymbols[activeChartIndex] || selected?.symbol || ''} instruments={instruments.map(item => ({ symbol: item.symbol, name: item.name }))} onClose={() => setResearchLabOpen(false)} onSelectInstrument={symbol => { const item = instruments.find(candidate => candidate.symbol === symbol); if (item) selectInstrument(item); }} />}
   </main>;
 }
