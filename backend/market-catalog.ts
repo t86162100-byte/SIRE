@@ -1,4 +1,4 @@
-export type MarketProvider = 'BITRUE' | 'ASCENDEX' | 'COINW' | 'BINGX' | 'BINANCE' | 'FXCM' | 'YFINANCE' | 'SP' | 'DERIV' | 'BITGET' | 'BYBIT' | 'OKX' | 'KRAKEN' | 'COINBASE' | 'GATEIO' | 'KUCOIN' | 'GEMINI' | 'BITSO' | 'BITFINEX' | 'BITVAVO' | 'COINEX' | 'LBANK' | 'WOOX' | 'CRYPTOCOM' | 'HTX' | 'BITKUB' | 'UPBIT' | 'PIONEX' | 'POLONIEX' | 'BITHUMB' | 'MEXC' | 'PHEMEX' | 'WHITEBIT' | 'TWELVEDATA' | 'NASDAQTRADER' | 'CME' | 'CBOT' | 'NYMEX' | 'COMEX' | 'NYSEAMERICAN' | 'XETR' | 'HKEX' | 'BSE' | 'TSE' | 'XFRA' | 'EUREX' | 'ASX' | 'TWSE' | 'PSX' | 'IDX' | 'NSE' | 'BITSTAMP' | 'OANDA' | 'TRADINGVIEW' | 'FOREXCOM' | 'INTERACTIVEBROKERS' | 'TRADESTATION' | 'WEBULL' | 'MOOMOO' | 'NINJATRADER' | 'TRADOVATE' | 'AMPFUTURES' | 'TASTYTRADE' | 'TASTYFX' | 'CRYPTOCOMEXCHANGE' | 'COINBASEADVANCED' | 'ALPACA' | 'TRADIERBROKERAGE' | 'TRADEZERO' | 'COBRATRADING' | 'CLEARSTREET' | 'INVESTRADE' | 'PUBLIC' | 'PLUS500US' | 'OPTIMUSFUTURES' | 'EDGECLEAR' | 'IRONBEAM' | 'STONEX' | 'DORMANTRADING' | 'TRADIERFUTURES' | 'BITTREX' | 'BITMART' | 'BLANK' | 'XT' | 'DEEPCOIN' | 'TOOBIT' | 'WEEX' | 'BITUNIX' | 'BLOFIN' | 'COINCATCH' | 'ZOOMEX' | 'BTCC' | 'DIGIFINEX' | 'COINSTORE' | 'PROBIT' | 'POLONIEX' | 'COINDCX' | 'POLYMARKET' | 'KALSHI' | 'OPINION' | 'UNISWAP' | 'CURVE' | 'PANCAKESWAP';
+export type MarketProvider = 'BITRUE' | 'ASCENDEX' | 'COINW' | 'BINGX' | 'BINANCE' | 'FXCM' | 'YFINANCE' | 'SP' | 'DERIV' | 'BITGET' | 'BYBIT' | 'OKX' | 'KRAKEN' | 'COINBASE' | 'GATEIO' | 'KUCOIN' | 'GEMINI' | 'BITSO' | 'BITFINEX' | 'BITVAVO' | 'COINEX' | 'LBANK' | 'WOOX' | 'CRYPTOCOM' | 'HTX' | 'BITKUB' | 'UPBIT' | 'PIONEX' | 'POLONIEX' | 'BITHUMB' | 'MEXC' | 'PHEMEX' | 'WHITEBIT' | 'TWELVEDATA' | 'NASDAQTRADER' | 'CME' | 'CBOT' | 'NYMEX' | 'COMEX' | 'NYSEAMERICAN' | 'XETR' | 'HKEX' | 'BSE' | 'TSE' | 'XFRA' | 'EUREX' | 'ASX' | 'TWSE' | 'PSX' | 'IDX' | 'NSE' | 'BITSTAMP' | 'OANDA' | 'TRADINGVIEW' | 'FOREXCOM' | 'INTERACTIVEBROKERS' | 'TRADESTATION' | 'WEBULL' | 'MOOMOO' | 'NINJATRADER' | 'TRADOVATE' | 'AMPFUTURES' | 'TASTYTRADE' | 'TASTYFX' | 'CRYPTOCOMEXCHANGE' | 'COINBASEADVANCED' | 'ALPACA' | 'TRADIERBROKERAGE' | 'TRADEZERO' | 'COBRATRADING' | 'CLEARSTREET' | 'INVESTRADE' | 'PUBLIC' | 'PLUS500US' | 'OPTIMUSFUTURES' | 'EDGECLEAR' | 'IRONBEAM' | 'STONEX' | 'DORMANTRADING' | 'TRADIERFUTURES' | 'BITTREX' | 'BITMART' | 'BLANK' | 'XT' | 'DEEPCOIN' | 'TOOBIT' | 'WEEX' | 'BITUNIX' | 'BLOFIN' | 'COINCATCH' | 'ZOOMEX' | 'BTCC' | 'DIGIFINEX' | 'COINSTORE' | 'PROBIT' | 'POLONIEX' | 'COINDCX' | 'POLYMARKET' | 'KALSHI' | 'OPINION' | 'UNISWAP' | 'CURVE' | 'PANCAKESWAP' | 'SUSHISWAP' | 'RAYDIUM' | 'JUPITER' | 'ORCA' | 'AERODROME' | 'TRADERJOE' | 'ONEINCH' | 'COWSWAP' | 'BALANCER';
 
 export interface UnifiedInstrument {
   id: string;
@@ -50,6 +50,15 @@ const providerLogo = (name: string) => {
   if (value === 'uniswap') return 'https://app.uniswap.org/favicon.ico';
   if (value === 'curve') return 'https://curve.fi/favicon.ico';
   if (value === 'pancakeswap') return 'https://pancakeswap.finance/favicon.ico';
+  if (value === 'sushiswap') return 'https://www.sushi.com/favicon.ico';
+  if (value === 'raydium') return 'https://raydium.io/favicon.ico';
+  if (value === 'jupiter') return 'https://jup.ag/favicon.ico';
+  if (value === 'orca') return 'https://orca.so/favicon.ico';
+  if (value === 'aerodrome') return 'https://aerodrome.finance/favicon.ico';
+  if (value === 'traderjoe') return 'https://traderjoexyz.com/favicon.ico';
+  if (value === 'oneinch') return 'https://1inch.io/favicon.ico';
+  if (value === 'cowswap') return 'https://swap.cow.fi/favicon.ico';
+  if (value === 'balancer') return 'https://balancer.fi/favicon.ico';
   if (value === 'nasdaq' || value === 'nasdaqtrader') return 'https://cdn.simpleicons.org/nasdaq';
   return 'https://cdn.simpleicons.org/' + value;
 };
@@ -2824,6 +2833,53 @@ async function poloniex(): Promise<UnifiedInstrument[]> {
   }
 }
 
+async function geckoDexPools(provider: MarketProvider, network: string, nameNeedles: string[]): Promise<UnifiedInstrument[]> {
+  const out: UnifiedInstrument[] = []; const seen = new Set<string>();
+  try {
+    const dexPayload = await getJson('https://api.geckoterminal.com/api/v2/networks/' + encodeURIComponent(network) + '/dexes', 15000);
+    const dexRows = Array.isArray(dexPayload?.data) ? dexPayload.data : [];
+    const dexIds = dexRows.filter((d:any) => { const id=String(d?.id||'').toLowerCase(); const name=String(d?.attributes?.name||'').toLowerCase(); return nameNeedles.some(n=>id.includes(n)||name.includes(n)); }).map((d:any)=>String(d?.id||'').trim()).filter(Boolean);
+    for (const dexId of Array.from(new Set(dexIds))) {
+      for (let page=1; page<=10; page++) {
+        const payload=await getJson('https://api.geckoterminal.com/api/v2/networks/'+encodeURIComponent(network)+'/dexes/'+encodeURIComponent(dexId)+'/pools?page='+page,12000);
+        const rows=Array.isArray(payload?.data)?payload.data:[]; if(!rows.length) break;
+        for(const raw of rows){ const a=raw?.attributes||{}; const poolAddress=String(raw?.id||'').split('_').pop()||String(a?.address||''); const pair=String(a?.name||'').trim(); const parts=pair.split('/').map((v:string)=>v.trim()).filter(Boolean); const base=parts[0]||pair; const quote=parts[1]||'LP'; if(!poolAddress||!pair) continue; const id=provider+':POOL:'+network+':'+poolAddress.toLowerCase(); if(seen.has(id)) continue;
+          const item=cryptoItem(provider,'Spot','Crypto',{symbol:pair,baseAsset:base,quoteAsset:quote,fullName:pair,status:'online'},{last:Number(a?.base_token_price_usd)}); if(!item) continue;
+          item.id=id; item.providerLabel=provider==='TRADERJOE'?'Trader Joe':provider[0]+provider.slice(1).toLowerCase(); item.marketType='Spot'; item.category='Crypto'; item.instrumentType='AMM Pool'; item.contractType=provider+' AMM Pool'; item.settlement='On-chain'; item.displaySymbol=pair+' · '+network; item.name=pair; item.exchangeOpen=1; item.logoUrl=assetLogo(base)||providerLogo(provider); item.providerLogoUrl=providerLogo(provider); seen.add(id); out.push(item);
+        }
+        if(rows.length<20) break;
+      }
+    }
+  } catch(error){ console.warn('[SIRE '+provider+'] indexed pool discovery failed:',error); }
+  console.log('[SIRE '+provider+'] COMPLETE',JSON.stringify({total:out.length,network})); return out;
+}
+async function sushi(): Promise<UnifiedInstrument[]> {
+  const out:UnifiedInstrument[]=[]; const key=String(process.env.SUSHI_API_KEY||'').trim();
+  if(key){ for(const chainId of [1,8453,42161,137,10,43114,56,100]){ try{ const p=await getJsonWithHeaders('https://api.sushi.com/price/v1/'+chainId,{'x-api-key':key},12000); const rows=Array.isArray(p?.data)?p.data:[]; for(const raw of rows){ const address=String(raw?.address||raw?.tokenAddress||'').trim(), symbol=String(raw?.symbol||'').trim(); if(!address||!symbol) continue; const item=cryptoItem('SUSHISWAP','Spot','Crypto',{symbol,baseAsset:symbol,quoteAsset:'N/A',fullName:raw?.name||symbol,status:'online'},{last:raw?.price}); if(!item) continue; item.id='SUSHISWAP:TOKEN:'+chainId+':'+address.toLowerCase(); item.providerLabel='SushiSwap'; item.instrumentType='Token'; item.contractType='ERC-20'; item.settlement='On-chain'; item.displaySymbol=symbol+' · Chain '+chainId; item.logoUrl=String(raw?.logoURI||assetLogo(symbol)); item.providerLogoUrl=providerLogo('sushiswap'); if(!out.some(x=>x.id===item.id)) out.push(item); } }catch(e){console.warn('[SIRE SUSHISWAP] official chain failed:',chainId,e);} } }
+  if(!out.length){ for(const network of ['ethereum','base','arbitrum','polygon_pos','optimism','avalanche','bsc']) out.push(...await geckoDexPools('SUSHISWAP',network,['sushiswap'])); }
+  return out;
+}
+async function raydium(): Promise<UnifiedInstrument[]> {
+  const out:UnifiedInstrument[]=[]; let pageId=''; try{ for(let page=0;page<100;page++){ const q=new URLSearchParams({poolType:'all',poolSortField:'liquidity',sortType:'desc',size:'1000'}); if(pageId) q.set('pageId',pageId); const p=await getJson('https://api-v3.raydium.io/pools/info/list-v2?'+q.toString(),20000); if(p?.success===false) throw new Error('Raydium API returned success=false'); const rows=Array.isArray(p?.data?.data)?p.data.data:Array.isArray(p?.data)?p.data:[]; for(const raw of rows){ const id=String(raw?.id||raw?.ammId||raw?.poolId||'').trim(), a=String(raw?.mintA?.symbol||raw?.mintA?.name||raw?.baseMint?.symbol||'').trim(), b=String(raw?.mintB?.symbol||raw?.mintB?.name||raw?.quoteMint?.symbol||'').trim(); if(!id||!a||!b) continue; const pair=a+'/'+b; const item=cryptoItem('RAYDIUM','Spot','Crypto',{symbol:pair,baseAsset:a,quoteAsset:b,fullName:pair,status:'online'},{last:raw?.price}); if(!item) continue; item.id='RAYDIUM:POOL:SOLANA:'+id; item.providerLabel='Raydium'; item.instrumentType=String(raw?.type||raw?.poolType||'AMM Pool'); item.contractType='Raydium '+item.instrumentType; item.settlement='On-chain'; item.displaySymbol=pair+' · Solana'; item.logoUrl=assetLogo(a)||providerLogo('raydium'); item.providerLogoUrl=providerLogo('raydium'); if(!out.some(x=>x.id===item.id)) out.push(item); } const next=String(p?.data?.nextPageId||p?.nextPageId||'').trim(); if(!next||next===pageId||rows.length===0) break; pageId=next; } }catch(e){console.warn('[SIRE RAYDIUM] API failed:',e);} console.log('[SIRE RAYDIUM] COMPLETE',JSON.stringify({total:out.length})); return out;
+}
+async function jupiter(): Promise<UnifiedInstrument[]> {
+  const out:UnifiedInstrument[]=[]; try{ const key=String(process.env.JUPITER_API_KEY||'').trim(); const headers:Record<string,string>=key?{'x-api-key':key}:{}; let rows:any[]=[]; for(const endpoint of ['https://api.jup.ag/tokens/v2/tag?query=verified','https://lite-api.jup.ag/tokens/v2/tag?query=verified']){ try{ const p=await getJsonWithHeaders(endpoint,headers,20000); if(Array.isArray(p)){rows=p;break;} }catch(e){console.warn('[SIRE JUPITER] token endpoint failed:',endpoint,e);} } for(const raw of rows){ const mint=String(raw?.id||raw?.address||raw?.mint||'').trim(), symbol=String(raw?.symbol||'').trim(); if(!mint||!symbol) continue; const item=cryptoItem('JUPITER','Spot','Crypto',{symbol,baseAsset:symbol,quoteAsset:'N/A',fullName:raw?.name||symbol,status:'online'},{last:raw?.usdPrice}); if(!item) continue; item.id='JUPITER:TOKEN:SOLANA:'+mint; item.providerLabel='Jupiter'; item.instrumentType='Routed Token'; item.contractType='SPL Token'; item.settlement='On-chain'; item.displaySymbol=symbol+' · Solana'; item.name=String(raw?.name||symbol); item.logoUrl=String(raw?.icon||assetLogo(symbol)); item.providerLogoUrl=providerLogo('jupiter'); out.push(item); } }catch(e){console.warn('[SIRE JUPITER] failed:',e);} console.log('[SIRE JUPITER] COMPLETE',JSON.stringify({total:out.length})); return out;
+}
+async function orca(): Promise<UnifiedInstrument[]> {
+  const out:UnifiedInstrument[]=[]; let cursor=''; try{ for(let page=0;page<100;page++){ const p=await getJson('https://api.orca.so/v2/solana/pools'+(cursor?'?cursor='+encodeURIComponent(cursor):''),20000); const rows=Array.isArray(p?.data)?p.data:Array.isArray(p?.pools)?p.pools:[]; for(const raw of rows){ const a=String(raw?.tokenA?.symbol||raw?.tokenA?.name||'').trim(), b=String(raw?.tokenB?.symbol||raw?.tokenB?.name||'').trim(), address=String(raw?.address||raw?.addressBase58||raw?.poolAddress||raw?.id||'').trim(); if(!address||!a||!b) continue; const pair=a+'/'+b; const item=cryptoItem('ORCA','Spot','Crypto',{symbol:pair,baseAsset:a,quoteAsset:b,fullName:pair,status:'online'},{last:raw?.price}); if(!item) continue; item.id='ORCA:POOL:SOLANA:'+address; item.providerLabel='Orca'; item.instrumentType='Whirlpool'; item.contractType='Orca Whirlpool'; item.settlement='On-chain'; item.displaySymbol=pair+' · Solana'; item.logoUrl=assetLogo(a)||providerLogo('orca'); item.providerLogoUrl=providerLogo('orca'); if(!out.some(x=>x.id===item.id)) out.push(item); } const next=String(p?.nextCursor||p?.pagination?.nextCursor||'').trim(); if(!next||next===cursor||rows.length===0) break; cursor=next; } }catch(e){console.warn('[SIRE ORCA] API failed:',e);} console.log('[SIRE ORCA] COMPLETE',JSON.stringify({total:out.length})); return out;
+}
+async function aerodrome(): Promise<UnifiedInstrument[]> { return geckoDexPools('AERODROME','base',['aerodrome']); }
+async function traderJoe(): Promise<UnifiedInstrument[]> { return [...await geckoDexPools('TRADERJOE','avax',['traderjoe','trader-joe']),...await geckoDexPools('TRADERJOE','arbitrum',['traderjoe','trader-joe']),...await geckoDexPools('TRADERJOE','bsc',['traderjoe','trader-joe'])]; }
+async function oneInch(): Promise<UnifiedInstrument[]> {
+  const out:UnifiedInstrument[]=[]; const key=String(process.env.INCH_API_KEY||process.env.ONEINCH_API_KEY||'').trim(); if(!key){console.warn('[SIRE 1INCH] official Token API requires an API key; set INCH_API_KEY.');return out;} for(const chain of [1,56,137,42161,10,8453,43114,100,59144,130]){try{const p=await getJsonWithHeaders('https://api.1inch.dev/token/v1.2/'+chain,{Authorization:'Bearer '+key},15000); for(const [address,raw] of Object.entries(p||{})){const r:any=raw,symbol=String(r?.symbol||'').trim(); if(!symbol)continue; const item=cryptoItem('ONEINCH','Spot','Crypto',{symbol,baseAsset:symbol,quoteAsset:'N/A',fullName:r?.name||symbol,status:'online'},{last:r?.price}); if(!item)continue; item.id='ONEINCH:TOKEN:'+chain+':'+String(address).toLowerCase(); item.providerLabel='1inch'; item.instrumentType='Aggregated Token'; item.contractType='ERC-20'; item.settlement='On-chain'; item.displaySymbol=symbol+' · Chain '+chain; item.logoUrl=String(r?.logoURI||assetLogo(symbol)); item.providerLogoUrl=providerLogo('oneinch'); if(!out.some(x=>x.id===item.id))out.push(item);} }catch(e){console.warn('[SIRE 1INCH] token API failed:',chain,e);} } return out;
+}
+async function cowSwap(): Promise<UnifiedInstrument[]> {
+  const out:UnifiedInstrument[]=[]; for(const chain of [1,100,8453,42161,137]){try{const p=await postJson('https://api.cow.fi/'+chain+'/yield/pools',[],20000); const rows=Array.isArray(p)?p:Array.isArray(p?.data)?p.data:[]; for(const raw of rows){if(!String(raw?.project||'').toLowerCase().includes('cow'))continue; const address=String(raw?.contract_address||'').trim(); if(!address)continue; const item=cryptoItem('COWSWAP','Spot','Crypto',{symbol:'CoW AMM',baseAsset:'CoW',quoteAsset:'LP',fullName:'CoW AMM · '+address.slice(0,10),status:'online'},{last:Number(raw?.tvl)}); if(!item)continue; item.id='COWSWAP:POOL:'+chain+':'+address.toLowerCase(); item.providerLabel='CoW Swap'; item.instrumentType='CoW AMM Pool'; item.contractType='CoW AMM'; item.settlement='On-chain'; item.displaySymbol='CoW AMM · Chain '+chain; item.logoUrl=providerLogo('cowswap'); item.providerLogoUrl=providerLogo('cowswap'); if(!out.some(x=>x.id===item.id))out.push(item);} }catch(e){console.warn('[SIRE COWSWAP] yield pools failed:',chain,e);} } console.log('[SIRE COWSWAP] COMPLETE',JSON.stringify({total:out.length})); return out;
+}
+async function balancer(): Promise<UnifiedInstrument[]> {
+  const out:UnifiedInstrument[]=[]; const chains=['MAINNET','BASE','ARBITRUM','OPTIMISM','POLYGON','AVALANCHE']; const query='query Pools($first:Int,$where:GqlPoolFilter){poolGetPools(first:$first,where:$where,orderBy:totalLiquidity,orderDirection:desc){id address chain type name symbol protocolVersion dynamicData{totalLiquidity volume24h} poolTokens{address symbol}}}';
+  for(const chain of chains){try{const p=await postJson('https://api-v3.balancer.fi/graphql',{query,variables:{first:10000,where:{chainIn:[chain]}}},30000); const rows=Array.isArray(p?.data?.poolGetPools)?p.data.poolGetPools:[]; for(const raw of rows){const address=String(raw?.address||raw?.id||'').trim(),tokens=Array.isArray(raw?.poolTokens)?raw.poolTokens.map((t:any)=>String(t?.symbol||'').trim()).filter(Boolean):[]; if(!address)continue; const pair=tokens.slice(0,4).join('/'); const item=cryptoItem('BALANCER','Spot','Crypto',{symbol:pair||String(raw?.symbol||raw?.name||address),baseAsset:tokens[0]||'BAL',quoteAsset:tokens[1]||'LP',fullName:String(raw?.name||raw?.symbol||address),status:'online'},{last:Number(raw?.dynamicData?.totalLiquidity)}); if(!item)continue; item.id='BALANCER:POOL:'+String(raw?.chain||chain)+':'+address.toLowerCase(); item.providerLabel='Balancer'; item.instrumentType=String(raw?.type||'AMM Pool'); item.contractType='Balancer '+String(raw?.type||'Pool'); item.settlement='On-chain'; item.displaySymbol=(pair||String(raw?.name||address))+' · '+String(raw?.chain||chain); item.logoUrl=assetLogo(tokens[0])||providerLogo('balancer'); item.providerLogoUrl=providerLogo('balancer'); if(!out.some(x=>x.id===item.id))out.push(item);} }catch(e){console.warn('[SIRE BALANCER] GraphQL failed:',chain,e);} } console.log('[SIRE BALANCER] COMPLETE',JSON.stringify({total:out.length})); return out;
+}
 export async function getStandaloneMarketProviderCatalogue(
   provider: MarketProvider,
   fetchDeriv: () => Promise<any[]>,
@@ -2881,6 +2937,15 @@ export async function getStandaloneMarketProviderCatalogue(
     case 'UNISWAP': return uniswap();
     case 'CURVE': return curve();
     case 'PANCAKESWAP': return pancakeswap();
+    case 'SUSHISWAP': return sushi();
+    case 'RAYDIUM': return raydium();
+    case 'JUPITER': return jupiter();
+    case 'ORCA': return orca();
+    case 'AERODROME': return aerodrome();
+    case 'TRADERJOE': return traderJoe();
+    case 'ONEINCH': return oneInch();
+    case 'COWSWAP': return cowSwap();
+    case 'BALANCER': return balancer();
     default: return [];
   }
 }
