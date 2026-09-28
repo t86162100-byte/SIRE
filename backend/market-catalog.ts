@@ -1,4 +1,4 @@
-export type MarketProvider = 'BITRUE' | 'ASCENDEX' | 'COINW' | 'BINGX' | 'BINANCE' | 'FXCM' | 'YFINANCE' | 'SP' | 'DERIV' | 'BITGET' | 'BYBIT' | 'OKX' | 'KRAKEN' | 'COINBASE' | 'GATEIO' | 'KUCOIN' | 'GEMINI' | 'BITSO' | 'BITFINEX' | 'BITVAVO' | 'COINEX' | 'LBANK' | 'WOOX' | 'CRYPTOCOM' | 'HTX' | 'BITKUB' | 'UPBIT' | 'PIONEX' | 'POLONIEX' | 'BITHUMB' | 'MEXC' | 'PHEMEX' | 'WHITEBIT' | 'TWELVEDATA' | 'NASDAQTRADER' | 'CME' | 'CBOT' | 'NYMEX' | 'COMEX' | 'NYSEAMERICAN' | 'XETR' | 'HKEX' | 'BSE' | 'TSE' | 'XFRA' | 'EUREX' | 'ASX' | 'TWSE' | 'PSX' | 'IDX' | 'NSE' | 'BITSTAMP' | 'OANDA' | 'TRADINGVIEW' | 'FOREXCOM' | 'INTERACTIVEBROKERS' | 'TRADESTATION' | 'WEBULL' | 'MOOMOO' | 'NINJATRADER' | 'TRADOVATE' | 'AMPFUTURES' | 'TASTYTRADE' | 'TASTYFX' | 'CRYPTOCOMEXCHANGE' | 'COINBASEADVANCED' | 'ALPACA' | 'TRADIERBROKERAGE' | 'TRADEZERO' | 'COBRATRADING' | 'CLEARSTREET' | 'INVESTRADE' | 'PUBLIC' | 'PLUS500US' | 'OPTIMUSFUTURES' | 'EDGECLEAR' | 'IRONBEAM' | 'STONEX' | 'DORMANTRADING' | 'TRADIERFUTURES' | 'BITTREX' | 'BITMART' | 'BLANK' | 'XT' | 'DEEPCOIN' | 'TOOBIT' | 'WEEX' | 'BITUNIX' | 'BLOFIN' | 'COINCATCH' | 'ZOOMEX' | 'BTCC' | 'DIGIFINEX' | 'COINSTORE' | 'PROBIT' | 'POLONIEX' | 'COINDCX' | 'POLYMARKET' | 'KALSHI' | 'OPINION' | 'UNISWAP';
+export type MarketProvider = 'BITRUE' | 'ASCENDEX' | 'COINW' | 'BINGX' | 'BINANCE' | 'FXCM' | 'YFINANCE' | 'SP' | 'DERIV' | 'BITGET' | 'BYBIT' | 'OKX' | 'KRAKEN' | 'COINBASE' | 'GATEIO' | 'KUCOIN' | 'GEMINI' | 'BITSO' | 'BITFINEX' | 'BITVAVO' | 'COINEX' | 'LBANK' | 'WOOX' | 'CRYPTOCOM' | 'HTX' | 'BITKUB' | 'UPBIT' | 'PIONEX' | 'POLONIEX' | 'BITHUMB' | 'MEXC' | 'PHEMEX' | 'WHITEBIT' | 'TWELVEDATA' | 'NASDAQTRADER' | 'CME' | 'CBOT' | 'NYMEX' | 'COMEX' | 'NYSEAMERICAN' | 'XETR' | 'HKEX' | 'BSE' | 'TSE' | 'XFRA' | 'EUREX' | 'ASX' | 'TWSE' | 'PSX' | 'IDX' | 'NSE' | 'BITSTAMP' | 'OANDA' | 'TRADINGVIEW' | 'FOREXCOM' | 'INTERACTIVEBROKERS' | 'TRADESTATION' | 'WEBULL' | 'MOOMOO' | 'NINJATRADER' | 'TRADOVATE' | 'AMPFUTURES' | 'TASTYTRADE' | 'TASTYFX' | 'CRYPTOCOMEXCHANGE' | 'COINBASEADVANCED' | 'ALPACA' | 'TRADIERBROKERAGE' | 'TRADEZERO' | 'COBRATRADING' | 'CLEARSTREET' | 'INVESTRADE' | 'PUBLIC' | 'PLUS500US' | 'OPTIMUSFUTURES' | 'EDGECLEAR' | 'IRONBEAM' | 'STONEX' | 'DORMANTRADING' | 'TRADIERFUTURES' | 'BITTREX' | 'BITMART' | 'BLANK' | 'XT' | 'DEEPCOIN' | 'TOOBIT' | 'WEEX' | 'BITUNIX' | 'BLOFIN' | 'COINCATCH' | 'ZOOMEX' | 'BTCC' | 'DIGIFINEX' | 'COINSTORE' | 'PROBIT' | 'POLONIEX' | 'COINDCX' | 'POLYMARKET' | 'KALSHI' | 'OPINION' | 'UNISWAP' | 'CURVE';
 
 export interface UnifiedInstrument {
   id: string;
@@ -48,6 +48,7 @@ const providerLogo = (name: string) => {
   if (value === 'kalshi') return 'https://kalshi.com/favicon.ico';
   if (value === 'opinion') return 'https://opinion.trade/favicon.ico';
   if (value === 'uniswap') return 'https://app.uniswap.org/favicon.ico';
+  if (value === 'curve') return 'https://curve.fi/favicon.ico';
   if (value === 'nasdaq' || value === 'nasdaqtrader') return 'https://cdn.simpleicons.org/nasdaq';
   return 'https://cdn.simpleicons.org/' + value;
 };
@@ -2588,75 +2589,48 @@ async function opinion(): Promise<UnifiedInstrument[]> {
   return out;
 }
 
-async function uniswap(): Promise<UnifiedInstrument[]> {
+async function curve(): Promise<UnifiedInstrument[]> {
   const out: UnifiedInstrument[] = [];
-  const key = String(process.env.UNISWAP_API_KEY || '').trim();
-  if (!key) {
-    console.warn('[SIRE UNISWAP] UNISWAP_API_KEY is not configured.');
-    return out;
-  }
-
-  // Uniswap's official token endpoint returns the full default token list
-  // across the API's supported chains when sort=default.
-  const endpoint = 'https://trade-api.gateway.uniswap.org/v1/tokens?sort=default';
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 30000);
   try {
-    const headers: Record<string,string> = {
-      Accept: 'application/json',
-      'User-Agent': 'SIRE-market-catalog/1.0'
-    };
-    headers['x-api-key'] = key;
-    const response = await fetch(endpoint, { signal: controller.signal, headers });
-    if (!response.ok) throw new Error('HTTP ' + response.status);
-    const payload = await response.json();
-    const rows = Array.isArray(payload?.tokens) ? payload.tokens : [];
-
+    const response = await getJson('https://api.curve.finance/v1/getPools/all', 30000);
+    const rows = Array.isArray(response?.data) ? response.data : Array.isArray(response) ? response : [];
+    const seen = new Set<string>();
     for (const raw of rows) {
-      const address = String(raw?.address || '').trim();
-      const symbol = String(raw?.symbol || '').trim();
-      const name = String(raw?.name || symbol || address).trim();
-      const chainId = Number(raw?.chainId);
-      if (!address || !symbol || !Number.isFinite(chainId)) continue;
-
-      const item = cryptoItem('UNISWAP', 'Spot', 'Crypto', {
+      const address = String(raw?.address || raw?.swap_address || raw?.pool_address || '').trim();
+      const chain = String(raw?.blockchainId || raw?.blockchain_id || raw?.chain || 'unknown').trim();
+      const name = String(raw?.name || raw?.plain_name || raw?.symbol || '').trim();
+      const coins = Array.isArray(raw?.coins) ? raw.coins : [];
+      const symbols = coins.map((coin: any) => String(coin?.symbol || coin?.name || '').trim()).filter(Boolean);
+      const symbol = symbols.length ? symbols.join('/') : (name || address);
+      if (!address || !symbol) continue;
+      const id = 'CURVE:POOL:' + chain + ':' + address.toLowerCase();
+      if (seen.has(id)) continue;
+      seen.add(id);
+      const item = cryptoItem('CURVE' as MarketProvider, 'Spot', 'Crypto', {
         symbol,
-        baseAsset: symbol,
-        quoteAsset: 'N/A',
-        fullName: name,
+        baseAsset: symbols[0] || symbol,
+        quoteAsset: symbols[1] || 'LP',
+        fullName: name || symbol,
         status: 'online'
       });
       if (!item) continue;
-
-      item.id = 'UNISWAP:TOKEN:' + chainId + ':' + address.toLowerCase();
-      item.providerLabel = 'Uniswap';
+      item.id = id;
+      item.providerLabel = 'Curve';
       item.marketType = 'Spot';
       item.category = 'Crypto';
-      item.instrumentType = 'Token';
-      item.contractType = 'ERC-20';
+      item.instrumentType = 'AMM Pool';
+      item.contractType = String(raw?.pool_type || raw?.registry_id || 'Curve Pool');
       item.settlement = 'On-chain';
-      item.exchangeOpen = 1;
-      item.displaySymbol = symbol + ' · Chain ' + chainId;
-      item.name = name;
-      item.symbol = symbol;
-      item.logoUrl = String(raw?.logoURI || assetLogo(symbol));
-      item.providerLogoUrl = providerLogo('uniswap');
+      item.displaySymbol = symbol + ' · ' + chain;
+      item.logoUrl = assetLogo(symbols[0]) || providerLogo('curve');
+      item.providerLogoUrl = providerLogo('curve');
       out.push(item);
     }
-
-    const seen = new Set<string>();
-    const unique = out.filter(item => !seen.has(item.id) && (seen.add(item.id), true));
-    console.log('[SIRE UNISWAP] COMPLETE', JSON.stringify({
-      total: unique.length,
-      endpoint: 'official-api-token-catalogue'
-    }));
-    return unique;
+    console.log('[SIRE CURVE] COMPLETE', JSON.stringify({ total: out.length, endpoint: 'official-api-getPools-all' }));
   } catch (error) {
-    console.warn('[SIRE UNISWAP] official API catalogue failed:', error);
-    return [];
-  } finally {
-    clearTimeout(timer);
+    console.warn('[SIRE CURVE] official pool API failed:', error);
   }
+  return out;
 }
 
 async function coinstore(): Promise<UnifiedInstrument[]> {
@@ -2750,6 +2724,7 @@ export async function getStandaloneMarketProviderCatalogue(
     case 'KALSHI': return kalshi();
     case 'OPINION': return opinion();
     case 'UNISWAP': return uniswap();
+    case 'CURVE': return curve();
     default: return [];
   }
 }
