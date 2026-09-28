@@ -2316,92 +2316,6 @@ async function probit(): Promise<UnifiedInstrument[]> {
  return out;
 }
 async function poloniex(): Promise<UnifiedInstrument[]> {
- const out:UnifiedInstrument[]=[];const seen=new Set<string>();
- const add=(r:any,type:string)=>{const symbol=String(r?.symbol||r?.s||'').trim();if(!symbol)return;const p=symbol.replace(/_PERP$/i,'').split('_');const base=String(r?.baseCurrencyName||r?.bCcy||p[0]||'').toUpperCase(),quote=String(r?.quoteCurrencyName||r?.qCcy||p[1]||'').toUpperCase();const x=cryptoItem('POLONIEX',type,'Crypto',{...r,symbol,baseAsset:base,quoteAsset:quote,fullName:r?.displayName||symbol,status:r?.state||r?.status||'online',contractType:type==='Perpetuals'?'perpetual':undefined,settleCoin:r?.sCcy||quote});if(!x||seen.has(x.id))return;x.providerLabel='Poloniex';seen.add(x.id);out.push(x);};
- try{const r=await getJson('https://api.poloniex.com/markets',20000);(Array.isArray(r)?r:[]).forEach(x=>add(x,'Spot'));}catch(e){console.warn('[SIRE POLONIEX] Spot failed:',e)}
- try{const r=await getJson('https://api.poloniex.com/v3/market/allInstruments',20000);(Array.isArray(r?.data)?r.data:Array.isArray(r)?r:[]).forEach(x=>add(x,'Perpetuals'));}catch(e){console.warn('[SIRE POLONIEX] Futures failed:',e)}
- return out;
-}
-async function coindcx(): Promise<UnifiedInstrument[]> {
- const out:UnifiedInstrument[]=[];const seen=new Set<string>();
- const add=(r:any,type:string)=>{const symbol=String(r?.pair||r?.symbol||r?.instrument||'').trim();if(!symbol)return;const p=symbol.replace(/^B-/,'').split('_');const base=String(r?.base_currency_short_name||r?.base_currency||r?.position_currency_short_name||p[0]||'').toUpperCase(),quote=String(r?.quote_currency_short_name||r?.quote_currency||r?.settle_currency_short_name||p[1]||'').toUpperCase();const x=cryptoItem('COINDCX',type,'Crypto',{...r,symbol,baseAsset:base,quoteAsset:quote,fullName:r?.display_name||symbol,status:r?.status||'active',contractType:r?.kind||(type==='Perpetuals'?'perpetual':undefined),settleCoin:r?.settle_currency_short_name||quote});if(!x||seen.has(x.id))return;x.providerLabel='CoinDCX';seen.add(x.id);out.push(x);};
- try{const r=await getJson('https://api.coindcx.com/exchange/v1/markets',20000);(Array.isArray(r)?r:[]).forEach(x=>add(x,'Spot'));}catch(e){console.warn('[SIRE COINDCX] Spot failed:',e)}
- for(const m of ['USDT','INR'])try{const r=await getJson('https://api.coindcx.com/exchange/v1/derivatives/futures/data/active_instruments?margin_currency_short_name[]='+m,20000);const rows=Array.isArray(r)?r:Array.isArray(r?.data)?r.data:[];rows.forEach(x=>add(x,'Perpetuals'));}catch(e){console.warn('[SIRE COINDCX] Futures '+m+' failed:',e)}
- return out;
-}
-
-export 
-async function bithumb(): Promise<UnifiedInstrument[]> {
-  try {
-    const markets = await getJson('https://api.bithumb.com/v1/market/all?isDetails=true');
-    const rows = Array.isArray(markets) ? markets : [];
-    const symbols = rows.map((m: any) => String(m?.market || '')).filter(Boolean);
-    const tickers = symbols.length ? await getJson('https://api.bithumb.com/v1/ticker?markets=' + encodeURIComponent(symbols.join(','))) : [];
-    const prices = new Map((Array.isArray(tickers) ? tickers : []).map((t: any) => [String(t?.market || ''), t]));
-    return rows.map((m: any) => {
-      const symbol = String(m?.market || '');
-      const [quote, base] = symbol.split('-');
-      return cryptoItem('BITHUMB', 'Spot', 'Crypto', {
-        symbol, baseAsset: base, quoteAsset: quote,
-        fullName: m?.english_name || m?.korean_name || base, status: m?.market_warning === 'CAUTION' ? 'caution' : 'online'
-      }, prices.get(symbol));
-    }).filter(Boolean) as UnifiedInstrument[];
-  } catch (e) {
-    console.warn('[SIRE BITHUMB] failed', e);
-    return [];
-  }
-}
-
-async function upbit(): Promise<UnifiedInstrument[]> {
-  try {
-    const base = 'https://sg-api.upbit.com';
-    const markets = await getJson(base + '/v1/market/all?isDetails=true');
-    const rows = Array.isArray(markets) ? markets : [];
-    const symbols = rows.map((m: any) => String(m?.market || '')).filter(Boolean);
-    const tickers = symbols.length ? await getJson(base + '/v1/ticker?markets=' + encodeURIComponent(symbols.join(','))) : [];
-    const prices = new Map((Array.isArray(tickers) ? tickers : []).map((t: any) => [String(t?.market || ''), t]));
-    return rows.map((m: any) => {
-      const symbol = String(m?.market || '');
-      const [quote, baseAsset] = symbol.split('-');
-      return cryptoItem('UPBIT', 'Spot', 'Crypto', {
-        symbol, baseAsset, quoteAsset: quote,
-        fullName: m?.english_name || baseAsset, status: m?.market_warning === 'CAUTION' ? 'caution' : 'online'
-      }, prices.get(symbol));
-    }).filter(Boolean) as UnifiedInstrument[];
-  } catch (e) {
-    console.warn('[SIRE UPBIT] failed', e);
-    return [];
-  }
-}
-
-async function pionex(): Promise<UnifiedInstrument[]> {
-  try {
-    const [spot, perp] = await Promise.all([
-      getJson('https://api.pionex.com/api/v1/market/tickers?type=SPOT'),
-      getJson('https://api.pionex.com/api/v1/market/tickers?type=PERP')
-    ]);
-    const out: UnifiedInstrument[] = [];
-    for (const [payload, type] of [[spot, 'Spot'], [perp, 'Perpetuals']] as const) {
-      const rows = Array.isArray(payload?.data?.tickers) ? payload.data.tickers : [];
-      for (const t of rows) {
-        const symbol = String(t?.symbol || '');
-        if (!symbol) continue;
-        const clean = symbol.replace(/_PERP$/, '');
-        const [base, quote] = clean.split('_');
-        const item = cryptoItem('PIONEX', type, 'Crypto', {
-          symbol, baseAsset: base, quoteAsset: quote, fullName: clean, status: 'online'
-        }, { last: t?.close });
-        if (item) out.push(item);
-      }
-    }
-    return out;
-  } catch (e) {
-    console.warn('[SIRE PIONEX] failed', e);
-    return [];
-  }
-}
-
-async function poloniex(): Promise<UnifiedInstrument[]> {
   try {
     const markets = await getJson('https://api.poloniex.com/markets');
     const rows = Array.isArray(markets) ? markets : Array.isArray(markets?.data) ? markets.data : [];
@@ -2475,7 +2389,6 @@ async function getStandaloneMarketProviderCatalogue(
     case 'POLONIEX': return poloniex();
     case 'COINSTORE': return coinstore();
     case 'PROBIT': return probit();
-    case 'POLONIEX': return poloniex();
     case 'COINDCX': return coindcx();
     default: return [];
   }
