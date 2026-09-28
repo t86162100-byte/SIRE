@@ -1,4 +1,4 @@
-export type MarketProvider = 'BITRUE' | 'ASCENDEX' | 'COINW' | 'BINGX' | 'BINANCE' | 'FXCM' | 'YFINANCE' | 'SP' | 'DERIV' | 'BITGET' | 'BYBIT' | 'OKX' | 'KRAKEN' | 'COINBASE' | 'GATEIO' | 'KUCOIN' | 'GEMINI' | 'BITSO' | 'BITFINEX' | 'BITVAVO' | 'COINEX' | 'LBANK' | 'WOOX' | 'CRYPTOCOM' | 'HTX' | 'BITKUB' | 'UPBIT' | 'PIONEX' | 'POLONIEX' | 'BITHUMB' | 'MEXC' | 'PHEMEX' | 'WHITEBIT' | 'TWELVEDATA' | 'NASDAQTRADER' | 'CME' | 'CBOT' | 'NYMEX' | 'COMEX' | 'NYSEAMERICAN' | 'XETR' | 'HKEX' | 'BSE' | 'TSE' | 'XFRA' | 'EUREX' | 'ASX' | 'TWSE' | 'PSX' | 'IDX' | 'NSE' | 'BITSTAMP' | 'OANDA' | 'TRADINGVIEW' | 'FOREXCOM' | 'INTERACTIVEBROKERS' | 'TRADESTATION' | 'WEBULL' | 'MOOMOO' | 'NINJATRADER' | 'TRADOVATE' | 'AMPFUTURES' | 'TASTYTRADE' | 'TASTYFX' | 'CRYPTOCOMEXCHANGE' | 'COINBASEADVANCED' | 'ALPACA' | 'TRADIERBROKERAGE' | 'TRADEZERO' | 'COBRATRADING' | 'CLEARSTREET' | 'INVESTRADE' | 'PUBLIC' | 'PLUS500US' | 'OPTIMUSFUTURES' | 'EDGECLEAR' | 'IRONBEAM' | 'STONEX' | 'DORMANTRADING' | 'TRADIERFUTURES' | 'BITTREX' | 'BITMART' | 'BLANK' | 'XT' | 'DEEPCOIN';
+export type MarketProvider = 'BITRUE' | 'ASCENDEX' | 'COINW' | 'BINGX' | 'BINANCE' | 'FXCM' | 'YFINANCE' | 'SP' | 'DERIV' | 'BITGET' | 'BYBIT' | 'OKX' | 'KRAKEN' | 'COINBASE' | 'GATEIO' | 'KUCOIN' | 'GEMINI' | 'BITSO' | 'BITFINEX' | 'BITVAVO' | 'COINEX' | 'LBANK' | 'WOOX' | 'CRYPTOCOM' | 'HTX' | 'BITKUB' | 'UPBIT' | 'PIONEX' | 'POLONIEX' | 'BITHUMB' | 'MEXC' | 'PHEMEX' | 'WHITEBIT' | 'TWELVEDATA' | 'NASDAQTRADER' | 'CME' | 'CBOT' | 'NYMEX' | 'COMEX' | 'NYSEAMERICAN' | 'XETR' | 'HKEX' | 'BSE' | 'TSE' | 'XFRA' | 'EUREX' | 'ASX' | 'TWSE' | 'PSX' | 'IDX' | 'NSE' | 'BITSTAMP' | 'OANDA' | 'TRADINGVIEW' | 'FOREXCOM' | 'INTERACTIVEBROKERS' | 'TRADESTATION' | 'WEBULL' | 'MOOMOO' | 'NINJATRADER' | 'TRADOVATE' | 'AMPFUTURES' | 'TASTYTRADE' | 'TASTYFX' | 'CRYPTOCOMEXCHANGE' | 'COINBASEADVANCED' | 'ALPACA' | 'TRADIERBROKERAGE' | 'TRADEZERO' | 'COBRATRADING' | 'CLEARSTREET' | 'INVESTRADE' | 'PUBLIC' | 'PLUS500US' | 'OPTIMUSFUTURES' | 'EDGECLEAR' | 'IRONBEAM' | 'STONEX' | 'DORMANTRADING' | 'TRADIERFUTURES' | 'BITTREX' | 'BITMART' | 'BLANK' | 'XT' | 'DEEPCOIN' | 'TOOBIT' | 'WEEX' | 'BITUNIX' | 'BLOFIN';
 
 export interface UnifiedInstrument {
   id: string;
@@ -1840,6 +1840,233 @@ async function deepcoin(): Promise<UnifiedInstrument[]> {
 }
 
 
+async function toobit(): Promise<UnifiedInstrument[]> {
+  const out: UnifiedInstrument[] = [];
+  const seen = new Set<string>();
+  const add = (raw: any, marketType: string, symbolOverride?: string) => {
+    const symbol = String(symbolOverride || raw?.symbol || raw?.symbolId || raw?.contractName || '').trim();
+    if (!symbol) return;
+    const base = String(raw?.baseAsset || raw?.baseCoin || raw?.baseCurrency || raw?.base || '').trim();
+    const quote = String(raw?.quoteAsset || raw?.quoteCoin || raw?.quoteCurrency || raw?.quote || '').trim();
+    const rawCategories = Array.isArray(raw?.categories) ? raw.categories.join(' ') : String(raw?.category || '');
+    const lower = rawCategories.toLowerCase();
+    const category = lower.includes('forex') ? 'Forex' : lower.includes('stock') ? 'Stocks' : lower.includes('commodity') ? 'Commodities' : 'Crypto';
+    const item = cryptoItem('TOOBIT', marketType, category, {
+      ...raw,
+      symbol,
+      baseAsset: base,
+      quoteAsset: quote,
+      fullName: raw?.displayName || raw?.display_name || symbol,
+      status: raw?.status || raw?.symbolStatus || raw?.state || 'online',
+      contractType: raw?.contractType || raw?.contract_type || (marketType === 'Perpetuals' ? 'perpetual' : undefined),
+      settleCoin: raw?.settleCoin || raw?.settleCurrency || raw?.settleAsset || quote,
+      deliveryTime: raw?.deliveryTime || raw?.expireTime || raw?.expiryTime || undefined,
+    });
+    if (!item || seen.has(item.id)) return;
+    item.providerLabel = 'Toobit';
+    item.marketType = marketType;
+    item.category = category;
+    item.instrumentType = marketType;
+    seen.add(item.id);
+    out.push(item);
+  };
+
+  try {
+    const response = await getJson('https://api.toobit.com/api/v1/exchangeInfo', 20000);
+    const symbols = Array.isArray(response?.symbols) ? response.symbols : [];
+    for (const raw of symbols) add(raw, 'Spot');
+    const contracts = Array.isArray(response?.contracts) ? response.contracts : [];
+    for (const raw of contracts) {
+      const contractType = String(raw?.contractType || raw?.type || '').toUpperCase();
+      const symbol = String(raw?.symbol || raw?.symbolId || '').trim();
+      const marketType = contractType.includes('PERPETUAL') || /SWAP|PERP/i.test(symbol) ? 'Perpetuals' : 'Futures';
+      add(raw, marketType, symbol);
+    }
+    console.log('[SIRE TOOBIT] exchangeInfo', JSON.stringify({ spot: symbols.length, contracts: contracts.length }));
+  } catch (error) {
+    console.warn('[SIRE TOOBIT] exchangeInfo failed:', error);
+  }
+
+  console.log('[SIRE TOOBIT] COMPLETE', JSON.stringify({
+    total: out.length,
+    spot: out.filter(x => x.marketType === 'Spot').length,
+    perpetuals: out.filter(x => x.marketType === 'Perpetuals').length,
+    futures: out.filter(x => x.marketType === 'Futures').length,
+  }));
+  return out;
+}
+
+async function weex(): Promise<UnifiedInstrument[]> {
+  const out: UnifiedInstrument[] = [];
+  const seen = new Set<string>();
+  const add = (raw: any, marketType: string, providerSymbol?: string) => {
+    const symbol = String(providerSymbol || raw?.symbol || raw?.symbolName || '').trim();
+    if (!symbol) return;
+    const base = String(raw?.baseCoin || raw?.baseAsset || raw?.baseCurrency || raw?.base || '').trim();
+    const quote = String(raw?.quoteCoin || raw?.quoteAsset || raw?.quoteCurrency || raw?.quote || '').trim();
+    const item = cryptoItem('WEEX', marketType, 'Crypto', {
+      ...raw,
+      symbol,
+      baseAsset: base,
+      quoteAsset: quote,
+      fullName: raw?.displayName || raw?.display_name || symbol,
+      status: raw?.status || raw?.state || 'online',
+      contractType: raw?.contractType || raw?.contract_type || (marketType === 'Perpetuals' ? 'perpetual' : undefined),
+      settleCoin: raw?.settleCoin || raw?.settleCurrency || raw?.marginCoin || quote,
+      deliveryTime: raw?.expireTime || raw?.deliveryTime || undefined,
+    });
+    if (!item || seen.has(item.id)) return;
+    item.providerLabel = 'WEEX';
+    item.marketType = marketType;
+    item.category = 'Crypto';
+    item.instrumentType = marketType;
+    seen.add(item.id);
+    out.push(item);
+  };
+
+  try {
+    const response = await getJson('https://api-spot.weex.com/api/v3/exchangeInfo', 20000);
+    const rows = Array.isArray(response?.symbols) ? response.symbols : [];
+    for (const raw of rows) add(raw, 'Spot');
+    console.log('[SIRE WEEX] Spot: ' + rows.length);
+  } catch (error) {
+    console.warn('[SIRE WEEX] Spot failed:', error);
+  }
+
+  try {
+    const response = await getJson('https://api-contract.weex.com/capi/v3/market/exchangeInfo', 20000);
+    const rows = Array.isArray(response?.symbols) ? response.symbols : [];
+    for (const raw of rows) {
+      const contractType = String(raw?.contractType || raw?.type || '').toUpperCase();
+      add(raw, contractType.includes('PERPETUAL') || !contractType ? 'Perpetuals' : 'Futures');
+    }
+    console.log('[SIRE WEEX] Futures: ' + rows.length);
+  } catch (error) {
+    console.warn('[SIRE WEEX] Futures failed:', error);
+  }
+
+  console.log('[SIRE WEEX] COMPLETE', JSON.stringify({
+    total: out.length,
+    spot: out.filter(x => x.marketType === 'Spot').length,
+    perpetuals: out.filter(x => x.marketType === 'Perpetuals').length,
+    futures: out.filter(x => x.marketType === 'Futures').length,
+  }));
+  return out;
+}
+
+async function bitunix(): Promise<UnifiedInstrument[]> {
+  const out: UnifiedInstrument[] = [];
+  const seen = new Set<string>();
+  const add = (raw: any, marketType: string) => {
+    const symbol = String(raw?.symbol || raw?.symbolName || raw?.instId || '').trim();
+    if (!symbol) return;
+    const base = String(raw?.base || raw?.baseCoin || raw?.baseAsset || '').trim();
+    const quote = String(raw?.quote || raw?.quoteCoin || raw?.quoteAsset || '').trim();
+    const item = cryptoItem('BITUNIX', marketType, 'Crypto', {
+      ...raw,
+      symbol,
+      baseAsset: base,
+      quoteAsset: quote,
+      fullName: raw?.displayName || symbol,
+      status: raw?.symbolStatus || raw?.status || raw?.state || 'online',
+      contractType: marketType === 'Perpetuals' ? 'perpetual' : undefined,
+      settleCoin: raw?.settleCoin || raw?.settlementCoin || quote,
+      deliveryTime: raw?.delistTime || raw?.expireTime || undefined,
+    });
+    if (!item || seen.has(item.id)) return;
+    item.providerLabel = 'Bitunix';
+    item.marketType = marketType;
+    item.category = 'Crypto';
+    item.instrumentType = marketType;
+    seen.add(item.id);
+    out.push(item);
+  };
+
+  try {
+    const rows = await getJsonAny([
+      'https://api.bitunix.com/api/v1/spot/market/trading_pairs',
+      'https://api.bitunix.com/api/v1/spot/market/symbols',
+      'https://api.bitunix.com/api/v1/spot/market/instruments',
+    ], 15000);
+    const data = Array.isArray(rows?.data) ? rows.data : Array.isArray(rows) ? rows : [];
+    for (const raw of data) add(raw, 'Spot');
+    console.log('[SIRE BITUNIX] Spot: ' + data.length);
+  } catch (error) {
+    console.warn('[SIRE BITUNIX] Spot discovery failed:', error);
+  }
+
+  try {
+    const response = await getJson('https://fapi.bitunix.com/api/v1/futures/market/trading_pairs', 15000);
+    const rows = Array.isArray(response?.data) ? response.data : Array.isArray(response) ? response : [];
+    for (const raw of rows) add(raw, 'Perpetuals');
+    console.log('[SIRE BITUNIX] Futures: ' + rows.length);
+  } catch (error) {
+    console.warn('[SIRE BITUNIX] Futures failed:', error);
+  }
+
+  console.log('[SIRE BITUNIX] COMPLETE', JSON.stringify({
+    total: out.length,
+    spot: out.filter(x => x.marketType === 'Spot').length,
+    perpetuals: out.filter(x => x.marketType === 'Perpetuals').length,
+  }));
+  return out;
+}
+
+async function blofin(): Promise<UnifiedInstrument[]> {
+  const out: UnifiedInstrument[] = [];
+  const seen = new Set<string>();
+  const add = (raw: any, marketType: string) => {
+    const symbol = String(raw?.instId || raw?.symbol || '').trim();
+    if (!symbol) return;
+    const base = String(raw?.baseCurrency || raw?.baseCoin || raw?.baseAsset || '').trim();
+    const quote = String(raw?.quoteCurrency || raw?.quoteCoin || raw?.quoteAsset || '').trim();
+    const item = cryptoItem('BLOFIN', marketType, 'Crypto', {
+      ...raw,
+      symbol,
+      baseAsset: base,
+      quoteAsset: quote,
+      fullName: symbol,
+      status: raw?.state || raw?.status || 'online',
+      contractType: raw?.contractType || (marketType === 'Perpetuals' ? 'perpetual' : undefined),
+      settleCoin: raw?.settleCurrency || raw?.settleCoin || quote,
+      deliveryTime: raw?.expireTime || raw?.offTime || undefined,
+    });
+    if (!item || seen.has(item.id)) return;
+    item.providerLabel = 'BloFin';
+    item.marketType = marketType;
+    item.category = 'Crypto';
+    item.instrumentType = marketType;
+    seen.add(item.id);
+    out.push(item);
+  };
+
+  try {
+    const response = await getJson('https://openapi.blofin.com/api/v1/spot/market/instruments?instType=SPOT', 20000);
+    const rows = Array.isArray(response?.data) ? response.data : [];
+    for (const raw of rows) if (String(raw?.state || '').toLowerCase() === 'live' || !raw?.state) add(raw, 'Spot');
+    console.log('[SIRE BLOFIN] Spot: ' + rows.length);
+  } catch (error) {
+    console.warn('[SIRE BLOFIN] Spot failed:', error);
+  }
+
+  try {
+    const response = await getJson('https://openapi.blofin.com/api/v1/market/instruments', 20000);
+    const rows = Array.isArray(response?.data) ? response.data : [];
+    for (const raw of rows) if (String(raw?.state || '').toLowerCase() === 'live' || !raw?.state) add(raw, 'Perpetuals');
+    console.log('[SIRE BLOFIN] Perpetuals: ' + rows.length);
+  } catch (error) {
+    console.warn('[SIRE BLOFIN] Perpetuals failed:', error);
+  }
+
+  console.log('[SIRE BLOFIN] COMPLETE', JSON.stringify({
+    total: out.length,
+    spot: out.filter(x => x.marketType === 'Spot').length,
+    perpetuals: out.filter(x => x.marketType === 'Perpetuals').length,
+  }));
+  return out;
+}
+
+
 export async function getStandaloneMarketProviderCatalogue(
   provider: MarketProvider,
   fetchDeriv: () => Promise<any[]>,
@@ -1871,6 +2098,10 @@ export async function getStandaloneMarketProviderCatalogue(
     case 'BITTREX': return bittrex();
     case 'XT': return xt();
     case 'DEEPCOIN': return deepcoin();
+    case 'TOOBIT': return toobit();
+    case 'WEEX': return weex();
+    case 'BITUNIX': return bitunix();
+    case 'BLOFIN': return blofin();
     case 'BITMART': return bitmart();
     case 'BLANK': return blank();
     case 'PHEMEX': return phemex();
@@ -1918,6 +2149,10 @@ export async function getUnifiedMarketCatalogue(fetchDeriv: () => Promise<any[]>
       ['BITTREX', bittrex()],
       ['XT', xt()],
       ['DEEPCOIN', deepcoin()],
+      ['TOOBIT', toobit()],
+      ['WEEX', weex()],
+      ['BITUNIX', bitunix()],
+      ['BLOFIN', blofin()],
       ['LBANK', lbank()],
       ['BITMART', bitmart()],
       ['PHEMEX', phemex()],
