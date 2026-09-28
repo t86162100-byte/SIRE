@@ -925,7 +925,7 @@ const server = http.createServer(async (req,res) => {
     }
     if (req.method === 'GET' && pathname.startsWith('/api/sire/markets/provider/')) {
       const provider = decodeURIComponent(pathname.slice('/api/sire/markets/provider/'.length)).toUpperCase();
-      const allowed = new Set(['DERIV','BINANCE','COINBASE','KRAKEN','BYBIT','OKX','BITGET','GATEIO']);
+      const allowed = new Set(['DERIV','BINANCE','COINBASE','KRAKEN','BYBIT','OKX','BITGET','GATEIO','KUCOIN','MEXC']);
       if (!allowed.has(provider)) {
         return res.writeHead(404,{ 'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8' }).end(JSON.stringify({ok:false,error:'Unknown standalone market provider: '+provider}));
       }
