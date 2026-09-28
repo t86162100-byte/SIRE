@@ -1,4 +1,4 @@
-export type MarketProvider = 'BITRUE' | 'ASCENDEX' | 'COINW' | 'BINGX' | 'BINANCE' | 'FXCM' | 'YFINANCE' | 'SP' | 'DERIV' | 'BITGET' | 'BYBIT' | 'OKX' | 'KRAKEN' | 'COINBASE' | 'GATEIO' | 'KUCOIN' | 'GEMINI' | 'BITSO' | 'BITFINEX' | 'BITVAVO' | 'COINEX' | 'LBANK' | 'WOOX' | 'CRYPTOCOM' | 'HTX' | 'BITKUB' | 'UPBIT' | 'PIONEX' | 'POLONIEX' | 'BITHUMB' | 'MEXC' | 'PHEMEX' | 'WHITEBIT' | 'TWELVEDATA' | 'NASDAQTRADER' | 'CME' | 'CBOT' | 'NYMEX' | 'COMEX' | 'NYSEAMERICAN' | 'XETR' | 'HKEX' | 'BSE' | 'TSE' | 'XFRA' | 'EUREX' | 'ASX' | 'TWSE' | 'PSX' | 'IDX' | 'NSE' | 'BITSTAMP' | 'OANDA' | 'TRADINGVIEW' | 'FOREXCOM' | 'INTERACTIVEBROKERS' | 'TRADESTATION' | 'WEBULL' | 'MOOMOO' | 'NINJATRADER' | 'TRADOVATE' | 'AMPFUTURES' | 'TASTYTRADE' | 'TASTYFX' | 'CRYPTOCOMEXCHANGE' | 'COINBASEADVANCED' | 'ALPACA' | 'TRADIERBROKERAGE' | 'TRADEZERO' | 'COBRATRADING' | 'CLEARSTREET' | 'INVESTRADE' | 'PUBLIC' | 'PLUS500US' | 'OPTIMUSFUTURES' | 'EDGECLEAR' | 'IRONBEAM' | 'STONEX' | 'DORMANTRADING' | 'TRADIERFUTURES' | 'BITTREX' | 'BITMART' | 'BLANK' | 'XT' | 'DEEPCOIN' | 'TOOBIT' | 'WEEX' | 'BITUNIX' | 'BLOFIN' | 'COINCATCH' | 'ZOOMEX' | 'BTCC' | 'DIGIFINEX' | 'COINSTORE' | 'PROBIT' | 'POLONIEX' | 'COINDCX';
+export type MarketProvider = 'BITRUE' | 'ASCENDEX' | 'COINW' | 'BINGX' | 'BINANCE' | 'FXCM' | 'YFINANCE' | 'SP' | 'DERIV' | 'BITGET' | 'BYBIT' | 'OKX' | 'KRAKEN' | 'COINBASE' | 'GATEIO' | 'KUCOIN' | 'GEMINI' | 'BITSO' | 'BITFINEX' | 'BITVAVO' | 'COINEX' | 'LBANK' | 'WOOX' | 'CRYPTOCOM' | 'HTX' | 'BITKUB' | 'UPBIT' | 'PIONEX' | 'POLONIEX' | 'BITHUMB' | 'MEXC' | 'PHEMEX' | 'WHITEBIT' | 'TWELVEDATA' | 'NASDAQTRADER' | 'CME' | 'CBOT' | 'NYMEX' | 'COMEX' | 'NYSEAMERICAN' | 'XETR' | 'HKEX' | 'BSE' | 'TSE' | 'XFRA' | 'EUREX' | 'ASX' | 'TWSE' | 'PSX' | 'IDX' | 'NSE' | 'BITSTAMP' | 'OANDA' | 'TRADINGVIEW' | 'FOREXCOM' | 'INTERACTIVEBROKERS' | 'TRADESTATION' | 'WEBULL' | 'MOOMOO' | 'NINJATRADER' | 'TRADOVATE' | 'AMPFUTURES' | 'TASTYTRADE' | 'TASTYFX' | 'CRYPTOCOMEXCHANGE' | 'COINBASEADVANCED' | 'ALPACA' | 'TRADIERBROKERAGE' | 'TRADEZERO' | 'COBRATRADING' | 'CLEARSTREET' | 'INVESTRADE' | 'PUBLIC' | 'PLUS500US' | 'OPTIMUSFUTURES' | 'EDGECLEAR' | 'IRONBEAM' | 'STONEX' | 'DORMANTRADING' | 'TRADIERFUTURES' | 'BITTREX' | 'BITMART' | 'BLANK' | 'XT' | 'DEEPCOIN' | 'TOOBIT' | 'WEEX' | 'BITUNIX' | 'BLOFIN' | 'COINCATCH' | 'ZOOMEX' | 'BTCC' | 'DIGIFINEX' | 'COINSTORE' | 'PROBIT' | 'POLONIEX' | 'COINDCX' | 'POLYMARKET' | 'KALSHI' | 'OPINION';
 
 export interface UnifiedInstrument {
   id: string;
@@ -44,6 +44,9 @@ const providerLogo = (name: string) => {
   if (value === 'probit') return 'https://www.probit.com/favicon.ico';
   if (value === 'poloniex') return 'https://poloniex.com/favicon.ico';
   if (value === 'coindcx') return 'https://coindcx.com/favicon.ico';
+  if (value === 'polymarket') return 'https://polymarket.com/favicon.ico';
+  if (value === 'kalshi') return 'https://kalshi.com/favicon.ico';
+  if (value === 'opinion') return 'https://opinion.trade/favicon.ico';
   if (value === 'nasdaq' || value === 'nasdaqtrader') return 'https://cdn.simpleicons.org/nasdaq';
   return 'https://cdn.simpleicons.org/' + value;
 };
@@ -68,6 +71,16 @@ async function getText(url: string, timeoutMs = 12000) {
   } finally {
     clearTimeout(timer);
   }
+}
+
+async function getJsonWithHeaders(url: string, headers: Record<string,string>, timeoutMs = 12000) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const response = await fetch(url, { signal: controller.signal, headers: { Accept: 'application/json', ...headers } });
+    if (!response.ok) throw new Error('HTTP ' + response.status);
+    return await response.json();
+  } finally { clearTimeout(timer); }
 }
 
 async function getJson(url: string, timeoutMs = 12000) {
@@ -2411,6 +2424,149 @@ async function pionex(): Promise<UnifiedInstrument[]> {
   }
 }
 
+async function polymarket(): Promise<UnifiedInstrument[]> {
+  const out: UnifiedInstrument[] = [];
+  let offset = 0;
+  const limit = 500;
+  for (let page = 0; page < 100; page++) {
+    try {
+      const rows = await getJson('https://gamma-api.polymarket.com/markets?active=true&closed=false&limit=' + limit + '&offset=' + offset, 20000);
+      if (!Array.isArray(rows) || !rows.length) break;
+      for (const m of rows) {
+        const marketId = String(m?.id || m?.conditionId || '').trim();
+        const question = String(m?.question || m?.title || '').trim();
+        if (!marketId || !question) continue;
+        let outcomes: any[] = [];
+        let tokenIds: any[] = [];
+        try { outcomes = Array.isArray(m?.outcomes) ? m.outcomes : JSON.parse(String(m?.outcomes || '[]')); } catch {}
+        try { tokenIds = Array.isArray(m?.clobTokenIds) ? m.clobTokenIds : JSON.parse(String(m?.clobTokenIds || '[]')); } catch {}
+        let prices: any[] = [];
+        try { prices = Array.isArray(m?.outcomePrices) ? m.outcomePrices : JSON.parse(String(m?.outcomePrices || '[]')); } catch {}
+        for (let i = 0; i < Math.max(outcomes.length, tokenIds.length); i++) {
+          const outcome = String(outcomes[i] || (i === 0 ? 'YES' : i === 1 ? 'NO' : 'Outcome ' + (i + 1))).trim();
+          const tokenId = String(tokenIds[i] || '').trim();
+          if (!tokenId) continue;
+          const price = Number(prices[i]);
+          const symbol = 'PM-' + marketId + '-' + outcome.replace(/[^A-Za-z0-9]+/g, '-').toUpperCase();
+          const item = cryptoItem('POLYMARKET', 'Prediction', 'Prediction Markets', {
+            symbol, baseAsset: outcome, quoteAsset: 'USD',
+            fullName: question + ' · ' + outcome,
+            status: m?.active && !m?.closed ? 'online' : 'closed'
+          }, Number.isFinite(price) ? { last: price } : undefined);
+          if (item) {
+            item.id = 'POLYMARKET:Prediction:' + tokenId;
+            item.providerLabel = 'Polymarket';
+            item.instrumentType = 'Prediction';
+            item.contractType = 'binary';
+            item.settlement = 'USD';
+            out.push(item);
+          }
+        }
+      }
+      offset += rows.length;
+      if (rows.length < limit) break;
+    } catch (e) {
+      console.warn('[SIRE POLYMARKET] page failed:', e);
+      break;
+    }
+  }
+  console.log('[SIRE POLYMARKET] COMPLETE', JSON.stringify({ total: out.length }));
+  return out;
+}
+
+async function kalshi(): Promise<UnifiedInstrument[]> {
+  const out: UnifiedInstrument[] = [];
+  let cursor = '';
+  for (let page = 0; page < 100; page++) {
+    try {
+      const query = cursor ? '&cursor=' + encodeURIComponent(cursor) : '';
+      const response = await getJson('https://external-api.kalshi.com/trade-api/v2/markets?limit=200&status=open' + query, 20000);
+      const rows = Array.isArray(response?.markets) ? response.markets : [];
+      for (const m of rows) {
+        const ticker = String(m?.ticker || '').trim();
+        const title = String(m?.title || m?.subtitle || ticker).trim();
+        if (!ticker) continue;
+        const outcomes = [
+          ['YES', m?.yes_bid ?? m?.yes_ask ?? m?.last_price],
+          ['NO', m?.no_bid ?? m?.no_ask ?? (Number.isFinite(Number(m?.last_price)) ? 100 - Number(m.last_price) : undefined)]
+        ] as const;
+        for (const [side, rawPrice] of outcomes) {
+          const cents = Number(rawPrice);
+          const price = Number.isFinite(cents) ? cents / 100 : undefined;
+          const item = cryptoItem('KALSHI', 'Prediction', 'Prediction Markets', {
+            symbol: ticker + '-' + side, baseAsset: side, quoteAsset: 'USD',
+            fullName: title + ' · ' + side,
+            status: m?.status || 'open'
+          }, price !== undefined ? { last: price } : undefined);
+          if (item) {
+            item.id = 'KALSHI:Prediction:' + ticker + ':' + side;
+            item.providerLabel = 'Kalshi';
+            item.instrumentType = 'Prediction';
+            item.contractType = 'binary';
+            item.settlement = 'USD';
+            out.push(item);
+          }
+        }
+      }
+      cursor = String(response?.cursor || '').trim();
+      if (!cursor || !rows.length) break;
+    } catch (e) {
+      console.warn('[SIRE KALSHI] page failed:', e);
+      break;
+    }
+  }
+  console.log('[SIRE KALSHI] COMPLETE', JSON.stringify({ total: out.length }));
+  return out;
+}
+
+async function opinion(): Promise<UnifiedInstrument[]> {
+  const out: UnifiedInstrument[] = [];
+  const apiKey = String(process.env.OPINION_API_KEY || '').trim();
+  if (!apiKey) {
+    console.warn('[SIRE OPINION] OPINION_API_KEY is not configured; public Opinion OpenAPI requires an API key.');
+    return out;
+  }
+  for (let page = 1; page <= 500; page++) {
+    try {
+      const url = 'https://openapi.opinion.trade/openapi/market?page=' + page + '&limit=20&status=activated&marketType=2&sortBy=3';
+      const response = await getJsonWithHeaders(url, { apikey: apiKey }, 20000);
+      const rows = Array.isArray(response?.result?.list) ? response.result.list : [];
+      for (const m of rows) {
+        const marketId = String(m?.marketId || '').trim();
+        const title = String(m?.marketTitle || m?.title || '').trim();
+        if (!marketId || !title) continue;
+        const children = Array.isArray(m?.childMarkets) && m.childMarkets.length ? m.childMarkets : [m];
+        for (const child of children) {
+          const childId = String(child?.marketId || marketId);
+          for (const [side, token] of [['YES', child?.yesTokenId], ['NO', child?.noTokenId]] as const) {
+            const tokenId = String(token || '').trim();
+            if (!tokenId) continue;
+            const item = cryptoItem('OPINION', 'Prediction', 'Prediction Markets', {
+              symbol: 'OP-' + childId + '-' + side, baseAsset: side, quoteAsset: 'USD',
+              fullName: String(child?.marketTitle || title) + ' · ' + side,
+              status: child?.statusEnum || m?.statusEnum || 'Activated'
+            });
+            if (item) {
+              item.id = 'OPINION:Prediction:' + tokenId;
+              item.providerLabel = 'Opinion';
+              item.instrumentType = 'Prediction';
+              item.contractType = Number(m?.marketType) === 1 ? 'categorical' : 'binary';
+              item.settlement = String(child?.quoteToken || m?.quoteToken || 'USD');
+              out.push(item);
+            }
+          }
+        }
+      }
+      if (rows.length < 20) break;
+    } catch (e) {
+      console.warn('[SIRE OPINION] page failed:', e);
+      break;
+    }
+  }
+  console.log('[SIRE OPINION] COMPLETE', JSON.stringify({ total: out.length }));
+  return out;
+}
+
 async function coinstore(): Promise<UnifiedInstrument[]> {
  const out:UnifiedInstrument[]=[]; const seen=new Set<string>();
  const add=(r:any)=>{const symbol=String(r?.symbolCode||r?.symbol||r?.symbolName||'').trim(); if(!symbol)return; const base=String(r?.tradeCurrencyCode||r?.baseCurrencyCode||r?.baseCoin||'').toUpperCase(); const quote=String(r?.quoteCurrencyCode||r?.quoteCoin||'').toUpperCase(); const x=cryptoItem('COINSTORE','Spot','Crypto',{...r,symbol,baseAsset:base,quoteAsset:quote,fullName:r?.displayName||symbol,status:r?.openTrade===false?'offline':'online'}); if(!x||seen.has(x.id))return; x.providerLabel='Coinstore';seen.add(x.id);out.push(x);};
@@ -2498,6 +2654,9 @@ export async function getStandaloneMarketProviderCatalogue(
     case 'COINSTORE': return coinstore();
     case 'PROBIT': return probit();
     case 'COINDCX': return coindcx();
+    case 'POLYMARKET': return polymarket();
+    case 'KALSHI': return kalshi();
+    case 'OPINION': return opinion();
     default: return [];
   }
 }
@@ -2559,6 +2718,9 @@ export async function getUnifiedMarketCatalogue(fetchDeriv: () => Promise<any[]>
       ['PROBIT', probit()],
       ['POLONIEX', poloniex()],
       ['COINDCX', coindcx()],
+      ['POLYMARKET', polymarket()],
+      ['KALSHI', kalshi()],
+      ['OPINION', opinion()],
       ['FXCM', fxcm()],
       // Nasdaq Trader supplies the public instrument master for Nasdaq-listed,
       // other U.S.-listed, bonds, NOM options, mutual funds and additional
