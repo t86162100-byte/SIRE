@@ -2098,18 +2098,185 @@ async function zoomex(): Promise<UnifiedInstrument[]> {
 }
 
 async function btcc(): Promise<UnifiedInstrument[]> {
-  const out: UnifiedInstrument[]=[]; const seen=new Set<string>();
-  const add=(raw:any,marketType='Perpetuals')=>{
-    const symbol=String(raw?.symbol||raw?.symbolName||raw?.instrument_id||raw?.contract||raw?.market||'').trim(); if(!symbol)return;
-    const base=String(raw?.baseCoin||raw?.baseAsset||raw?.base_currency||'').trim().toUpperCase(); const quote=String(raw?.quoteCoin||raw?.quoteAsset||raw?.quote_currency||'').trim().toUpperCase();
-    const item=cryptoItem('BTCC',marketType,'Crypto',{...raw,symbol,baseAsset:base||symbol.replace(/[_-]/g,'').replace(/USDT|USD|USDC$/i,''),quoteAsset:quote||(/USDT/i.test(symbol)?'USDT':'USD'),fullName:raw?.displayName||raw?.name||symbol,status:raw?.status||raw?.state||'online',contractType:raw?.contractType||raw?.contract_type||(marketType==='Perpetuals'?'perpetual':undefined),settleCoin:raw?.settleCoin||raw?.settlement||quote||'USDT'});
-    if(!item||seen.has(item.id))return; item.providerLabel='BTCC'; item.marketType=marketType; item.instrumentType=marketType; seen.add(item.id); out.push(item);
+  const out: UnifiedInstrument[] = [];
+  const seen = new Set<string>();
+
+  const add = (raw: any, marketType: string, category = 'Crypto') => {
+    const symbol = String(
+      raw?.symbol || raw?.symbolName || raw?.instId || raw?.instrumentId ||
+      raw?.productId || raw?.contract || raw?.market || raw?.code || ''
+    ).trim();
+    if (!symbol) return;
+
+    const normalizedType = String(raw?.marketType || raw?.productType || raw?.type || raw?.product || '').toLowerCase();
+    const normalizedCategory = String(raw?.category || raw?.assetClass || raw?.assetType || category).trim();
+
+    let resolvedType = marketType;
+    let resolvedCategory = normalizedCategory || category;
+    if (/tradfi|forex|stock|equity|metal|commodity|index|oil/i.test(resolvedCategory + ' ' + normalizedType)) {
+      resolvedCategory = /forex/i.test(resolvedCategory + ' ' + normalizedType) ? 'Forex'
+        : /stock|equity/i.test(resolvedCategory + ' ' + normalizedType) ? 'Stocks'
+        : /metal|commodity|oil/i.test(resolvedCategory + ' ' + normalizedType) ? 'Commodities'
+        : 'Indices';
+      resolvedType = 'TradFi';
+    } else if (/spot/i.test(resolvedCategory + ' ' + normalizedType)) {
+      resolvedType = 'Spot';
+      resolvedCategory = 'Crypto';
+    } else if (/coin.?m/i.test(resolvedCategory + ' ' + normalizedType)) {
+      resolvedType = 'Coin-M Perpetuals';
+      resolvedCategory = 'Crypto';
+    } else if (/usdc.?m/i.test(resolvedCategory + ' ' + normalizedType)) {
+      resolvedType = 'USDC-M Perpetuals';
+      resolvedCategory = 'Crypto';
+    } else if (/usdt.?m|perpetual|future|swap/i.test(resolvedCategory + ' ' + normalizedType)) {
+      resolvedType = 'USDT-M Perpetuals';
+      resolvedCategory = 'Crypto';
+    }
+
+    const base = String(raw?.baseCoin || raw?.baseAsset || raw?.base_currency || raw?.base || '').trim().toUpperCase();
+    const quote = String(raw?.quoteCoin || raw?.quoteAsset || raw?.quote_currency || raw?.quote || '').trim().toUpperCase();
+    const item = cryptoItem('BTCC', resolvedType, resolvedCategory, {
+      ...raw,
+      symbol,
+      baseAsset: base || symbol.replace(/[\\/_-]/g, '').replace(/USDT|USDC|USD$/i, ''),
+      quoteAsset: quote || (/USDC/i.test(symbol) ? 'USDC' : /USDT/i.test(symbol) ? 'USDT' : 'USD'),
+      fullName: raw?.displayName || raw?.name || raw?.title || symbol,
+      status: raw?.status || raw?.state || 'online',
+      contractType: raw?.contractType || raw?.contract_type || (/perpetual/i.test(resolvedType) ? 'perpetual' : undefined),
+      settleCoin: raw?.settleCoin || raw?.settlement || raw?.settleCurrency || quote || 'USDT',
+    });
+    if (!item) return;
+    const key = item.id;
+    if (seen.has(key)) return;
+    seen.add(key);
+    item.providerLabel = 'BTCC';
+    item.marketType = resolvedType;
+    item.instrumentType = resolvedType;
+    out.push(item);
   };
-  for(const url of ['https://pro-data.btcc.com/data/pro/symbols','https://pro-data.btcc.com/data/pro/markets','https://pro-data.btcc.com/data/pro/products','https://api.btcc.com/data/pro/symbols','https://api.btcc.com/data/pro/markets']){
-    try { const r=await getJson(url,15000); const rows=Array.isArray(r)?r:Array.isArray(r?.symbols)?r.symbols:Array.isArray(r?.markets)?r.markets:Array.isArray(r?.data)?r.data:Array.isArray(r?.data?.symbols)?r.data.symbols:Array.isArray(r?.data?.markets)?r.data.markets:[]; for(const raw of rows)add(raw); if(rows.length){console.log('[SIRE BTCC] catalogue',url,rows.length);break;} } catch(e){console.warn('[SIRE BTCC] catalogue failed:',url,e);}
+
+  // BTCC suspended its public Futures API in February 2026. The web terminal
+  // remains operational, so use the live market page as the public catalogue
+  // source instead of retired pro-data/api endpoints.
+  const pages = [
+    'https://www.btcc.com/en-US/markets',
+    'https://www.btcc.com/en-US/markets?type=usdt',
+    'https://www.btcc.com/en-US/markets?type=usdc',
+    'https://www.btcc.com/en-US/markets?type=coin',
+    'https://www.btcc.com/en-US/markets?type=tradfi',
+  ];
+
+  const collect = (value: any, context = '') => {
+    if (!value) return;
+    if (Array.isArray(value)) {
+      for (const entry of value) collect(entry, context);
+      return;
+    }
+    if (typeof value !== 'object') return;
+
+    const typeContext = [
+      context,
+      value?.marketType, value?.productType, value?.product,
+      value?.category, value?.assetClass, value?.assetType,
+      value?.tab, value?.name, value?.title
+    ].filter(Boolean).join(' ');
+
+    const symbol = value?.symbol || value?.symbolName || value?.instId ||
+      value?.instrumentId || value?.productId || value?.contract ||
+      value?.market || value?.code;
+    if (symbol) {
+      const text = String(symbol);
+      if (/^[A-Za-z0-9._/-]{2,40}$/.test(text) &&
+          (/[A-Za-z]/.test(text)) &&
+          !/^(all|product|price|markets|favorites)$/i.test(text)) {
+        add(value, /tradfi|forex|stock|equity|metal|commodity|index|oil/i.test(typeContext)
+          ? 'TradFi'
+          : /spot/i.test(typeContext) ? 'Spot'
+          : /coin.?m/i.test(typeContext) ? 'Coin-M Perpetuals'
+          : /usdc.?m/i.test(typeContext) ? 'USDC-M Perpetuals'
+          : 'USDT-M Perpetuals',
+          /forex/i.test(typeContext) ? 'Forex'
+          : /stock|equity/i.test(typeContext) ? 'Stocks'
+          : /metal|commodity|oil/i.test(typeContext) ? 'Commodities'
+          : /index/i.test(typeContext) ? 'Indices'
+          : 'Crypto');
+      }
+    }
+
+    for (const [key, child] of Object.entries(value)) {
+      if (key === 'children' || key === 'props' || key === 'data' || key === 'state' ||
+          key === 'markets' || key === 'products' || key === 'instruments' ||
+          key === 'symbols' || key === 'items' || key === 'list' || key === 'rows') {
+        collect(child, typeContext);
+      } else if (child && typeof child === 'object') {
+        collect(child, typeContext);
+      }
+    }
+  };
+
+  for (const url of pages) {
+    try {
+      const html = await getText(url, 20000);
+      let parsed = false;
+
+      // Next.js/React data blobs, if present.
+      const scriptPattern = /<script[^>]*>([\\s\\S]*?)<\\/script>/gi;
+      let match: RegExpExecArray | null;
+      while ((match = scriptPattern.exec(html))) {
+        const body = match[1].trim();
+        if (!body || body.length < 2 || body.length > 8_000_000) continue;
+        if (!(body.startsWith('{') || body.startsWith('['))) continue;
+        try {
+          collect(JSON.parse(body), url);
+          parsed = true;
+        } catch {
+          // Ignore unrelated JavaScript; the raw HTML fallback below still runs.
+        }
+      }
+
+      // Raw HTML fallback for server-rendered market rows.
+      const symbolPattern = /(?:symbol|symbolName|instId|instrumentId|productId|contract|code)["'\\s:=]+["']([A-Za-z0-9._/-]{2,40})["']/gi;
+      while ((match = symbolPattern.exec(html))) {
+        const symbol = match[1];
+        if (/^(all|product|price|markets|favorites)$/i.test(symbol)) continue;
+        add({ symbol }, /tradfi|forex|stock|equity|metal|commodity|index|oil/i.test(url)
+          ? 'TradFi' : /spot/i.test(url) ? 'Spot' : 'USDT-M Perpetuals',
+          /tradfi|forex|stock|equity|metal|commodity|index|oil/i.test(url) ? 'TradFi' : 'Crypto');
+      }
+
+      console.log('[SIRE BTCC] web market page', url, JSON.stringify({ bytes: html.length, parsed, total: out.length }));
+    } catch (error) {
+      console.warn('[SIRE BTCC] web market page failed:', url, error);
+    }
   }
-  try { const r=await getJsonAny(['https://pro-data.btcc.com/data/pro/tickers','https://api.btcc.com/data/pro/tickers'],12000); const rows=Array.isArray(r)?r:Array.isArray(r?.data)?r.data:Array.isArray(r?.tickers)?r.tickers:[]; for(const raw of rows)add(raw); console.log('[SIRE BTCC] ticker rows:',rows.length); } catch(e){console.warn('[SIRE BTCC] ticker catalogue failed:',e);}
-  console.log('[SIRE BTCC] COMPLETE',JSON.stringify({total:out.length})); return out;
+
+  // BTCC's current web catalogue explicitly exposes these TradFi products.
+  // Keep them as a verified fallback only when the web payload omits them.
+  const tradfiFallback = [
+    ['XAUUSD','Commodities'], ['XAGUSD','Commodities'], ['XPTUSD','Commodities'],
+    ['XPDUSD','Commodities'], ['XALUSD','Commodities'], ['UKOIL','Commodities'],
+    ['USOIL','Commodities'], ['DJ30','Indices'], ['TECH100','Indices'],
+    ['SP500','Indices'], ['GER30','Indices'], ['UK100','Indices'],
+    ['GBPUSD','Forex'], ['EURUSD','Forex'], ['AUDUSD','Forex'], ['NZDUSD','Forex'],
+    ['META','Stocks'], ['TSLA','Stocks'], ['MSFT','Stocks'], ['GOOG','Stocks'],
+    ['AAPL','Stocks'], ['AMD','Stocks'], ['AMZN','Stocks'], ['NVIDIA','Stocks'],
+    ['ORCL','Stocks'], ['NFLX','Stocks'], ['INTEL','Stocks'],
+  ] as const;
+  for (const [symbol, category] of tradfiFallback) {
+    if (!out.some(item => item.symbol === symbol && item.marketType === 'TradFi')) {
+      add({ symbol, name: symbol }, 'TradFi', category);
+    }
+  }
+
+  console.log('[SIRE BTCC] COMPLETE', JSON.stringify({
+    total: out.length,
+    usdtm: out.filter(item => item.marketType === 'USDT-M Perpetuals').length,
+    usdcm: out.filter(item => item.marketType === 'USDC-M Perpetuals').length,
+    coinm: out.filter(item => item.marketType === 'Coin-M Perpetuals').length,
+    spot: out.filter(item => item.marketType === 'Spot').length,
+    tradfi: out.filter(item => item.marketType === 'TradFi').length,
+  }));
+  return out;
 }
 
 async function digifinex(): Promise<UnifiedInstrument[]> {
