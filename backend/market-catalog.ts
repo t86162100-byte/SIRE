@@ -2004,6 +2004,168 @@ async function sp(): Promise<UnifiedInstrument[]> {
   return items;
 }
 
+async function bybit(): Promise<UnifiedInstrument[]> {
+  const out: UnifiedInstrument[] = [];
+  const seen = new Set<string>();
+
+  const add = (raw: any, marketType: string, category: string, instrumentType?: string) => {
+    const symbol = String(raw?.symbol || '').trim();
+    if (!symbol) return;
+    const key = category + ':' + symbol;
+    if (seen.has(key)) return;
+
+    const item = cryptoItem('BYBIT', marketType, category, {
+      ...raw,
+      symbol,
+      baseCoin: raw?.baseCoin,
+      quoteCoin: raw?.quoteCoin,
+      fullName: raw?.fullName || raw?.displayName || symbol,
+      status: raw?.status || 'online',
+      contractType: raw?.contractType || raw?.eventContractType,
+      settleCoin: raw?.settleCoin,
+      deliveryTime: raw?.deliveryTime,
+      strikePrice: raw?.strikePrice,
+      optionsType: raw?.optionsType,
+      isMarginEnabled: raw?.marginTrading && raw.marginTrading !== 'none',
+    });
+    if (!item) return;
+
+    item.id = 'BYBIT:' + category + ':' + symbol;
+    item.providerLabel = 'Bybit';
+    item.marketType = marketType;
+    item.category = category;
+    item.instrumentType = instrumentType || marketType;
+    item.contractType = String(raw?.contractType || raw?.eventContractType || '').trim() || item.contractType;
+    item.settlement = String(raw?.settleCoin || '').trim() || item.settlement;
+    item.expiry = String(raw?.deliveryTime || '').trim() || item.expiry;
+    item.strike = Number.isFinite(Number(raw?.strikePrice)) ? Number(raw.strikePrice) : item.strike;
+    item.optionType = String(raw?.optionsType || '').trim() || item.optionType;
+    item.supportsMargin = Boolean(raw?.marginTrading && raw.marginTrading !== 'none');
+    (item as any).symbolType = raw?.symbolType;
+    (item as any).marketRegion = raw?.marketRegion;
+    (item as any).underlyingTicker = raw?.underlyingTicker;
+    (item as any).isPreListing = Boolean(raw?.isPreListing);
+    seen.add(key);
+    out.push(item);
+  };
+
+  const fetchPaged = async (category: string, params: Record<string, string>, handler: (raw: any) => void) => {
+    let cursor = '';
+    for (let page = 0; page < 1000; page += 1) {
+      const query = new URLSearchParams({ category, limit: '1000', ...params });
+      if (cursor) query.set('cursor', cursor);
+
+      const response = await getJsonAny([
+        'https://api.bybit.com/v5/market/instruments-info?' + query.toString(),
+        'https://api.bytick.com/v5/market/instruments-info?' + query.toString(),
+      ], 15000);
+
+      if (Number(response?.retCode) !== 0) {
+        throw new Error(String(response?.retMsg || 'Bybit API error'));
+      }
+
+      const rows = Array.isArray(response?.result?.list) ? response.result.list : [];
+      for (const raw of rows) handler(raw);
+
+      const next = String(response?.result?.nextPageCursor || '');
+      console.log('[SIRE BYBIT] ' + category + ' page ' + (page + 1) + ': ' + rows.length);
+      if (!next || next === cursor || rows.length === 0) break;
+      cursor = next;
+    }
+  };
+
+  try {
+    // Spot has no pagination according to Bybit's API and returns its complete
+    // online spot universe in one response.
+    await fetchPaged('spot', {}, raw => {
+      add(raw, 'Spot', 'Crypto', 'Spot');
+    });
+  } catch (error) {
+    console.warn('[SIRE BYBIT] spot failed:', error);
+  }
+
+  try {
+    // Linear contains USDT/USDC perpetuals and delivery futures. Keep the
+    // contractType supplied by Bybit so the UI can distinguish them exactly.
+    await fetchPaged('linear', {}, raw => {
+      const contractType = String(raw?.contractType || '').toLowerCase();
+      const marketType = contractType.includes('perpetual') ? 'Perpetuals' : 'Futures';
+      add(raw, marketType, 'Crypto', marketType);
+    });
+  } catch (error) {
+    console.warn('[SIRE BYBIT] linear failed:', error);
+  }
+
+  try {
+    // Inverse contains both inverse perpetuals and inverse delivery futures.
+    await fetchPaged('inverse', {}, raw => {
+      const contractType = String(raw?.contractType || '').toLowerCase();
+      const marketType = contractType.includes('perpetual') ? 'Perpetuals' : 'Futures';
+      add(raw, marketType, 'Crypto', marketType);
+    });
+  } catch (error) {
+    console.warn('[SIRE BYBIT] inverse failed:', error);
+  }
+
+  try {
+    // Passing baseCoin=All is required to enumerate the complete option
+    // universe rather than Bybit's default BTC-only option set.
+    await fetchPaged('option', { baseCoin: 'All' }, raw => {
+      const underlyingType = String(raw?.underlyingType || '').trim();
+      const category =
+        underlyingType === '1' ? 'Commodities' :
+        underlyingType === '2' ? 'Stocks' :
+        underlyingType === '3' ? 'Forex' :
+        underlyingType === '4' ? 'Oil' :
+        'Crypto';
+      add(raw, 'Options', category, 'Options');
+    });
+  } catch (error) {
+    console.warn('[SIRE BYBIT] option failed:', error);
+  }
+
+  try {
+    // Bybit Event Contracts are exposed through a separate API, not through
+    // /v5/market/instruments-info. Include every non-Closed event instrument.
+    let cursor = '';
+    for (let page = 0; page < 1000; page += 1) {
+      const query = new URLSearchParams({ limit: '100' });
+      if (cursor) query.set('cursor', cursor);
+      const response = await getJsonAny([
+        'https://api.bybit.com/v5/event/instruments-info?' + query.toString(),
+        'https://api.bytick.com/v5/event/instruments-info?' + query.toString(),
+      ], 15000);
+      if (Number(response?.retCode) !== 0) {
+        throw new Error(String(response?.retMsg || 'Bybit event API error'));
+      }
+
+      const rows = Array.isArray(response?.result?.list) ? response.result.list : [];
+      for (const raw of rows) {
+        if (String(raw?.status || '').toLowerCase() === 'closed') continue;
+        add(raw, 'Event Contracts', 'Crypto', 'Event Contracts');
+      }
+
+      const next = String(response?.result?.nextPageCursor || '');
+      console.log('[SIRE BYBIT] events page ' + (page + 1) + ': ' + rows.length);
+      if (!next || next === cursor || rows.length === 0) break;
+      cursor = next;
+    }
+  } catch (error) {
+    console.warn('[SIRE BYBIT] events failed:', error);
+  }
+
+  console.log('[SIRE BYBIT] COMPLETE', JSON.stringify({
+    total: out.length,
+    spot: out.filter(i => i.marketType === 'Spot').length,
+    perpetuals: out.filter(i => i.marketType === 'Perpetuals').length,
+    futures: out.filter(i => i.marketType === 'Futures').length,
+    options: out.filter(i => i.marketType === 'Options').length,
+    events: out.filter(i => i.marketType === 'Event Contracts').length,
+  }));
+
+  return out;
+}
+
 async function okx(): Promise<UnifiedInstrument[]> {
   const out: UnifiedInstrument[] = [];
   const endpointTypes = ['SPOT', 'MARGIN', 'SWAP', 'FUTURES'] as const;
@@ -2230,6 +2392,8 @@ export async function getUnifiedMarketCatalogue(fetchDeriv: () => Promise<any[]>
       ['BINANCE', binance()],
       ['COINBASE', coinbase()],
       ['KRAKEN', kraken()],
+      // Bybit public instrument catalogue: Spot, perpetuals, futures, options and Event Contracts.
+      ['BYBIT', bybit()],
       // OKX public instruments: Spot, Margin, Perpetuals, Futures/X-Perps,
       // Options and Event Contracts.
       ['OKX', okx()],
