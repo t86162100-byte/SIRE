@@ -401,8 +401,88 @@ async function gateio(): Promise<UnifiedInstrument[]> {
   }));
   return out;
 }
-async function kucoin(): Promise<UnifiedInstrument[]> { const out:UnifiedInstrument[]=[];try{const r=await getJson('https://api.kucoin.com/api/v2/symbols',15000);for(const raw of r?.data||[]){if(raw?.enableTrading===false)continue;const i=cryptoItem('KUCOIN','Spot','Crypto',{symbol:raw?.symbol,baseAsset:raw?.baseCurrency,quoteAsset:raw?.quoteCurrency,status:'online'});if(i)out.push(i)}}catch(e){console.warn('[SIRE KUCOIN] Spot failed:',e)}for(const u of ['https://api.kucoin.com/api/v3/margin/symbols','https://api.kucoin.com/api/v1/isolated/symbols'])try{const r=await getJson(u,15000);const rows=Array.isArray(r?.data)?r.data:r?.data?.items||[];for(const raw of rows){if(raw?.enableTrading===false||raw?.tradeEnable===false)continue;const i=cryptoItem('KUCOIN','Margin','Crypto',{symbol:raw?.symbol,baseAsset:raw?.baseCurrency,quoteAsset:raw?.quoteCurrency,status:'online',isMarginEnabled:true});if(i&&!out.some(x=>x.marketType==='Margin'&&x.symbol===i.symbol))out.push(i)}}catch(e){console.warn('[SIRE KUCOIN] Margin failed:',e)}try{const r=await getJson('https://api-futures.kucoin.com/api/v1/contracts/active',15000);for(const raw of r?.data||[]){const i=cryptoItem('KUCOIN',raw?.expireDate?'Futures':'Perpetuals','Crypto',raw);if(i)out.push(i)}}catch(e){console.warn('[SIRE KUCOIN] Futures failed:',e)}return out; }
+async function kucoin(): Promise<UnifiedInstrument[]> {
+  const out: UnifiedInstrument[] = [];
+  const seen = new Set<string>();
 
+  const add = (raw: any, marketType: string, category = 'Crypto', symbolOverride?: string) => {
+    const symbol = String(symbolOverride || raw?.symbol || raw?.name || '').trim();
+    if (!symbol) return;
+    const item = cryptoItem('KUCOIN', marketType, category, {
+      ...raw,
+      symbol,
+      baseAsset: raw?.baseCurrency || raw?.baseAsset,
+      quoteAsset: raw?.quoteCurrency || raw?.quoteAsset,
+      status: raw?.status || raw?.tradingStatus || (raw?.enableTrading === false ? 'offline' : 'online'),
+      settleCoin: raw?.settleCurrency || raw?.settleCoin,
+      deliveryTime: raw?.expireDate || undefined,
+      contractType: raw?.expireDate ? 'delivery' : (raw?.type || 'perpetual'),
+    });
+    if (!item) return;
+    const key = item.id;
+    if (seen.has(key)) return;
+    seen.add(key);
+    out.push(item);
+  };
+
+  // KuCoin's public Spot symbol master is the source of truth for the complete
+  // spot universe. Keep disabled/call-auction rows instead of silently losing
+  // products from the Quote catalogue.
+  try {
+    const payload = await getJson('https://api.kucoin.com/api/v2/symbols', 15000);
+    const rows = Array.isArray(payload?.data) ? payload.data : [];
+    for (const raw of rows) add(raw, 'Spot');
+    console.log('[SIRE KUCOIN] Spot: ' + rows.length);
+  } catch (e) {
+    console.warn('[SIRE KUCOIN] Spot failed:', e);
+  }
+
+  // KuCoin exposes the actual margin trading universe separately through the
+  // public mark-price list. This avoids guessing margin support from spot flags.
+  try {
+    const payload = await getJson('https://api.kucoin.com/api/v3/mark-price/all-symbols', 15000);
+    const rows = Array.isArray(payload?.data) ? payload.data : [];
+    for (const raw of rows) {
+      const symbol = String(raw?.symbol || '').trim();
+      if (!symbol) continue;
+      const parts = symbol.split('-');
+      add(raw, 'Margin', 'Crypto', symbol);
+      const item = out[out.length - 1];
+      if (item && item.symbol === symbol) {
+        item.base = parts[0] || item.base;
+        item.quote = parts[1] || item.quote;
+        item.supportsMargin = true;
+      }
+    }
+    console.log('[SIRE KUCOIN] Margin: ' + rows.length);
+  } catch (e) {
+    console.warn('[SIRE KUCOIN] Margin failed:', e);
+  }
+
+  // Futures has its own public contract master. expireDate distinguishes
+  // delivery contracts from perpetual contracts; do not collapse them.
+  try {
+    const payload = await getJson('https://api-futures.kucoin.com/api/v1/contracts/active', 15000);
+    const rows = Array.isArray(payload?.data) ? payload.data : [];
+    for (const raw of rows) {
+      const expireDate = raw?.expireDate ?? raw?.settleDate;
+      const marketType = expireDate ? 'Futures' : 'Perpetuals';
+      add(raw, marketType, 'Crypto');
+    }
+    console.log('[SIRE KUCOIN] Futures contracts: ' + rows.length);
+  } catch (e) {
+    console.warn('[SIRE KUCOIN] Futures failed:', e);
+  }
+
+  console.log('[SIRE KUCOIN] COMPLETE', JSON.stringify({
+    total: out.length,
+    spot: out.filter(x => x.marketType === 'Spot').length,
+    margin: out.filter(x => x.marketType === 'Margin').length,
+    perpetuals: out.filter(x => x.marketType === 'Perpetuals').length,
+    futures: out.filter(x => x.marketType === 'Futures').length,
+  }));
+  return out;
+}
 async function gemini(): Promise<UnifiedInstrument[]> {
   try {
     const rows = await getJson('https://api.gemini.com/v1/symbols', 15000);
@@ -702,9 +782,72 @@ async function bithumb(): Promise<UnifiedInstrument[]> {
 }
 
 async function mexc(): Promise<UnifiedInstrument[]> {
-  const out: UnifiedInstrument[]=[];
-  try{const r=await getJson('https://api.mexc.com/api/v3/exchangeInfo',15000);for(const raw of r?.symbols||[]){if(String(raw?.status||'').toUpperCase()!=='ENABLED')continue;const i=cryptoItem('MEXC','Spot','Crypto',raw);if(i)out.push(i)}}catch(e){console.warn('[SIRE MEXC] Spot failed:',e)}
-  try{const r=await getJson('https://api.mexc.com/api/v1/contract/detail',15000);for(const raw of r?.data||[]){const i=cryptoItem('MEXC','Perpetuals','Crypto',{...raw,symbol:raw?.symbol,baseAsset:raw?.baseCoin,quoteAsset:raw?.quoteCoin,status:'online'});if(i)out.push(i)}}catch(e){console.warn('[SIRE MEXC] Futures failed:',e)}
+  const out: UnifiedInstrument[] = [];
+  const seen = new Set<string>();
+
+  const add = (raw: any, marketType: string, category = 'Crypto', symbolOverride?: string) => {
+    const symbol = String(symbolOverride || raw?.symbol || '').trim();
+    if (!symbol) return;
+    const item = cryptoItem('MEXC', marketType, category, {
+      ...raw,
+      symbol,
+      baseAsset: raw?.baseCoin || raw?.baseAsset,
+      quoteAsset: raw?.quoteCoin || raw?.quoteAsset,
+      status: raw?.status || raw?.state || (raw?.enableTrading === false ? 'offline' : 'online'),
+      settleCoin: raw?.settleCoin || raw?.settleCurrency,
+      deliveryTime: raw?.deliveryTime || raw?.expireDate || undefined,
+      contractType: raw?.futureType === 2 ? 'delivery' : (raw?.futureType === 1 ? 'perpetual' : raw?.contractType),
+    });
+    if (!item) return;
+    if (seen.has(item.id)) return;
+    seen.add(item.id);
+    out.push(item);
+  };
+
+  // MEXC Spot exchangeInfo is the complete public symbol master. Keep every
+  // returned row so paused/offline products are not silently omitted.
+  try {
+    const payload = await getJson('https://api.mexc.com/api/v3/exchangeInfo', 20000);
+    const rows = Array.isArray(payload?.symbols) ? payload.symbols : [];
+    for (const raw of rows) add(raw, 'Spot');
+    console.log('[SIRE MEXC] Spot: ' + rows.length);
+
+    // MEXC publishes margin eligibility on each spot symbol. Represent those
+    // pairs as separate Margin instruments so Spot and Margin remain distinct.
+    for (const raw of rows) {
+      if (raw?.isMarginTradingAllowed !== true) continue;
+      add(raw, 'Margin', 'Crypto');
+    }
+    console.log('[SIRE MEXC] Margin: ' + out.filter(x => x.marketType === 'Margin').length);
+  } catch (e) {
+    console.warn('[SIRE MEXC] Spot/Margin failed:', e);
+  }
+
+  // MEXC Futures exposes futureType: 1 = perpetual, 2 = delivery.
+  // Use the public contract-detail master and retain both contract classes.
+  try {
+    const payload = await getJsonAny([
+      'https://api.mexc.com/api/v1/contract/detail',
+      'https://www.mexc.co/api/v1/contract/detail',
+      'https://api.mexc.com/api/v1/contract/detail/country',
+    ], 20000);
+    const rows = Array.isArray(payload?.data) ? payload.data : [];
+    for (const raw of rows) {
+      const marketType = Number(raw?.futureType) === 2 ? 'Futures' : 'Perpetuals';
+      add(raw, marketType, 'Crypto');
+    }
+    console.log('[SIRE MEXC] Futures contracts: ' + rows.length);
+  } catch (e) {
+    console.warn('[SIRE MEXC] Futures failed:', e);
+  }
+
+  console.log('[SIRE MEXC] COMPLETE', JSON.stringify({
+    total: out.length,
+    spot: out.filter(x => x.marketType === 'Spot').length,
+    margin: out.filter(x => x.marketType === 'Margin').length,
+    perpetuals: out.filter(x => x.marketType === 'Perpetuals').length,
+    futures: out.filter(x => x.marketType === 'Futures').length,
+  }));
   return out;
 }
 async function phemex(): Promise<UnifiedInstrument[]> {
@@ -2596,6 +2739,8 @@ export async function getStandaloneMarketProviderCatalogue(
     case 'OKX': return okx();
     case 'BITGET': return bitget();
     case 'GATEIO': return gateio();
+    case 'KUCOIN': return kucoin();
+    case 'MEXC': return mexc();
     default: return [];
   }
 }
@@ -2623,6 +2768,8 @@ export async function getUnifiedMarketCatalogue(fetchDeriv: () => Promise<any[]>
       // Bitget is independent: Spot, Margin, USDT-M, Coin-M and USDC-M.
       ['BITGET', bitget()],
       ['GATEIO', gateio()],
+      ['KUCOIN', kucoin()],
+      ['MEXC', mexc()],
       ['FXCM', fxcm()],
       // Nasdaq Trader supplies the public instrument master for Nasdaq-listed,
       // other U.S.-listed, bonds, NOM options, mutual funds and additional
