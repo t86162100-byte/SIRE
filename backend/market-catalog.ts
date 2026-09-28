@@ -2339,7 +2339,7 @@ async function poloniex(): Promise<UnifiedInstrument[]> {
   }
 }
 
-async function getStandaloneMarketProviderCatalogue(
+export async function getStandaloneMarketProviderCatalogue(
   provider: MarketProvider,
   fetchDeriv: () => Promise<any[]>,
 ): Promise<UnifiedInstrument[]> {
