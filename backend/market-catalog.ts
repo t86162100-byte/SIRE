@@ -1,4 +1,4 @@
-export type MarketProvider = 'BINANCE' | 'FXCM' | 'YFINANCE' | 'SP' | 'DERIV' | 'BITGET' | 'BYBIT' | 'OKX' | 'KRAKEN' | 'COINBASE' | 'GATEIO' | 'KUCOIN' | 'GEMINI' | 'BITSO' | 'BITFINEX' | 'BITVAVO' | 'COINEX' | 'LBANK' | 'WOOX' | 'CRYPTOCOM' | 'HTX' | 'BITKUB' | 'UPBIT' | 'PIONEX' | 'POLONIEX' | 'BITHUMB' | 'MEXC' | 'PHEMEX' | 'WHITEBIT' | 'TWELVEDATA' | 'NASDAQTRADER' | 'CME' | 'CBOT' | 'NYMEX' | 'COMEX' | 'NYSEAMERICAN' | 'XETR' | 'HKEX' | 'BSE' | 'TSE' | 'XFRA' | 'EUREX' | 'ASX' | 'TWSE' | 'PSX' | 'IDX' | 'NSE' | 'BITSTAMP' | 'OANDA' | 'TRADINGVIEW' | 'FOREXCOM' | 'INTERACTIVEBROKERS' | 'TRADESTATION' | 'WEBULL' | 'MOOMOO' | 'NINJATRADER' | 'TRADOVATE' | 'AMPFUTURES' | 'TASTYTRADE' | 'TASTYFX' | 'CRYPTOCOMEXCHANGE' | 'COINBASEADVANCED' | 'ALPACA' | 'TRADIERBROKERAGE' | 'TRADEZERO' | 'COBRATRADING' | 'CLEARSTREET' | 'INVESTRADE' | 'PUBLIC' | 'PLUS500US' | 'OPTIMUSFUTURES' | 'EDGECLEAR' | 'IRONBEAM' | 'STONEX' | 'DORMANTRADING' | 'TRADIERFUTURES' | 'BITTREX';
+export type MarketProvider = 'BINANCE' | 'FXCM' | 'YFINANCE' | 'SP' | 'DERIV' | 'BITGET' | 'BYBIT' | 'OKX' | 'KRAKEN' | 'COINBASE' | 'GATEIO' | 'KUCOIN' | 'GEMINI' | 'BITSO' | 'BITFINEX' | 'BITVAVO' | 'COINEX' | 'LBANK' | 'WOOX' | 'CRYPTOCOM' | 'HTX' | 'BITKUB' | 'UPBIT' | 'PIONEX' | 'POLONIEX' | 'BITHUMB' | 'MEXC' | 'PHEMEX' | 'WHITEBIT' | 'TWELVEDATA' | 'NASDAQTRADER' | 'CME' | 'CBOT' | 'NYMEX' | 'COMEX' | 'NYSEAMERICAN' | 'XETR' | 'HKEX' | 'BSE' | 'TSE' | 'XFRA' | 'EUREX' | 'ASX' | 'TWSE' | 'PSX' | 'IDX' | 'NSE' | 'BITSTAMP' | 'OANDA' | 'TRADINGVIEW' | 'FOREXCOM' | 'INTERACTIVEBROKERS' | 'TRADESTATION' | 'WEBULL' | 'MOOMOO' | 'NINJATRADER' | 'TRADOVATE' | 'AMPFUTURES' | 'TASTYTRADE' | 'TASTYFX' | 'CRYPTOCOMEXCHANGE' | 'COINBASEADVANCED' | 'ALPACA' | 'TRADIERBROKERAGE' | 'TRADEZERO' | 'COBRATRADING' | 'CLEARSTREET' | 'INVESTRADE' | 'PUBLIC' | 'PLUS500US' | 'OPTIMUSFUTURES' | 'EDGECLEAR' | 'IRONBEAM' | 'STONEX' | 'DORMANTRADING' | 'TRADIERFUTURES' | 'BITTREX' | 'BITMART' | 'BLANK';
 
 export interface UnifiedInstrument {
   id: string;
@@ -1245,28 +1245,155 @@ async function mexc(): Promise<UnifiedInstrument[]> {
 
 
 
-async function phemex(): Promise<UnifiedInstrument[]> {
+async function bitmart(): Promise<UnifiedInstrument[]> {
+  const out: UnifiedInstrument[] = [];
+  const seen = new Set<string>();
+
+  const add = (raw: any, marketType: string) => {
+    const symbol = String(raw?.symbol || raw?.contract_symbol || '').trim().toUpperCase();
+    if (!symbol) return;
+    const base = String(raw?.base_currency || raw?.baseCoin || raw?.base_asset || '').trim().toUpperCase();
+    const quote = String(raw?.quote_currency || raw?.quoteCoin || raw?.quote_asset || '').trim().toUpperCase();
+    const item = cryptoItem('BITMART', marketType, 'Crypto', {
+      ...raw,
+      symbol,
+      baseAsset: base,
+      quoteAsset: quote,
+      fullName: String(raw?.symbol || symbol),
+      status: raw?.trade_status || raw?.status || (raw?.symbol_status === 'online' ? 'online' : 'offline'),
+      contractType: raw?.contract_type || raw?.contractType,
+      settleCoin: raw?.settle_coin || raw?.settle_currency || undefined,
+      deliveryTime: raw?.delivery_time || raw?.expiry_time || undefined,
+    });
+    if (!item) return;
+    item.id = 'BITMART:' + marketType + ':' + symbol;
+    item.providerLabel = 'BitMart';
+    item.marketType = marketType;
+    item.category = 'Crypto';
+    item.instrumentType = marketType;
+    item.contractType = String(raw?.contract_type || raw?.contractType || '').trim() || item.contractType;
+    item.settlement = String(raw?.settle_coin || raw?.settle_currency || '').trim() || item.settlement;
+    item.expiry = raw?.delivery_time || raw?.expiry_time || item.expiry;
+    if (!seen.has(item.id)) { seen.add(item.id); out.push(item); }
+  };
+
+  // BitMart's public spot symbol master.
   try {
-    const payload = await getJson('https://api.phemex.com/public/products', 15000);
-    const rows = Array.isArray(payload?.result?.products) ? payload.result.products : [];
-    const out: UnifiedInstrument[] = [];
+    const payload = await getJsonAny([
+      'https://api-cloud.bitmart.com/spot/v1/symbols',
+      'https://api-cloud.bitmart.com/spot/v1/symbols/details'
+    ], 20000);
+    const rows = Array.isArray(payload?.data?.symbols) ? payload.data.symbols :
+      Array.isArray(payload?.data) ? payload.data : [];
+    for (const raw of rows) add(raw, 'Spot');
+    console.log('[SIRE BITMART] Spot: ' + rows.length);
+  } catch (e) {
+    console.warn('[SIRE BITMART] Spot failed:', e);
+  }
+
+  // BitMart contract details contain the complete derivatives product master.
+  try {
+    const payload = await getJsonAny([
+      'https://api-cloud.bitmart.com/contract/public/details',
+      'https://api-cloud.bitmart.com/contract/v1/details'
+    ], 20000);
+    const rows = Array.isArray(payload?.data) ? payload.data :
+      Array.isArray(payload?.data?.symbols) ? payload.data.symbols : [];
     for (const raw of rows) {
-      const symbol = String(raw?.symbol || '').trim();
-      if (!symbol) continue;
-      const type = String(raw?.type || '').toLowerCase();
-      const marketType = type === 'spot' ? 'Spot' : 'Perpetual';
-      const item = cryptoItem('PHEMEX', marketType, 'Crypto', {
-        symbol,
-        baseAsset: String(raw?.baseCurrency || raw?.baseCcy || ''),
-        quoteAsset: String(raw?.quoteCurrency || raw?.quoteCcy || ''),
-        fullName: symbol,
-        status: String(raw?.status || 'online')
-      });
-      if (item) out.push(item);
+      const type = String(raw?.contract_type || raw?.contractType || raw?.type || '').toLowerCase();
+      const marketType =
+        type.includes('perpetual') || type.includes('swap') || !type ? 'Perpetuals' :
+        type.includes('future') || type.includes('delivery') ? 'Futures' : 'Perpetuals';
+      add(raw, marketType);
     }
-    console.log('[SIRE PHEMEX] Markets: ' + out.length);
-    return out;
-  } catch (error) { console.warn('[SIRE PHEMEX] failed:', error); return []; }
+    console.log('[SIRE BITMART] Derivatives: ' + rows.length);
+  } catch (e) {
+    console.warn('[SIRE BITMART] Derivatives failed:', e);
+  }
+
+  console.log('[SIRE BITMART] COMPLETE', JSON.stringify({
+    total: out.length,
+    spot: out.filter(x => x.marketType === 'Spot').length,
+    perpetuals: out.filter(x => x.marketType === 'Perpetuals').length,
+    futures: out.filter(x => x.marketType === 'Futures').length,
+  }));
+  return out;
+}
+
+async function phemex(): Promise<UnifiedInstrument[]> {
+  const out: UnifiedInstrument[] = [];
+  const seen = new Set<string>();
+
+  const add = (raw: any, marketType: string) => {
+    const symbol = String(raw?.symbol || '').trim();
+    if (!symbol) return;
+    const type = String(raw?.type || '').trim();
+    const base = String(raw?.baseCurrency || raw?.baseCcy || raw?.baseCurrencyCode || '').trim();
+    const quote = String(raw?.quoteCurrency || raw?.quoteCcy || raw?.quoteCurrencyCode || '').trim();
+    const item = cryptoItem('PHEMEX', marketType, 'Crypto', {
+      ...raw,
+      symbol,
+      baseAsset: base,
+      quoteAsset: quote,
+      fullName: symbol,
+      status: raw?.status || 'online',
+      contractType: raw?.type || raw?.contractType,
+      settleCoin: raw?.settleCurrency || raw?.settleCcy || undefined,
+      deliveryTime: raw?.expiryTime || raw?.endTimestamp || undefined,
+    });
+    if (!item) return;
+    item.id = 'PHEMEX:' + marketType + ':' + symbol;
+    item.providerLabel = 'Phemex';
+    item.marketType = marketType;
+    item.category = 'Crypto';
+    item.instrumentType = type || marketType;
+    item.contractType = String(raw?.type || raw?.contractType || '').trim() || item.contractType;
+    item.settlement = String(raw?.settleCurrency || raw?.settleCcy || '').trim() || item.settlement;
+    item.expiry = raw?.expiryTime || raw?.endTimestamp || item.expiry;
+    if (!seen.has(item.id)) { seen.add(item.id); out.push(item); }
+  };
+
+  // Phemex publishes spot and contract products from the public product
+  // catalogue. Use both products and products-plus so listing metadata such as
+  // delist timelines is not lost.
+  for (const endpoint of ['https://api.phemex.com/public/products-plus','https://api.phemex.com/public/products']) {
+    try {
+      const payload = await getJson(endpoint, 20000);
+      const result = payload?.result || payload;
+      const rows = Array.isArray(result?.products) ? result.products :
+        Array.isArray(result?.perpProductsV2) ? result.perpProductsV2 :
+        Array.isArray(result?.data) ? result.data : [];
+      for (const raw of rows) {
+        const type = String(raw?.type || '').toLowerCase();
+        const marketType =
+          type === 'spot' ? 'Spot' :
+          type === 'perpetual' || type === 'perpetual_swap' || type === 'perpetual contract' ? 'Perpetuals' :
+          type === 'future' || type === 'futures' || type === 'delivery' ? 'Futures' :
+          type.includes('option') ? 'Options' : '';
+        if (marketType) add(raw, marketType);
+      }
+      console.log('[SIRE PHEMEX] ' + endpoint.split('/').pop() + ': ' + rows.length);
+    } catch (e) {
+      console.warn('[SIRE PHEMEX] ' + endpoint + ' failed:', e);
+    }
+  }
+
+  console.log('[SIRE PHEMEX] COMPLETE', JSON.stringify({
+    total: out.length,
+    spot: out.filter(x => x.marketType === 'Spot').length,
+    perpetuals: out.filter(x => x.marketType === 'Perpetuals').length,
+    futures: out.filter(x => x.marketType === 'Futures').length,
+    options: out.filter(x => x.marketType === 'Options').length,
+  }));
+  return out;
+}
+
+async function blank(): Promise<UnifiedInstrument[]> {
+  // "Blank" is not an exchange/provider currently present in SIRE's provider
+  // registry and no public instrument API could be identified. Do not fabricate
+  // symbols. This provider stays isolated until the exact venue is identified.
+  console.warn('[SIRE BLANK] No verified public exchange catalogue identified.');
+  return [];
 }
 
 async function whitebit(): Promise<UnifiedInstrument[]> {
@@ -3115,6 +3242,9 @@ export async function getStandaloneMarketProviderCatalogue(
     case 'COINEX': return coinex();
     case 'HTX': return htx();
     case 'BITTREX': return bittrex();
+    case 'BITMART': return bitmart();
+    case 'BLANK': return blank();
+    case 'PHEMEX': return phemex();
     case 'MEXC': return mexc();
     default: return [];
   }
@@ -3149,6 +3279,8 @@ export async function getUnifiedMarketCatalogue(fetchDeriv: () => Promise<any[]>
       ['BITFINEX', bitfinex()],
       ['GEMINI', gemini()],
       ['BITSTAMP', bitstamp()],
+      ['BITMART', bitmart()],
+      ['PHEMEX', phemex()],
       ['FXCM', fxcm()],
       // Nasdaq Trader supplies the public instrument master for Nasdaq-listed,
       // other U.S.-listed, bonds, NOM options, mutual funds and additional
