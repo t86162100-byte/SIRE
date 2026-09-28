@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import './home.css';
 import {
   ArrowRight, Bell, BrainCircuit, ChevronRight, CircleUserRound, Flame,
   Grid2X2, LineChart, Play, Search, Sparkles, TrendingUp, Wallet,
