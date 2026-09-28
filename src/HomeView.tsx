@@ -43,7 +43,7 @@ function money(value?: number) {
   return '$' + Number(value).toLocaleString(undefined, { maximumFractionDigits: 6 });
 }
 
-export default function HomeView({ instruments, onSelectInstrument, videoSrc = '/magichour_image_to_video.mp4' }: Props) {
+export default function HomeView({ instruments, onSelectInstrument, videoSrc = '/sire-home-hero-preview.mp4' }: Props) {
   const [videoReady, setVideoReady] = useState(true);
   const [searchOpen, setSearchOpen] = useState(false);
   const [query, setQuery] = useState('');
