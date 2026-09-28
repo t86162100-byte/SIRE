@@ -511,7 +511,7 @@ export default function App() {
     setMultiChartOpen(false);
   };
   if (homeOpen) {
-    return <HomeView instruments={instruments} onSelectInstrument={selectInstrument} />;
+    return <HomeView instruments={instruments} onSelectInstrument={item => { const match = instruments.find(candidate => candidate.id === item.id); if (match) selectInstrument(match); }} />;
   }
 
   return <main className={`native-terminal-shell${researchLabOpen ? ' sire-research-open' : ''}`}>
