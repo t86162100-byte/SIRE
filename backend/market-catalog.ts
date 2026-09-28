@@ -2004,7 +2004,115 @@ async function sp(): Promise<UnifiedInstrument[]> {
   return items;
 }
 
-async function okx(): Promise<UnifiedInstrument[]> { const out:UnifiedInstrument[]=[];for(const t of ['SPOT','MARGIN','SWAP','FUTURES','OPTION'])try{const r=await getJsonAny(['https://www.okx.com/api/v5/public/instruments?instType='+t,'https://app.okx.com/api/v5/public/instruments?instType='+t],15000);for(const raw of r?.data||[]){if(String(raw?.state||'').toLowerCase()!=='live')continue;const mt=t==='SPOT'?'Spot':t==='MARGIN'?'Margin':t==='SWAP'?'Perpetuals':t==='FUTURES'?'Futures':'Options';const i=cryptoItem('OKX',mt,'Crypto',raw);if(i)out.push(i)}}catch(e){console.warn('[SIRE OKX] '+t+' failed:',e)}return out; }
+async function okx(): Promise<UnifiedInstrument[]> {
+  const out: UnifiedInstrument[] = [];
+  const endpointTypes = ['SPOT', 'MARGIN', 'SWAP', 'FUTURES', 'OPTION', 'EVENTS'] as const;
+
+  const categoryFromInstCategory = (raw: any): string => {
+    const key = String(raw?.instCategory || '').trim();
+    if (key === '1') return 'Crypto';
+    if (key === '3') return 'Stocks';
+    if (key === '4') return 'Commodities';
+    if (key === '5') return 'Forex';
+    if (key === '6') return 'Bonds';
+    if (String(raw?.instType || '').toUpperCase() === 'EVENTS') return 'Event Contracts';
+    return 'Crypto';
+  };
+
+  const marketTypeFor = (instType: string, raw: any): string => {
+    switch (instType) {
+      case 'SPOT': return 'Spot';
+      case 'MARGIN': return 'Margin';
+      case 'SWAP': return 'Perpetuals';
+      case 'OPTION': return 'Options';
+      case 'EVENTS': return 'Event Contracts';
+      case 'FUTURES': {
+        // OKX X-Perps are returned as FUTURES and identified by ruleType.
+        // Pre-market X-Perps use ruleType=pre_market until conversion.
+        const ruleType = String(raw?.ruleType || '').toLowerCase();
+        if (ruleType === 'xperp' || ruleType === 'pre_market') return 'Perpetuals';
+        return 'Futures';
+      }
+      default: return instType;
+    }
+  };
+
+  const normalize = (instType: string, raw: any): UnifiedInstrument | null => {
+    const marketType = marketTypeFor(instType, raw);
+    const category = categoryFromInstCategory(raw);
+    const item = cryptoItem('OKX', marketType, category, {
+      ...raw,
+      symbol: raw?.instId,
+      baseCcy: raw?.baseCcy || raw?.uly || raw?.instFamily,
+      quoteCcy: raw?.quoteCcy || raw?.settleCcy,
+      fullName: raw?.instId,
+      status: raw?.state || 'live',
+      type: marketType,
+      contractType: raw?.ctType || raw?.ruleType || undefined,
+      settleCcy: raw?.settleCcy,
+      deliveryTime: raw?.expTime || raw?.contTdSwTime || undefined,
+      strikePrice: raw?.stk,
+      optionsType: raw?.optType,
+    });
+    if (!item) return null;
+
+    item.id = 'OKX:' + instType + ':' + String(raw?.instId || item.symbol);
+    item.providerLabel = 'OKX';
+    item.marketType = marketType;
+    item.category = category;
+    item.instrumentType = instType;
+    item.contractType = String(raw?.ruleType || raw?.ctType || '').trim() || item.contractType;
+    item.settlement = String(raw?.settleCcy || '').trim() || item.settlement;
+    item.expiry = String(raw?.expTime || '').trim() || item.expiry;
+    item.strike = Number.isFinite(Number(raw?.stk)) ? Number(raw.stk) : item.strike;
+    item.optionType = String(raw?.optType || '').trim() || item.optionType;
+    item.supportsMargin = instType === 'MARGIN' || Boolean(raw?.lever);
+    return item;
+  };
+
+  for (const instType of endpointTypes) {
+    try {
+      const response = await getJsonAny([
+        'https://www.okx.com/api/v5/public/instruments?instType=' + instType,
+        'https://app.okx.com/api/v5/public/instruments?instType=' + instType,
+      ], 15000);
+
+      const rows = Array.isArray(response?.data) ? response.data : [];
+      for (const raw of rows) {
+        // The public catalogue contains suspended/rebase rows too. The Quote
+        // catalogue is intended to expose instruments OKX currently offers for
+        // trading, so keep only live instruments while retaining every live ID.
+        if (String(raw?.state || '').toLowerCase() !== 'live') continue;
+        const item = normalize(instType, raw);
+        if (item) out.push(item);
+      }
+
+      console.log('[SIRE OKX] ' + instType + ': ' + rows.length + ' published / ' +
+        out.filter(item => item.instrumentType === instType).length + ' live');
+    } catch (error) {
+      console.warn('[SIRE OKX] ' + instType + ' failed:', error);
+    }
+  }
+
+  const seen = new Set<string>();
+  const unique = out.filter(item => {
+    if (seen.has(item.id)) return false;
+    seen.add(item.id);
+    return true;
+  });
+
+  console.log('[SIRE OKX] COMPLETE', JSON.stringify({
+    total: unique.length,
+    spot: unique.filter(item => item.instrumentType === 'SPOT').length,
+    margin: unique.filter(item => item.instrumentType === 'MARGIN').length,
+    perpetuals: unique.filter(item => item.marketType === 'Perpetuals').length,
+    futures: unique.filter(item => item.instrumentType === 'FUTURES' && item.marketType === 'Futures').length,
+    options: unique.filter(item => item.instrumentType === 'OPTION').length,
+    events: unique.filter(item => item.instrumentType === 'EVENTS').length,
+  }));
+
+  return unique;
+}
 
 
 function derivItem(raw: any): UnifiedInstrument | null {
@@ -2084,6 +2192,9 @@ export async function getUnifiedMarketCatalogue(fetchDeriv: () => Promise<any[]>
       ['BINANCE', binance()],
       ['COINBASE', coinbase()],
       ['KRAKEN', kraken()],
+      // OKX public instruments: Spot, Margin, Perpetuals, Futures/X-Perps,
+      // Options and Event Contracts.
+      ['OKX', okx()],
       ['FXCM', fxcm()],
       // Nasdaq Trader supplies the public instrument master for Nasdaq-listed,
       // other U.S.-listed, bonds, NOM options, mutual funds and additional
