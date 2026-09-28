@@ -2712,43 +2712,79 @@ async function pancakeswap(): Promise<UnifiedInstrument[]> {
   const out: UnifiedInstrument[] = [];
   const seen = new Set<string>();
   try {
-    const [tokensResponse, pairsResponse] = await Promise.all([
-      getJson('https://api.pancakeswap.info/api/v2/tokens', 60000),
-      getJson('https://api.pancakeswap.info/api/v2/pairs', 60000),
-    ]);
-    const tokens = tokensResponse?.data && typeof tokensResponse.data === 'object' ? tokensResponse.data : {};
-    const pairs = pairsResponse?.data && typeof pairsResponse.data === 'object' ? pairsResponse.data : {};
-    for (const [addressKey, raw] of Object.entries(tokens as Record<string, any>)) {
-      const address = String(addressKey || '').trim();
-      const symbol = String(raw?.symbol || '').trim();
-      const name = String(raw?.name || symbol || address).trim();
-      if (!address || !symbol) continue;
-      const item = cryptoItem('PANCAKESWAP', 'Spot', 'Crypto', {symbol, baseAsset:symbol, quoteAsset:'N/A', fullName:name, status:'online'}, {last:Number(raw?.price)});
-      if (!item) continue;
-      item.id='PANCAKESWAP:TOKEN:BSC:'+address.toLowerCase();
-      item.providerLabel='PancakeSwap'; item.marketType='Spot'; item.category='Crypto';
-      item.instrumentType='Token'; item.contractType='BEP-20'; item.settlement='On-chain';
-      item.exchangeOpen=1; item.displaySymbol=symbol+' · BSC'; item.name=name; item.symbol=symbol;
-      item.logoUrl=assetLogo(symbol)||providerLogo('pancakeswap'); item.providerLogoUrl=providerLogo('pancakeswap');
-      if(!seen.has(item.id)){seen.add(item.id);out.push(item);}
+    // api.pancakeswap.info is an archived legacy service. Use the current
+    // public on-chain DEX index instead of silently returning an empty list.
+    const dexResponse = await getJson('https://api.geckoterminal.com/api/v2/networks/bsc/dexes', 12000);
+    const dexRows = Array.isArray(dexResponse?.data) ? dexResponse.data : [];
+    const dexIds = Array.from(new Set(dexRows
+      .filter((dex: any) => {
+        const id = String(dex?.id || '').toLowerCase();
+        const name = String(dex?.attributes?.name || '').toLowerCase();
+        return id.includes('pancake') || name.includes('pancake');
+      })
+      .map((dex: any) => String(dex?.id || '').trim())
+      .filter(Boolean)));
+
+    for (const dexId of dexIds) {
+      for (let page = 1; page <= 3; page += 1) {
+        const response = await getJson(
+          'https://api.geckoterminal.com/api/v2/networks/bsc/dexes/' +
+          encodeURIComponent(dexId) + '/pools?page=' + page,
+          12000,
+        );
+        const pools = Array.isArray(response?.data) ? response.data : [];
+        if (!pools.length) break;
+
+        for (const raw of pools) {
+          const attrs = raw?.attributes || {};
+          const poolAddress = String(raw?.id || '').split('_').pop() || String(attrs?.address || '');
+          const name = String(attrs?.name || '').trim();
+          const parts = name.split('/').map((v: string) => v.trim()).filter(Boolean);
+          const baseSymbol = parts[0] || '';
+          const quoteSymbol = parts[1] || '';
+          if (!poolAddress || !name || !baseSymbol || !quoteSymbol) continue;
+
+          const price = Number(attrs?.base_token_price_usd);
+          const item = cryptoItem('PANCAKESWAP', 'Spot', 'Crypto', {
+            symbol: name,
+            baseAsset: baseSymbol,
+            quoteAsset: quoteSymbol,
+            fullName: name,
+            status: 'online',
+          }, { last: price });
+
+          if (!item) continue;
+          item.id = 'PANCAKESWAP:POOL:BSC:' + poolAddress.toLowerCase();
+          item.providerLabel = 'PancakeSwap';
+          item.marketType = 'Spot';
+          item.category = 'Crypto';
+          item.instrumentType = 'AMM Pool';
+          item.contractType = 'PancakeSwap AMM Pool';
+          item.settlement = 'On-chain';
+          item.exchangeOpen = 1;
+          item.displaySymbol = name + ' · BSC';
+          item.name = name;
+          item.logoUrl = assetLogo(baseSymbol) || providerLogo('pancakeswap');
+          item.providerLogoUrl = providerLogo('pancakeswap');
+
+          if (!seen.has(item.id)) {
+            seen.add(item.id);
+            out.push(item);
+          }
+        }
+
+        if (pools.length < 20) break;
+      }
     }
-    for (const raw of Object.values(pairs as Record<string, any>)) {
-      const pairAddress=String(raw?.pair_address||'').trim();
-      const baseSymbol=String(raw?.base_symbol||'').trim();
-      const quoteSymbol=String(raw?.quote_symbol||'').trim();
-      if(!pairAddress||!baseSymbol||!quoteSymbol) continue;
-      const symbol=baseSymbol+'/'+quoteSymbol;
-      const item=cryptoItem('PANCAKESWAP','Spot','Crypto',{symbol,baseAsset:baseSymbol,quoteAsset:quoteSymbol,fullName:String(raw?.base_name||baseSymbol)+' / '+String(raw?.quote_name||quoteSymbol),status:'online'},{last:Number(raw?.price)});
-      if(!item) continue;
-      item.id='PANCAKESWAP:POOL:BSC:'+pairAddress.toLowerCase();
-      item.providerLabel='PancakeSwap'; item.marketType='Spot'; item.category='Crypto';
-      item.instrumentType='AMM Pool'; item.contractType='PancakeSwap V2 Pair'; item.settlement='On-chain';
-      item.exchangeOpen=1; item.displaySymbol=symbol+' · BSC'; item.name=symbol;
-      item.logoUrl=assetLogo(baseSymbol)||providerLogo('pancakeswap'); item.providerLogoUrl=providerLogo('pancakeswap');
-      if(!seen.has(item.id)){seen.add(item.id);out.push(item);}
-    }
-    console.log('[SIRE PANCAKESWAP] COMPLETE',JSON.stringify({total:out.length,tokens:Object.keys(tokens).length,pairs:Object.keys(pairs).length,endpoint:'pancakeswap-info-v2'}));
-  } catch(error) { console.warn('[SIRE PANCAKESWAP] catalogue failed:',error); }
+
+    console.log('[SIRE PANCAKESWAP] COMPLETE', JSON.stringify({
+      total: out.length,
+      dexes: dexIds,
+      source: 'geckoterminal-public-onchain',
+    }));
+  } catch (error) {
+    console.warn('[SIRE PANCAKESWAP] catalogue failed:', error);
+  }
   return out;
 }
 
