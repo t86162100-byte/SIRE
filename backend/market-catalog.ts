@@ -2589,10 +2589,64 @@ async function opinion(): Promise<UnifiedInstrument[]> {
   return out;
 }
 
+async function uniswap(): Promise<UnifiedInstrument[]> {
+  const out: UnifiedInstrument[] = [];
+  const key = String(process.env.UNISWAP_API_KEY || '').trim();
+  if (!key) {
+    console.warn('[SIRE UNISWAP] UNISWAP_API_KEY is not configured.');
+    return out;
+  }
+  const endpoint = 'https://trade-api.gateway.uniswap.org/v1/tokens?sort=default';
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 60000);
+  try {
+    const response = await fetch(endpoint, {
+      signal: controller.signal,
+      headers: { Accept: 'application/json', 'User-Agent': 'SIRE-market-catalog/1.0', 'x-api-key': key }
+    });
+    if (!response.ok) throw new Error('HTTP ' + response.status);
+    const payload = await response.json();
+    const rows = Array.isArray(payload?.tokens) ? payload.tokens : [];
+    for (const raw of rows) {
+      const address = String(raw?.address || '').trim();
+      const symbol = String(raw?.symbol || '').trim();
+      const name = String(raw?.name || symbol || address).trim();
+      const chainId = Number(raw?.chainId);
+      if (!address || !symbol || !Number.isFinite(chainId)) continue;
+      const item = cryptoItem('UNISWAP', 'Spot', 'Crypto', {
+        symbol, baseAsset: symbol, quoteAsset: 'N/A', fullName: name, status: 'online'
+      });
+      if (!item) continue;
+      item.id = 'UNISWAP:TOKEN:' + chainId + ':' + address.toLowerCase();
+      item.providerLabel = 'Uniswap';
+      item.marketType = 'Spot';
+      item.category = 'Crypto';
+      item.instrumentType = 'Token';
+      item.contractType = 'ERC-20';
+      item.settlement = 'On-chain';
+      item.exchangeOpen = 1;
+      item.displaySymbol = symbol + ' · Chain ' + chainId;
+      item.name = name;
+      item.symbol = symbol;
+      item.logoUrl = String(raw?.logoURI || assetLogo(symbol));
+      item.providerLogoUrl = providerLogo('uniswap');
+      out.push(item);
+    }
+    const unique = out.filter((item, i, arr) => arr.findIndex(x => x.id === item.id) === i);
+    console.log('[SIRE UNISWAP] COMPLETE', JSON.stringify({ total: unique.length, endpoint: 'official-api-token-catalogue' }));
+    return unique;
+  } catch (error) {
+    console.warn('[SIRE UNISWAP] official API catalogue failed:', error);
+    return [];
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 async function curve(): Promise<UnifiedInstrument[]> {
   const out: UnifiedInstrument[] = [];
   try {
-    const response = await getJson('https://api.curve.finance/v1/getPools/all', 30000);
+    const response = await getJson('https://api-core.curve.finance/v1/getPools/all', 60000);
     const rows = Array.isArray(response?.data) ? response.data : Array.isArray(response) ? response : [];
     const seen = new Set<string>();
     for (const raw of rows) {
