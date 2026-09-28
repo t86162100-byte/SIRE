@@ -2469,6 +2469,10 @@ async function getStandaloneMarketProviderCatalogue(
     case 'ZOOMEX': return zoomex();
     case 'BTCC': return btcc();
     case 'DIGIFINEX': return digifinex();
+    case 'BITHUMB': return bithumb();
+    case 'UPBIT': return upbit();
+    case 'PIONEX': return pionex();
+    case 'POLONIEX': return poloniex();
     case 'COINSTORE': return coinstore();
     case 'PROBIT': return probit();
     case 'POLONIEX': return poloniex();
@@ -2526,6 +2530,10 @@ export async function getUnifiedMarketCatalogue(fetchDeriv: () => Promise<any[]>
       ['ZOOMEX', zoomex()],
       ['BTCC', btcc()],
       ['DIGIFINEX', digifinex()],
+      ['BITHUMB', bithumb()],
+      ['UPBIT', upbit()],
+      ['PIONEX', pionex()],
+      ['POLONIEX', poloniex()],
       ['COINSTORE', coinstore()],
       ['PROBIT', probit()],
       ['POLONIEX', poloniex()],
