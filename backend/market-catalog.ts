@@ -1,4 +1,4 @@
-export type MarketProvider = 'BITRUE' | 'ASCENDEX' | 'COINW' | 'BINGX' | 'BINANCE' | 'FXCM' | 'YFINANCE' | 'SP' | 'DERIV' | 'BITGET' | 'BYBIT' | 'OKX' | 'KRAKEN' | 'COINBASE' | 'GATEIO' | 'KUCOIN' | 'GEMINI' | 'BITSO' | 'BITFINEX' | 'BITVAVO' | 'COINEX' | 'LBANK' | 'WOOX' | 'CRYPTOCOM' | 'HTX' | 'BITKUB' | 'UPBIT' | 'PIONEX' | 'POLONIEX' | 'BITHUMB' | 'MEXC' | 'PHEMEX' | 'WHITEBIT' | 'TWELVEDATA' | 'NASDAQTRADER' | 'CME' | 'CBOT' | 'NYMEX' | 'COMEX' | 'NYSEAMERICAN' | 'XETR' | 'HKEX' | 'BSE' | 'TSE' | 'XFRA' | 'EUREX' | 'ASX' | 'TWSE' | 'PSX' | 'IDX' | 'NSE' | 'BITSTAMP' | 'OANDA' | 'TRADINGVIEW' | 'FOREXCOM' | 'INTERACTIVEBROKERS' | 'TRADESTATION' | 'WEBULL' | 'MOOMOO' | 'NINJATRADER' | 'TRADOVATE' | 'AMPFUTURES' | 'TASTYTRADE' | 'TASTYFX' | 'CRYPTOCOMEXCHANGE' | 'COINBASEADVANCED' | 'ALPACA' | 'TRADIERBROKERAGE' | 'TRADEZERO' | 'COBRATRADING' | 'CLEARSTREET' | 'INVESTRADE' | 'PUBLIC' | 'PLUS500US' | 'OPTIMUSFUTURES' | 'EDGECLEAR' | 'IRONBEAM' | 'STONEX' | 'DORMANTRADING' | 'TRADIERFUTURES' | 'BITTREX' | 'BITMART' | 'BLANK' | 'XT' | 'DEEPCOIN' | 'TOOBIT' | 'WEEX' | 'BITUNIX' | 'BLOFIN' | 'COINCATCH' | 'ZOOMEX' | 'BTCC' | 'DIGIFINEX' | 'COINSTORE' | 'PROBIT' | 'POLONIEX' | 'COINDCX' | 'POLYMARKET' | 'KALSHI' | 'OPINION';
+export type MarketProvider = 'BITRUE' | 'ASCENDEX' | 'COINW' | 'BINGX' | 'BINANCE' | 'FXCM' | 'YFINANCE' | 'SP' | 'DERIV' | 'BITGET' | 'BYBIT' | 'OKX' | 'KRAKEN' | 'COINBASE' | 'GATEIO' | 'KUCOIN' | 'GEMINI' | 'BITSO' | 'BITFINEX' | 'BITVAVO' | 'COINEX' | 'LBANK' | 'WOOX' | 'CRYPTOCOM' | 'HTX' | 'BITKUB' | 'UPBIT' | 'PIONEX' | 'POLONIEX' | 'BITHUMB' | 'MEXC' | 'PHEMEX' | 'WHITEBIT' | 'TWELVEDATA' | 'NASDAQTRADER' | 'CME' | 'CBOT' | 'NYMEX' | 'COMEX' | 'NYSEAMERICAN' | 'XETR' | 'HKEX' | 'BSE' | 'TSE' | 'XFRA' | 'EUREX' | 'ASX' | 'TWSE' | 'PSX' | 'IDX' | 'NSE' | 'BITSTAMP' | 'OANDA' | 'TRADINGVIEW' | 'FOREXCOM' | 'INTERACTIVEBROKERS' | 'TRADESTATION' | 'WEBULL' | 'MOOMOO' | 'NINJATRADER' | 'TRADOVATE' | 'AMPFUTURES' | 'TASTYTRADE' | 'TASTYFX' | 'CRYPTOCOMEXCHANGE' | 'COINBASEADVANCED' | 'ALPACA' | 'TRADIERBROKERAGE' | 'TRADEZERO' | 'COBRATRADING' | 'CLEARSTREET' | 'INVESTRADE' | 'PUBLIC' | 'PLUS500US' | 'OPTIMUSFUTURES' | 'EDGECLEAR' | 'IRONBEAM' | 'STONEX' | 'DORMANTRADING' | 'TRADIERFUTURES' | 'BITTREX' | 'BITMART' | 'BLANK' | 'XT' | 'DEEPCOIN' | 'TOOBIT' | 'WEEX' | 'BITUNIX' | 'BLOFIN' | 'COINCATCH' | 'ZOOMEX' | 'BTCC' | 'DIGIFINEX' | 'COINSTORE' | 'PROBIT' | 'POLONIEX' | 'COINDCX' | 'POLYMARKET' | 'KALSHI' | 'OPINION' | 'UNISWAP';
 
 export interface UnifiedInstrument {
   id: string;
@@ -47,6 +47,7 @@ const providerLogo = (name: string) => {
   if (value === 'polymarket') return 'https://polymarket.com/favicon.ico';
   if (value === 'kalshi') return 'https://kalshi.com/favicon.ico';
   if (value === 'opinion') return 'https://opinion.trade/favicon.ico';
+  if (value === 'uniswap') return 'https://app.uniswap.org/favicon.ico';
   if (value === 'nasdaq' || value === 'nasdaqtrader') return 'https://cdn.simpleicons.org/nasdaq';
   return 'https://cdn.simpleicons.org/' + value;
 };
@@ -2587,6 +2588,109 @@ async function opinion(): Promise<UnifiedInstrument[]> {
   return out;
 }
 
+async function uniswap(): Promise<UnifiedInstrument[]> {
+  const out: UnifiedInstrument[] = [];
+  const apiKey = String(process.env.THE_GRAPH_API_KEY || process.env.UNISWAP_GRAPH_API_KEY || '').trim();
+  if (!apiKey) {
+    console.warn('[SIRE UNISWAP] THE_GRAPH_API_KEY/UNISWAP_GRAPH_API_KEY is not configured; Uniswap official subgraph gateway requires a Graph API key.');
+    return out;
+  }
+
+  const deployments = [
+    {
+      version: 'V2',
+      id: 'A3Np3RQbaBA6oKJgiwDJeo5T3zrYfGHPWFYayMwtNDum',
+      entity: 'pairs',
+      query: `query($skip:Int!){pairs(first:1000,skip:$skip,orderBy:reserveUSD,orderDirection:desc){id token0{id symbol name decimals} token1{id symbol name decimals} reserve0 reserve1 reserveUSD token0Price token1Price volumeUSD txCount}}`
+    },
+    {
+      version: 'V3',
+      id: '5zvR82QoaXYFyDEKLZ9t6v9adgnptxYpKpSbxtgVENFV',
+      entity: 'pools',
+      query: `query($skip:Int!){pools(first:1000,skip:$skip,orderBy:totalValueLockedUSD,orderDirection:desc){id token0{id symbol name decimals} token1{id symbol name decimals} feeTier liquidity sqrtPrice tick token0Price token1Price totalValueLockedUSD volumeUSD txCount}}`
+    },
+    {
+      version: 'V4',
+      id: 'DiYPVdygkfjDWhbxGSqAQxwBKmfKnkWQojqeM2rkLb3G',
+      entity: 'pools',
+      query: `query($skip:Int!){pools(first:1000,skip:$skip,orderBy:totalValueLockedUSD,orderDirection:desc){id token0{id symbol name decimals} token1{id symbol name decimals} feeTier tickSpacing hooks liquidity sqrtPrice tick token0Price token1Price totalValueLockedUSD volumeUSD txCount}}`
+    }
+  ];
+
+  const graphPost = async (endpoint:string, query:string, variables:Record<string,unknown>) => {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 30000);
+    try {
+      const response = await fetch(endpoint, {
+        method:'POST',
+        signal:controller.signal,
+        headers:{
+          'Content-Type':'application/json',
+          'Accept':'application/json',
+          'Authorization':'Bearer ' + apiKey,
+          'User-Agent':'SIRE-market-catalog/1.0'
+        },
+        body:JSON.stringify({query,variables})
+      });
+      if (!response.ok) throw new Error('HTTP ' + response.status);
+      const payload = await response.json();
+      if (Array.isArray(payload?.errors) && payload.errors.length) throw new Error(String(payload.errors[0]?.message || 'GraphQL error'));
+      return payload?.data || {};
+    } finally { clearTimeout(timer); }
+  };
+
+  for (const deployment of deployments) {
+    const endpoint = 'https://gateway.thegraph.com/api/' + encodeURIComponent(apiKey) + '/subgraphs/id/' + deployment.id;
+    let total = 0;
+    for (let skip = 0; skip < 100000; skip += 1000) {
+      try {
+        const data = await graphPost(endpoint, deployment.query, {skip});
+        const rows = Array.isArray(data?.[deployment.entity]) ? data[deployment.entity] : [];
+        for (const raw of rows) {
+          const token0 = raw?.token0 || {};
+          const token1 = raw?.token1 || {};
+          const symbol0 = String(token0?.symbol || token0?.id || '').trim();
+          const symbol1 = String(token1?.symbol || token1?.id || '').trim();
+          if (!raw?.id || !symbol0 || !symbol1) continue;
+          const symbol = symbol0 + '/' + symbol1;
+          const marketType = 'AMM ' + deployment.version + ' Pool';
+          const item = cryptoItem('UNISWAP', marketType, 'Crypto', {
+            symbol: String(raw.id),
+            baseAsset: symbol0,
+            quoteAsset: symbol1,
+            fullName: 'Uniswap ' + deployment.version + ' · ' + symbol,
+            status: 'online',
+            contractType: deployment.version === 'V2' ? 'constant-product' : 'concentrated-liquidity',
+            settleCoin: 'N/A'
+          }, {last: Number(raw?.token0Price) || undefined});
+          if (!item) continue;
+          item.id = 'UNISWAP:' + deployment.version + ':' + String(raw.id);
+          item.providerLabel = 'Uniswap';
+          item.marketType = marketType;
+          item.category = 'Crypto';
+          item.instrumentType = 'AMM Pool';
+          item.contractType = deployment.version === 'V2' ? 'constant-product' : 'concentrated-liquidity';
+          item.settlement = 'On-chain';
+          item.price = Number.isFinite(Number(raw?.token0Price)) ? Number(raw.token0Price) : undefined;
+          item.exchangeOpen = 1;
+          out.push(item);
+          total += 1;
+        }
+        if (rows.length < 1000) break;
+      } catch (error) {
+        console.warn('[SIRE UNISWAP] ' + deployment.version + ' page failed at skip=' + skip + ':', error);
+        break;
+      }
+    }
+    console.log('[SIRE UNISWAP] ' + deployment.version + ': ' + total);
+  }
+
+  const seen = new Set<string>();
+  const unique = out.filter(item => !seen.has(item.id) && (seen.add(item.id), true));
+  console.log('[SIRE UNISWAP] COMPLETE', JSON.stringify({total:unique.length, v2:unique.filter(x=>x.id.startsWith('UNISWAP:V2:')).length, v3:unique.filter(x=>x.id.startsWith('UNISWAP:V3:')).length, v4:unique.filter(x=>x.id.startsWith('UNISWAP:V4:')).length}));
+  return unique;
+}
+
 async function coinstore(): Promise<UnifiedInstrument[]> {
  const out:UnifiedInstrument[]=[]; const seen=new Set<string>();
  const add=(r:any)=>{const symbol=String(r?.symbolCode||r?.symbol||r?.symbolName||'').trim(); if(!symbol)return; const base=String(r?.tradeCurrencyCode||r?.baseCurrencyCode||r?.baseCoin||'').toUpperCase(); const quote=String(r?.quoteCurrencyCode||r?.quoteCoin||'').toUpperCase(); const x=cryptoItem('COINSTORE','Spot','Crypto',{...r,symbol,baseAsset:base,quoteAsset:quote,fullName:r?.displayName||symbol,status:r?.openTrade===false?'offline':'online'}); if(!x||seen.has(x.id))return; x.providerLabel='Coinstore';seen.add(x.id);out.push(x);};
@@ -2677,6 +2781,7 @@ export async function getStandaloneMarketProviderCatalogue(
     case 'POLYMARKET': return polymarket();
     case 'KALSHI': return kalshi();
     case 'OPINION': return opinion();
+    case 'UNISWAP': return uniswap();
     default: return [];
   }
 }
