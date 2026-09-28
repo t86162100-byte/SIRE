@@ -14,7 +14,7 @@ import { signup, login, logout, currentUser, googleStart, googleCallback } from 
 import { runSireDiagnostics } from './backend/sire-diagnostics.ts';
 import { runAutonomousCycle } from './autonomous/sire-autonomous-cycle.ts';
 import { recordIssue, getRecentIssues } from './backend/sire-issue-tracker.ts';
-import { getUnifiedMarketCatalogue, getCmeCatalogueForDiagnostics, getNyseAmericanCatalogueForDiagnostics } from './backend/market-catalog.ts';
+import { getUnifiedMarketCatalogue, getStandaloneMarketProviderCatalogue, getCmeCatalogueForDiagnostics, getNyseAmericanCatalogueForDiagnostics } from './backend/market-catalog.ts';
 import { binanceHistory, binanceQuote } from './backend/binance-market-data.ts';
 
 const PORT = Number(process.env.PORT || 10000);
@@ -922,6 +922,28 @@ const server = http.createServer(async (req,res) => {
       const failures = parsed.failures && typeof parsed.failures === 'object' ? parsed.failures : {};
       console.log('[SIRE BINANCE BROWSER REPORT]', JSON.stringify({source:'browser',total,counts,failures,reportedAt:parsed.reportedAt||Date.now()}));
       return res.writeHead(200,{ 'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8' }).end(JSON.stringify({ok:true,total,counts,failures}));
+    }
+    if (req.method === 'GET' && pathname.startsWith('/api/sire/markets/provider/')) {
+      const provider = decodeURIComponent(pathname.slice('/api/sire/markets/provider/'.length)).toUpperCase();
+      const allowed = new Set(['DERIV','BINANCE','COINBASE','KRAKEN','BYBIT','OKX']);
+      if (!allowed.has(provider)) {
+        return res.writeHead(404,{ 'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8' }).end(JSON.stringify({ok:false,error:'Unknown standalone market provider: '+provider}));
+      }
+      try {
+        const result = await getStandaloneMarketProviderCatalogue(provider, async () => {
+          const health = await checkDerivPublicMarketData();
+          if (!health.ok || !Array.isArray(health.activeSymbols)) throw new Error(health.error || 'Deriv catalogue unavailable.');
+          return health.activeSymbols;
+        });
+        console.log('[SIRE MARKET PROVIDER] COMPLETE', JSON.stringify({provider,count:result.length}));
+        return res.writeHead(200,{ 'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8' }).end(JSON.stringify({
+          ok:true, provider, count:result.length, instruments:result,
+        }));
+      } catch (cause) {
+        const message=cause instanceof Error?cause.message:String(cause);
+        console.error('[SIRE MARKET PROVIDER] FAILED', JSON.stringify({provider,error:message}));
+        return res.writeHead(502,{ 'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8' }).end(JSON.stringify({ok:false,provider,error:message,instruments:[]}));
+      }
     }
     if (req.method === 'GET' && pathname === '/api/sire/markets/catalog') {
       try {
