@@ -745,7 +745,112 @@ async function tradingviewFeedRegistry(): Promise<UnifiedInstrument[]> {
   return out;
 }
 
-async function bitget(): Promise<UnifiedInstrument[]> { const out:UnifiedInstrument[]=[];for(const c of ['SPOT','MARGIN','USDT-FUTURES','COIN-FUTURES','USDC-FUTURES'])try{const r=await getJson('https://api.bitget.com/api/v3/market/instruments?category='+c,15000);for(const raw of r?.data||[]){if(String(raw?.status||'').toLowerCase()!=='online')continue;const t=c==='SPOT'?'Spot':c==='MARGIN'?'Margin':c==='USDT-FUTURES'?(String(raw?.type||'').toLowerCase()==='delivery'?'USDT Futures':'USDT Perpetuals'):c==='COIN-FUTURES'?(String(raw?.type||'').toLowerCase()==='delivery'?'Coin-M Futures':'Coin-M Perpetuals'):(String(raw?.type||'').toLowerCase()==='delivery'?'USDC Futures':'USDC Perpetuals');const i=cryptoItem('BITGET',t,'Crypto',raw);if(i)out.push(i)}}catch(e){console.warn('[SIRE BITGET] '+c+' failed:',e)}return out; }
+async function bitget(): Promise<UnifiedInstrument[]> {
+  const out: UnifiedInstrument[] = [];
+  const seen = new Set<string>();
+  const categories = ['SPOT', 'MARGIN', 'USDT-FUTURES', 'COIN-FUTURES', 'USDC-FUTURES'] as const;
+
+  const assetCategory = (raw: any): string => {
+    const type = String(raw?.symbolType || '').toLowerCase();
+    if (type === 'stock' || type === 'stocks') return 'Stocks';
+    if (type === 'metal' || type === 'precious_metal' || type === 'commodity' || type === 'commodities') return 'Commodities';
+    return 'Crypto';
+  };
+
+  const add = (raw: any, requestedCategory: string) => {
+    const symbol = String(raw?.symbol || '').trim();
+    const category = String(raw?.category || requestedCategory).toUpperCase();
+    if (!symbol || !categories.includes(category as any)) return;
+    const type = String(raw?.type || raw?.symbolType || '').toLowerCase();
+    const marketType =
+      category === 'SPOT' ? 'Spot' :
+      category === 'MARGIN' ? 'Margin' :
+      type === 'perpetual' ? 'Perpetuals' :
+      'Futures';
+    const key = category + ':' + symbol;
+    if (seen.has(key)) return;
+
+    const item = cryptoItem('BITGET', marketType, assetCategory(raw), {
+      ...raw,
+      symbol,
+      baseCoin: raw?.baseCoin || raw?.baseAsset,
+      quoteCoin: raw?.quoteCoin || raw?.quoteAsset,
+      fullName: raw?.displayName || symbol,
+      status: raw?.status || 'online',
+      contractType: raw?.type,
+      settleCoin: raw?.settleCoin || raw?.settleCcy || raw?.quoteCoin,
+      deliveryTime: raw?.deliveryTime,
+      isMarginEnabled: category === 'MARGIN',
+    });
+    if (!item) return;
+
+    item.id = 'BITGET:' + category + ':' + symbol;
+    item.providerLabel = 'Bitget';
+    item.marketType = marketType;
+    item.category = assetCategory(raw);
+    item.instrumentType = category;
+    item.contractType = String(raw?.type || '').trim() || item.contractType;
+    item.settlement = String(raw?.settleCoin || raw?.settleCcy || '').trim() || item.settlement;
+    item.expiry = String(raw?.deliveryTime || '').trim() || item.expiry;
+    item.supportsMargin = category === 'MARGIN' || Boolean(raw?.maxLeverage || raw?.maxCrossedLeverage || raw?.maxIsolatedLeverage);
+    (item as any).bitgetCategory = category;
+    (item as any).symbolType = raw?.symbolType;
+    (item as any).deliveryPeriod = raw?.deliveryPeriod;
+    (item as any).isRwa = String(raw?.isRwa || '').toUpperCase() === 'YES';
+    (item as any).isReality = String(raw?.isReality || '').toLowerCase() === 'yes';
+
+    seen.add(key);
+    out.push(item);
+  };
+
+  // Bitget's public UTA v3 catalogue covers every public trading product line.
+  // Query each category independently so one failed category never suppresses
+  // the others. We retain all returned instrument states instead of silently
+  // dropping non-online rows.
+  for (const category of categories) {
+    try {
+      const response = await getJsonAny([
+        'https://api.bitget.com/api/v3/market/instruments?category=' + encodeURIComponent(category),
+        'https://api.bitget.com/api/v3/public/instruments?category=' + encodeURIComponent(category),
+      ], 15000);
+      if (String(response?.code || '00000') !== '00000') throw new Error(String(response?.msg || 'Bitget instruments request failed'));
+      const rows = Array.isArray(response?.data) ? response.data : [];
+      for (const raw of rows) add(raw, category);
+      console.log('[SIRE BITGET] v3 ' + category + ': ' + rows.length);
+    } catch (error) {
+      console.warn('[SIRE BITGET] v3 ' + category + ' failed:', error);
+    }
+  }
+
+  // Independent v2 contract fallback. It is additive and deduplicated, so
+  // Render can still populate futures/perpetuals if v3 is temporarily blocked.
+  for (const productType of ['USDT-FUTURES', 'COIN-FUTURES', 'USDC-FUTURES']) {
+    try {
+      const response = await getJson('https://api.bitget.com/api/v2/mix/market/contracts?productType=' + productType, 15000);
+      if (String(response?.code || '00000') !== '00000') throw new Error(String(response?.msg || 'Bitget futures contract request failed'));
+      const rows = Array.isArray(response?.data) ? response.data : [];
+      for (const raw of rows) add({
+        ...raw,
+        category: productType,
+        type: String(raw?.symbolType || '').toLowerCase() === 'perpetual' ? 'perpetual' : 'delivery',
+        settleCoin: raw?.supportMarginCoins?.[0] || raw?.marginCoin,
+      }, productType);
+      console.log('[SIRE BITGET] v2 ' + productType + ': ' + rows.length);
+    } catch (error) {
+      console.warn('[SIRE BITGET] v2 ' + productType + ' failed:', error);
+    }
+  }
+
+  const unique = out.filter((item, index, all) => all.findIndex(other => other.id === item.id) === index);
+  console.log('[SIRE BITGET] COMPLETE', JSON.stringify({
+    total: unique.length,
+    spot: unique.filter(i => i.instrumentType === 'SPOT').length,
+    margin: unique.filter(i => i.instrumentType === 'MARGIN').length,
+    perpetuals: unique.filter(i => i.marketType === 'Perpetuals').length,
+    futures: unique.filter(i => i.marketType === 'Futures').length,
+  }));
+  return unique;
+}
 
 async function kraken(): Promise<UnifiedInstrument[]> {
   const out: UnifiedInstrument[] = [];
@@ -2414,6 +2519,7 @@ export async function getStandaloneMarketProviderCatalogue(
     case 'KRAKEN': return kraken();
     case 'BYBIT': return bybit();
     case 'OKX': return okx();
+    case 'BITGET': return bitget();
     default: return [];
   }
 }
@@ -2438,6 +2544,8 @@ export async function getUnifiedMarketCatalogue(fetchDeriv: () => Promise<any[]>
       // OKX public instruments: Spot, Margin, Perpetuals, Futures/X-Perps,
       // Options and Event Contracts.
       ['OKX', okx()],
+      // Bitget is independent: Spot, Margin, USDT-M, Coin-M and USDC-M.
+      ['BITGET', bitget()],
       ['FXCM', fxcm()],
       // Nasdaq Trader supplies the public instrument master for Nasdaq-listed,
       // other U.S.-listed, bonds, NOM options, mutual funds and additional
