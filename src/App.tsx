@@ -85,7 +85,7 @@ const exchangeDomains: Record<string, string> = {
   hyperliquid: 'hyperliquid.xyz',
   oanda: 'oanda.com',
   woox: 'woo.org',
-  uniswap: 'uniswap.org', curve: 'curve.fi',
+  uniswap: 'uniswap.org', curve: 'curve.fi', pancakeswap: 'pancakeswap.finance',
 };
 
 const makeProviderLogoFallback = (item: Instrument) => {
