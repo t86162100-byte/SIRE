@@ -941,6 +941,486 @@ async function ascendex(): Promise<UnifiedInstrument[]> {
  console.log('[SIRE ASCENDEX] COMPLETE',JSON.stringify({total:out.length,spot:out.filter(x=>x.marketType==='Spot').length,margin:out.filter(x=>x.marketType==='Margin').length,perpetuals:out.filter(x=>x.marketType==='Perpetuals').length,futures:out.filter(x=>x.marketType==='Futures').length}));return out;
 }
 
+async function kraken(): Promise<UnifiedInstrument[]> {
+  const out: UnifiedInstrument[] = [];
+  const seen = new Set<string>();
+
+  const add = (raw: any, marketType: string, category: string, symbolOverride?: string) => {
+    const symbol = String(symbolOverride || raw?.symbol || raw?.wsname || raw?.altname || raw?.id || raw?.instrumentName || '').trim();
+    if (!symbol) return;
+    const key = marketType + ':' + symbol;
+    if (seen.has(key)) return;
+
+    const base = String(raw?.baseAsset || raw?.base_currency || raw?.base || raw?.underlyingAsset || raw?.underlying || raw?.underlying_symbol || '').trim();
+    const quote = String(raw?.quoteAsset || raw?.quote_currency || raw?.quote || raw?.quoteCurrency || raw?.settleCurrency || '').trim();
+
+    const item = cryptoItem('KRAKEN', marketType, category, {
+      ...raw,
+      symbol,
+      baseAsset: base,
+      quoteAsset: quote,
+      fullName: raw?.displayName || raw?.display_name || raw?.name || symbol,
+      status: raw?.status || raw?.state || (raw?.tradeable === false ? 'offline' : 'online'),
+      contractType: raw?.contractType || raw?.contract_type || raw?.type,
+      settleCoin: raw?.settleCurrency || raw?.settle_currency || raw?.settleCoin,
+      deliveryTime: raw?.expiry || raw?.expiration || raw?.expiryTime,
+      strikePrice: raw?.strikePrice || raw?.strike_price,
+      optionType: raw?.optionType || raw?.option_type,
+    });
+    if (!item) return;
+
+    item.id = 'KRAKEN:' + marketType + ':' + symbol;
+    item.providerLabel = 'Kraken';
+    item.marketType = marketType;
+    item.category = category;
+    item.instrumentType = marketType;
+    seen.add(key);
+    out.push(item);
+  };
+
+  try {
+    const response = await getJson('https://api.kraken.com/0/public/AssetPairs', 15000);
+    const rows = response?.result && typeof response.result === 'object' ? Object.entries(response.result) : [];
+    for (const [id, raw] of rows) {
+      add({ ...(raw as any), id, symbol: (raw as any)?.wsname || (raw as any)?.altname || id }, 'Spot', 'Crypto', id);
+    }
+    console.log('[SIRE KRAKEN] Spot AssetPairs: ' + rows.length);
+  } catch (error) {
+    console.warn('[SIRE KRAKEN] Spot AssetPairs failed:', error);
+  }
+
+  try {
+    const response = await getJson('https://futures.kraken.com/derivatives/api/v3/instruments', 20000);
+    const rows = Array.isArray(response?.instruments) ? response.instruments : Array.isArray(response?.result) ? response.result : [];
+
+    for (const raw of rows) {
+      const type = String(raw?.type || raw?.instrumentType || raw?.contractType || '').toLowerCase();
+      const symbol = String(raw?.symbol || raw?.instrumentName || raw?.instrument || raw?.id || '').trim();
+      const display = String(raw?.displayName || raw?.display_name || raw?.name || symbol).toLowerCase();
+      const expiry = String(raw?.expiry || raw?.expiration || raw?.expiryTime || '').trim();
+
+      let marketType = 'Other Derivatives';
+      if (type.includes('perpetual') || type === 'perpetual_swap' || display.includes('perpetual') || symbol.startsWith('PF_') || symbol.startsWith('PI_')) {
+        marketType = 'Perpetual Futures';
+      } else if (type.includes('option') || display.includes('option')) {
+        marketType = 'Options';
+      } else if (type.includes('future') || type.includes('futures') || expiry || symbol.startsWith('FI_')) {
+        marketType = 'Futures';
+      }
+
+      add(raw, marketType, 'Crypto', symbol);
+    }
+    console.log('[SIRE KRAKEN] Derivatives instruments: ' + rows.length);
+  } catch (error) {
+    console.warn('[SIRE KRAKEN] Derivatives instruments failed:', error);
+  }
+
+  const counts = out.reduce<Record<string, number>>((acc, item) => {
+    acc[item.marketType] = (acc[item.marketType] || 0) + 1;
+    return acc;
+  }, {});
+  console.log('[SIRE KRAKEN] COMPLETE', JSON.stringify({ total: out.length, ...counts }));
+  return out;
+}
+
+async function bybit(): Promise<UnifiedInstrument[]> {
+  const out: UnifiedInstrument[] = [];
+  const seen = new Set<string>();
+  // Render's default US runtime can be rejected by Bybit's API edge. The
+  // Frankfurt relay is the primary path; direct Bybit endpoints remain a
+  // fallback for deployments whose source region is accepted by Bybit.
+  const relay = String(process.env.SIRE_BYBIT_RELAY_URL || '').replace(/\/+$/, '');
+  const bybitEndpoints = (pathAndQuery: string) => [
+    ...(relay ? [relay + pathAndQuery] : []),
+    'https://api.bybit.com' + pathAndQuery,
+    'https://api.bytick.com' + pathAndQuery,
+  ];
+
+  const add = (raw: any, marketType: string, category: string, instrumentType?: string) => {
+    const symbol = String(raw?.symbol || '').trim();
+    if (!symbol) return;
+    const key = category + ':' + symbol;
+    if (seen.has(key)) return;
+
+    const item = cryptoItem('BYBIT', marketType, category, {
+      ...raw,
+      symbol,
+      baseCoin: raw?.baseCoin,
+      quoteCoin: raw?.quoteCoin,
+      fullName: raw?.fullName || raw?.displayName || symbol,
+      status: raw?.status || 'online',
+      contractType: raw?.contractType || raw?.eventContractType,
+      settleCoin: raw?.settleCoin,
+      deliveryTime: raw?.deliveryTime,
+      strikePrice: raw?.strikePrice,
+      optionsType: raw?.optionsType,
+      isMarginEnabled: raw?.marginTrading && raw.marginTrading !== 'none',
+    });
+    if (!item) return;
+
+    item.id = 'BYBIT:' + category + ':' + symbol;
+    item.providerLabel = 'Bybit';
+    item.marketType = marketType;
+    item.category = category;
+    item.instrumentType = instrumentType || marketType;
+    item.contractType = String(raw?.contractType || raw?.eventContractType || '').trim() || item.contractType;
+    item.settlement = String(raw?.settleCoin || '').trim() || item.settlement;
+    item.expiry = String(raw?.deliveryTime || '').trim() || item.expiry;
+    item.strike = Number.isFinite(Number(raw?.strikePrice)) ? Number(raw.strikePrice) : item.strike;
+    item.optionType = String(raw?.optionsType || '').trim() || item.optionType;
+    item.supportsMargin = Boolean(raw?.marginTrading && raw.marginTrading !== 'none');
+    (item as any).symbolType = raw?.symbolType;
+    (item as any).marketRegion = raw?.marketRegion;
+    (item as any).underlyingTicker = raw?.underlyingTicker;
+    (item as any).isPreListing = Boolean(raw?.isPreListing);
+    seen.add(key);
+    out.push(item);
+  };
+
+  const categoryFor = (raw: any, fallback = 'Crypto'): string => {
+    const symbolType = String(raw?.symbolType || '').trim();
+    if (symbolType === 'stock' || symbolType === 'xstocks' || symbolType === 'mstocks') return 'Stocks';
+    if (symbolType === 'ETF') return 'ETF';
+    if (symbolType === 'commodity') return 'Commodities';
+    if (symbolType === 'forex') return 'Forex';
+    return fallback;
+  };
+
+  const fetchPaged = async (category: string, params: Record<string, string>, handler: (raw: any) => void, paginated = true) => {
+    let cursor = '';
+    for (let page = 0; page < 1000; page += 1) {
+      const query = new URLSearchParams({ category, ...params });
+      if (paginated) {
+        query.set('limit', '1000');
+        if (cursor) query.set('cursor', cursor);
+      }
+
+      const response = await getJsonAny(bybitEndpoints('/v5/market/instruments-info?' + query.toString()), 15000);
+
+      if (Number(response?.retCode) !== 0) {
+        throw new Error(String(response?.retMsg || 'Bybit API error'));
+      }
+
+      const rows = Array.isArray(response?.result?.list) ? response.result.list : [];
+      for (const raw of rows) handler(raw);
+
+      const next = String(response?.result?.nextPageCursor || '');
+      console.log('[SIRE BYBIT] ' + category + ' page ' + (page + 1) + ': ' + rows.length);
+      if (!paginated || !next || next === cursor || rows.length === 0) break;
+      cursor = next;
+    }
+  };
+
+  try {
+    // Spot has no pagination according to Bybit's API and returns its complete
+    // online spot universe in one response.
+    await fetchPaged('spot', {}, raw => {
+      add(raw, 'Spot', categoryFor(raw), 'Spot');
+    }, false);
+  } catch (error) {
+    console.warn('[SIRE BYBIT] spot failed:', error);
+  }
+
+  try {
+    // Linear contains USDT/USDC perpetuals and delivery futures. Keep the
+    // contractType supplied by Bybit so the UI can distinguish them exactly.
+    await fetchPaged('linear', {}, raw => {
+      const contractType = String(raw?.contractType || '').toLowerCase();
+      const marketType = contractType.includes('perpetual') ? 'Perpetuals' : 'Futures';
+      add(raw, marketType, categoryFor(raw), marketType);
+    });
+  } catch (error) {
+    console.warn('[SIRE BYBIT] linear failed:', error);
+  }
+
+  try {
+    // Inverse contains both inverse perpetuals and inverse delivery futures.
+    await fetchPaged('inverse', {}, raw => {
+      const contractType = String(raw?.contractType || '').toLowerCase();
+      const marketType = contractType.includes('perpetual') ? 'Perpetuals' : 'Futures';
+      add(raw, marketType, categoryFor(raw), marketType);
+    });
+  } catch (error) {
+    console.warn('[SIRE BYBIT] inverse failed:', error);
+  }
+
+  const optionBaseTypes = new Map<string, string>();
+  try {
+    const response = await getJsonAny(bybitEndpoints('/v5/market/option-base-coins'), 15000);
+    for (const raw of Array.isArray(response?.result?.list) ? response.result.list : []) {
+      optionBaseTypes.set(String(raw?.baseCoin || '').toUpperCase(), String(raw?.underlyingType || '0'));
+    }
+  } catch (error) {
+    console.warn('[SIRE BYBIT] option base-coin discovery failed:', error);
+  }
+
+  try {
+    // Passing baseCoin=All is required to enumerate the complete option
+    // universe rather than Bybit's default BTC-only option set.
+    await fetchPaged('option', { baseCoin: 'All' }, raw => {
+      const underlyingType = optionBaseTypes.get(String(raw?.baseCoin || '').toUpperCase()) || '0';
+      const category =
+        underlyingType === '1' ? 'Commodities' :
+        underlyingType === '2' ? 'Stocks' :
+        underlyingType === '3' ? 'Forex' :
+        underlyingType === '4' ? 'Oil' :
+        'Crypto';
+      add(raw, 'Options', category, 'Options');
+    });
+  } catch (error) {
+    console.warn('[SIRE BYBIT] option failed:', error);
+  }
+
+  try {
+    // Bybit Event Contracts are exposed through a separate API, not through
+    // /v5/market/instruments-info. Include every non-Closed event instrument.
+    let cursor = '';
+    for (let page = 0; page < 1000; page += 1) {
+      const query = new URLSearchParams({ limit: '100' });
+      if (cursor) query.set('cursor', cursor);
+      const response = await getJsonAny(bybitEndpoints('/v5/event/instruments-info?' + query.toString()), 15000);
+      if (Number(response?.retCode) !== 0) {
+        throw new Error(String(response?.retMsg || 'Bybit event API error'));
+      }
+
+      const rows = Array.isArray(response?.result?.list) ? response.result.list : [];
+      for (const raw of rows) {
+        if (String(raw?.status || '').toLowerCase() === 'closed') continue;
+        add(raw, 'Event Contracts', 'Crypto', 'Event Contracts');
+      }
+
+      const next = String(response?.result?.nextPageCursor || '');
+      console.log('[SIRE BYBIT] events page ' + (page + 1) + ': ' + rows.length);
+      if (!next || next === cursor || rows.length === 0) break;
+      cursor = next;
+    }
+  } catch (error) {
+    console.warn('[SIRE BYBIT] events failed:', error);
+  }
+
+  console.log('[SIRE BYBIT] COMPLETE', JSON.stringify({
+    total: out.length,
+    spot: out.filter(i => i.marketType === 'Spot').length,
+    perpetuals: out.filter(i => i.marketType === 'Perpetuals').length,
+    futures: out.filter(i => i.marketType === 'Futures').length,
+    options: out.filter(i => i.marketType === 'Options').length,
+    events: out.filter(i => i.marketType === 'Event Contracts').length,
+  }));
+
+  return out;
+}
+
+async function okx(): Promise<UnifiedInstrument[]> {
+  const out: UnifiedInstrument[] = [];
+  const endpointTypes = ['SPOT', 'MARGIN', 'SWAP', 'FUTURES'] as const;
+
+  const categoryFromInstCategory = (raw: any): string => {
+    const key = String(raw?.instCategory || '').trim();
+    if (key === '1') return 'Crypto';
+    if (key === '3') return 'Stocks';
+    if (key === '4') return 'Commodities';
+    if (key === '5') return 'Forex';
+    if (key === '6') return 'Bonds';
+    if (String(raw?.instType || '').toUpperCase() === 'EVENTS') return 'Event Contracts';
+    return 'Crypto';
+  };
+
+  const marketTypeFor = (instType: string, raw: any): string => {
+    switch (instType) {
+      case 'SPOT': return 'Spot';
+      case 'MARGIN': return 'Margin';
+      case 'SWAP': return 'Perpetuals';
+      case 'OPTION': return 'Options';
+      case 'EVENTS': return 'Event Contracts';
+      case 'FUTURES': {
+        // OKX X-Perps are returned as FUTURES and identified by ruleType.
+        // Pre-market X-Perps use ruleType=pre_market until conversion.
+        const ruleType = String(raw?.ruleType || '').toLowerCase();
+        if (ruleType === 'xperp' || ruleType === 'pre_market') return 'Perpetuals';
+        return 'Futures';
+      }
+      default: return instType;
+    }
+  };
+
+  const normalize = (instType: string, raw: any): UnifiedInstrument | null => {
+    const marketType = marketTypeFor(instType, raw);
+    const category = categoryFromInstCategory(raw);
+    const item = cryptoItem('OKX', marketType, category, {
+      ...raw,
+      symbol: raw?.instId,
+      baseCcy: raw?.baseCcy || raw?.uly || raw?.instFamily,
+      quoteCcy: raw?.quoteCcy || raw?.settleCcy,
+      fullName: raw?.instId,
+      status: raw?.state || 'live',
+      type: marketType,
+      contractType: raw?.ctType || raw?.ruleType || undefined,
+      settleCcy: raw?.settleCcy,
+      deliveryTime: raw?.expTime || raw?.contTdSwTime || undefined,
+      strikePrice: raw?.stk,
+      optionsType: raw?.optType,
+    });
+    if (!item) return null;
+
+    item.id = 'OKX:' + instType + ':' + String(raw?.instId || item.symbol);
+    item.providerLabel = 'OKX';
+    item.marketType = marketType;
+    item.category = category;
+    item.instrumentType = instType;
+    item.contractType = String(raw?.ruleType || raw?.ctType || '').trim() || item.contractType;
+    item.settlement = String(raw?.settleCcy || '').trim() || item.settlement;
+    item.expiry = String(raw?.expTime || '').trim() || item.expiry;
+    item.strike = Number.isFinite(Number(raw?.stk)) ? Number(raw.stk) : item.strike;
+    item.optionType = String(raw?.optType || '').trim() || item.optionType;
+    item.supportsMargin = instType === 'MARGIN' || Boolean(raw?.lever);
+    return item;
+  };
+
+  for (const instType of endpointTypes) {
+    try {
+      const response = await getJsonAny([
+        'https://www.okx.com/api/v5/public/instruments?instType=' + instType,
+        'https://app.okx.com/api/v5/public/instruments?instType=' + instType,
+      ], 15000);
+
+      const rows = Array.isArray(response?.data) ? response.data : [];
+      for (const raw of rows) {
+        // The public catalogue contains suspended/rebase rows too. The Quote
+        // catalogue is intended to expose instruments OKX currently offers for
+        // trading, so keep only live instruments while retaining every live ID.
+        if (String(raw?.state || '').toLowerCase() !== 'live') continue;
+        const item = normalize(instType, raw);
+        if (item) out.push(item);
+      }
+
+      console.log('[SIRE OKX] ' + instType + ': ' + rows.length + ' published / ' +
+        out.filter(item => item.instrumentType === instType).length + ' live');
+    } catch (error) {
+      console.warn('[SIRE OKX] ' + instType + ' failed:', error);
+    }
+  }
+
+  // OKX requires an underlying (uly) or instrument family when querying
+  // OPTION instruments. Discover every option underlying first, then query each
+  // family so the catalog does not silently return zero options.
+  try {
+    const underlyingResponse = await getJsonAny([
+      'https://www.okx.com/api/v5/public/underlying?instType=OPTION',
+      'https://app.okx.com/api/v5/public/underlying?instType=OPTION',
+    ], 15000);
+    const families = new Set<string>();
+    for (const row of Array.isArray(underlyingResponse?.data) ? underlyingResponse.data : []) {
+      const values = Array.isArray(row?.uly) ? row.uly : [];
+      for (const value of values) {
+        const family = String(value || '').trim();
+        if (family) families.add(family);
+      }
+    }
+
+    for (const family of families) {
+      try {
+        const response = await getJsonAny([
+          'https://www.okx.com/api/v5/public/instruments?instType=OPTION&uly=' + encodeURIComponent(family),
+          'https://app.okx.com/api/v5/public/instruments?instType=OPTION&uly=' + encodeURIComponent(family),
+        ], 15000);
+        const rows = Array.isArray(response?.data) ? response.data : [];
+        for (const raw of rows) {
+          if (String(raw?.state || '').toLowerCase() !== 'live') continue;
+          const item = normalize('OPTION', raw);
+          if (item) out.push(item);
+        }
+      } catch (error) {
+        console.warn('[SIRE OKX] OPTION family ' + family + ' failed:', error);
+      }
+    }
+    console.log('[SIRE OKX] OPTION families: ' + families.size + ' / live instruments: ' +
+      out.filter(item => item.instrumentType === 'OPTION').length);
+  } catch (error) {
+    console.warn('[SIRE OKX] OPTION underlying discovery failed:', error);
+  }
+
+  const seen = new Set<string>();
+  const unique = out.filter(item => {
+    if (seen.has(item.id)) return false;
+    seen.add(item.id);
+    return true;
+  });
+
+  console.log('[SIRE OKX] COMPLETE', JSON.stringify({
+    total: unique.length,
+    spot: unique.filter(item => item.instrumentType === 'SPOT').length,
+    margin: unique.filter(item => item.instrumentType === 'MARGIN').length,
+    perpetuals: unique.filter(item => item.marketType === 'Perpetuals').length,
+    futures: unique.filter(item => item.instrumentType === 'FUTURES' && item.marketType === 'Futures').length,
+    options: unique.filter(item => item.instrumentType === 'OPTION').length,
+  }));
+
+  return unique;
+}
+
+
+function derivItem(raw: any): UnifiedInstrument | null {
+  const symbol = String(raw?.underlying_symbol ?? raw?.symbol ?? '').trim();
+  if (!symbol) return null;
+
+  const market = String(raw?.market ?? '').trim().toLowerCase();
+  const symbolType = String(raw?.underlying_symbol_type ?? raw?.symbol_type ?? '').trim().toLowerCase();
+  const explicitCategory = String(raw?.category ?? '').trim().toLowerCase();
+  const categoryKey = explicitCategory || symbolType || market;
+
+  const categoryMap: Record<string,string> = {
+    synthetic: 'Synthetic Indices',
+    synthetic_indices: 'Synthetic Indices',
+    syntheticindex: 'Synthetic Indices',
+    forex: 'Forex',
+    currency: 'Forex',
+    commodities: 'Commodities',
+    commodity: 'Commodities',
+    indices: 'Indices',
+    index: 'Indices',
+    stocks: 'Stocks',
+    stock: 'Stocks',
+    shares: 'Stocks',
+    crypto: 'Crypto',
+    cryptocurrency: 'Crypto',
+    other: 'Other',
+  };
+
+  const category =
+    categoryMap[categoryKey] ||
+    (market.includes('synthetic') || symbolType.includes('synthetic') ? 'Synthetic Indices' :
+      market.includes('forex') || symbolType.includes('forex') ? 'Forex' :
+      market.includes('commodit') || symbolType.includes('commodit') ? 'Commodities' :
+      market.includes('index') || symbolType.includes('index') ? 'Indices' :
+      market.includes('stock') || symbolType.includes('stock') ? 'Stocks' :
+      market.includes('crypto') || symbolType.includes('crypto') ? 'Crypto' :
+      'Other');
+
+  const marketType = category === 'Synthetic Indices' ? 'Synthetic Indices' : category;
+  const base = String(raw?.base ?? '').trim() || undefined;
+  const quote = String(raw?.quote ?? '').trim() || undefined;
+  const displayName = String(raw?.underlying_symbol_name ?? raw?.display_name ?? raw?.name ?? symbol).trim() || symbol;
+  const suspended = Number(raw?.is_trading_suspended ?? raw?.tradingSuspended);
+
+  return {
+    id: 'DERIV:' + symbol,
+    provider: 'DERIV',
+    providerLabel: 'Deriv',
+    marketType,
+    category,
+    symbol,
+    displaySymbol: displayName || symbol,
+    name: displayName,
+    base,
+    quote,
+    exchangeOpen: Number.isFinite(Number(raw?.exchange_is_open ?? raw?.exchangeOpen)) ? Number(raw?.exchange_is_open ?? raw?.exchangeOpen) : undefined,
+    status: suspended === 1 ? 'suspended' : 'online',
+    logoUrl: assetLogo(base) || providerLogo('DERIV'),
+    providerLogoUrl: providerLogo('DERIV'),
+    instrumentType: String(raw?.underlying_symbol_type ?? raw?.symbol_type ?? marketType),
+  };
+}
+
 export async function getStandaloneMarketProviderCatalogue(
   provider: MarketProvider,
   fetchDeriv: () => Promise<any[]>,
