@@ -82,8 +82,8 @@ async function fetchCoinEx(): Promise<ExchangeCatalogue> {
 
 function htxSpotInstrument(row: any): ExchangeInstrument | null {
   const symbol = String(row?.symbol || '').trim().toUpperCase();
-  const base = String(row?.base-currency || row?.base_currency || '').trim().toUpperCase();
-  const quote = String(row?.quote-currency || row?.quote_currency || '').trim().toUpperCase();
+  const base = String(row?.['base-currency'] || row?.base_currency || '').trim().toUpperCase();
+  const quote = String(row?.['quote-currency'] || row?.quote_currency || '').trim().toUpperCase();
   if (!symbol || !base || !quote) return null;
   return {
     id: `htx:spot:${symbol}`,
