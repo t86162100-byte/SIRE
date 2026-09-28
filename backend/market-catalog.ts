@@ -246,101 +246,6 @@ async function coinbase(): Promise<UnifiedInstrument[]> {
   return out;
 }
 
-async function kraken(): Promise<UnifiedInstrument[]> {
-  const out: UnifiedInstrument[] = [];
-  const seen = new Set<string>();
-
-  const add = (raw: any, marketType: string, category: string, symbolOverride?: string) => {
-    const symbol = String(symbolOverride || raw?.symbol || raw?.wsname || raw?.altname || raw?.id || '').trim();
-    if (!symbol) return;
-    const key = marketType + ':' + symbol;
-    if (seen.has(key)) return;
-    const base = String(
-      raw?.baseAsset || raw?.base_currency || raw?.base || raw?.underlyingAsset ||
-      raw?.underlying || raw?.underlying_symbol || ''
-    ).trim();
-    const quote = String(
-      raw?.quoteAsset || raw?.quote_currency || raw?.quote || raw?.quoteCurrency ||
-      raw?.settleCurrency || ''
-    ).trim();
-    const item = cryptoItem('KRAKEN', marketType, category, {
-      ...raw,
-      symbol,
-      baseAsset: base,
-      quoteAsset: quote,
-      fullName: raw?.displayName || raw?.display_name || raw?.name || symbol,
-      status: raw?.status || raw?.state || (raw?.tradeable === false ? 'offline' : 'online'),
-      contractType: raw?.contractType || raw?.contract_type || raw?.type,
-      settleCoin: raw?.settleCurrency || raw?.settle_currency || raw?.settleCoin,
-      deliveryTime: raw?.expiry || raw?.expiration || raw?.expiryTime,
-      strikePrice: raw?.strikePrice || raw?.strike_price,
-      optionType: raw?.optionType || raw?.option_type,
-    });
-    if (!item) return;
-    item.id = 'KRAKEN:' + marketType + ':' + symbol;
-    item.providerLabel = 'Kraken';
-    item.marketType = marketType;
-    item.category = category;
-    item.instrumentType = marketType;
-    seen.add(key);
-    out.push(item);
-  };
-
-  // Kraken Spot public catalogue. Keep every returned pair, including pairs
-  // that are not currently online, so the Quote catalogue does not silently
-  // omit instruments from Kraken's published universe.
-  try {
-    const response = await getJson('https://api.kraken.com/0/public/AssetPairs', 15000);
-    const rows = response?.result && typeof response.result === 'object' ? Object.entries(response.result) : [];
-    for (const [id, raw] of rows) {
-      add({ ...(raw as any), id, symbol: (raw as any)?.wsname || (raw as any)?.altname || id }, 'Spot', 'Crypto', id);
-    }
-    console.log('[SIRE KRAKEN] Spot AssetPairs: ' + rows.length);
-  } catch (error) {
-    console.warn('[SIRE KRAKEN] Spot AssetPairs failed:', error);
-  }
-
-  // Kraken Derivatives public catalogue. This endpoint publishes perpetuals,
-  // dated futures and any other derivative instrument types Kraken exposes.
-  // Do not filter by tradeable/state: every published instrument is retained.
-  try {
-    const response = await getJson('https://futures.kraken.com/derivatives/api/v3/instruments', 20000);
-    const rows = Array.isArray(response?.instruments)
-      ? response.instruments
-      : Array.isArray(response?.result)
-        ? response.result
-        : [];
-
-    for (const raw of rows) {
-      const type = String(raw?.type || raw?.instrumentType || raw?.contractType || '').toLowerCase();
-      const symbol = String(raw?.symbol || raw?.instrument || raw?.id || '').trim();
-      const display = String(raw?.displayName || raw?.display_name || raw?.name || symbol).toLowerCase();
-      const expiry = String(raw?.expiry || raw?.expiration || raw?.expiryTime || '').trim();
-
-      let marketType = 'Other Derivatives';
-      if (type.includes('perpetual') || type === 'perpetual_swap' || display.includes('perpetual')) {
-        marketType = 'Perpetual Futures';
-      } else if (type.includes('future') || type.includes('futures') || expiry) {
-        marketType = 'Futures';
-      } else if (type.includes('option') || display.includes('option')) {
-        marketType = 'Options';
-      }
-
-      add(raw, marketType, 'Crypto', symbol);
-    }
-    console.log('[SIRE KRAKEN] Derivatives instruments: ' + rows.length);
-  } catch (error) {
-    console.warn('[SIRE KRAKEN] Derivatives instruments failed:', error);
-  }
-
-  const counts = out.reduce<Record<string, number>>((acc, item) => {
-    acc[item.marketType] = (acc[item.marketType] || 0) + 1;
-    return acc;
-  }, {});
-  console.log('[SIRE KRAKEN] COMPLETE', JSON.stringify({ total: out.length, ...counts }));
-  return out;
-}
-
 async function binance(): Promise<UnifiedInstrument[]> {
   const out: UnifiedInstrument[] = [];
 
@@ -844,7 +749,87 @@ async function bitget(): Promise<UnifiedInstrument[]> { const out:UnifiedInstrum
 
 async function bybit(): Promise<UnifiedInstrument[]> { const out:UnifiedInstrument[]=[];for(const c of ['spot','linear','inverse','option']){let cursor='';for(let p=0;p<100;p++)try{const q='?category='+c+'&limit=1000'+(c==='option'?'&baseCoin=All':'')+(cursor?'&cursor='+encodeURIComponent(cursor):'');const r=await getJsonAny(['https://api.bybit.com/v5/market/instruments-info'+q,'https://api.bybit.tr/v5/market/instruments-info'+q,'https://api.bybit.ae/v5/market/instruments-info'+q,'https://api.bybit.eu/v5/market/instruments-info'+q],12000);const rows=r?.result?.list||[];for(const raw of rows){const st=String(raw?.status||'').toLowerCase();if(c==='option'?!['trading','prelaunch','delivering'].includes(st):!['trading','pendingopen','prelaunch'].includes(st))continue;const t=c==='spot'?(raw?.marginTrading&&raw.marginTrading!=='none'?'Spot/Margin':'Spot'):c==='linear'?(String(raw?.contractType||'').toLowerCase().includes('perpetual')?'Linear Perpetuals':'Linear Futures'):c==='inverse'?(String(raw?.contractType||'').toLowerCase().includes('perpetual')?'Inverse Perpetuals':'Inverse Futures'):'Options';const i=cryptoItem('BYBIT',t,'Crypto',raw);if(i)out.push(i)}cursor=String(r?.result?.nextPageCursor||'');if(!cursor||c==='spot'||!rows.length)break}catch(e){console.warn('[SIRE BYBIT] '+c+' failed:',e);break}}return out; }
 
-async function kraken(): Promise<UnifiedInstrument[]> { const out:UnifiedInstrument[]=[];try{const r=await getJsonAny(['https://api.kraken.com/0/public/AssetPairs'],15000);for(const [k,v] of Object.entries(r?.result||{})){const raw:any=v;if(['online','trading'].includes(String(raw?.status||'online').toLowerCase())){const i=cryptoItem('KRAKEN','Spot','Crypto',{symbol:raw?.wsname||raw?.altname||k,baseAsset:raw?.base,quoteAsset:raw?.quote,status:'online'});if(i)out.push(i)}}}catch(e){console.warn('[SIRE KRAKEN] Spot failed:',e)}try{const r=await getJsonAny(['https://futures.kraken.com/derivatives/api/v3/instruments'],15000);for(const raw of r?.instruments||[]){const sym=String(raw?.symbol||raw?.instrumentName||'');if(!sym)continue;const t=String(raw?.type||raw?.contractType||'').toLowerCase().includes('perpetual')||sym.startsWith('PF_')||sym.startsWith('PI_')?'Perpetuals':'Futures';const i=cryptoItem('KRAKEN',t,'Crypto',{...raw,symbol:sym});if(i)out.push(i)}}catch(e){console.warn('[SIRE KRAKEN] Derivatives failed:',e)}return out; }
+async function kraken(): Promise<UnifiedInstrument[]> {
+  const out: UnifiedInstrument[] = [];
+  const seen = new Set<string>();
+
+  const add = (raw: any, marketType: string, category: string, symbolOverride?: string) => {
+    const symbol = String(symbolOverride || raw?.symbol || raw?.wsname || raw?.altname || raw?.id || raw?.instrumentName || '').trim();
+    if (!symbol) return;
+    const key = marketType + ':' + symbol;
+    if (seen.has(key)) return;
+
+    const base = String(raw?.baseAsset || raw?.base_currency || raw?.base || raw?.underlyingAsset || raw?.underlying || raw?.underlying_symbol || '').trim();
+    const quote = String(raw?.quoteAsset || raw?.quote_currency || raw?.quote || raw?.quoteCurrency || raw?.settleCurrency || '').trim();
+
+    const item = cryptoItem('KRAKEN', marketType, category, {
+      ...raw,
+      symbol,
+      baseAsset: base,
+      quoteAsset: quote,
+      fullName: raw?.displayName || raw?.display_name || raw?.name || symbol,
+      status: raw?.status || raw?.state || (raw?.tradeable === false ? 'offline' : 'online'),
+      contractType: raw?.contractType || raw?.contract_type || raw?.type,
+      settleCoin: raw?.settleCurrency || raw?.settle_currency || raw?.settleCoin,
+      deliveryTime: raw?.expiry || raw?.expiration || raw?.expiryTime,
+      strikePrice: raw?.strikePrice || raw?.strike_price,
+      optionType: raw?.optionType || raw?.option_type,
+    });
+    if (!item) return;
+
+    item.id = 'KRAKEN:' + marketType + ':' + symbol;
+    item.providerLabel = 'Kraken';
+    item.marketType = marketType;
+    item.category = category;
+    item.instrumentType = marketType;
+    seen.add(key);
+    out.push(item);
+  };
+
+  try {
+    const response = await getJson('https://api.kraken.com/0/public/AssetPairs', 15000);
+    const rows = response?.result && typeof response.result === 'object' ? Object.entries(response.result) : [];
+    for (const [id, raw] of rows) {
+      add({ ...(raw as any), id, symbol: (raw as any)?.wsname || (raw as any)?.altname || id }, 'Spot', 'Crypto', id);
+    }
+    console.log('[SIRE KRAKEN] Spot AssetPairs: ' + rows.length);
+  } catch (error) {
+    console.warn('[SIRE KRAKEN] Spot AssetPairs failed:', error);
+  }
+
+  try {
+    const response = await getJson('https://futures.kraken.com/derivatives/api/v3/instruments', 20000);
+    const rows = Array.isArray(response?.instruments) ? response.instruments : Array.isArray(response?.result) ? response.result : [];
+
+    for (const raw of rows) {
+      const type = String(raw?.type || raw?.instrumentType || raw?.contractType || '').toLowerCase();
+      const symbol = String(raw?.symbol || raw?.instrumentName || raw?.instrument || raw?.id || '').trim();
+      const display = String(raw?.displayName || raw?.display_name || raw?.name || symbol).toLowerCase();
+      const expiry = String(raw?.expiry || raw?.expiration || raw?.expiryTime || '').trim();
+
+      let marketType = 'Other Derivatives';
+      if (type.includes('perpetual') || type === 'perpetual_swap' || display.includes('perpetual') || symbol.startsWith('PF_') || symbol.startsWith('PI_')) {
+        marketType = 'Perpetual Futures';
+      } else if (type.includes('option') || display.includes('option')) {
+        marketType = 'Options';
+      } else if (type.includes('future') || type.includes('futures') || expiry || symbol.startsWith('FI_')) {
+        marketType = 'Futures';
+      }
+
+      add(raw, marketType, 'Crypto', symbol);
+    }
+    console.log('[SIRE KRAKEN] Derivatives instruments: ' + rows.length);
+  } catch (error) {
+    console.warn('[SIRE KRAKEN] Derivatives instruments failed:', error);
+  }
+
+  const counts = out.reduce<Record<string, number>>((acc, item) => {
+    acc[item.marketType] = (acc[item.marketType] || 0) + 1;
+    return acc;
+  }, {});
+  console.log('[SIRE KRAKEN] COMPLETE', JSON.stringify({ total: out.length, ...counts }));
+  return out;
+}
 
 async function getJsonAuth(url: string, headers: Record<string, string>, timeoutMs = 12000) {
   const controller = new AbortController();
