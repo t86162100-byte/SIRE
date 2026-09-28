@@ -1,4 +1,4 @@
-export type MarketProvider = 'BITRUE' | 'ASCENDEX' | 'COINW' | 'BINGX' | 'BINANCE' | 'FXCM' | 'YFINANCE' | 'SP' | 'DERIV' | 'BITGET' | 'BYBIT' | 'OKX' | 'KRAKEN' | 'COINBASE' | 'GATEIO' | 'KUCOIN' | 'GEMINI' | 'BITSO' | 'BITFINEX' | 'BITVAVO' | 'COINEX' | 'LBANK' | 'WOOX' | 'CRYPTOCOM' | 'HTX' | 'BITKUB' | 'UPBIT' | 'PIONEX' | 'POLONIEX' | 'BITHUMB' | 'MEXC' | 'PHEMEX' | 'WHITEBIT' | 'TWELVEDATA' | 'NASDAQTRADER' | 'CME' | 'CBOT' | 'NYMEX' | 'COMEX' | 'NYSEAMERICAN' | 'XETR' | 'HKEX' | 'BSE' | 'TSE' | 'XFRA' | 'EUREX' | 'ASX' | 'TWSE' | 'PSX' | 'IDX' | 'NSE' | 'BITSTAMP' | 'OANDA' | 'TRADINGVIEW' | 'FOREXCOM' | 'INTERACTIVEBROKERS' | 'TRADESTATION' | 'WEBULL' | 'MOOMOO' | 'NINJATRADER' | 'TRADOVATE' | 'AMPFUTURES' | 'TASTYTRADE' | 'TASTYFX' | 'CRYPTOCOMEXCHANGE' | 'COINBASEADVANCED' | 'ALPACA' | 'TRADIERBROKERAGE' | 'TRADEZERO' | 'COBRATRADING' | 'CLEARSTREET' | 'INVESTRADE' | 'PUBLIC' | 'PLUS500US' | 'OPTIMUSFUTURES' | 'EDGECLEAR' | 'IRONBEAM' | 'STONEX' | 'DORMANTRADING' | 'TRADIERFUTURES' | 'BITTREX' | 'BITMART' | 'BLANK' | 'XT' | 'DEEPCOIN' | 'TOOBIT' | 'WEEX' | 'BITUNIX' | 'BLOFIN' | 'COINCATCH' | 'ZOOMEX' | 'BTCC' | 'DIGIFINEX';
+export type MarketProvider = 'BITRUE' | 'ASCENDEX' | 'COINW' | 'BINGX' | 'BINANCE' | 'FXCM' | 'YFINANCE' | 'SP' | 'DERIV' | 'BITGET' | 'BYBIT' | 'OKX' | 'KRAKEN' | 'COINBASE' | 'GATEIO' | 'KUCOIN' | 'GEMINI' | 'BITSO' | 'BITFINEX' | 'BITVAVO' | 'COINEX' | 'LBANK' | 'WOOX' | 'CRYPTOCOM' | 'HTX' | 'BITKUB' | 'UPBIT' | 'PIONEX' | 'POLONIEX' | 'BITHUMB' | 'MEXC' | 'PHEMEX' | 'WHITEBIT' | 'TWELVEDATA' | 'NASDAQTRADER' | 'CME' | 'CBOT' | 'NYMEX' | 'COMEX' | 'NYSEAMERICAN' | 'XETR' | 'HKEX' | 'BSE' | 'TSE' | 'XFRA' | 'EUREX' | 'ASX' | 'TWSE' | 'PSX' | 'IDX' | 'NSE' | 'BITSTAMP' | 'OANDA' | 'TRADINGVIEW' | 'FOREXCOM' | 'INTERACTIVEBROKERS' | 'TRADESTATION' | 'WEBULL' | 'MOOMOO' | 'NINJATRADER' | 'TRADOVATE' | 'AMPFUTURES' | 'TASTYTRADE' | 'TASTYFX' | 'CRYPTOCOMEXCHANGE' | 'COINBASEADVANCED' | 'ALPACA' | 'TRADIERBROKERAGE' | 'TRADEZERO' | 'COBRATRADING' | 'CLEARSTREET' | 'INVESTRADE' | 'PUBLIC' | 'PLUS500US' | 'OPTIMUSFUTURES' | 'EDGECLEAR' | 'IRONBEAM' | 'STONEX' | 'DORMANTRADING' | 'TRADIERFUTURES' | 'BITTREX' | 'BITMART' | 'BLANK' | 'XT' | 'DEEPCOIN' | 'TOOBIT' | 'WEEX' | 'BITUNIX' | 'BLOFIN' | 'COINCATCH' | 'ZOOMEX' | 'BTCC' | 'DIGIFINEX' | 'COINSTORE' | 'PROBIT' | 'POLONIEX' | 'COINDCX';
 
 export interface UnifiedInstrument {
   id: string;
@@ -40,6 +40,10 @@ const providerLogo = (name: string) => {
   if (value === 'deriv') return 'https://deriv.com/favicon.ico';
   if (value === 'xt') return 'https://www.xt.com/favicon.ico';
   if (value === 'deepcoin') return 'https://www.deepcoin.com/favicon.ico';
+  if (value === 'coinstore') return 'https://www.coinstore.com/favicon.ico';
+  if (value === 'probit') return 'https://www.probit.com/favicon.ico';
+  if (value === 'poloniex') return 'https://poloniex.com/favicon.ico';
+  if (value === 'coindcx') return 'https://coindcx.com/favicon.ico';
   if (value === 'nasdaq' || value === 'nasdaqtrader') return 'https://cdn.simpleicons.org/nasdaq';
   return 'https://cdn.simpleicons.org/' + value;
 };
@@ -78,6 +82,11 @@ async function getJson(url: string, timeoutMs = 12000) {
   }
 }
 
+async function postJson(url: string, body: any, timeoutMs = 12000) {
+  const controller = new AbortController(); const timer = setTimeout(()=>controller.abort(), timeoutMs);
+  try { const response=await fetch(url,{method:'POST',signal:controller.signal,headers:{Accept:'application/json','Content-Type':'application/json','User-Agent':'SIRE-market-catalog/1.0'},body:JSON.stringify(body)}); if(!response.ok) throw new Error('HTTP '+response.status); return await response.json(); }
+  finally { clearTimeout(timer); }
+}
 async function getJsonAny(urls: string[], timeoutMs = 10000) {
   let last: unknown;
   for (const url of urls) {
@@ -2293,6 +2302,34 @@ async function digifinex(): Promise<UnifiedInstrument[]> {
 }
 
 
+
+async function coinstore(): Promise<UnifiedInstrument[]> {
+ const out:UnifiedInstrument[]=[]; const seen=new Set<string>();
+ const add=(r:any)=>{const symbol=String(r?.symbolCode||r?.symbol||r?.symbolName||'').trim(); if(!symbol)return; const base=String(r?.tradeCurrencyCode||r?.baseCurrencyCode||r?.baseCoin||'').toUpperCase(); const quote=String(r?.quoteCurrencyCode||r?.quoteCoin||'').toUpperCase(); const x=cryptoItem('COINSTORE','Spot','Crypto',{...r,symbol,baseAsset:base,quoteAsset:quote,fullName:r?.displayName||symbol,status:r?.openTrade===false?'offline':'online'}); if(!x||seen.has(x.id))return; x.providerLabel='Coinstore';seen.add(x.id);out.push(x);};
+ try{const r=await postJson('https://api.coinstore.com/api/v2/public/config/spot/symbols',{},20000);const rows=Array.isArray(r?.data)?r.data:Array.isArray(r)?r:[];rows.forEach(add);console.log('[SIRE COINSTORE] Spot:',rows.length);}catch(e){console.warn('[SIRE COINSTORE] Spot failed:',e)}
+ return out;
+}
+async function probit(): Promise<UnifiedInstrument[]> {
+ const out:UnifiedInstrument[]=[];const seen=new Set<string>();
+ const add=(r:any)=>{const symbol=String(r?.id||r?.market_id||r?.symbol||r?.market||'').trim();if(!symbol||!symbol.includes('-'))return;const p=symbol.split('-');const base=String(r?.base_currency_id||p[0]||'').toUpperCase(),quote=String(r?.quote_currency_id||p[1]||'').toUpperCase();const x=cryptoItem('PROBIT','Spot','Crypto',{...r,symbol,baseAsset:base,quoteAsset:quote,fullName:r?.display_name||symbol,status:r?.status||r?.state||'online'});if(!x||seen.has(x.id))return;x.providerLabel='ProBit Global';seen.add(x.id);out.push(x);};
+ for(const body of [{market_ids:[]},{}]){try{const r=await postJson('https://api.probit.com/api/exchange/v1/market',body,20000);const rows=Array.isArray(r?.data)?r.data:Array.isArray(r)?r:[];rows.forEach(add);if(out.length)break;}catch(e){console.warn('[SIRE PROBIT] market failed:',e)}}
+ return out;
+}
+async function poloniex(): Promise<UnifiedInstrument[]> {
+ const out:UnifiedInstrument[]=[];const seen=new Set<string>();
+ const add=(r:any,type:string)=>{const symbol=String(r?.symbol||r?.s||'').trim();if(!symbol)return;const p=symbol.replace(/_PERP$/i,'').split('_');const base=String(r?.baseCurrencyName||r?.bCcy||p[0]||'').toUpperCase(),quote=String(r?.quoteCurrencyName||r?.qCcy||p[1]||'').toUpperCase();const x=cryptoItem('POLONIEX',type,'Crypto',{...r,symbol,baseAsset:base,quoteAsset:quote,fullName:r?.displayName||symbol,status:r?.state||r?.status||'online',contractType:type==='Perpetuals'?'perpetual':undefined,settleCoin:r?.sCcy||quote});if(!x||seen.has(x.id))return;x.providerLabel='Poloniex';seen.add(x.id);out.push(x);};
+ try{const r=await getJson('https://api.poloniex.com/markets',20000);(Array.isArray(r)?r:[]).forEach(x=>add(x,'Spot'));}catch(e){console.warn('[SIRE POLONIEX] Spot failed:',e)}
+ try{const r=await getJson('https://api.poloniex.com/v3/market/allInstruments',20000);(Array.isArray(r?.data)?r.data:Array.isArray(r)?r:[]).forEach(x=>add(x,'Perpetuals'));}catch(e){console.warn('[SIRE POLONIEX] Futures failed:',e)}
+ return out;
+}
+async function coindcx(): Promise<UnifiedInstrument[]> {
+ const out:UnifiedInstrument[]=[];const seen=new Set<string>();
+ const add=(r:any,type:string)=>{const symbol=String(r?.pair||r?.symbol||r?.instrument||'').trim();if(!symbol)return;const p=symbol.replace(/^B-/,'').split('_');const base=String(r?.base_currency_short_name||r?.base_currency||r?.position_currency_short_name||p[0]||'').toUpperCase(),quote=String(r?.quote_currency_short_name||r?.quote_currency||r?.settle_currency_short_name||p[1]||'').toUpperCase();const x=cryptoItem('COINDCX',type,'Crypto',{...r,symbol,baseAsset:base,quoteAsset:quote,fullName:r?.display_name||symbol,status:r?.status||'active',contractType:r?.kind||(type==='Perpetuals'?'perpetual':undefined),settleCoin:r?.settle_currency_short_name||quote});if(!x||seen.has(x.id))return;x.providerLabel='CoinDCX';seen.add(x.id);out.push(x);};
+ try{const r=await getJson('https://api.coindcx.com/exchange/v1/markets',20000);(Array.isArray(r)?r:[]).forEach(x=>add(x,'Spot'));}catch(e){console.warn('[SIRE COINDCX] Spot failed:',e)}
+ for(const m of ['USDT','INR'])try{const r=await getJson('https://api.coindcx.com/exchange/v1/derivatives/futures/data/active_instruments?margin_currency_short_name[]='+m,20000);const rows=Array.isArray(r)?r:Array.isArray(r?.data)?r.data:[];rows.forEach(x=>add(x,'Perpetuals'));}catch(e){console.warn('[SIRE COINDCX] Futures '+m+' failed:',e)}
+ return out;
+}
+
 export async function getStandaloneMarketProviderCatalogue(
   provider: MarketProvider,
   fetchDeriv: () => Promise<any[]>,
@@ -2337,6 +2374,10 @@ export async function getStandaloneMarketProviderCatalogue(
     case 'ZOOMEX': return zoomex();
     case 'BTCC': return btcc();
     case 'DIGIFINEX': return digifinex();
+    case 'COINSTORE': return coinstore();
+    case 'PROBIT': return probit();
+    case 'POLONIEX': return poloniex();
+    case 'COINDCX': return coindcx();
     default: return [];
   }
 }
@@ -2390,6 +2431,10 @@ export async function getUnifiedMarketCatalogue(fetchDeriv: () => Promise<any[]>
       ['ZOOMEX', zoomex()],
       ['BTCC', btcc()],
       ['DIGIFINEX', digifinex()],
+      ['COINSTORE', coinstore()],
+      ['PROBIT', probit()],
+      ['POLONIEX', poloniex()],
+      ['COINDCX', coindcx()],
       ['FXCM', fxcm()],
       // Nasdaq Trader supplies the public instrument master for Nasdaq-listed,
       // other U.S.-listed, bonds, NOM options, mutual funds and additional
