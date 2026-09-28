@@ -2049,11 +2049,23 @@ async function bybit(): Promise<UnifiedInstrument[]> {
     out.push(item);
   };
 
-  const fetchPaged = async (category: string, params: Record<string, string>, handler: (raw: any) => void) => {
+  const categoryFor = (raw: any, fallback = 'Crypto'): string => {
+    const symbolType = String(raw?.symbolType || '').trim();
+    if (symbolType === 'stock' || symbolType === 'xstocks' || symbolType === 'mstocks') return 'Stocks';
+    if (symbolType === 'ETF') return 'ETF';
+    if (symbolType === 'commodity') return 'Commodities';
+    if (symbolType === 'forex') return 'Forex';
+    return fallback;
+  };
+
+  const fetchPaged = async (category: string, params: Record<string, string>, handler: (raw: any) => void, paginated = true) => {
     let cursor = '';
     for (let page = 0; page < 1000; page += 1) {
-      const query = new URLSearchParams({ category, limit: '1000', ...params });
-      if (cursor) query.set('cursor', cursor);
+      const query = new URLSearchParams({ category, ...params });
+      if (paginated) {
+        query.set('limit', '1000');
+        if (cursor) query.set('cursor', cursor);
+      }
 
       const response = await getJsonAny([
         'https://api.bybit.com/v5/market/instruments-info?' + query.toString(),
@@ -2069,7 +2081,7 @@ async function bybit(): Promise<UnifiedInstrument[]> {
 
       const next = String(response?.result?.nextPageCursor || '');
       console.log('[SIRE BYBIT] ' + category + ' page ' + (page + 1) + ': ' + rows.length);
-      if (!next || next === cursor || rows.length === 0) break;
+      if (!paginated || !next || next === cursor || rows.length === 0) break;
       cursor = next;
     }
   };
@@ -2078,8 +2090,8 @@ async function bybit(): Promise<UnifiedInstrument[]> {
     // Spot has no pagination according to Bybit's API and returns its complete
     // online spot universe in one response.
     await fetchPaged('spot', {}, raw => {
-      add(raw, 'Spot', 'Crypto', 'Spot');
-    });
+      add(raw, 'Spot', categoryFor(raw), 'Spot');
+    }, false);
   } catch (error) {
     console.warn('[SIRE BYBIT] spot failed:', error);
   }
@@ -2090,7 +2102,7 @@ async function bybit(): Promise<UnifiedInstrument[]> {
     await fetchPaged('linear', {}, raw => {
       const contractType = String(raw?.contractType || '').toLowerCase();
       const marketType = contractType.includes('perpetual') ? 'Perpetuals' : 'Futures';
-      add(raw, marketType, 'Crypto', marketType);
+      add(raw, marketType, categoryFor(raw), marketType);
     });
   } catch (error) {
     console.warn('[SIRE BYBIT] linear failed:', error);
@@ -2101,17 +2113,30 @@ async function bybit(): Promise<UnifiedInstrument[]> {
     await fetchPaged('inverse', {}, raw => {
       const contractType = String(raw?.contractType || '').toLowerCase();
       const marketType = contractType.includes('perpetual') ? 'Perpetuals' : 'Futures';
-      add(raw, marketType, 'Crypto', marketType);
+      add(raw, marketType, categoryFor(raw), marketType);
     });
   } catch (error) {
     console.warn('[SIRE BYBIT] inverse failed:', error);
+  }
+
+  const optionBaseTypes = new Map<string, string>();
+  try {
+    const response = await getJsonAny([
+      'https://api.bybit.com/v5/market/option-base-coins',
+      'https://api.bytick.com/v5/market/option-base-coins',
+    ], 15000);
+    for (const raw of Array.isArray(response?.result?.list) ? response.result.list : []) {
+      optionBaseTypes.set(String(raw?.baseCoin || '').toUpperCase(), String(raw?.underlyingType || '0'));
+    }
+  } catch (error) {
+    console.warn('[SIRE BYBIT] option base-coin discovery failed:', error);
   }
 
   try {
     // Passing baseCoin=All is required to enumerate the complete option
     // universe rather than Bybit's default BTC-only option set.
     await fetchPaged('option', { baseCoin: 'All' }, raw => {
-      const underlyingType = String(raw?.underlyingType || '').trim();
+      const underlyingType = optionBaseTypes.get(String(raw?.baseCoin || '').toUpperCase()) || '0';
       const category =
         underlyingType === '1' ? 'Commodities' :
         underlyingType === '2' ? 'Stocks' :
