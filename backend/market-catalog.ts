@@ -1421,6 +1421,280 @@ function derivItem(raw: any): UnifiedInstrument | null {
   };
 }
 
+async function bitget(): Promise<UnifiedInstrument[]> {
+  const out: UnifiedInstrument[] = [];
+  const seen = new Set<string>();
+  const categories = ['SPOT', 'MARGIN', 'USDT-FUTURES', 'COIN-FUTURES', 'USDC-FUTURES'] as const;
+
+  const assetCategory = (raw: any): string => {
+    const type = String(raw?.symbolType || '').toLowerCase();
+    if (type === 'stock' || type === 'stocks') return 'Stocks';
+    if (type === 'metal' || type === 'precious_metal' || type === 'commodity' || type === 'commodities') return 'Commodities';
+    return 'Crypto';
+  };
+
+  const add = (raw: any, requestedCategory: string) => {
+    const symbol = String(raw?.symbol || '').trim();
+    const category = String(raw?.category || requestedCategory).toUpperCase();
+    if (!symbol || !categories.includes(category as any)) return;
+    const type = String(raw?.type || raw?.symbolType || '').toLowerCase();
+    const marketType =
+      category === 'SPOT' ? 'Spot' :
+      category === 'MARGIN' ? 'Margin' :
+      type === 'perpetual' ? 'Perpetuals' :
+      'Futures';
+    const key = category + ':' + symbol;
+    if (seen.has(key)) return;
+
+    const item = cryptoItem('BITGET', marketType, assetCategory(raw), {
+      ...raw,
+      symbol,
+      baseCoin: raw?.baseCoin || raw?.baseAsset,
+      quoteCoin: raw?.quoteCoin || raw?.quoteAsset,
+      fullName: raw?.displayName || symbol,
+      status: raw?.status || 'online',
+      contractType: raw?.type,
+      settleCoin: raw?.settleCoin || raw?.settleCcy || raw?.quoteCoin,
+      deliveryTime: raw?.deliveryTime,
+      isMarginEnabled: category === 'MARGIN',
+    });
+    if (!item) return;
+
+    item.id = 'BITGET:' + category + ':' + symbol;
+    item.providerLabel = 'Bitget';
+    item.marketType = marketType;
+    item.category = assetCategory(raw);
+    item.instrumentType = category;
+    item.contractType = String(raw?.type || '').trim() || item.contractType;
+    item.settlement = String(raw?.settleCoin || raw?.settleCcy || '').trim() || item.settlement;
+    item.expiry = String(raw?.deliveryTime || '').trim() || item.expiry;
+    item.supportsMargin = category === 'MARGIN' || Boolean(raw?.maxLeverage || raw?.maxCrossedLeverage || raw?.maxIsolatedLeverage);
+    (item as any).bitgetCategory = category;
+    (item as any).symbolType = raw?.symbolType;
+    (item as any).deliveryPeriod = raw?.deliveryPeriod;
+    (item as any).isRwa = String(raw?.isRwa || '').toUpperCase() === 'YES';
+    (item as any).isReality = String(raw?.isReality || '').toLowerCase() === 'yes';
+
+    seen.add(key);
+    out.push(item);
+  };
+
+  // Bitget's public UTA v3 catalogue covers every public trading product line.
+  // Query each category independently so one failed category never suppresses
+  // the others. We retain all returned instrument states instead of silently
+  // dropping non-online rows.
+  for (const category of categories) {
+    try {
+      const response = await getJsonAny([
+        'https://api.bitget.com/api/v3/market/instruments?category=' + encodeURIComponent(category),
+        'https://api.bitget.com/api/v3/public/instruments?category=' + encodeURIComponent(category),
+      ], 15000);
+      if (String(response?.code || '00000') !== '00000') throw new Error(String(response?.msg || 'Bitget instruments request failed'));
+      const rows = Array.isArray(response?.data) ? response.data : [];
+      for (const raw of rows) add(raw, category);
+      console.log('[SIRE BITGET] v3 ' + category + ': ' + rows.length);
+    } catch (error) {
+      console.warn('[SIRE BITGET] v3 ' + category + ' failed:', error);
+    }
+  }
+
+  // Independent v2 contract fallback. It is additive and deduplicated, so
+  // Render can still populate futures/perpetuals if v3 is temporarily blocked.
+  for (const productType of ['USDT-FUTURES', 'COIN-FUTURES', 'USDC-FUTURES']) {
+    try {
+      const response = await getJson('https://api.bitget.com/api/v2/mix/market/contracts?productType=' + productType, 15000);
+      if (String(response?.code || '00000') !== '00000') throw new Error(String(response?.msg || 'Bitget futures contract request failed'));
+      const rows = Array.isArray(response?.data) ? response.data : [];
+      for (const raw of rows) add({
+        ...raw,
+        category: productType,
+        type: String(raw?.symbolType || '').toLowerCase() === 'perpetual' ? 'perpetual' : 'delivery',
+        settleCoin: raw?.supportMarginCoins?.[0] || raw?.marginCoin,
+      }, productType);
+      console.log('[SIRE BITGET] v2 ' + productType + ': ' + rows.length);
+    } catch (error) {
+      console.warn('[SIRE BITGET] v2 ' + productType + ' failed:', error);
+    }
+  }
+
+  const unique = out.filter((item, index, all) => all.findIndex(other => other.id === item.id) === index);
+  console.log('[SIRE BITGET] COMPLETE', JSON.stringify({
+    total: unique.length,
+    spot: unique.filter(i => i.instrumentType === 'SPOT').length,
+    margin: unique.filter(i => i.instrumentType === 'MARGIN').length,
+    perpetuals: unique.filter(i => i.marketType === 'Perpetuals').length,
+    futures: unique.filter(i => i.marketType === 'Futures').length,
+  }));
+  return unique;
+}
+
+async function mexc(): Promise<UnifiedInstrument[]> {
+  const out: UnifiedInstrument[] = [];
+  const seen = new Set<string>();
+
+  const add = (raw: any, marketType: string, category = 'Crypto', symbolOverride?: string) => {
+    const symbol = String(symbolOverride || raw?.symbol || '').trim();
+    if (!symbol) return;
+    const item = cryptoItem('MEXC', marketType, category, {
+      ...raw,
+      symbol,
+      baseAsset: raw?.baseCoin || raw?.baseAsset,
+      quoteAsset: raw?.quoteCoin || raw?.quoteAsset,
+      status: raw?.status || raw?.state || (raw?.enableTrading === false ? 'offline' : 'online'),
+      settleCoin: raw?.settleCoin || raw?.settleCurrency,
+      deliveryTime: raw?.deliveryTime || raw?.expireDate || undefined,
+      contractType: raw?.futureType === 2 ? 'delivery' : (raw?.futureType === 1 ? 'perpetual' : raw?.contractType),
+    });
+    if (!item) return;
+    if (seen.has(item.id)) return;
+    seen.add(item.id);
+    out.push(item);
+  };
+
+  // MEXC Spot exchangeInfo is the complete public symbol master. Keep every
+  // returned row so paused/offline products are not silently omitted.
+  try {
+    const payload = await getJson('https://api.mexc.com/api/v3/exchangeInfo', 20000);
+    const rows = Array.isArray(payload?.symbols) ? payload.symbols : [];
+    for (const raw of rows) add(raw, 'Spot');
+    console.log('[SIRE MEXC] Spot: ' + rows.length);
+
+    // MEXC publishes margin eligibility on each spot symbol. Represent those
+    // pairs as separate Margin instruments so Spot and Margin remain distinct.
+    for (const raw of rows) {
+      if (raw?.isMarginTradingAllowed !== true) continue;
+      add(raw, 'Margin', 'Crypto');
+    }
+    console.log('[SIRE MEXC] Margin: ' + out.filter(x => x.marketType === 'Margin').length);
+  } catch (e) {
+    console.warn('[SIRE MEXC] Spot/Margin failed:', e);
+  }
+
+  // MEXC Futures exposes futureType: 1 = perpetual, 2 = delivery.
+  // Use the public contract-detail master and retain both contract classes.
+  try {
+    const payload = await getJsonAny([
+      'https://api.mexc.com/api/v1/contract/detail',
+      'https://www.mexc.co/api/v1/contract/detail',
+      'https://api.mexc.com/api/v1/contract/detail/country',
+    ], 20000);
+    const rows = Array.isArray(payload?.data) ? payload.data : [];
+    for (const raw of rows) {
+      const marketType = Number(raw?.futureType) === 2 ? 'Futures' : 'Perpetuals';
+      add(raw, marketType, 'Crypto');
+    }
+    console.log('[SIRE MEXC] Futures contracts: ' + rows.length);
+  } catch (e) {
+    console.warn('[SIRE MEXC] Futures failed:', e);
+  }
+
+  console.log('[SIRE MEXC] COMPLETE', JSON.stringify({
+    total: out.length,
+    spot: out.filter(x => x.marketType === 'Spot').length,
+    margin: out.filter(x => x.marketType === 'Margin').length,
+    perpetuals: out.filter(x => x.marketType === 'Perpetuals').length,
+    futures: out.filter(x => x.marketType === 'Futures').length,
+  }));
+  return out;
+}
+async function cryptocom(): Promise<UnifiedInstrument[]> {
+  try {
+    const response = await fetch('https://api.crypto.com/exchange/v1/public/get-instruments', {
+      method: 'GET', headers: { Accept: 'application/json' }
+    });
+    if (!response.ok) throw new Error('HTTP ' + response.status);
+    const payload = await response.json();
+    const rows = Array.isArray(payload?.result?.data) ? payload.result.data : [];
+    const out: UnifiedInstrument[] = [];
+    for (const raw of rows) {
+      if (raw?.tradable === false) continue;
+      const item = cryptoItem('CRYPTOCOM', String(raw?.inst_type || 'Market'), 'Crypto', {
+        symbol: String(raw?.symbol || ''),
+        baseAsset: String(raw?.base_ccy || ''),
+        quoteAsset: String(raw?.quote_ccy || ''),
+        fullName: String(raw?.display_name || raw?.symbol || ''),
+        status: raw?.tradable === false ? 'offline' : 'online'
+      });
+      if (item) out.push(item);
+    }
+    console.log('[SIRE CRYPTOCOM] Instruments: ' + out.length);
+    return out;
+  } catch (error) { console.warn('[SIRE CRYPTOCOM] failed:', error); return []; }
+}
+
+async function bitfinex(): Promise<UnifiedInstrument[]> {
+  try {
+    const payload = await getJson('https://api-pub.bitfinex.com/v2/conf/pub:list:pair:exchange', 15000);
+    const rows = Array.isArray(payload) ? payload : [];
+    const out: UnifiedInstrument[] = [];
+    for (const raw of rows) {
+      const symbol = String(raw || '').trim().toUpperCase();
+      if (!symbol) continue;
+      const item = cryptoItem('BITFINEX', 'Spot', 'Crypto', { symbol, fullName: symbol });
+      if (item) out.push(item);
+    }
+    console.log('[SIRE BITFINEX] Spot: ' + out.length);
+    return out;
+  } catch (error) { console.warn('[SIRE BITFINEX] failed:', error); return []; }
+}
+
+async function gemini(): Promise<UnifiedInstrument[]> {
+  try {
+    const rows = await getJson('https://api.gemini.com/v1/symbols', 15000);
+    const out: UnifiedInstrument[] = [];
+    for (const symbolRaw of Array.isArray(rows) ? rows : []) {
+      const symbol = String(symbolRaw || '').trim().toUpperCase();
+      if (!symbol) continue;
+      const knownQuotes = ['USDT','USDC','GUSD','USD','EUR','GBP','SGD','BTC','ETH'];
+      const quote = knownQuotes.find(q => symbol.endsWith(q));
+      const base = quote ? symbol.slice(0, -quote.length) : undefined;
+      const item = cryptoItem('GEMINI', 'Spot', 'Crypto', {
+        symbol,
+        baseAsset: base,
+        quoteAsset: quote,
+        fullName: symbol
+      });
+      if (item) out.push(item);
+    }
+    console.log('[SIRE GEMINI] Spot: ' + out.length);
+    return out;
+  } catch (error) { console.warn('[SIRE GEMINI] failed:', error); return []; }
+}
+
+async function bitstamp(): Promise<UnifiedInstrument[]> {
+  const out:UnifiedInstrument[]=[]; const seen=new Set<string>();
+  try{const p=await getJson('https://www.bitstamp.net/api/v2/trading-pairs-info/',15000);const rows=Array.isArray(p)?p:[];for(const r of rows){const symbol=String(r?.name||r?.url_symbol||'').toUpperCase();const item=cryptoItem('BITSTAMP','Spot','Crypto',{...r,symbol,baseAsset:r?.base_decimals!=null?String(r?.base_currency||'').toUpperCase():String(symbol).slice(0,3),quoteAsset:String(r?.counter_currency||'').toUpperCase(),status:r?.trading?'online':'offline'});if(item&&!seen.has(item.id)){seen.add(item.id);out.push(item);}}}catch(e){console.warn('[SIRE BITSTAMP] pairs failed:',e);}
+  console.log('[SIRE BITSTAMP] COMPLETE',JSON.stringify({total:out.length,spot:out.length}));
+  return out;
+}
+
+async function htx(): Promise<UnifiedInstrument[]> {
+  try {
+    const payload = await getJson('https://api.huobi.pro/v1/common/symbols', 15000);
+    const rows = Array.isArray(payload?.data) ? payload.data : [];
+    const out: UnifiedInstrument[] = [];
+    for (const raw of rows) {
+      if (String(raw?.state || '').toLowerCase() !== 'online') continue;
+      const item = cryptoItem('HTX', 'Spot', 'Crypto', {
+        symbol: String(raw?.symbol || ''),
+        baseAsset: String(raw?.['base-currency'] || ''),
+        quoteAsset: String(raw?.['quote-currency'] || ''),
+        fullName: String(raw?.symbol || ''),
+        status: raw?.state || 'online'
+      });
+      if (item) out.push(item);
+    }
+    console.log('[SIRE HTX] Spot: ' + out.length);
+    return out;
+  } catch (error) { console.warn('[SIRE HTX] failed:', error); return []; }
+}
+
+async function bittrex(): Promise<UnifiedInstrument[]> {
+  console.warn('[SIRE BITTREX] Trading is unavailable; no live instruments are published.');
+  return [];
+}
+
+
 export async function getStandaloneMarketProviderCatalogue(
   provider: MarketProvider,
   fetchDeriv: () => Promise<any[]>,
