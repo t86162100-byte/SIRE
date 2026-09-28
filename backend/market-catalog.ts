@@ -1,4 +1,4 @@
-export type MarketProvider = 'BINANCE' | 'FXCM' | 'YFINANCE' | 'SP' | 'DERIV' | 'BITGET' | 'BYBIT' | 'OKX' | 'KRAKEN' | 'COINBASE' | 'GATEIO' | 'KUCOIN' | 'GEMINI' | 'BITSO' | 'BITFINEX' | 'BITVAVO' | 'COINEX' | 'LBANK' | 'WOOX' | 'CRYPTOCOM' | 'HTX' | 'BITKUB' | 'UPBIT' | 'PIONEX' | 'POLONIEX' | 'BITHUMB' | 'MEXC' | 'PHEMEX' | 'WHITEBIT' | 'TWELVEDATA' | 'NASDAQTRADER' | 'CME' | 'CBOT' | 'NYMEX' | 'COMEX' | 'NYSEAMERICAN' | 'XETR' | 'HKEX' | 'BSE' | 'TSE' | 'XFRA' | 'EUREX' | 'ASX' | 'TWSE' | 'PSX' | 'IDX' | 'NSE' | 'BITSTAMP' | 'OANDA' | 'TRADINGVIEW' | 'FOREXCOM' | 'INTERACTIVEBROKERS' | 'TRADESTATION' | 'WEBULL' | 'MOOMOO' | 'NINJATRADER' | 'TRADOVATE' | 'AMPFUTURES' | 'TASTYTRADE' | 'TASTYFX' | 'CRYPTOCOMEXCHANGE' | 'COINBASEADVANCED' | 'ALPACA' | 'TRADIERBROKERAGE' | 'TRADEZERO' | 'COBRATRADING' | 'CLEARSTREET' | 'INVESTRADE' | 'PUBLIC' | 'PLUS500US' | 'OPTIMUSFUTURES' | 'EDGECLEAR' | 'IRONBEAM' | 'STONEX' | 'DORMANTRADING' | 'TRADIERFUTURES';
+export type MarketProvider = 'BINANCE' | 'FXCM' | 'YFINANCE' | 'SP' | 'DERIV' | 'BITGET' | 'BYBIT' | 'OKX' | 'KRAKEN' | 'COINBASE' | 'GATEIO' | 'KUCOIN' | 'GEMINI' | 'BITSO' | 'BITFINEX' | 'BITVAVO' | 'COINEX' | 'LBANK' | 'WOOX' | 'CRYPTOCOM' | 'HTX' | 'BITKUB' | 'UPBIT' | 'PIONEX' | 'POLONIEX' | 'BITHUMB' | 'MEXC' | 'PHEMEX' | 'WHITEBIT' | 'TWELVEDATA' | 'NASDAQTRADER' | 'CME' | 'CBOT' | 'NYMEX' | 'COMEX' | 'NYSEAMERICAN' | 'XETR' | 'HKEX' | 'BSE' | 'TSE' | 'XFRA' | 'EUREX' | 'ASX' | 'TWSE' | 'PSX' | 'IDX' | 'NSE' | 'BITSTAMP' | 'OANDA' | 'TRADINGVIEW' | 'FOREXCOM' | 'INTERACTIVEBROKERS' | 'TRADESTATION' | 'WEBULL' | 'MOOMOO' | 'NINJATRADER' | 'TRADOVATE' | 'AMPFUTURES' | 'TASTYTRADE' | 'TASTYFX' | 'CRYPTOCOMEXCHANGE' | 'COINBASEADVANCED' | 'ALPACA' | 'TRADIERBROKERAGE' | 'TRADEZERO' | 'COBRATRADING' | 'CLEARSTREET' | 'INVESTRADE' | 'PUBLIC' | 'PLUS500US' | 'OPTIMUSFUTURES' | 'EDGECLEAR' | 'IRONBEAM' | 'STONEX' | 'DORMANTRADING' | 'TRADIERFUTURES' | 'BITTREX';
 
 export interface UnifiedInstrument {
   id: string;
@@ -529,23 +529,59 @@ async function bitvavo(): Promise<UnifiedInstrument[]> {
 }
 
 async function coinex(): Promise<UnifiedInstrument[]> {
+  const out: UnifiedInstrument[] = [];
+  const seen = new Set<string>();
+  const add = (raw: any, marketType: string, category = 'Crypto') => {
+    const symbol = String(raw?.market || '').trim().toUpperCase();
+    if (!symbol) return;
+    const item = cryptoItem('COINEX', marketType, category, {
+      ...raw,
+      symbol,
+      baseAsset: raw?.base_ccy,
+      quoteAsset: raw?.quote_ccy,
+      fullName: symbol,
+      status: raw?.status || 'online',
+      contractType: raw?.contract_type || undefined,
+      settleCoin: raw?.quote_ccy || undefined,
+    });
+    if (!item || seen.has(item.id)) return;
+    item.providerLabel = 'CoinEx';
+    item.marketType = marketType;
+    item.category = category;
+    item.instrumentType = marketType;
+    item.contractType = String(raw?.contract_type || '').trim() || item.contractType;
+    seen.add(item.id);
+    out.push(item);
+  };
+
   try {
     const payload = await getJson('https://api.coinex.com/v2/spot/market', 15000);
     const rows = Array.isArray(payload?.data) ? payload.data : [];
-    const out: UnifiedInstrument[] = [];
-    for (const raw of rows) {
-      const item = cryptoItem('COINEX', 'Spot', 'Crypto', {
-        symbol: String(raw?.market || ''),
-        baseAsset: String(raw?.base_ccy || ''),
-        quoteAsset: String(raw?.quote_ccy || ''),
-        fullName: String(raw?.market || ''),
-        status: raw?.status || 'online'
-      });
-      if (item) out.push(item);
-    }
-    console.log('[SIRE COINEX] Spot: ' + out.length);
-    return out;
-  } catch (error) { console.warn('[SIRE COINEX] failed:', error); return []; }
+    for (const raw of rows) add(raw, 'Spot');
+    // CoinEx exposes margin availability on the spot market master. Keep Margin
+    // as its own instrument class rather than silently merging it into Spot.
+    for (const raw of rows) if (raw?.is_margin_available === true) add(raw, 'Margin');
+    console.log('[SIRE COINEX] Spot/Margin:', out.length);
+  } catch (error) {
+    console.warn('[SIRE COINEX] Spot/Margin failed:', error);
+  }
+
+  try {
+    const payload = await getJson('https://api.coinex.com/v2/futures/market', 15000);
+    const rows = Array.isArray(payload?.data) ? payload.data : [];
+    for (const raw of rows) add(raw, 'Perpetuals');
+    console.log('[SIRE COINEX] Perpetuals:', out.filter(item => item.marketType === 'Perpetuals').length);
+  } catch (error) {
+    console.warn('[SIRE COINEX] Futures failed:', error);
+  }
+
+  console.log('[SIRE COINEX] COMPLETE', JSON.stringify({
+    total: out.length,
+    spot: out.filter(x => x.marketType === 'Spot').length,
+    margin: out.filter(x => x.marketType === 'Margin').length,
+    perpetuals: out.filter(x => x.marketType === 'Perpetuals').length,
+  }));
+  return out;
 }
 
 async function lbank(): Promise<UnifiedInstrument[]> {
@@ -931,24 +967,105 @@ async function bitstamp(): Promise<UnifiedInstrument[]> {
 
 
 async function htx(): Promise<UnifiedInstrument[]> {
+  const out: UnifiedInstrument[] = [];
+  const seen = new Set<string>();
+  const add = (raw: any, marketType: string, quote: string, category = 'Crypto') => {
+    const symbol = String(raw?.contract_code || raw?.symbol || '').trim().toUpperCase();
+    const base = String(raw?.symbol || '').trim().toUpperCase();
+    if (!symbol || !base) return;
+    const item = cryptoItem('HTX', marketType, category, {
+      ...raw,
+      symbol,
+      baseAsset: base,
+      quoteAsset: quote,
+      fullName: symbol,
+      status: Number(raw?.contract_status) === 1 || String(raw?.state || '').toLowerCase() === 'online' ? 'online' : (raw?.state || 'offline'),
+      contractType: raw?.contract_type || (marketType === 'Perpetuals' ? 'perpetual' : 'delivery'),
+      settleCoin: quote,
+      deliveryTime: raw?.delivery_time || raw?.deliveryTime || undefined,
+    });
+    if (!item) return;
+    item.providerLabel = 'HTX';
+    item.marketType = marketType;
+    item.category = category;
+    item.instrumentType = marketType;
+    item.contractType = String(raw?.contract_type || (marketType === 'Perpetuals' ? 'perpetual' : 'delivery')).trim();
+    if (seen.has(item.id)) return;
+    seen.add(item.id);
+    out.push(item);
+  };
+
   try {
     const payload = await getJson('https://api.huobi.pro/v1/common/symbols', 15000);
     const rows = Array.isArray(payload?.data) ? payload.data : [];
-    const out: UnifiedInstrument[] = [];
     for (const raw of rows) {
-      if (String(raw?.state || '').toLowerCase() !== 'online') continue;
+      // Keep the complete public spot symbol master, including non-online rows,
+      // so the catalogue does not silently lose an HTX-listed product.
+      const symbol = String(raw?.symbol || '').trim().toUpperCase();
+      const base = String(raw?.['base-currency'] || '').trim().toUpperCase();
+      const quote = String(raw?.['quote-currency'] || '').trim().toUpperCase();
+      if (!symbol || !base || !quote) continue;
       const item = cryptoItem('HTX', 'Spot', 'Crypto', {
-        symbol: String(raw?.symbol || ''),
-        baseAsset: String(raw?.['base-currency'] || ''),
-        quoteAsset: String(raw?.['quote-currency'] || ''),
-        fullName: String(raw?.symbol || ''),
-        status: raw?.state || 'online'
+        ...raw,
+        symbol,
+        baseAsset: base,
+        quoteAsset: quote,
+        fullName: symbol,
+        status: raw?.state || 'online',
       });
-      if (item) out.push(item);
+      if (!item || seen.has(item.id)) continue;
+      item.providerLabel = 'HTX';
+      item.marketType = 'Spot';
+      item.category = 'Crypto';
+      item.instrumentType = 'Spot';
+      seen.add(item.id);
+      out.push(item);
     }
-    console.log('[SIRE HTX] Spot: ' + out.length);
-    return out;
-  } catch (error) { console.warn('[SIRE HTX] failed:', error); return []; }
+    console.log('[SIRE HTX] Spot:', out.filter(x => x.marketType === 'Spot').length);
+  } catch (error) {
+    console.warn('[SIRE HTX] Spot failed:', error);
+  }
+
+  try {
+    const payload = await getJson('https://api.hbdm.com/linear-swap-api/v1/swap_contract_info', 15000);
+    const rows = Array.isArray(payload?.data) ? payload.data : [];
+    for (const raw of rows) add(raw, 'Perpetuals', 'USDT');
+    console.log('[SIRE HTX] USDT Perpetuals:', out.filter(x => x.marketType === 'Perpetuals' && x.quote === 'USDT').length);
+  } catch (error) {
+    console.warn('[SIRE HTX] USDT perpetuals failed:', error);
+  }
+
+  try {
+    const payload = await getJson('https://api.hbdm.com/swap-api/v1/swap_contract_info', 15000);
+    const rows = Array.isArray(payload?.data) ? payload.data : [];
+    for (const raw of rows) add(raw, 'Perpetuals', 'USD');
+    console.log('[SIRE HTX] Coin-margined Perpetuals:', out.filter(x => x.marketType === 'Perpetuals' && x.quote === 'USD').length);
+  } catch (error) {
+    console.warn('[SIRE HTX] Coin-margined perpetuals failed:', error);
+  }
+
+  try {
+    const payload = await getJson('https://api.hbdm.com/api/v1/contract_contract_info', 15000);
+    const rows = Array.isArray(payload?.data) ? payload.data : [];
+    for (const raw of rows) add(raw, 'Futures', 'USD');
+    console.log('[SIRE HTX] Coin-margined Futures:', out.filter(x => x.marketType === 'Futures').length);
+  } catch (error) {
+    console.warn('[SIRE HTX] Futures failed:', error);
+  }
+
+  console.log('[SIRE HTX] COMPLETE', JSON.stringify({
+    total: out.length,
+    spot: out.filter(x => x.marketType === 'Spot').length,
+    margin: out.filter(x => x.marketType === 'Margin').length,
+    perpetuals: out.filter(x => x.marketType === 'Perpetuals').length,
+    futures: out.filter(x => x.marketType === 'Futures').length,
+  }));
+  return out;
+}
+
+async function bittrex(): Promise<UnifiedInstrument[]> {
+  console.warn('[SIRE BITTREX] Trading is unavailable; no live instruments are published.');
+  return [];
 }
 
 async function bitkub(): Promise<UnifiedInstrument[]> {
@@ -2995,6 +3112,9 @@ export async function getStandaloneMarketProviderCatalogue(
     case 'BITFINEX': return bitfinex();
     case 'GEMINI': return gemini();
     case 'BITSTAMP': return bitstamp();
+    case 'COINEX': return coinex();
+    case 'HTX': return htx();
+    case 'BITTREX': return bittrex();
     case 'MEXC': return mexc();
     default: return [];
   }
