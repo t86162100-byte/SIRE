@@ -2005,6 +2005,15 @@ async function sp(): Promise<UnifiedInstrument[]> {
 async function bybit(): Promise<UnifiedInstrument[]> {
   const out: UnifiedInstrument[] = [];
   const seen = new Set<string>();
+  // Render's default US runtime can be rejected by Bybit's API edge. The
+  // Frankfurt relay is the primary path; direct Bybit endpoints remain a
+  // fallback for deployments whose source region is accepted by Bybit.
+  const relay = String(process.env.SIRE_BYBIT_RELAY_URL || '').replace(/\\/+$/, '');
+  const bybitEndpoints = (pathAndQuery: string) => [
+    ...(relay ? [relay + pathAndQuery] : []),
+    'https://api.bybit.com' + pathAndQuery,
+    'https://api.bytick.com' + pathAndQuery,
+  ];
 
   const add = (raw: any, marketType: string, category: string, instrumentType?: string) => {
     const symbol = String(raw?.symbol || '').trim();
@@ -2065,10 +2074,7 @@ async function bybit(): Promise<UnifiedInstrument[]> {
         if (cursor) query.set('cursor', cursor);
       }
 
-      const response = await getJsonAny([
-        'https://api.bybit.com/v5/market/instruments-info?' + query.toString(),
-        'https://api.bytick.com/v5/market/instruments-info?' + query.toString(),
-      ], 15000);
+      const response = await getJsonAny(bybitEndpoints('/v5/market/instruments-info?' + query.toString()), 15000);
 
       if (Number(response?.retCode) !== 0) {
         throw new Error(String(response?.retMsg || 'Bybit API error'));
@@ -2119,10 +2125,7 @@ async function bybit(): Promise<UnifiedInstrument[]> {
 
   const optionBaseTypes = new Map<string, string>();
   try {
-    const response = await getJsonAny([
-      'https://api.bybit.com/v5/market/option-base-coins',
-      'https://api.bytick.com/v5/market/option-base-coins',
-    ], 15000);
+    const response = await getJsonAny(bybitEndpoints('/v5/market/option-base-coins'), 15000);
     for (const raw of Array.isArray(response?.result?.list) ? response.result.list : []) {
       optionBaseTypes.set(String(raw?.baseCoin || '').toUpperCase(), String(raw?.underlyingType || '0'));
     }
@@ -2154,10 +2157,7 @@ async function bybit(): Promise<UnifiedInstrument[]> {
     for (let page = 0; page < 1000; page += 1) {
       const query = new URLSearchParams({ limit: '100' });
       if (cursor) query.set('cursor', cursor);
-      const response = await getJsonAny([
-        'https://api.bybit.com/v5/event/instruments-info?' + query.toString(),
-        'https://api.bytick.com/v5/event/instruments-info?' + query.toString(),
-      ], 15000);
+      const response = await getJsonAny(bybitEndpoints('/v5/event/instruments-info?' + query.toString()), 15000);
       if (Number(response?.retCode) !== 0) {
         throw new Error(String(response?.retMsg || 'Bybit event API error'));
       }
