@@ -246,6 +246,101 @@ async function coinbase(): Promise<UnifiedInstrument[]> {
   return out;
 }
 
+async function kraken(): Promise<UnifiedInstrument[]> {
+  const out: UnifiedInstrument[] = [];
+  const seen = new Set<string>();
+
+  const add = (raw: any, marketType: string, category: string, symbolOverride?: string) => {
+    const symbol = String(symbolOverride || raw?.symbol || raw?.wsname || raw?.altname || raw?.id || '').trim();
+    if (!symbol) return;
+    const key = marketType + ':' + symbol;
+    if (seen.has(key)) return;
+    const base = String(
+      raw?.baseAsset || raw?.base_currency || raw?.base || raw?.underlyingAsset ||
+      raw?.underlying || raw?.underlying_symbol || ''
+    ).trim();
+    const quote = String(
+      raw?.quoteAsset || raw?.quote_currency || raw?.quote || raw?.quoteCurrency ||
+      raw?.settleCurrency || ''
+    ).trim();
+    const item = cryptoItem('KRAKEN', marketType, category, {
+      ...raw,
+      symbol,
+      baseAsset: base,
+      quoteAsset: quote,
+      fullName: raw?.displayName || raw?.display_name || raw?.name || symbol,
+      status: raw?.status || raw?.state || (raw?.tradeable === false ? 'offline' : 'online'),
+      contractType: raw?.contractType || raw?.contract_type || raw?.type,
+      settleCoin: raw?.settleCurrency || raw?.settle_currency || raw?.settleCoin,
+      deliveryTime: raw?.expiry || raw?.expiration || raw?.expiryTime,
+      strikePrice: raw?.strikePrice || raw?.strike_price,
+      optionType: raw?.optionType || raw?.option_type,
+    });
+    if (!item) return;
+    item.id = 'KRAKEN:' + marketType + ':' + symbol;
+    item.providerLabel = 'Kraken';
+    item.marketType = marketType;
+    item.category = category;
+    item.instrumentType = marketType;
+    seen.add(key);
+    out.push(item);
+  };
+
+  // Kraken Spot public catalogue. Keep every returned pair, including pairs
+  // that are not currently online, so the Quote catalogue does not silently
+  // omit instruments from Kraken's published universe.
+  try {
+    const response = await getJson('https://api.kraken.com/0/public/AssetPairs', 15000);
+    const rows = response?.result && typeof response.result === 'object' ? Object.entries(response.result) : [];
+    for (const [id, raw] of rows) {
+      add({ ...(raw as any), id, symbol: (raw as any)?.wsname || (raw as any)?.altname || id }, 'Spot', 'Crypto', id);
+    }
+    console.log('[SIRE KRAKEN] Spot AssetPairs: ' + rows.length);
+  } catch (error) {
+    console.warn('[SIRE KRAKEN] Spot AssetPairs failed:', error);
+  }
+
+  // Kraken Derivatives public catalogue. This endpoint publishes perpetuals,
+  // dated futures and any other derivative instrument types Kraken exposes.
+  // Do not filter by tradeable/state: every published instrument is retained.
+  try {
+    const response = await getJson('https://futures.kraken.com/derivatives/api/v3/instruments', 20000);
+    const rows = Array.isArray(response?.instruments)
+      ? response.instruments
+      : Array.isArray(response?.result)
+        ? response.result
+        : [];
+
+    for (const raw of rows) {
+      const type = String(raw?.type || raw?.instrumentType || raw?.contractType || '').toLowerCase();
+      const symbol = String(raw?.symbol || raw?.instrument || raw?.id || '').trim();
+      const display = String(raw?.displayName || raw?.display_name || raw?.name || symbol).toLowerCase();
+      const expiry = String(raw?.expiry || raw?.expiration || raw?.expiryTime || '').trim();
+
+      let marketType = 'Other Derivatives';
+      if (type.includes('perpetual') || type === 'perpetual_swap' || display.includes('perpetual')) {
+        marketType = 'Perpetual Futures';
+      } else if (type.includes('future') || type.includes('futures') || expiry) {
+        marketType = 'Futures';
+      } else if (type.includes('option') || display.includes('option')) {
+        marketType = 'Options';
+      }
+
+      add(raw, marketType, 'Crypto', symbol);
+    }
+    console.log('[SIRE KRAKEN] Derivatives instruments: ' + rows.length);
+  } catch (error) {
+    console.warn('[SIRE KRAKEN] Derivatives instruments failed:', error);
+  }
+
+  const counts = out.reduce<Record<string, number>>((acc, item) => {
+    acc[item.marketType] = (acc[item.marketType] || 0) + 1;
+    return acc;
+  }, {});
+  console.log('[SIRE KRAKEN] COMPLETE', JSON.stringify({ total: out.length, ...counts }));
+  return out;
+}
+
 async function binance(): Promise<UnifiedInstrument[]> {
   const out: UnifiedInstrument[] = [];
 
@@ -2003,6 +2098,7 @@ export async function getUnifiedMarketCatalogue(fetchDeriv: () => Promise<any[]>
       ['DERIV', fetchDeriv().then(items => items.map(derivItem).filter(Boolean) as UnifiedInstrument[])],
       ['BINANCE', binance()],
       ['COINBASE', coinbase()],
+      ['KRAKEN', kraken()],
       ['FXCM', fxcm()],
       // Nasdaq Trader supplies the public instrument master for Nasdaq-listed,
       // other U.S.-listed, bonds, NOM options, mutual funds and additional
