@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import './home.css';
 import {
   ArrowRight, Bell, BrainCircuit, ChevronRight, CircleUserRound, Eye, EyeOff, Flame,
@@ -48,6 +48,14 @@ export default function HomeView({ instruments, onSelectInstrument, videoSrc = '
   const [searchOpen, setSearchOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [balanceVisible, setBalanceVisible] = useState(true);
+  const [activeEvent, setActiveEvent] = useState(0);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      setActiveEvent(current => (current + 1) % 4);
+    }, 6500);
+    return () => window.clearInterval(timer);
+  }, []);
 
   const liveMarkets = useMemo(() => {
     const crypto = instruments.filter(item => item.category?.toLowerCase().includes('crypto')).slice(0, 12);
@@ -136,37 +144,44 @@ export default function HomeView({ instruments, onSelectInstrument, videoSrc = '
         </section>
 
         <section className="sire-home-events-media" aria-label="SIRE events, notices and updates">
-          <div className="sire-home-events-media-track">
-            <article className="sire-home-event-media">
+          <div className="sire-home-events-media-stage" aria-live="polite">
+            <article className={`sire-home-event-media ${activeEvent === 0 ? 'is-active' : ''}`}>
               <div className="sire-home-event-media-art event-art-notice">
                 <span className="sire-home-event-media-icon"><Megaphone size={22} /></span>
                 <div><b>NOTICE</b><strong>Important SIRE announcements</strong><small>New notices, maintenance updates and platform information.</small></div>
               </div>
             </article>
-            <article className="sire-home-event-media">
+            <article className={`sire-home-event-media ${activeEvent === 1 ? 'is-active' : ''}`}>
               <div className="sire-home-event-media-art event-art-competition">
                 <span className="sire-home-event-media-icon"><Trophy size={22} /></span>
                 <div><b>COMPETITION</b><strong>Upcoming trading events</strong><small>Challenges, competitions and community events will appear here.</small></div>
               </div>
             </article>
-            <article className="sire-home-event-media">
+            <article className={`sire-home-event-media ${activeEvent === 2 ? 'is-active' : ''}`}>
               <div className="sire-home-event-media-art event-art-update">
                 <span className="sire-home-event-media-icon"><CalendarClock size={22} /></span>
                 <div><b>UPCOMING</b><strong>New platform updates</strong><small>Product launches, market updates and new features.</small></div>
               </div>
             </article>
-            <article className="sire-home-event-media">
+            <article className={`sire-home-event-media ${activeEvent === 3 ? 'is-active' : ''}`}>
               <div className="sire-home-event-media-art event-art-rewards">
                 <span className="sire-home-event-media-icon"><Gift size={22} /></span>
                 <div><b>INCENTIVES &amp; REWARDS</b><strong>New opportunities are coming</strong><small>Promotions and reward campaigns can be featured here.</small></div>
               </div>
             </article>
-            <article className="sire-home-event-media" aria-hidden="true">
-              <div className="sire-home-event-media-art event-art-notice">
-                <span className="sire-home-event-media-icon"><Megaphone size={22} /></span>
-                <div><b>NOTICE</b><strong>Important SIRE announcements</strong><small>New notices, maintenance updates and platform information.</small></div>
-              </div>
-            </article>
+          </div>
+          <div className="sire-home-events-dots" role="tablist" aria-label="Event slides">
+            {[0, 1, 2, 3].map(index => (
+              <button
+                key={index}
+                type="button"
+                role="tab"
+                aria-selected={activeEvent === index}
+                aria-label={`Show event ${index + 1} of 4`}
+                className={activeEvent === index ? 'is-active' : ''}
+                onClick={() => setActiveEvent(index)}
+              />
+            ))}
           </div>
         </section>
 
