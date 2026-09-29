@@ -410,7 +410,7 @@
     radial-gradient(38% 27% at 94% 74%,rgba(139,53,150,.5),transparent 72%),
     radial-gradient(30% 24% at 61% 82%,rgba(41,20,82,.62),transparent 73%),
     linear-gradient(118deg,#020713 0%,#06152a 34%,#0a1024 51%,#24133b 74%,#321b42 100%);
-  filter:blur(13px);
+  filter:blur(7px);
   opacity:.76;
   transform:translate3d(-2%,1%,0) scale(1.08);
   animation:sireCardLiquidDrift 12s ease-in-out infinite alternate;
@@ -445,8 +445,8 @@
     radial-gradient(38% 15% at 78% 38%,rgba(173,73,239,.38),transparent 72%),
     radial-gradient(30% 12% at 84% 69%,rgba(238,113,190,.22),transparent 72%),
     linear-gradient(132deg,transparent 22%,rgba(41,143,255,.08) 38%,transparent 52%,rgba(196,86,239,.1) 67%,transparent 81%);
-  filter:blur(6px);
-  opacity:.78;
+  filter:blur(3.5px);
+  opacity:.68;
   mix-blend-mode:screen;
   transform:translate3d(0,0,0) scale(1.04);
   animation:sireCardFlowGlow 9s ease-in-out infinite alternate;
@@ -465,8 +465,8 @@
     radial-gradient(35% 15% at 47% 55%,rgba(75,174,255,.24),transparent 74%),
     radial-gradient(40% 17% at 80% 38%,rgba(163,69,237,.38),transparent 74%),
     radial-gradient(32% 14% at 83% 69%,rgba(255,132,111,.22),transparent 74%);
-  filter:blur(6px);
-  opacity:.76;
+  filter:blur(3.5px);
+  opacity:.66;
 }
 
 /* Keep every card's content crisp above the liquid. */
@@ -485,8 +485,8 @@
 
 @keyframes sireCardLiquidDrift{
   0%{transform:translate3d(-3%,-1%,0) scale(1.07);filter:blur(13px) brightness(.82)}
-  50%{filter:blur(15px) brightness(1)}
-  100%{transform:translate3d(4%,3%,0) scale(1.12);filter:blur(13px) brightness(.9)}
+  50%{filter:blur(8px) brightness(1)}
+  100%{transform:translate3d(4%,3%,0) scale(1.12);filter:blur(7px) brightness(.9)}
 }
 @keyframes sireCardFlowGlow{
   0%{transform:translate3d(-3%,2%,0) scale(1.03);opacity:.58}
