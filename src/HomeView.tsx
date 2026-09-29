@@ -3,6 +3,7 @@ import './home.css';
 import {
   ArrowRight, Bell, BrainCircuit, ChevronRight, CircleUserRound, Eye, EyeOff, Flame,
   Grid2X2, LineChart, Search, Sparkles, TrendingUp, Wallet, ArrowDownToLine, ArrowUpFromLine, Repeat2,
+  BadgePercent, Megaphone, Trophy, CalendarClock, Gift, MoreHorizontal,
 } from 'lucide-react';
 
 type HomeInstrument = {
@@ -145,6 +146,39 @@ export default function HomeView({ instruments, onSelectInstrument, videoSrc = '
                 <div className={market.down ? 'sire-home-spark down' : 'sire-home-spark'}><i /><i /><i /><i /><i /></div>
               </article>
             ))}
+          </div>
+        </section>
+
+        <section className="sire-home-events" aria-label="SIRE events and updates">
+          <div className="sire-home-events-track">
+            <div className="sire-home-event">
+              <span className="sire-home-event-icon"><Megaphone size={14} /></span>
+              <span><b>NOTICE</b><small>Scheduled maintenance window coming soon</small></span>
+            </div>
+            <div className="sire-home-event">
+              <span className="sire-home-event-icon"><Gift size={14} /></span>
+              <span><b>INCENTIVE</b><small>New rewards campaign is being prepared</small></span>
+            </div>
+            <div className="sire-home-event">
+              <span className="sire-home-event-icon"><Trophy size={14} /></span>
+              <span><b>COMPETITION</b><small>Trading challenge updates are on the way</small></span>
+            </div>
+            <div className="sire-home-event">
+              <span className="sire-home-event-icon"><CalendarClock size={14} /></span>
+              <span><b>UPCOMING</b><small>New market and platform updates coming soon</small></span>
+            </div>
+            <div className="sire-home-event">
+              <span className="sire-home-event-icon"><BadgePercent size={14} /></span>
+              <span><b>REWARDS</b><small>Watch this space for new earning opportunities</small></span>
+            </div>
+            <div className="sire-home-event">
+              <span className="sire-home-event-icon"><MoreHorizontal size={14} /></span>
+              <span><b>SIRE UPDATE</b><small>More platform announcements will appear here</small></span>
+            </div>
+            <div className="sire-home-event" aria-hidden="true">
+              <span className="sire-home-event-icon"><Megaphone size={14} /></span>
+              <span><b>NOTICE</b><small>Scheduled maintenance window coming soon</small></span>
+            </div>
           </div>
         </section>
 
