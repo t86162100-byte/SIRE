@@ -126,9 +126,9 @@ export default function HomeView({ instruments, onSelectInstrument, videoSrc = '
           </div>
 
           <div className="sire-home-balance-actions" aria-label="Balance actions">
-            <button type="button"><span className="balance-action-icon"><ArrowDownToLine size={15} /></span><span>Deposit</span></button>
-            <button type="button"><span className="balance-action-icon"><ArrowUpFromLine size={15} /></span><span>Withdraw</span></button>
-            <button type="button"><span className="balance-action-icon"><Repeat2 size={15} /></span><span>Transfer</span></button>
+            <button type="button" aria-label="Deposit"><span className="balance-action-icon"><ArrowDownToLine size={18} /></span></button>
+            <button type="button" aria-label="Withdraw"><span className="balance-action-icon"><ArrowUpFromLine size={18} /></span></button>
+            <button type="button" aria-label="Transfer"><span className="balance-action-icon"><Repeat2 size={18} /></span></button>
           </div>
         </section>
 
