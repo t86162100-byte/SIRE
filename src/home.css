@@ -772,3 +772,91 @@
   position:relative;
   z-index:2;
 }
+/* Unified edge-dissolve treatment: cards fade into the surrounding UI instead of ending at a boundary. */
+.sire-home-market-card,
+.sire-home-intelligence,
+.sire-home-watchlist,
+.sire-home-actions-grid button,
+.sire-home-copy-card,
+.sire-home-ai-card,
+.sire-home-earn-grid button,
+.sire-home-new-grid button,
+.sire-home-brief,
+.sire-home-balance{
+  border:0 !important;
+  box-shadow:none !important;
+  background-color:transparent !important;
+  -webkit-mask-image:radial-gradient(
+    ellipse 92% 94% at 50% 50%,
+    #000 54%,
+    rgba(0,0,0,.94) 66%,
+    rgba(0,0,0,.62) 79%,
+    rgba(0,0,0,.22) 91%,
+    transparent 100%
+  );
+  mask-image:radial-gradient(
+    ellipse 92% 94% at 50% 50%,
+    #000 54%,
+    rgba(0,0,0,.94) 66%,
+    rgba(0,0,0,.62) 79%,
+    rgba(0,0,0,.22) 91%,
+    transparent 100%
+  );
+}
+
+/* Let the existing liquid/glass fields carry the card surface, while their
+   outer luminance gently falls away into the page. */
+.sire-home-market-card:before,
+.sire-home-intelligence:before,
+.sire-home-watchlist:before,
+.sire-home-actions-grid button:before,
+.sire-home-copy-card:before,
+.sire-home-ai-card:before,
+.sire-home-earn-grid button:before,
+.sire-home-new-grid button:before,
+.sire-home-brief:before{
+  opacity:.72;
+}
+
+/* The balance uses the same visual language rather than looking like a separate panel. */
+.sire-home-balance:before{
+  opacity:.68;
+}
+.sire-home-balance:after{
+  opacity:.55;
+}
+
+/* Hero: preserve the video itself, but let its surrounding surface dissolve into the UI. */
+.sire-home-hero{
+  border:0 !important;
+  box-shadow:none !important;
+  background:transparent !important;
+  -webkit-mask-image:radial-gradient(
+    ellipse 98% 98% at 50% 50%,
+    #000 68%,
+    rgba(0,0,0,.92) 78%,
+    rgba(0,0,0,.48) 91%,
+    transparent 100%
+  );
+  mask-image:radial-gradient(
+    ellipse 98% 98% at 50% 50%,
+    #000 68%,
+    rgba(0,0,0,.92) 78%,
+    rgba(0,0,0,.48) 91%,
+    transparent 100%
+  );
+}
+
+/* Keep card text/icons crisp while only the card surface visually dissolves. */
+.sire-home-market-card > *,
+.sire-home-intelligence > *,
+.sire-home-watchlist > *,
+.sire-home-actions-grid button > *,
+.sire-home-copy-card > *,
+.sire-home-ai-card > *,
+.sire-home-earn-grid button > *,
+.sire-home-new-grid button > *,
+.sire-home-brief > *,
+.sire-home-balance > *{
+  filter:none;
+}
