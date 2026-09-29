@@ -1,6 +1,6 @@
 const STYLE_ID = 'sire-tab-layout-controller-style';
 const BAR_ID = 'sire-glass-action-bar';
-const NAV_ID = 'sire-bottom-tabs';
+const NAV_ID = 'sire-bottom-tabs-v2';
 
 function installStyles() {
   if (document.getElementById(STYLE_ID)) return;
