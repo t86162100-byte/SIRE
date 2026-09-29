@@ -505,35 +505,51 @@
   }
 }
 
-/* Total balance — exchange-style portfolio summary */
+/* Total balance — borderless atmospheric portfolio surface */
 .sire-home-balance{
   margin-top:12px;
   padding:15px 15px 13px;
-  border:1px solid rgba(194,169,255,.19);
-  border-radius:18px;
+  border:0;
+  border-radius:20px;
   background:
-    radial-gradient(80% 130% at 100% 0%,rgba(126,82,224,.15),transparent 62%),
-    radial-gradient(55% 100% at 0% 100%,rgba(38,126,205,.08),transparent 72%),
-    linear-gradient(145deg,rgba(17,19,33,.88),rgba(5,10,18,.9));
-  box-shadow:inset 0 1px rgba(255,255,255,.10),0 14px 34px rgba(0,0,0,.24),0 0 30px rgba(108,69,204,.07);
+    radial-gradient(78% 120% at 100% 0%,rgba(126,82,224,.17),transparent 66%),
+    radial-gradient(62% 115% at 0% 100%,rgba(38,126,205,.09),transparent 74%),
+    radial-gradient(85% 90% at 50% 48%,rgba(20,25,40,.42),transparent 76%),
+    linear-gradient(145deg,rgba(17,19,33,.82),rgba(5,10,18,.76));
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.045),
+    0 18px 38px rgba(0,0,0,.18),
+    0 0 34px rgba(108,69,204,.06);
   backdrop-filter:blur(20px) saturate(135%);
   -webkit-backdrop-filter:blur(20px) saturate(135%);
   position:relative;
-  overflow:hidden;
+  overflow:visible;
+  isolation:isolate;
 }
 .sire-home-balance:before{
   content:"";
   position:absolute;
-  width:210px;height:120px;right:-72px;top:-62px;
-  border-radius:50%;
-  background:radial-gradient(circle,rgba(182,137,255,.20),rgba(104,86,208,.07) 42%,transparent 72%);
-  filter:blur(5px);
+  z-index:-1;
+  inset:-18px -24px;
+  border-radius:30px;
+  background:
+    radial-gradient(58% 90% at 86% 14%,rgba(182,137,255,.15),transparent 72%),
+    radial-gradient(55% 80% at 12% 82%,rgba(63,151,231,.07),transparent 74%),
+    linear-gradient(180deg,rgba(20,20,38,.10),transparent 82%);
+  filter:blur(16px);
+  opacity:.9;
   pointer-events:none;
 }
 .sire-home-balance:after{
   content:"";
-  position:absolute;left:16px;right:16px;top:0;height:1px;
-  background:linear-gradient(90deg,transparent,rgba(255,255,255,.18),rgba(181,151,255,.12),transparent);
+  position:absolute;
+  z-index:-1;
+  inset:10px 2px -10px;
+  border-radius:24px;
+  background:
+    radial-gradient(70% 45% at 50% 0%,rgba(190,158,255,.075),transparent 76%),
+    linear-gradient(180deg,transparent 55%,rgba(8,11,20,.22) 100%);
+  filter:blur(7px);
   pointer-events:none;
 }
 .sire-home-balance>*{position:relative;z-index:1}
@@ -550,7 +566,7 @@
 .sire-home-balance-eye:active{background:rgba(255,255,255,.08)}
 .sire-home-balance-wallet{
   display:flex;align-items:center;gap:5px;height:29px;
-  border:1px solid rgba(202,177,255,.15);border-radius:9px;
+  border:0;border-radius:9px;
   background:rgba(255,255,255,.035);color:#cfc4dc;padding:0 7px 0 8px;
   font-size:8px;font-weight:800;
 }
@@ -586,13 +602,14 @@
 }
 .sire-home-balance-actions button{
   min-width:0;height:45px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;
-  border:1px solid rgba(195,164,255,.14);border-radius:11px;
+  border:0;border-radius:11px;
   background:rgba(255,255,255,.035);color:#d8cfdf;font-size:8px;font-weight:800;
   transition:transform .18s ease,background .18s ease,border-color .18s ease;
+  box-shadow:inset 0 1px rgba(255,255,255,.035);
 }
 .sire-home-balance-actions button:first-child{
   background:linear-gradient(135deg,rgba(139,85,232,.25),rgba(80,48,145,.11));
-  border-color:rgba(196,158,255,.31);color:#f2ebff;
+  border:0;color:#f2ebff;
 }
 .sire-home-balance-actions button:active{transform:translateY(1px);background:rgba(255,255,255,.07)}
 .balance-action-icon{
