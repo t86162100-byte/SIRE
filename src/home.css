@@ -504,3 +504,15 @@
     animation:none;
   }
 }
+
+/* Total balance — exchange-style account summary */
+.sire-home-balance{margin-top:12px;padding:14px 14px 12px;border:1px solid rgba(196,166,255,.17);border-radius:17px;background:linear-gradient(135deg,rgba(27,19,49,.72),rgba(8,13,24,.78));box-shadow:inset 0 1px rgba(255,255,255,.09),0 12px 32px rgba(0,0,0,.24),0 0 30px rgba(109,65,208,.08);backdrop-filter:blur(18px) saturate(135%);-webkit-backdrop-filter:blur(18px) saturate(135%);position:relative;overflow:hidden}
+.sire-home-balance:before{content:"";position:absolute;inset:-30% -12%;background:radial-gradient(45% 80% at 82% 25%,rgba(146,92,255,.17),transparent 70%),radial-gradient(32% 70% at 10% 80%,rgba(61,145,255,.07),transparent 72%);pointer-events:none}
+.sire-home-balance>*{position:relative;z-index:1}
+.sire-home-balance-head{display:flex;align-items:center;justify-content:space-between}
+.sire-home-balance-head>div{display:flex;align-items:center;gap:7px}.sire-home-balance-head span{font-size:8px;font-weight:900;letter-spacing:.16em;color:#9b8fae}
+.sire-home-balance-head button{border:0;background:none;color:#8e829f;font-size:11px;padding:0}
+.sire-home-balance-wallet{display:flex;align-items:center;gap:5px;border:1px solid rgba(202,177,255,.16);border-radius:10px;background:rgba(255,255,255,.035);color:#cbbbe3;padding:6px 9px;font-size:9px;font-weight:800}
+.sire-home-balance-value{margin-top:5px;font-size:27px;line-height:1.05;font-weight:800;letter-spacing:-.045em;color:#f6f2ff;text-shadow:0 0 22px rgba(190,158,255,.12)}
+.sire-home-balance-value small{font-size:9px;letter-spacing:.08em;color:#91859e;font-weight:700}
+.sire-home-balance-meta{display:flex;gap:18px;margin-top:9px;color:#81768e;font-size:8px}.sire-home-balance-meta span{display:flex;gap:5px;align-items:center}.sire-home-balance-meta b{color:#c9bfd2;font-weight:800}.sire-home-balance-actions{display:grid;grid-template-columns:repeat(3,1fr);gap:7px;margin-top:12px}.sire-home-balance-actions button{height:31px;border:1px solid rgba(195,164,255,.17);border-radius:9px;background:rgba(255,255,255,.035);color:#d9cef0;font-size:9px;font-weight:800}.sire-home-balance-actions button:first-child{background:linear-gradient(135deg,rgba(139,85,232,.24),rgba(80,48,145,.12));border-color:rgba(192,153,255,.3);color:#f0e8ff}

@@ -99,6 +99,21 @@ export default function HomeView({ instruments, onSelectInstrument, videoSrc = '
           </video>
         </section>
 
+        <section className="sire-home-balance" aria-label="Total balance">
+          <div className="sire-home-balance-head">
+            <div><span>TOTAL BALANCE</span><button type="button" aria-label="Hide balance">◉</button></div>
+            <button type="button" className="sire-home-balance-wallet"><Wallet size={14} /> Wallet</button>
+          </div>
+          <div className="sire-home-balance-value">$0.00 <small>USD</small></div>
+          <div className="sire-home-balance-meta">
+            <span>Available <b>$0.00</b></span>
+            <span>Today's P&amp;L <b className="up">+$0.00 (0.00%)</b></span>
+          </div>
+          <div className="sire-home-balance-actions">
+            <button type="button">Deposit</button><button type="button">Withdraw</button><button type="button">Transfer</button>
+          </div>
+        </section>
+
         <section className="sire-home-section sire-home-pulse">
           <div className="sire-home-section-head"><div><span>LIVE MARKET</span><h2>Market Pulse</h2></div><button type="button">See All <ChevronRight size={15} /></button></div>
           <div className="sire-home-market-row">
