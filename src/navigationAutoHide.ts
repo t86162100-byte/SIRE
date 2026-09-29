@@ -1,4 +1,4 @@
-const NAV_ID = 'sire-bottom-tabs';
+const NAV_ID = 'sire-bottom-tabs-v2';
 const STYLE_ID = 'sire-navigation-auto-hide-style';
 const HIDE_AFTER = 30000;
 
