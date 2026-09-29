@@ -71,17 +71,32 @@ export default function HomeView({ instruments, onSelectInstrument, videoSrc = '
         </div>
       </header>
 
+      <div className="sire-home-liquid" aria-hidden="true">
+        <span className="sire-liquid-dark" />
+        <span className="sire-liquid-blue blue-a" />
+        <span className="sire-liquid-blue blue-b" />
+        <span className="sire-liquid-blue blue-c" />
+        <span className="sire-liquid-purple purple-a" />
+        <span className="sire-liquid-purple purple-b" />
+        <span className="sire-liquid-purple purple-c" />
+        <span className="sire-liquid-sheen" />
+      </div>
+
       <div className="sire-home-scroll">
         <section className="sire-home-hero">
           <video
             className="sire-home-video"
-            src={videoSrc}
             autoPlay
             muted
             loop
             playsInline
             preload="auto"
-          />
+            onCanPlay={event => { event.currentTarget.play().catch(() => {}); }}
+          >
+            <source src={videoSrc} type="video/mp4" />
+            <source src="/sire-home-hero.mp4" type="video/mp4" />
+            <source src="/magichour_image_to_video-2026-09-28--1x-1-cmullyqw300zgi0017dnt2dar.mp4" type="video/mp4" />
+          </video>
         </section>
 
         <section className="sire-home-section sire-home-pulse">
