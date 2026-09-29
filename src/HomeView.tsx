@@ -1,8 +1,8 @@
 import { useMemo, useState } from 'react';
 import './home.css';
 import {
-  ArrowRight, Bell, BrainCircuit, ChevronRight, CircleUserRound, Flame,
-  Grid2X2, LineChart, Search, Sparkles, TrendingUp, Wallet,
+  ArrowRight, Bell, BrainCircuit, ChevronRight, CircleUserRound, Eye, EyeOff, Flame,
+  Grid2X2, LineChart, Search, Sparkles, TrendingUp, Wallet, ArrowDownToLine, ArrowUpFromLine, Repeat2,
 } from 'lucide-react';
 
 type HomeInstrument = {
@@ -46,6 +46,7 @@ function money(value?: number) {
 export default function HomeView({ instruments, onSelectInstrument, videoSrc = '/sire-home-hero.mp4' }: Props) {
   const [searchOpen, setSearchOpen] = useState(false);
   const [query, setQuery] = useState('');
+  const [balanceVisible, setBalanceVisible] = useState(true);
 
   const liveMarkets = useMemo(() => {
     const crypto = instruments.filter(item => item.category?.toLowerCase().includes('crypto')).slice(0, 12);
@@ -101,16 +102,33 @@ export default function HomeView({ instruments, onSelectInstrument, videoSrc = '
 
         <section className="sire-home-balance" aria-label="Total balance">
           <div className="sire-home-balance-head">
-            <div><span>TOTAL BALANCE</span><button type="button" aria-label="Hide balance">◉</button></div>
-            <button type="button" className="sire-home-balance-wallet"><Wallet size={14} /> Wallet</button>
+            <div className="sire-home-balance-title">
+              <span>TOTAL BALANCE</span>
+              <button type="button" className="sire-home-balance-eye" aria-label={balanceVisible ? 'Hide balance' : 'Show balance'} onClick={() => setBalanceVisible(value => !value)}>
+                {balanceVisible ? <Eye size={14} /> : <EyeOff size={14} />}
+              </button>
+            </div>
+            <button type="button" className="sire-home-balance-wallet"><Wallet size={14} /><span>Wallet</span><ChevronRight size={12} /></button>
           </div>
-          <div className="sire-home-balance-value">$0.00 <small>USD</small></div>
-          <div className="sire-home-balance-meta">
-            <span>Available <b>$0.00</b></span>
-            <span>Today's P&amp;L <b className="up">+$0.00 (0.00%)</b></span>
+
+          <div className="sire-home-balance-main">
+            <div className="sire-home-balance-value">{balanceVisible ? '$0.00' : '••••••'} <small>USD</small></div>
+            <div className="sire-home-balance-pnl">
+              <span>Today's P&amp;L</span>
+              <strong className="up">{balanceVisible ? '+$0.00' : '••••'}</strong>
+              <b className="up">{balanceVisible ? '0.00%' : '•••'}</b>
+            </div>
           </div>
-          <div className="sire-home-balance-actions">
-            <button type="button">Deposit</button><button type="button">Withdraw</button><button type="button">Transfer</button>
+
+          <div className="sire-home-balance-available">
+            <span>Available to trade</span>
+            <strong>{balanceVisible ? '$0.00 USD' : '••••••'}</strong>
+          </div>
+
+          <div className="sire-home-balance-actions" aria-label="Balance actions">
+            <button type="button"><span className="balance-action-icon"><ArrowDownToLine size={15} /></span><span>Deposit</span></button>
+            <button type="button"><span className="balance-action-icon"><ArrowUpFromLine size={15} /></span><span>Withdraw</span></button>
+            <button type="button"><span className="balance-action-icon"><Repeat2 size={15} /></span><span>Transfer</span></button>
           </div>
         </section>
 
