@@ -49,6 +49,7 @@ export default function HomeView({ instruments, onSelectInstrument, videoSrc = '
   const [query, setQuery] = useState('');
   const [balanceVisible, setBalanceVisible] = useState(true);
   const [activeEvent, setActiveEvent] = useState(0);
+  const [activeMarketFilter, setActiveMarketFilter] = useState('Favorite');
 
   useEffect(() => {
     const timer = window.setInterval(() => {
@@ -185,6 +186,35 @@ export default function HomeView({ instruments, onSelectInstrument, videoSrc = '
           </div>
         </section>
 
+        <section className="sire-home-section">
+          <div className="sire-home-section-head"><div><span>DISCOVER</span><h2>Markets</h2></div><button type="button">See All <ChevronRight size={15} /></button></div>
+          <div className="sire-home-market-tabs" role="tablist" aria-label="Market filters">
+            {['Favorite', 'Hot', 'Spot', 'Futures', 'New', 'Gainers', 'Losers', 'Vol', 'Market Cap'].map(filter => (
+              <button
+                key={filter}
+                type="button"
+                role="tab"
+                aria-selected={activeMarketFilter === filter}
+                className={activeMarketFilter === filter ? 'active' : ''}
+                onClick={() => setActiveMarketFilter(filter)}
+              >
+                {filter}
+              </button>
+            ))}
+          </div>
+          <div className="sire-home-watchlist">
+            {(liveMarkets.length ? liveMarkets.slice(0, 5) : []).map((item, index) => (
+              <button type="button" key={item.id} onClick={() => onSelectInstrument?.(item)} className="sire-home-watch-row">
+                <img src={item.logoUrl || fallbackLogo(item.displaySymbol || item.symbol)} alt="" onError={event => { event.currentTarget.onerror = null; event.currentTarget.src = fallbackLogo(item.displaySymbol || item.symbol); }} />
+                <span><b>{String(item.displaySymbol || item.symbol).toUpperCase()}</b><small>{String(item.providerLabel || item.provider || 'MARKET').toUpperCase()}</small></span>
+                <strong>{money(item.price) === '—' ? ['—', '$2,686.32', '$142.38', '$2.45', '$83,572.21'][index] : money(item.price)}</strong>
+                <em className={index % 3 === 0 ? 'down' : 'up'}>{index % 3 === 0 ? '-0.46%' : '+' + (1.12 + index * .37).toFixed(2) + '%'}</em>
+                <LineChart size={28} />
+              </button>
+            ))}
+          </div>
+        </section>
+
         <section className="sire-home-section sire-home-pulse">
           <div className="sire-home-section-head"><div><span>LIVE MARKET</span><h2>Market Pulse</h2></div><button type="button">See All <ChevronRight size={15} /></button></div>
           <div className="sire-home-market-row">
@@ -216,21 +246,7 @@ export default function HomeView({ instruments, onSelectInstrument, videoSrc = '
           <div className="sire-home-intel-note"><Sparkles size={17} /><p><strong>SIRE AI</strong> BTC is showing increasing momentum while volatility remains elevated.</p></div>
         </section>
 
-        <section className="sire-home-section">
-          <div className="sire-home-section-head"><div><span>DISCOVER</span><h2>Markets</h2></div><button type="button">See All <ChevronRight size={15} /></button></div>
-          <div className="sire-home-market-tabs"><button className="active">Favorites</button><button>Spot</button><button>Futures</button><button>Crypto</button></div>
-          <div className="sire-home-watchlist">
-            {(liveMarkets.length ? liveMarkets.slice(0, 5) : []).map((item, index) => (
-              <button type="button" key={item.id} onClick={() => onSelectInstrument?.(item)} className="sire-home-watch-row">
-                <img src={item.logoUrl || fallbackLogo(item.displaySymbol || item.symbol)} alt="" onError={event => { event.currentTarget.onerror = null; event.currentTarget.src = fallbackLogo(item.displaySymbol || item.symbol); }} />
-                <span><b>{String(item.displaySymbol || item.symbol).toUpperCase()}</b><small>{String(item.providerLabel || item.provider || 'MARKET').toUpperCase()}</small></span>
-                <strong>{money(item.price) === '—' ? ['—', '$2,686.32', '$142.38', '$2.45', '$83,572.21'][index] : money(item.price)}</strong>
-                <em className={index % 3 === 0 ? 'down' : 'up'}>{index % 3 === 0 ? '-0.46%' : '+' + (1.12 + index * .37).toFixed(2) + '%'}</em>
-                <LineChart size={28} />
-              </button>
-            ))}
-          </div>
-        </section>
+
 
         <section className="sire-home-section">
           <div className="sire-home-section-head"><div><span>ACTION</span><h2>Quick Trade</h2></div><button type="button">See All <ChevronRight size={15} /></button></div>
