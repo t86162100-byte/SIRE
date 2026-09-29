@@ -369,7 +369,7 @@
   .sire-home-liquid:before,.sire-home-liquid:after,.blue-a,.blue-b,.blue-c,.purple-a,.purple-b,.purple-c,.sire-liquid-sheen,.sire-liquid-blue:after,.sire-liquid-purple:after{animation:none}
 }
 
-/* Card-only Liquid Nebula — contained inside cards, never across the page */
+/* Card-only Living Liquid — soft, flowing, blurred and non-distracting */
 .sire-home-liquid{display:none!important}
 
 .sire-home-market-card,
@@ -383,10 +383,11 @@
 .sire-home-brief{
   isolation:isolate;
   overflow:hidden;
-  background-color:#050916;
+  background:#050916;
 }
 
-/* Deep navy / black side with a sharp flowing blue-violet liquid boundary. */
+/* One soft, irregular liquid field per card. The shapes move like poured material,
+   rather than reading as straight neon lines. */
 .sire-home-market-card:before,
 .sire-home-intelligence:before,
 .sire-home-watchlist:before,
@@ -398,60 +399,77 @@
 .sire-home-brief:before{
   content:"";
   position:absolute;
-  inset:-22%;
+  inset:-38%;
   z-index:0;
   pointer-events:none;
   background:
-    radial-gradient(38% 30% at 16% 24%,rgba(10,24,50,.98) 0 54%,transparent 55%),
-    radial-gradient(34% 27% at 86% 76%,rgba(50,18,83,.98) 0 54%,transparent 55%),
-    linear-gradient(132deg,#020712 0%,#06132a 29%,#0a0c1e 47%,#21102e 69%,#32163e 100%);
-  background-size:125% 125%;
-  animation:sireCardTide 10s ease-in-out infinite alternate;
+    radial-gradient(42% 28% at 8% 20%,rgba(5,18,42,.92),transparent 72%),
+    radial-gradient(36% 25% at 30% 62%,rgba(8,54,108,.62),transparent 70%),
+    radial-gradient(31% 23% at 56% 38%,rgba(34,78,169,.36),transparent 71%),
+    radial-gradient(42% 30% at 83% 25%,rgba(69,30,118,.68),transparent 72%),
+    radial-gradient(38% 27% at 94% 74%,rgba(139,53,150,.5),transparent 72%),
+    radial-gradient(30% 24% at 61% 82%,rgba(41,20,82,.62),transparent 73%),
+    linear-gradient(118deg,#020713 0%,#06152a 34%,#0a1024 51%,#24133b 74%,#321b42 100%);
+  filter:blur(13px);
+  opacity:.76;
+  transform:translate3d(-2%,1%,0) scale(1.08);
+  animation:sireCardLiquidDrift 12s ease-in-out infinite alternate;
 }
 
-/* Sharp, visible blue/purple molten ribbons — deliberately not blurred. */
+/* Secondary translucent flow + tiny star glows. */
 .sire-home-market-card:after,
 .sire-home-intelligence:after,
+.sire-home-watchlist:after,
+.sire-home-actions-grid button:after,
 .sire-home-copy-card:after,
 .sire-home-ai-card:after,
-.sire-home-actions-grid button:after,
 .sire-home-earn-grid button:after,
 .sire-home-new-grid button:after,
 .sire-home-brief:after{
   content:"";
   position:absolute;
-  inset:0;
+  inset:-25%;
   z-index:1;
   pointer-events:none;
-  opacity:.95;
   background:
-    radial-gradient(1.4px 1.4px at 12% 22%,rgba(255,255,255,.98) 0 55%,transparent 60%),
-    radial-gradient(1px 1px at 78% 18%,rgba(255,255,255,.9) 0 55%,transparent 60%),
-    radial-gradient(1.2px 1.2px at 66% 78%,rgba(218,240,255,.95) 0 55%,transparent 60%),
-    radial-gradient(1px 1px at 31% 83%,rgba(255,255,255,.78) 0 55%,transparent 60%),
-    linear-gradient(156deg,transparent 0 24%,rgba(35,124,255,.92) 25% 27%,rgba(88,194,255,.98) 27.3% 28.2%,transparent 29% 43%,rgba(74,41,196,.72) 43.5% 45%,rgba(180,91,255,.98) 45.3% 47%,transparent 48% 100%),
-    linear-gradient(22deg,transparent 0 57%,rgba(15,81,213,.82) 58% 59.5%,rgba(74,169,255,.92) 59.8% 60.5%,transparent 61% 71%,rgba(130,54,213,.86) 71.5% 73%,rgba(239,119,225,.84) 73.4% 74.3%,transparent 75%);
-  background-size:auto,auto,auto,auto,135% 135%,145% 145%;
-  background-position:0 0,0 0,0 0,0 0,0 0,0 0;
+    radial-gradient(18px 18px at 12% 24%,rgba(154,219,255,.16),transparent 70%),
+    radial-gradient(11px 11px at 12% 24%,rgba(255,255,255,.96),transparent 42%),
+    radial-gradient(22px 22px at 76% 17%,rgba(197,151,255,.16),transparent 70%),
+    radial-gradient(8px 8px at 76% 17%,rgba(255,255,255,.92),transparent 43%),
+    radial-gradient(15px 15px at 63% 78%,rgba(110,201,255,.13),transparent 70%),
+    radial-gradient(5px 5px at 63% 78%,rgba(244,250,255,.9),transparent 43%),
+    radial-gradient(13px 13px at 31% 83%,rgba(206,139,255,.12),transparent 70%),
+    radial-gradient(4px 4px at 31% 83%,rgba(255,255,255,.82),transparent 44%),
+    radial-gradient(35% 13% at 18% 35%,rgba(23,130,255,.42),transparent 72%),
+    radial-gradient(31% 12% at 49% 53%,rgba(62,179,255,.28),transparent 72%),
+    radial-gradient(38% 15% at 78% 38%,rgba(173,73,239,.38),transparent 72%),
+    radial-gradient(30% 12% at 84% 69%,rgba(238,113,190,.22),transparent 72%),
+    linear-gradient(132deg,transparent 22%,rgba(41,143,255,.08) 38%,transparent 52%,rgba(196,86,239,.1) 67%,transparent 81%);
+  filter:blur(6px);
+  opacity:.78;
   mix-blend-mode:screen;
-  animation:sireCardLava 8s ease-in-out infinite alternate;
+  transform:translate3d(0,0,0) scale(1.04);
+  animation:sireCardFlowGlow 9s ease-in-out infinite alternate;
 }
 
-/* Add a crisp warm sunset reflection to the violet side, matching the hero. */
+/* Warm sunset reflection only appears softly on selected intelligence cards. */
 .sire-home-copy-card:after,
 .sire-home-ai-card:after,
 .sire-home-intelligence:after{
   background:
-    radial-gradient(1.5px 1.5px at 12% 22%,#fff 0 55%,transparent 60%),
-    radial-gradient(1px 1px at 78% 18%,rgba(255,255,255,.92) 0 55%,transparent 60%),
-    radial-gradient(1.2px 1.2px at 66% 78%,rgba(218,240,255,.95) 0 55%,transparent 60%),
-    linear-gradient(162deg,transparent 0 35%,rgba(35,112,244,.88) 36% 37.4%,rgba(84,186,255,.96) 37.7% 38.5%,transparent 39% 51%,rgba(108,45,205,.9) 51.5% 54%,rgba(210,91,237,.98) 54.3% 55.5%,rgba(255,149,120,.72) 55.8% 57%,transparent 58%),
-    linear-gradient(18deg,transparent 0 65%,rgba(12,64,183,.82) 66% 67.5%,rgba(78,161,255,.92) 67.8% 68.5%,transparent 69% 78%,rgba(139,54,207,.9) 78.5% 80%,rgba(247,127,178,.75) 80.3% 81.2%,transparent 82%);
-  background-size:auto,auto,auto,145% 145%,155% 155%;
-  mix-blend-mode:screen;
+    radial-gradient(20px 20px at 13% 24%,rgba(177,226,255,.17),transparent 72%),
+    radial-gradient(7px 7px at 13% 24%,#fff,transparent 44%),
+    radial-gradient(17px 17px at 77% 18%,rgba(222,173,255,.18),transparent 72%),
+    radial-gradient(6px 6px at 77% 18%,rgba(255,255,255,.94),transparent 44%),
+    radial-gradient(40% 17% at 18% 34%,rgba(20,125,255,.32),transparent 74%),
+    radial-gradient(35% 15% at 47% 55%,rgba(75,174,255,.24),transparent 74%),
+    radial-gradient(40% 17% at 80% 38%,rgba(163,69,237,.38),transparent 74%),
+    radial-gradient(32% 14% at 83% 69%,rgba(255,132,111,.22),transparent 74%);
+  filter:blur(6px);
+  opacity:.76;
 }
 
-/* Content always sits cleanly above the living material. */
+/* Keep every card's content crisp above the liquid. */
 .sire-home-market-card>*,
 .sire-home-intelligence>*,
 .sire-home-watchlist>*,
@@ -465,21 +483,24 @@
   z-index:3;
 }
 
-/* Brightness migrates from one side of the card to the other. */
-@keyframes sireCardTide{
-  0%{transform:translate3d(-3%,2%,0) scale(1);filter:brightness(.82)}
-  45%{filter:brightness(1.04)}
-  100%{transform:translate3d(4%,-2%,0) scale(1.035);filter:brightness(.9)}
+@keyframes sireCardLiquidDrift{
+  0%{transform:translate3d(-3%,-1%,0) scale(1.07);filter:blur(13px) brightness(.82)}
+  50%{filter:blur(15px) brightness(1)}
+  100%{transform:translate3d(4%,3%,0) scale(1.12);filter:blur(13px) brightness(.9)}
 }
-@keyframes sireCardLava{
-  0%{background-position:0 0,0 0,0 0,0 0,-8% 8%,10% -6%;opacity:.72}
-  50%{opacity:1}
-  100%{background-position:0 0,0 0,0 0,0 0,13% -7%,-10% 9%;opacity:.84}
+@keyframes sireCardFlowGlow{
+  0%{transform:translate3d(-3%,2%,0) scale(1.03);opacity:.58}
+  50%{opacity:.78}
+  100%{transform:translate3d(4%,-2%,0) scale(1.09);opacity:.7}
 }
 
 @media(prefers-reduced-motion:reduce){
-  .sire-home-market-card:before,.sire-home-intelligence:before,.sire-home-watchlist:before,.sire-home-actions-grid button:before,.sire-home-copy-card:before,.sire-home-ai-card:before,.sire-home-earn-grid button:before,.sire-home-new-grid button:before,.sire-home-brief:before,
-  .sire-home-market-card:after,.sire-home-intelligence:after,.sire-home-copy-card:after,.sire-home-ai-card:after,.sire-home-actions-grid button:after,.sire-home-earn-grid button:after,.sire-home-new-grid button:after,.sire-home-brief:after{
+  .sire-home-market-card:before,.sire-home-intelligence:before,.sire-home-watchlist:before,
+  .sire-home-actions-grid button:before,.sire-home-copy-card:before,.sire-home-ai-card:before,
+  .sire-home-earn-grid button:before,.sire-home-new-grid button:before,.sire-home-brief:before,
+  .sire-home-market-card:after,.sire-home-intelligence:after,.sire-home-watchlist:after,
+  .sire-home-actions-grid button:after,.sire-home-copy-card:after,.sire-home-ai-card:after,
+  .sire-home-earn-grid button:after,.sire-home-new-grid button:after,.sire-home-brief:after{
     animation:none;
   }
 }
