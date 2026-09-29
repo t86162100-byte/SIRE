@@ -27,11 +27,67 @@ function injectStyles() {
     #${NAV_ID} button.active:not(.trade-tab) .tab-icon svg{filter:drop-shadow(0 0 6px rgba(169,112,255,.55))}
     #${NAV_ID} .tab-icon{width:22px;height:22px;display:grid;place-items:center}
     #${NAV_ID} .tab-icon svg{width:20px;height:20px;stroke:currentColor;fill:none;stroke-width:1.75;stroke-linecap:round;stroke-linejoin:round;transition:filter .18s ease,transform .18s ease}
-    #${NAV_ID} .trade-tab{flex:0 0 62px;width:62px;min-width:62px;height:62px;margin:-20px 2px 0;border-radius:50%;padding:0;z-index:3;border:1px solid rgba(242,231,255,.78);background:radial-gradient(circle at 34% 25%,#dfd0ff 0%,#a873f2 25%,#713bd1 58%,#3c1d75 100%);box-shadow:0 0 0 5px rgba(8,6,18,.94),0 0 0 6px rgba(165,116,255,.20),0 10px 28px rgba(93,45,183,.42),inset 0 1px rgba(255,255,255,.75),inset 0 -8px 15px rgba(22,8,48,.34);color:#fff;filter:none}
+    #${NAV_ID} .trade-tab{
+      flex:0 0 66px;width:66px;min-width:66px;height:66px;margin:-22px 2px 0;
+      border-radius:50%;padding:0;z-index:3;position:relative;overflow:hidden;
+      border:1px solid rgba(241,231,255,.48);
+      color:#fff;
+      background:
+        radial-gradient(circle at 29% 20%,rgba(255,255,255,.74) 0%,rgba(235,215,255,.34) 10%,transparent 27%),
+        radial-gradient(circle at 69% 74%,rgba(78,24,157,.55) 0%,transparent 48%),
+        radial-gradient(circle at 52% 44%,rgba(167,103,255,.30) 0%,rgba(82,35,153,.18) 46%,rgba(19,9,43,.38) 100%);
+      -webkit-backdrop-filter:blur(14px) saturate(155%);
+      backdrop-filter:blur(14px) saturate(155%);
+      box-shadow:
+        0 0 0 5px rgba(5,4,13,.94),
+        0 0 0 6px rgba(164,103,255,.16),
+        0 10px 30px rgba(82,30,176,.42),
+        0 0 28px rgba(166,103,255,.22),
+        inset 0 1px 1px rgba(255,255,255,.72),
+        inset 0 -10px 18px rgba(26,8,57,.46);
+      isolation:isolate;
+    }
+    #${NAV_ID} .trade-tab::before{
+      content:"";position:absolute;inset:-10%;z-index:-1;pointer-events:none;border-radius:50%;
+      background:
+        radial-gradient(ellipse 65% 24% at 28% 18%,rgba(255,255,255,.78),transparent 68%),
+        radial-gradient(ellipse 46% 28% at 78% 68%,rgba(211,139,255,.28),transparent 72%),
+        linear-gradient(118deg,transparent 22%,rgba(255,255,255,.16) 42%,rgba(190,125,255,.08) 52%,transparent 72%);
+      filter:blur(2px);
+      mix-blend-mode:screen;
+      transform:rotate(-12deg);
+    }
+    #${NAV_ID} .trade-tab::after{
+      content:"";position:absolute;inset:8px;z-index:0;border-radius:50%;pointer-events:none;
+      background:
+        radial-gradient(circle at 32% 24%,rgba(255,255,255,.24),transparent 20%),
+        radial-gradient(circle at 70% 76%,rgba(111,55,205,.28),transparent 44%),
+        linear-gradient(145deg,rgba(255,255,255,.10),rgba(154,91,242,.08) 42%,rgba(23,9,49,.12));
+      box-shadow:inset 0 1px rgba(255,255,255,.36),inset 0 -7px 13px rgba(16,5,39,.34);
+      -webkit-backdrop-filter:blur(7px) saturate(170%);
+      backdrop-filter:blur(7px) saturate(170%);
+    }
     #${NAV_ID} .trade-tab:hover{transform:translateY(-1px)}
-    #${NAV_ID} .trade-tab.active{box-shadow:0 0 0 5px rgba(8,6,18,.94),0 0 0 6px rgba(181,132,255,.30),0 12px 34px rgba(111,53,216,.54),inset 0 1px rgba(255,255,255,.78),inset 0 -8px 15px rgba(22,8,48,.34)}
-    #${NAV_ID} .trade-tab .trade-logo{width:36px;height:36px;object-fit:contain;filter:drop-shadow(0 0 7px rgba(255,255,255,.44))}
-    #${NAV_ID} .trade-label{position:absolute;top:62px;color:rgba(235,222,255,.70);font-size:7px;font-weight:700;letter-spacing:.11em;white-space:nowrap;pointer-events:none}
+    #${NAV_ID} .trade-tab.active{
+      box-shadow:
+        0 0 0 5px rgba(5,4,13,.94),
+        0 0 0 6px rgba(177,122,255,.25),
+        0 12px 34px rgba(111,53,216,.54),
+        0 0 34px rgba(177,113,255,.27),
+        inset 0 1px 1px rgba(255,255,255,.78),
+        inset 0 -10px 18px rgba(26,8,57,.46);
+    }
+    #${NAV_ID} .trade-tab .trade-logo{
+      position:relative;z-index:2;width:38px;height:38px;object-fit:contain;
+      opacity:.94;
+      filter:
+        brightness(1.28) saturate(.9)
+        drop-shadow(0 0 2px rgba(255,255,255,.9))
+        drop-shadow(0 0 7px rgba(181,117,255,.9))
+        drop-shadow(0 4px 10px rgba(71,25,150,.58));
+      mix-blend-mode:screen;
+    }
+    #${NAV_ID} .trade-label{position:absolute;top:66px;color:rgba(235,222,255,.70);font-size:7px;font-weight:700;letter-spacing:.11em;white-space:nowrap;pointer-events:none}
     @media(max-width:520px){#${NAV_ID}{width:calc(100vw - 20px);height:58px;bottom:max(7px,env(safe-area-inset-bottom));gap:1px;padding:5px;border-radius:29px}#${NAV_ID}::before{border-radius:29px;-webkit-mask:radial-gradient(circle 32px at 50% 0,transparent 0 30px,#000 31px);mask:radial-gradient(circle 32px at 50% 0,transparent 0 30px,#000 31px)}#${NAV_ID} button{height:47px;border-radius:14px;font-size:8px;gap:4px}#${NAV_ID} .tab-icon{width:21px;height:21px}#${NAV_ID} .tab-icon svg{width:19px;height:19px}#${NAV_ID} .trade-tab{flex:0 0 58px;width:58px;min-width:58px;height:58px;margin:-19px 2px 0}#${NAV_ID} .trade-tab .trade-logo{width:33px;height:33px}#${NAV_ID} .trade-label{top:59px;font-size:6.5px}}
     @media(min-width:800px){#${NAV_ID}{height:62px;gap:2px}#${NAV_ID}::before{border-radius:31px;-webkit-mask:radial-gradient(circle 35px at 50% 0,transparent 0 33px,#000 34px);mask:radial-gradient(circle 35px at 50% 0,transparent 0 33px,#000 34px)}#${NAV_ID} button{height:50px;font-size:9px}#${NAV_ID} .trade-tab{flex-basis:64px;width:64px;min-width:64px;height:64px;margin-top:-21px}}  `; document.head.appendChild(style);
 }
