@@ -135,6 +135,41 @@ export default function HomeView({ instruments, onSelectInstrument, videoSrc = '
           </div>
         </section>
 
+        <section className="sire-home-events-media" aria-label="SIRE events, notices and updates">
+          <div className="sire-home-events-media-track">
+            <article className="sire-home-event-media">
+              <div className="sire-home-event-media-art event-art-notice">
+                <span className="sire-home-event-media-icon"><Megaphone size={22} /></span>
+                <div><b>NOTICE</b><strong>Important SIRE announcements</strong><small>New notices, maintenance updates and platform information.</small></div>
+              </div>
+            </article>
+            <article className="sire-home-event-media">
+              <div className="sire-home-event-media-art event-art-competition">
+                <span className="sire-home-event-media-icon"><Trophy size={22} /></span>
+                <div><b>COMPETITION</b><strong>Upcoming trading events</strong><small>Challenges, competitions and community events will appear here.</small></div>
+              </div>
+            </article>
+            <article className="sire-home-event-media">
+              <div className="sire-home-event-media-art event-art-update">
+                <span className="sire-home-event-media-icon"><CalendarClock size={22} /></span>
+                <div><b>UPCOMING</b><strong>New platform updates</strong><small>Product launches, market updates and new features.</small></div>
+              </div>
+            </article>
+            <article className="sire-home-event-media">
+              <div className="sire-home-event-media-art event-art-rewards">
+                <span className="sire-home-event-media-icon"><Gift size={22} /></span>
+                <div><b>INCENTIVES &amp; REWARDS</b><strong>New opportunities are coming</strong><small>Promotions and reward campaigns can be featured here.</small></div>
+              </div>
+            </article>
+            <article className="sire-home-event-media" aria-hidden="true">
+              <div className="sire-home-event-media-art event-art-notice">
+                <span className="sire-home-event-media-icon"><Megaphone size={22} /></span>
+                <div><b>NOTICE</b><strong>Important SIRE announcements</strong><small>New notices, maintenance updates and platform information.</small></div>
+              </div>
+            </article>
+          </div>
+        </section>
+
         <section className="sire-home-section sire-home-pulse">
           <div className="sire-home-section-head"><div><span>LIVE MARKET</span><h2>Market Pulse</h2></div><button type="button">See All <ChevronRight size={15} /></button></div>
           <div className="sire-home-market-row">
@@ -149,38 +184,7 @@ export default function HomeView({ instruments, onSelectInstrument, videoSrc = '
           </div>
         </section>
 
-        <section className="sire-home-events" aria-label="SIRE events and updates">
-          <div className="sire-home-events-track">
-            <div className="sire-home-event">
-              <span className="sire-home-event-icon"><Megaphone size={14} /></span>
-              <span><b>NOTICE</b><small>Scheduled maintenance window coming soon</small></span>
-            </div>
-            <div className="sire-home-event">
-              <span className="sire-home-event-icon"><Gift size={14} /></span>
-              <span><b>INCENTIVE</b><small>New rewards campaign is being prepared</small></span>
-            </div>
-            <div className="sire-home-event">
-              <span className="sire-home-event-icon"><Trophy size={14} /></span>
-              <span><b>COMPETITION</b><small>Trading challenge updates are on the way</small></span>
-            </div>
-            <div className="sire-home-event">
-              <span className="sire-home-event-icon"><CalendarClock size={14} /></span>
-              <span><b>UPCOMING</b><small>New market and platform updates coming soon</small></span>
-            </div>
-            <div className="sire-home-event">
-              <span className="sire-home-event-icon"><BadgePercent size={14} /></span>
-              <span><b>REWARDS</b><small>Watch this space for new earning opportunities</small></span>
-            </div>
-            <div className="sire-home-event">
-              <span className="sire-home-event-icon"><MoreHorizontal size={14} /></span>
-              <span><b>SIRE UPDATE</b><small>More platform announcements will appear here</small></span>
-            </div>
-            <div className="sire-home-event" aria-hidden="true">
-              <span className="sire-home-event-icon"><Megaphone size={14} /></span>
-              <span><b>NOTICE</b><small>Scheduled maintenance window coming soon</small></span>
-            </div>
-          </div>
-        </section>
+
 
         <section className="sire-home-intelligence">
           <div className="sire-home-intel-top">
