@@ -267,7 +267,6 @@ export async function fetchBinanceMarketMetadata(): Promise<Record<string, { cir
             marketCap: Number.isFinite(marketCap) ? marketCap : undefined,
             listedAt: Number.isFinite(Number(row?.listingTime ?? row?.listedAt ?? row?.onboardDate)) ? Number(row.listingTime ?? row.listedAt ?? row.onboardDate) : undefined,
             fullName: String(row?.an || row?.fullName || row?.name || '').trim() || undefined,
-            listedAt: Number.isFinite(Number(row?.listingTime ?? row?.listedAt ?? row?.onboardDate)) ? Number(row.listingTime ?? row.listedAt ?? row.onboardDate) : undefined,
           };
         }
       }
