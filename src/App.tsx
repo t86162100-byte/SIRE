@@ -5,7 +5,7 @@ import ResearchLab from './ResearchLab';
 import HomeView from './HomeView';
 import FinancialChart from './FinancialChart';
 import { fetchDerivInstruments, type DerivInstrument } from './derivMarketData';
-import { fetchBinanceBrowserCatalogue, fetchBinanceLiveQuotes } from './binanceMarketData';
+import { fetchBinanceBrowserCatalogue, fetchBinanceLiveQuotes, createBinanceCatalogueLiveFeed } from './binanceMarketData';
 import { SireErrorScreen } from './SireErrorBoundary';
 import './nativeTerminal.css';
 
@@ -212,24 +212,24 @@ export default function App() {
     // official public-data source and must start even if another provider is slow,
     // unavailable, or geo-restricted on the Render server.
     void (async () => {
-      let liveTimer: number | null = null;
-      const refreshBinanceQuotes = async () => {
-        try {
-          const quotes = await fetchBinanceLiveQuotes();
+      try {
+        const applyQuotes = (quotes: Record<string, { price?: number; change24h?: number; volume24h?: number }>) => {
           if (cancelled) return;
           setInstruments(current => current.map(item => {
             if (item.provider !== 'BINANCE') return item;
             const quote = quotes[item.id];
             return quote ? { ...item, ...quote, priceChangePercent: quote.change24h } : item;
           }));
-        } catch (error) {
-          console.warn('[SIRE BINANCE LIVE] refresh failed:', error);
-        }
-      };
-      await refreshBinanceQuotes();
-      if (!cancelled) liveTimer = window.setInterval(refreshBinanceQuotes, 3000);
-      return () => { if (liveTimer !== null) window.clearInterval(liveTimer); };
+        };
+        const initialQuotes = await fetchBinanceLiveQuotes();
+        applyQuotes(initialQuotes);
+        const closeStream = createBinanceCatalogueLiveFeed(applyQuotes);
+        return closeStream;
+      } catch (error) {
+        console.warn('[SIRE BINANCE LIVE] stream startup failed:', error);
+      }
     })();
+
 
     void (async () => {
       try {
