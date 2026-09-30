@@ -76,11 +76,11 @@ jobs:
           try:
               usdm = get_first_symbols([
                   "https://fapi.binance.com/fapi/v1/exchangeInfo",
-                  "https://api-dev.pipai.org/fapi/v1/exchangeInfo",
+                  "https://r.jina.ai/https://fapi.binance.com/fapi/v1/exchangeInfo",
               ], attempts=1, timeout=8)
               coinm = get_first_symbols([
                   "https://dapi.binance.com/dapi/v1/exchangeInfo",
-                  "https://api-dev.pipai.org/dapi/v1/exchangeInfo",
+                  "https://r.jina.ai/https://dapi.binance.com/dapi/v1/exchangeInfo",
               ], attempts=1, timeout=8)
           except Exception as rest_error:
               print("Binance derivative REST discovery blocked; switching to Binance Futures WebSocket:", rest_error)
