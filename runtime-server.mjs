@@ -1117,7 +1117,17 @@ function scheduleBinanceFuturesRelayReconnect() {
 connectBinanceFuturesRelay();
 server.on('upgrade',(req,socket,head)=>{
   const url=new URL(req.url||'/',`http://${req.headers.host||'localhost'}`);
-  if(url.pathname==='/deriv/ws'){
+  if(url.pathname==='/binance/futures/ws'){
+    console.log('[BINANCE FUTURES RELAY] Browser client connected');
+    wss.handleUpgrade(req,socket,head,clientSocket=>{
+      binanceFuturesClients.add(clientSocket);
+      clientSocket.send(JSON.stringify({type:'sire.binance.futures.connected',timestamp:Date.now()}));
+      clientSocket.on('close',()=>binanceFuturesClients.delete(clientSocket));
+      clientSocket.on('error',()=>binanceFuturesClients.delete(clientSocket));
+    });
+    return;
+  }
+    if(url.pathname==='/deriv/ws'){
     console.log('[DERIV PROXY] Browser market-data client connected');
     wss.handleUpgrade(req,socket,head,clientSocket=>{
       const upstream=new WebSocket('wss://api.derivws.com/trading/v1/options/ws/public');
