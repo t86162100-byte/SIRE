@@ -2821,3 +2821,107 @@
 .sire-home-watch-row button{
   touch-action:manipulation;
 }
+
+
+/* Watchlist scroll lock: enabled keeps the filter rail at the top and gives
+   the instrument catalogue its own continuous scroll surface. Disabled returns
+   the entire market section to normal page scrolling. */
+.sire-home-market-lock-row{
+  position:relative;
+  min-height:20px;
+  display:flex;
+  align-items:center;
+  justify-content:flex-end;
+  gap:7px;
+  padding:0 1px 3px 0;
+  z-index:3;
+}
+.sire-home-market-lock-status{
+  color:#8b8498;
+  font-size:7px;
+  font-weight:800;
+  letter-spacing:.035em;
+  white-space:nowrap;
+  opacity:0;
+  transform:translateX(4px);
+  transition:opacity .18s ease,transform .18s ease;
+  pointer-events:none;
+}
+.sire-home-market-lock-status.is-visible{
+  opacity:1;
+  transform:translateX(0);
+}
+.sire-home-market-lock{
+  width:26px;
+  height:26px;
+  flex:0 0 26px;
+  display:grid;
+  place-items:center;
+  padding:0;
+  border:0;
+  border-radius:8px;
+  background:transparent;
+  color:rgba(215,220,232,.38);
+  box-shadow:none;
+  opacity:.7;
+  transition:color .18s ease,opacity .18s ease,background .18s ease,filter .18s ease;
+  touch-action:manipulation;
+  -webkit-tap-highlight-color:transparent;
+}
+.sire-home-market-lock:hover{
+  background:rgba(255,255,255,.045);
+}
+.sire-home-market-lock.active{
+  color:#e7ddff;
+  opacity:1;
+  filter:drop-shadow(0 0 7px rgba(171,126,255,.48));
+  background:rgba(164,119,247,.055);
+}
+.sire-home-market-filter-shell.watchlist-scroll-disabled{
+  position:relative;
+  top:auto;
+  z-index:auto;
+}
+.sire-home-market-filter-shell.watchlist-scroll-enabled{
+  position:sticky;
+  top:0;
+  z-index:18;
+}
+.sire-home-watchlist.is-scroll-enabled{
+  height:448px;
+  max-height:448px;
+  overflow-y:auto;
+  overflow-x:hidden;
+  overscroll-behavior:contain;
+  -webkit-overflow-scrolling:touch;
+  scrollbar-width:none;
+  touch-action:pan-y;
+}
+.sire-home-watchlist.is-scroll-enabled::-webkit-scrollbar{display:none}
+.sire-home-watchlist.is-scroll-disabled{
+  height:auto;
+  max-height:none;
+  overflow:visible;
+  overscroll-behavior:auto;
+  -webkit-overflow-scrolling:auto;
+  touch-action:auto;
+}
+.sire-home-watchlist.is-scroll-enabled .sire-home-watch-row{
+  content-visibility:auto;
+  contain:layout paint style;
+  contain-intrinsic-size:56px;
+}
+.sire-home-market-source button{
+  touch-action:manipulation;
+  -webkit-tap-highlight-color:transparent;
+}
+@media(max-width:380px){
+  .sire-home-watchlist.is-scroll-enabled{
+    height:448px;
+    max-height:448px;
+  }
+}
+@media(prefers-reduced-motion:reduce){
+  .sire-home-market-lock,
+  .sire-home-market-lock-status{transition:none}
+}
