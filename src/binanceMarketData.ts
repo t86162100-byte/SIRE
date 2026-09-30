@@ -129,13 +129,13 @@ export function createBinanceCatalogueLiveFeed(onQuotes: (quotes: Record<string,
         try {
           const payload = JSON.parse(String(event.data));
           const rows = Array.isArray(payload) ? payload : [payload];
-          const quotes: Record<string, { price?: number; change24h?: number; volume24h?: number }> = {};
+          const quotes: Record<string, { price?: number; change24h?: number; volume24h?: number; tradeCount24h?: number; timestamp?: number }> = {};
           for (const row of rows) {
             const symbol = String(row?.s || '').toUpperCase();
             if (!symbol) continue;
             const quote = {
               price: Number.isFinite(Number(row?.c)) ? Number(row.c) : undefined,
-              change24h: Number.isFinite(Number(row?.P)) ? Number(row.P) : undefined,
+              change24h: Number.isFinite(Number(row?.P)) ? Number(row.P) : (Number.isFinite(Number(row?.c)) && Number.isFinite(Number(row?.o)) && Number(row.o) !== 0 ? ((Number(row.c) - Number(row.o)) / Number(row.o)) * 100 : undefined),
               volume24h: Number.isFinite(Number(row?.q)) ? Number(row.q) : undefined,
               tradeCount24h: Number.isFinite(Number(row?.n)) ? Number(row.n) : undefined,
               timestamp: Number.isFinite(Number(row?.E)) ? Number(row.E) : Date.now(),
@@ -163,9 +163,9 @@ export function createBinanceCatalogueLiveFeed(onQuotes: (quotes: Record<string,
 
   // Binance's public all-market ticker is a 1-second stream. Use the documented
   // stream host directly so the Home market list receives fresh ticks continuously.
-  open('wss://stream.binance.com:9443/ws/!ticker@arr', ['Spot']);
-  open('wss://fstream.binance.com/ws/!ticker@arr', ['Perpetuals', 'Futures']);
-  open('wss://dstream.binance.com/ws/!ticker@arr', ['Perpetuals', 'Futures'], 'BINANCE:COIN-M');
+  open(BINANCE.spotStream + '/ws/!miniTicker@arr', ['Spot']);
+  open(BINANCE.usdmStream + '/ws/!miniTicker@arr', ['Perpetuals', 'Futures']);
+  open(BINANCE.coinmStream + '/ws/!miniTicker@arr', ['Perpetuals', 'Futures'], 'BINANCE:COIN-M');
 
   return () => {
     stopped = true;
