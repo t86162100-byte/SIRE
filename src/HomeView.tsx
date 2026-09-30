@@ -499,19 +499,17 @@ export default function HomeView({ instruments, onSelectInstrument, videoSrc = '
                 <article key={item.id} className="sire-home-watch-row">
                   <button type="button" className="sire-home-watch-main" onClick={() => onSelectInstrument?.(item)}>
                     <span className="market-asset-logo">
-                      <img src={item.logoUrl || fallbackLogo(displayBase)} alt="" onError={event => { event.currentTarget.onerror = null; event.currentTarget.src = fallbackLogo(displayBase); }} />
-                      <i>{String(item.providerLabel || item.provider || 'MARKET').slice(0, 1).toUpperCase()}</i>
+                      <img className="market-token-logo" src={item.logoUrl || fallbackLogo(displayBase)} alt="" onError={event => { event.currentTarget.onerror = null; event.currentTarget.src = fallbackLogo(displayBase); }} />
+                      <span className="market-exchange-logo" aria-label={String(item.providerLabel || item.provider || 'Exchange')}>
+                        <img src={providerLogo(item, String(item.providerLabel || item.provider || 'MARKET'))} alt="" onError={event => { event.currentTarget.onerror = null; event.currentTarget.src = fallbackLogo(String(item.providerLabel || item.provider || 'EX')); }} />
+                      </span>
                     </span>
                     <span className="market-asset-name">
                       <b>{displayBase}</b>
-                      <small>{String(item.name || item.displaySymbol || item.symbol).replace(/_/g, ' ')} · {String(item.providerLabel || item.provider || 'MARKET')}</small>
+                      <small>{String(item.name || item.displaySymbol || item.symbol).replace(/_/g, ' ')} · {String(item.providerLabel || item.provider || 'MARKET').toUpperCase()}</small>
                     </span>
                     <span className="market-asset-price">
                       <strong>{money(item.price)}</strong>
-                      <small>{Number.isFinite(change) ? ((change >= 0 ? '+' : '') + change.toFixed(2) + '%') : '24h —'}</small>
-                    </span>
-                    <span className={Number.isFinite(change) ? (change >= 0 ? 'market-change up' : 'market-change down') : 'market-change'}>
-                      {Number.isFinite(change) ? ((change >= 0 ? '+' : '') + change.toFixed(2) + '%') : '—'}
                     </span>
                     <span className="market-asset-volume"><small>24H VOL</small><b>{Number.isFinite(volume) ? money(volume) : '—'}</b></span>
                   </button>
