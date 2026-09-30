@@ -4,7 +4,7 @@ on:
   push:
     branches: [render-migration]
     paths:
-      - '.github/workflows/update-binance-catalogue.yml'
+      - '.github/workflows/update-binance-catalogue.yml'\n      - 'src/App.tsx'\n      - 'backend/market-catalog.ts'
   schedule:
     - cron: '*/5 * * * *'
   workflow_dispatch:
