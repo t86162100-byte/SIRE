@@ -135,6 +135,7 @@ export default function App() {
   const [chartSymbols, setChartSymbols] = useState<string[]>([]);
   const linkGroupRef = useRef<LinkGroup | null>(null);
   const binanceQuoteCacheRef = useRef<Record<string, any>>({});
+  const binanceMetadataCacheRef = useRef<Record<string, any>>({});
 
   useEffect(() => {
     let cancelled = false;
@@ -241,6 +242,7 @@ export default function App() {
         closeBinanceStream = createBinanceCatalogueLiveFeed(applyQuotes);
         void fetchBinanceMarketMetadata().then(metadata => {
           if (cancelled) return;
+          Object.assign(binanceMetadataCacheRef.current, metadata);
           setInstruments(current => current.map(item => {
             if (item.provider !== 'BINANCE') return item;
             const meta = metadata[String(item.base || '').toUpperCase()];
@@ -277,8 +279,16 @@ export default function App() {
             const existing = new Set(current.map(item => item.id));
             const additions = binanceItems.filter((item:any) => !existing.has(item.id)).map((item:any) => {
               const quote = binanceQuoteCacheRef.current[item.id];
-              if (!quote) return item as Instrument;
-              return { ...item, ...quote, priceChangePercent: quote.change24h } as Instrument;
+              const meta = binanceMetadataCacheRef.current[String(item.base || '').toUpperCase()];
+              const supply = Number(meta?.circulatingSupply);
+              const marketCap = Number.isFinite(supply) && Number.isFinite(Number(quote?.price)) ? supply * Number(quote.price) : meta?.marketCap;
+              return {
+                ...item,
+                ...(quote || {}),
+                ...(quote ? { priceChangePercent: quote.change24h } : {}),
+                ...(Number.isFinite(supply) ? { circulatingSupply: supply } : {}),
+                ...(Number.isFinite(Number(marketCap)) ? { marketCap: Number(marketCap) } : {}),
+              } as Instrument;
             });
             console.info('[SIRE BINANCE BROWSER] publishing instruments to SIRE', {received:binanceItems.length,added:additions.length});
             return current.concat(additions);
@@ -305,7 +315,16 @@ export default function App() {
         const merged = additions.length ? current.concat(additions.map((item: any) => {
           if (item.provider !== 'BINANCE') return item;
           const quote = binanceQuoteCacheRef.current[item.id];
-          return quote ? { ...item, ...quote, priceChangePercent: quote.change24h } : item;
+          const meta = binanceMetadataCacheRef.current[String(item.base || '').toUpperCase()];
+          const supply = Number(meta?.circulatingSupply);
+          const marketCap = Number.isFinite(supply) && Number.isFinite(Number(quote?.price)) ? supply * Number(quote.price) : meta?.marketCap;
+          return {
+            ...item,
+            ...(quote || {}),
+            ...(quote ? { priceChangePercent: quote.change24h } : {}),
+            ...(Number.isFinite(supply) ? { circulatingSupply: supply } : {}),
+            ...(Number.isFinite(Number(marketCap)) ? { marketCap: Number(marketCap) } : {}),
+          };
         })) : current;
         console.info('[SIRE MARKET STARTUP] publishing unified catalogue', {
           received: items.length,
