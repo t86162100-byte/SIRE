@@ -224,19 +224,29 @@ export default function App() {
     // that arrives a moment later still receives the latest snapshot.
     void (async () => {
       try {
+        let pendingQuotes: Record<string, any> = {};
+        let flushTimer: number | null = null;
         const applyQuotes = (quotes: Record<string, any>) => {
           if (cancelled) return;
-          Object.assign(binanceQuoteCacheRef.current, quotes);
-          setInstruments(current => current.map(item => {
-            if (item.provider !== 'BINANCE') return item;
-            const quote = quotes[item.id] || binanceQuoteCacheRef.current[item.id];
-            if (!quote) return item;
-            const supply = Number(item.circulatingSupply);
-            const marketCap = Number.isFinite(supply) && Number.isFinite(Number(quote.price))
-              ? supply * Number(quote.price)
-              : item.marketCap;
-            return { ...item, ...quote, priceChangePercent: quote.change24h, marketCap };
-          }));
+          Object.assign(pendingQuotes, quotes);
+          if (flushTimer !== null) return;
+          flushTimer = window.setTimeout(() => {
+            flushTimer = null;
+            if (cancelled) return;
+            const batch = pendingQuotes;
+            pendingQuotes = {};
+            Object.assign(binanceQuoteCacheRef.current, batch);
+            setInstruments(current => current.map(item => {
+              if (item.provider !== 'BINANCE') return item;
+              const quote = batch[item.id] || binanceQuoteCacheRef.current[item.id];
+              if (!quote) return item;
+              const supply = Number(item.circulatingSupply);
+              const marketCap = Number.isFinite(supply) && Number.isFinite(Number(quote.price))
+                ? supply * Number(quote.price)
+                : item.marketCap;
+              return { ...item, ...quote, priceChangePercent: quote.change24h, marketCap };
+            }));
+          }, 200);
         };
         const initialQuotes = await fetchBinanceLiveQuotes();
         applyQuotes(initialQuotes);
