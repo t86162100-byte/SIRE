@@ -2063,3 +2063,13 @@
   .sire-home-watchlist{margin-left:0;margin-right:0}
   .sire-home-watch-row{padding-left:0;padding-right:0}
 }
+
+
+/* Fine tune market row inset: keep the card margin, nudge logo/button inward. */
+.sire-home-watch-row{
+  padding-left:6px;
+  padding-right:6px;
+}
+@media(max-width:380px){
+  .sire-home-watch-row{padding-left:5px;padding-right:5px}
+}
