@@ -111,61 +111,55 @@ async function postBrowserDiagnostic(diagnostic: any) {
   }
 }
 
-export async function fetchBinanceHotMarkets(limit = 8): Promise<any[]> {
-  const data = await publicRest(BINANCE.spotRest + '/api/v3/ticker/24hr', {});
-  const rows = Array.isArray(data) ? data : [];
-  return rows
-    .filter((row: any) => {
-      const symbol = String(row?.symbol || '').toUpperCase();
-      return symbol.endsWith('USDT') &&
-        !symbol.endsWith('UPUSDT') &&
-        !symbol.endsWith('DOWNUSDT') &&
-        !symbol.endsWith('BULLUSDT') &&
-        !symbol.endsWith('BEARUSDT') &&
-        Number(row?.quoteVolume) > 0;
+export async function fetchBinanceLiveQuotes(): Promise<Record<string, { price?: number; change24h?: number; volume24h?: number }>> {
+  const out: Record<string, { price?: number; change24h?: number; volume24h?: number }> = {};
+
+  const load = async (url: string, marketType: string, idPrefix = 'BINANCE') => {
+    try {
+      const payload = await publicRest(url, {});
+      const rows = Array.isArray(payload) ? payload : [];
+      for (const row of rows) {
+        const symbol = String(row?.symbol || '').toUpperCase();
+        if (!symbol) continue;
+        const price = Number(row?.lastPrice ?? row?.last ?? row?.markPrice ?? row?.price);
+        const change = Number(row?.priceChangePercent ?? row?.priceChangePercent24h ?? row?.percentChange);
+        const volume = Number(row?.quoteVolume ?? row?.quoteVolume24h ?? row?.volume);
+        out[idPrefix + ':' + marketType + ':' + symbol] = {
+          price: Number.isFinite(price) ? price : undefined,
+          change24h: Number.isFinite(change) ? change : undefined,
+          volume24h: Number.isFinite(volume) ? volume : undefined,
+        };
+      }
+    } catch (error) {
+      console.warn('[SIRE BINANCE LIVE] quote endpoint failed', { marketType, error });
+    }
+  };
+
+  await Promise.all([
+    load(BINANCE.spotRest + '/api/v3/ticker/24hr', 'Spot'),
+    load(BINANCE.usdmRest + '/fapi/v1/ticker/24hr', 'Perpetuals'),
+    load(BINANCE.usdmRest + '/fapi/v1/ticker/24hr', 'Futures'),
+    load(BINANCE.coinmRest + '/dapi/v1/ticker/24hr', 'Perpetuals', 'BINANCE:COIN-M'),
+    load(BINANCE.coinmRest + '/dapi/v1/ticker/24hr', 'Futures', 'BINANCE:COIN-M'),
+  ]);
+
+  return out;
+}
+
+export function getBinanceHotFromCatalogue(instruments: any[], limit = 8): any[] {
+  return instruments
+    .filter(item => item?.provider === 'BINANCE' && String(item.marketType) === 'Spot' && Number.isFinite(Number(item.price)) && Number.isFinite(Number(item.change24h)))
+    .filter(item => String(item.symbol || '').toUpperCase().endsWith('USDT'))
+    .map(item => {
+      const volumeScore = Math.log10(Math.max(1, Number(item.volume24h) || 0));
+      const movementScore = Math.min(12, Math.abs(Number(item.change24h) || 0));
+      const participationScore = Math.log10(Math.max(1, Number(item.tradeCount24h) || 1)) * 0.35;
+      return { ...item, hotScore: volumeScore * 1.15 + movementScore * 1.8 + participationScore };
     })
-    .map((row: any) => {
-      const symbol = String(row.symbol).toUpperCase();
-      const base = symbol.slice(0, -4);
-      const change = Number(row.priceChangePercent);
-      const quoteVolume = Number(row.quoteVolume);
-      const trades = Number(row.count);
-      // Binance does not document a public API endpoint for its proprietary
-      // Hot ordering, so use Binance's own live 24h ticker fields to build a
-      // deterministic Hot ranking: activity + movement + participation.
-      const volumeScore = Math.log10(Math.max(1, quoteVolume));
-      const movementScore = Math.min(12, Math.abs(change));
-      const participationScore = Math.log10(Math.max(1, trades)) * 0.35;
-      const hotScore = volumeScore * 1.15 + movementScore * 1.8 + participationScore;
-      return {
-        id: 'BINANCE:Spot:' + symbol,
-        provider: 'BINANCE',
-        providerLabel: 'Binance',
-        exchange: 'BINANCE',
-        marketType: 'Spot',
-        category: 'Crypto',
-        symbol,
-        displaySymbol: symbol,
-        name: base + ' / USDT',
-        base,
-        quote: 'USDT',
-        price: Number(row.lastPrice),
-        change24h: change,
-        priceChangePercent: change,
-        volume24h: quoteVolume,
-        quoteVolume,
-        tradeCount24h: trades,
-        hotScore,
-        logoUrl: 'https://cdn.jsdelivr.net/gh/vadimmalykhin/binance-icons/crypto/' + encodeURIComponent(base.toLowerCase()) + '.svg',
-        providerLogoUrl: 'https://www.binance.com/favicon.ico',
-        exchangeOpen: 1,
-        status: 'online',
-      };
-    })
-    .filter((row: any) => Number.isFinite(row.price))
-    .sort((a: any, b: any) => b.hotScore - a.hotScore)
+    .sort((x, y) => Number(y.hotScore) - Number(x.hotScore))
     .slice(0, Math.max(1, limit));
 }
+
 
 export async function fetchBinanceBrowserCatalogue(): Promise<any[]> {
   const out: any[] = [];
