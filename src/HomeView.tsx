@@ -619,15 +619,17 @@ export default function HomeView({ instruments, onSelectInstrument, videoSrc = '
         <section className="sire-home-section sire-home-markets">
           <div className="sire-home-section-head">
             <div><span>MARKET DISCOVERY</span><h2>Markets</h2></div>
-            <button type="button">See All <ChevronRight size={15} /></button>
+            <div className="sire-home-market-head-actions">
+              <div className="sire-home-market-lock-row">
+                <button type="button" className={`sire-home-market-lock${watchlistScrollEnabled ? ' active' : ''}`} aria-label={watchlistScrollEnabled ? 'Disable watchlist scroll' : 'Enable watchlist scroll'} aria-pressed={watchlistScrollEnabled} title={watchlistScrollEnabled ? 'Disable watchlist scroll' : 'Enable watchlist scroll'} onClick={() => setWatchlistScrollEnabled(value => !value)}>
+                  <LockKeyhole size={15} strokeWidth={2.2} />
+                </button>
+                <div className={`sire-home-market-lock-status${watchlistScrollEnabled ? ' is-visible' : ''}`} aria-live="polite">{watchlistScrollEnabled ? 'watchlist scroll enabled' : ''}</div>
+              </div>
+              <button type="button">See All <ChevronRight size={15} /></button>
+            </div>
           </div>
           <div className={`sire-home-market-filter-shell${watchlistScrollEnabled ? ' watchlist-scroll-enabled' : ' watchlist-scroll-disabled'}`} aria-label="Market discovery filters">
-            <div className="sire-home-market-lock-row">
-              <div className={`sire-home-market-lock-status${watchlistScrollEnabled ? ' is-visible' : ''}`} aria-live="polite">{watchlistScrollEnabled ? 'watchlist scroll enabled' : ''}</div>
-              <button type="button" className={`sire-home-market-lock${watchlistScrollEnabled ? ' active' : ''}`} aria-label={watchlistScrollEnabled ? 'Disable watchlist scroll' : 'Enable watchlist scroll'} aria-pressed={watchlistScrollEnabled} title={watchlistScrollEnabled ? 'Disable watchlist scroll' : 'Enable watchlist scroll'} onClick={() => setWatchlistScrollEnabled(value => !value)}>
-                <LockKeyhole size={15} strokeWidth={2.2} />
-              </button>
-            </div>
             <div className="sire-home-market-tabs" role="tablist" aria-label="Market filters">
               {['Favorite', 'Hot', 'Spot', 'Futures', 'New', 'Gainers', 'Losers', 'Vol', 'Market Cap'].map(filter => (
                 <button
