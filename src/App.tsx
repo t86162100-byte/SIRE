@@ -338,7 +338,6 @@ export default function App() {
           console.warn('[SIRE BINANCE HOSTED CATALOGUE] failed:', error);
         }
 
-        const browserItems = await fetchBinanceBrowserCatalogue();
         await fetch('/api/sire/binance/browser-diagnostic', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
