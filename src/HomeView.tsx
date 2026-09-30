@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { fetchBinanceHotMarkets } from './binanceMarketData';
 import './home.css';
 import {
   ArrowRight, Bell, BrainCircuit, ChevronRight, CircleUserRound, Eye, EyeOff, Flame,
@@ -51,6 +52,23 @@ export default function HomeView({ instruments, onSelectInstrument, videoSrc = '
   const [activeEvent, setActiveEvent] = useState(0);
   const [activeMarketFilter, setActiveMarketFilter] = useState('Hot');
   const [favoriteIds, setFavoriteIds] = useState<string[]>(() => { try { const saved = window.localStorage.getItem('sire.home.marketFavorites'); return saved ? JSON.parse(saved) : []; } catch { return []; } });
+  const [binanceHotMarkets, setBinanceHotMarkets] = useState<HomeInstrument[]>([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    let timer = 0;
+    const loadHot = async () => {
+      try {
+        const rows = await fetchBinanceHotMarkets(8);
+        if (!cancelled) setBinanceHotMarkets(rows as HomeInstrument[]);
+      } catch (error) {
+        console.warn('[SIRE HOME BINANCE HOT] failed:', error);
+      }
+    };
+    void loadHot();
+    timer = window.setInterval(loadHot, 30000);
+    return () => { cancelled = true; window.clearInterval(timer); };
+  }, []);
 
   useEffect(() => {
     const timer = window.setInterval(() => {
@@ -88,6 +106,11 @@ export default function HomeView({ instruments, onSelectInstrument, videoSrc = '
     const crypto = instruments.filter(item => item.category?.toLowerCase().includes('crypto')).slice(0, 8);
     return crypto.length ? crypto : instruments.slice(0, 8);
   }, [instruments]);
+
+  const marketRows = useMemo(() => {
+    if (activeMarketFilter === 'Hot') return binanceHotMarkets;
+    return liveMarkets;
+  }, [activeMarketFilter, binanceHotMarkets, liveMarkets]);
 
   const searchResults = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -225,7 +248,7 @@ export default function HomeView({ instruments, onSelectInstrument, videoSrc = '
             ))}
           </div>
           <div className="sire-home-watchlist" aria-label={activeMarketFilter + ' markets'}>
-            {(liveMarkets.length ? liveMarkets.slice(0, 8) : []).map(item => {
+            {(marketRows.length ? marketRows.slice(0, 8) : []).map(item => {
               const raw = item as any;
               const change = Number(raw.change24h ?? raw.changePercent24h ?? raw.priceChangePercent ?? raw.percentChange24h ?? raw.changePercent);
               const volume = Number(raw.volume24h ?? raw.quoteVolume ?? raw.volume);
