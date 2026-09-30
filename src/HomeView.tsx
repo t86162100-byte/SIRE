@@ -491,6 +491,13 @@ export default function HomeView({ instruments, onSelectInstrument, videoSrc = '
     return out.concat(others);
   }, [binanceMarketRows, bitgetMarketRows]);
 
+  useEffect(() => {
+    const ids = marketRows.slice(0, 7)
+      .filter(item => item.provider === 'BITGET')
+      .map(item => item.id);
+    window.dispatchEvent(new CustomEvent('sire:bitget-priority-symbols', { detail: { ids } }));
+  }, [marketRows]);
+
   const searchResults = useMemo(() => {
     const q = query.trim().toLowerCase();
     if (!q) return liveMarkets.slice(0, 8);
