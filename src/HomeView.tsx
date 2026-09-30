@@ -148,6 +148,8 @@ export default function HomeView({ instruments, onSelectInstrument, videoSrc = '
     return mt.includes('future') || mt.includes('perpetual');
   };
 
+  const isSpot = (item: HomeInstrument) => String(item.marketType || '').toLowerCase() === 'spot';
+
   const filterSpotSubcategory = (rows: HomeInstrument[]) => {
     if (activeMarketSubfilter === 'All') return rows;
     return rows.filter(item => {
@@ -232,25 +234,38 @@ export default function HomeView({ instruments, onSelectInstrument, videoSrc = '
         const rows = [...binanceUniverse].filter(item => Number.isFinite(change(item))).sort((a, b) => change(b) - change(a));
         return activeMarketSubfilter === 'Futures'
           ? rows.filter(isFutures)
-          : rows.filter(item => !isFutures(item));
+          : rows.filter(isSpot);
       }
       case 'Losers': {
         const rows = [...binanceUniverse].filter(item => Number.isFinite(change(item))).sort((a, b) => change(a) - change(b));
         return activeMarketSubfilter === 'Futures'
           ? rows.filter(isFutures)
-          : rows.filter(item => !isFutures(item));
+          : rows.filter(isSpot);
       }
       case 'Vol': {
         const rows = [...binanceUniverse].filter(item => Number.isFinite(volume(item))).sort((a, b) => volume(b) - volume(a));
         return activeMarketSubfilter === 'Futures'
           ? rows.filter(isFutures)
-          : rows.filter(item => !isFutures(item));
+          : rows.filter(isSpot);
       }
       case 'Market Cap': {
-        const rows = [...binanceUniverse].filter(item => Number.isFinite(marketCap(item))).sort((a, b) => marketCap(b) - marketCap(a));
+        const spotCaps = new Map<string, number>();
+        for (const item of binanceSpot) {
+          const base = String((item as any).base || item.symbol || '').replace(/USDT$|USDC$|BUSD$/i, '').toUpperCase();
+          const cap = marketCap(item);
+          if (base && Number.isFinite(cap)) spotCaps.set(base, cap);
+        }
+        const rows = [...binanceUniverse]
+          .map(item => {
+            const base = String((item as any).base || item.symbol || '').replace(/USDT$|USDC$|BUSD$/i, '').toUpperCase();
+            const cap = marketCap(item);
+            return Number.isFinite(cap) ? item : (Number.isFinite(spotCaps.get(base)) ? { ...item, marketCap: spotCaps.get(base) } : item);
+          })
+          .filter(item => Number.isFinite(marketCap(item)))
+          .sort((a, b) => marketCap(b) - marketCap(a));
         return activeMarketSubfilter === 'Futures'
           ? rows.filter(isFutures)
-          : rows.filter(item => !isFutures(item));
+          : rows.filter(isSpot);
       }
       default:
         return binanceSpot;
