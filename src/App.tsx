@@ -342,6 +342,7 @@ export default function App() {
             ...(Number.isFinite(supply) ? { circulatingSupply: supply } : {}),
             ...(Number.isFinite(Number(marketCap)) ? { marketCap: Number(marketCap) } : {}),
             ...(Number.isFinite(Number(meta?.listedAt)) ? { listedAt: Number(meta.listedAt), onboardDate: Number(meta.listedAt) } : {}),
+            ...(meta?.newListing === true ? { newListing: true } : {}),
           };
         })) : current;
         console.info('[SIRE MARKET STARTUP] publishing unified catalogue', {
