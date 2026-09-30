@@ -333,11 +333,11 @@ async function binance(): Promise<UnifiedInstrument[]> {
   }
 
   await loadSymbols('USD-M', ['https://fapi.binance.com/fapi/v1/exchangeInfo'], raw =>
-    String(raw?.contractType || '').toUpperCase() === 'PERPETUAL' ? 'USD-M Perpetuals' : 'USD-M Futures'
+    String(raw?.contractType || '').toUpperCase() === 'PERPETUAL' ? 'Perpetuals' : 'Futures'
   );
 
   await loadSymbols('COIN-M', ['https://dapi.binance.com/dapi/v1/exchangeInfo'], raw =>
-    String(raw?.contractType || '').toUpperCase() === 'PERPETUAL' ? 'COIN-M Perpetuals' : 'COIN-M Futures'
+    String(raw?.contractType || '').toUpperCase() === 'PERPETUAL' ? 'Perpetuals' : 'Futures'
   );
 
   try {
