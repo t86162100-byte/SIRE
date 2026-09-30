@@ -111,6 +111,62 @@ async function postBrowserDiagnostic(diagnostic: any) {
   }
 }
 
+export async function fetchBinanceHotMarkets(limit = 8): Promise<any[]> {
+  const data = await publicRest(BINANCE.spotRest + '/api/v3/ticker/24hr', {});
+  const rows = Array.isArray(data) ? data : [];
+  return rows
+    .filter((row: any) => {
+      const symbol = String(row?.symbol || '').toUpperCase();
+      return symbol.endsWith('USDT') &&
+        !symbol.endsWith('UPUSDT') &&
+        !symbol.endsWith('DOWNUSDT') &&
+        !symbol.endsWith('BULLUSDT') &&
+        !symbol.endsWith('BEARUSDT') &&
+        Number(row?.quoteVolume) > 0;
+    })
+    .map((row: any) => {
+      const symbol = String(row.symbol).toUpperCase();
+      const base = symbol.slice(0, -4);
+      const change = Number(row.priceChangePercent);
+      const quoteVolume = Number(row.quoteVolume);
+      const trades = Number(row.count);
+      // Binance does not document a public API endpoint for its proprietary
+      // Hot ordering, so use Binance's own live 24h ticker fields to build a
+      // deterministic Hot ranking: activity + movement + participation.
+      const volumeScore = Math.log10(Math.max(1, quoteVolume));
+      const movementScore = Math.min(12, Math.abs(change));
+      const participationScore = Math.log10(Math.max(1, trades)) * 0.35;
+      const hotScore = volumeScore * 1.15 + movementScore * 1.8 + participationScore;
+      return {
+        id: 'BINANCE:Spot:' + symbol,
+        provider: 'BINANCE',
+        providerLabel: 'Binance',
+        exchange: 'BINANCE',
+        marketType: 'Spot',
+        category: 'Crypto',
+        symbol,
+        displaySymbol: symbol,
+        name: base + ' / USDT',
+        base,
+        quote: 'USDT',
+        price: Number(row.lastPrice),
+        change24h: change,
+        priceChangePercent: change,
+        volume24h: quoteVolume,
+        quoteVolume,
+        tradeCount24h: trades,
+        hotScore,
+        logoUrl: 'https://cdn.jsdelivr.net/gh/vadimmalykhin/binance-icons/crypto/' + encodeURIComponent(base.toLowerCase()) + '.svg',
+        providerLogoUrl: 'https://www.binance.com/favicon.ico',
+        exchangeOpen: 1,
+        status: 'online',
+      };
+    })
+    .filter((row: any) => Number.isFinite(row.price))
+    .sort((a: any, b: any) => b.hotScore - a.hotScore)
+    .slice(0, Math.max(1, limit));
+}
+
 export async function fetchBinanceBrowserCatalogue(): Promise<any[]> {
   const out: any[] = [];
   const counts: Record<string, number> = {};
