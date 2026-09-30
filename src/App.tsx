@@ -98,13 +98,6 @@ const exchangeDomains: Record<string, string> = {
   uniswap: 'uniswap.org', curve: 'curve.fi', pancakeswap: 'pancakeswap.finance',
 };
 
-const normalizeBinanceMarketType = (value: unknown) => {
-  const marketType = String(value || '').trim();
-  if (/^USD-M\s+Perpetuals$/i.test(marketType) || /^COIN-M\s+Perpetuals$/i.test(marketType)) return 'Perpetuals';
-  if (/^USD-M\s+Futures$/i.test(marketType) || /^COIN-M\s+Futures$/i.test(marketType)) return 'Futures';
-  return marketType;
-};
-
 const makeProviderLogoFallback = (item: Instrument) => {
   const key = String(item.exchange || item.providerLabel || item.provider || '')
     .trim().toLowerCase().replace(/[^a-z0-9]/g, '');
@@ -645,11 +638,12 @@ export default function App() {
     const q = deferredSearch.trim().toLowerCase();
     return randomizedInstruments.filter(item => {
       const providerMatch = providerFilter === 'ALL' || item.provider === providerFilter;
-      const marketType = normalizeBinanceMarketType(item.marketType).toLowerCase();
+      const marketType = String(item.marketType || '').trim().toLowerCase();
       const categoryMatch = categoryFilter === 'ALL'
         || item.category === categoryFilter
         || (categoryFilter === 'Options' && marketType.includes('option'))
-        || (categoryFilter === 'Futures' && (marketType.includes('future') || marketType.includes('perpetual') || marketType.includes('swap')))
+        || (categoryFilter === 'Futures' && marketType === 'futures')
+        || (categoryFilter === 'Perpetuals' && marketType === 'perpetuals')
         || (categoryFilter === 'Crypto' && item.category === 'Crypto' && !marketType.includes('future') && !marketType.includes('option') && !marketType.includes('perpetual') && !marketType.includes('swap'));
       const searchMatch = !q || `${item.name} ${item.symbol} ${item.providerLabel} ${item.marketType} ${item.category}`.toLowerCase().includes(q);
       return providerMatch && categoryMatch && searchMatch;
@@ -737,7 +731,7 @@ export default function App() {
             <button key={provider} type="button" className={providerFilter === provider ? 'active' : ''} onClick={() => setProviderFilter(provider)}>{provider === 'ALL' ? 'All' : provider[0] + provider.slice(1).toLowerCase()}</button>
           ))}
         </div><div className="sire-market-providers sire-market-categories">
-          {(['ALL','Forex','Stocks','Funds','Commodities','Indices','Bonds','Options','Futures','Crypto','Prediction Markets','Synthetic Indices','Baskets'] as const).map(category => (
+          {(['ALL','Forex','Stocks','Funds','Commodities','Indices','Bonds','Options','Futures','Perpetuals','Crypto','Prediction Markets','Synthetic Indices','Baskets'] as const).map(category => (
             <button key={category} type="button" className={categoryFilter === category ? 'active' : ''} onClick={() => setCategoryFilter(category)}>{category}</button>
           ))}
         </div>{derivError && <div className="sire-deriv-error">{derivError}</div>}<div className="native-symbol-list symbol-list" onScroll={event => setQuoteScrollTop(event.currentTarget.scrollTop)}><div style={{height: quoteWindow.top}} aria-hidden="true" /><div className="sire-quote-window">{quoteWindow.items.map(item => <button key={item.id} className={`symbol-row ${selected?.id === item.id ? 'active' : ''}`} data-provider={item.provider} onClick={() => selectInstrument(item)}><span className="quote-asset-logo-wrap"><img className="quote-asset-logo" src={item.logoUrl || makeAssetLogoFallback(item)} alt="" decoding="async" onError={event => { const image = event.currentTarget; image.onerror = null; image.src = makeLogoFallback(item.displaySymbol || item.symbol); }} /></span><span className="quote-instrument-name"><b>{String(item.displaySymbol || item.symbol).toUpperCase()}</b><small>{String(item.name || item.displaySymbol || item.symbol).toUpperCase()}</small></span><span className="quote-broker"><span className="quote-exchange-logo-wrap"><img className="quote-exchange-logo" src={makeProviderLogoFallback(item)} alt="" decoding="async" onError={event => {
