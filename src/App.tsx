@@ -31,6 +31,7 @@ type Instrument = DerivInstrument & {
   onboardDate?: number;
   circulatingSupply?: number;
   marketCap?: number;
+  newListing?: boolean;
 };
 
 const makeLogoFallback = (label: string) => {
@@ -257,6 +258,7 @@ export default function App() {
               marketCap: Number.isFinite(Number(marketCap)) ? Number(marketCap) : item.marketCap,
               listedAt: Number.isFinite(Number(meta.listedAt)) ? Number(meta.listedAt) : item.listedAt,
               onboardDate: Number.isFinite(Number(meta.listedAt)) ? Number(meta.listedAt) : item.onboardDate,
+              newListing: meta.newListing === true ? true : item.newListing,
             };
           }));
         }).catch(error => console.warn('[SIRE BINANCE] market metadata failed:', error));
@@ -291,6 +293,8 @@ export default function App() {
                 ...(Number.isFinite(supply) ? { circulatingSupply: supply } : {}),
                 ...(Number.isFinite(Number(marketCap)) ? { marketCap: Number(marketCap) } : {}),
                 ...(Number.isFinite(Number(meta?.listedAt)) ? { listedAt: Number(meta.listedAt), onboardDate: Number(meta.listedAt) } : {}),
+            ...(meta?.newListing === true ? { newListing: true } : {}),
+                ...(meta?.newListing === true ? { newListing: true } : {}),
               } as Instrument;
             });
             console.info('[SIRE BINANCE BROWSER] publishing instruments to SIRE', {received:binanceItems.length,added:additions.length});
