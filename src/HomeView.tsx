@@ -105,7 +105,6 @@ export default function HomeView({ instruments, onSelectInstrument, videoSrc = '
   const binanceSpot = useMemo(() => (
     binanceUniverse
       .filter(item => String(item.marketType || '').toLowerCase().includes('spot'))
-      .filter(item => Number.isFinite(Number(item.price)))
   ), [binanceUniverse]);
 
   const binanceFutures = useMemo(
