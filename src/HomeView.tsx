@@ -102,18 +102,11 @@ export default function HomeView({ instruments, onSelectInstrument, videoSrc = '
     return () => { cancelled = true; };
   }, []);
 
-  const binanceSpot = useMemo(() => {
-    const rows = binanceUniverse
+  const binanceSpot = useMemo(() => (
+    binanceUniverse
       .filter(item => String(item.marketType || '').toLowerCase().includes('spot'))
-      .filter(item => String(item.symbol || '').toUpperCase().endsWith('USDT'));
-    const byBase = new Map<string, HomeInstrument>();
-    for (const item of rows) {
-      const base = String((item as any).base || item.symbol).replace(/USDT$/i, '').toUpperCase();
-      const current = byBase.get(base);
-      if (!current || String((item as any).quote || '').toUpperCase() === 'USDT') byBase.set(base, item);
-    }
-    return Array.from(byBase.values());
-  }, [binanceUniverse]);
+      .filter(item => Number.isFinite(Number(item.price)))
+  ), [binanceUniverse]);
 
   const binanceFutures = useMemo(
     () => binanceUniverse
@@ -175,12 +168,25 @@ export default function HomeView({ instruments, onSelectInstrument, videoSrc = '
 
   const isSpot = (item: HomeInstrument) => String(item.marketType || '').toLowerCase() === 'spot';
 
+  const quoteAsset = (item: HomeInstrument) => {
+    const explicit = String((item as any).quote || '').trim().toUpperCase();
+    if (explicit) return explicit;
+    const symbol = String(item.symbol || '').trim().toUpperCase();
+    const slash = symbol.lastIndexOf('/');
+    if (slash >= 0) return symbol.slice(slash + 1);
+    const colon = symbol.lastIndexOf(':');
+    if (colon >= 0) return symbol.slice(colon + 1);
+    if (symbol.endsWith('USDT')) return 'USDT';
+    if (symbol.endsWith('USDC')) return 'USDC';
+    return '';
+  };
+
   const filterSpotSubcategory = (rows: HomeInstrument[]) => {
     if (activeMarketSubfilter === 'All') return rows;
     return rows.filter(item => {
-      const quote = String((item as any).quote || '').toUpperCase();
-      if (activeMarketSubfilter === 'USDT') return quote === 'USDT' || (!quote && String(item.symbol || '').toUpperCase().endsWith('USDT'));
-      if (activeMarketSubfilter === 'USDC') return quote === 'USDC' || (!quote && String(item.symbol || '').toUpperCase().endsWith('USDC'));
+      const quote = quoteAsset(item);
+      if (activeMarketSubfilter === 'USDT') return quote === 'USDT';
+      if (activeMarketSubfilter === 'USDC') return quote === 'USDC';
       return quote !== 'USDT' && quote !== 'USDC';
     });
   };
