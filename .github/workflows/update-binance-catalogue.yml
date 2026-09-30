@@ -28,7 +28,7 @@ jobs:
           import json, urllib.request, urllib.error, os
           from pathlib import Path
 
-          def get(url, attempts=4):
+          def get(url, attempts=4, timeout=45):
               req = urllib.request.Request(url, headers={
                   "Accept": "application/json",
                   "User-Agent": "SIRE-Binance-Catalogue/1.0",
@@ -36,7 +36,7 @@ jobs:
               last = None
               for attempt in range(attempts):
                   try:
-                      with urllib.request.urlopen(req, timeout=45) as r:
+                      with urllib.request.urlopen(req, timeout=timeout) as r:
                           return json.loads(r.read().decode("utf-8"))
                   except Exception as e:
                       last = e
@@ -49,11 +49,11 @@ jobs:
           # Binance may return HTTP 451 to hosted runners. For every catalogue
           # family, accept only a response containing a real symbols[] array.
           # data-api.binance.vision is Binance's public market-data host.
-          def get_first_symbols(urls):
+          def get_first_symbols(urls, attempts=1, timeout=12):
               last = None
               for url in urls:
                   try:
-                      payload = get(url)
+                      payload = get(url, attempts=attempts, timeout=timeout)
                       rows = payload.get("symbols") if isinstance(payload, dict) else None
                       if isinstance(rows, list) and rows:
                           print("symbol source succeeded:", url, "symbols:", len(rows))
@@ -67,7 +67,7 @@ jobs:
           spot = get_first_symbols([
               "https://data-api.binance.vision/api/v3/exchangeInfo?symbolStatus=TRADING",
               "https://api.binance.com/api/v3/exchangeInfo?symbolStatus=TRADING",
-          ])
+          ], attempts=2, timeout=20)
 
           # Derivatives are official Binance exchangeInfo data. If Binance's
           # derivative host blocks the GitHub runner, use a transparent public
@@ -77,11 +77,11 @@ jobs:
               usdm = get_first_symbols([
                   "https://fapi.binance.com/fapi/v1/exchangeInfo",
                   "https://api-dev.pipai.org/fapi/v1/exchangeInfo",
-              ])
+              ], attempts=1, timeout=8)
               coinm = get_first_symbols([
                   "https://dapi.binance.com/dapi/v1/exchangeInfo",
                   "https://api-dev.pipai.org/dapi/v1/exchangeInfo",
-              ])
+              ], attempts=1, timeout=8)
           except Exception as rest_error:
               print("Binance derivative REST discovery blocked; switching to Binance Futures WebSocket:", rest_error)
               import subprocess, sys
