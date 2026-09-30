@@ -3108,3 +3108,130 @@
     height:clamp(340px,58svh,500px);
   }
 }
+
+
+/* Refined market catalogue fade:
+   no dark overlay, no hard rectangular boundary. The cards themselves are
+   alpha-masked so their pixels/content dissolve as they pass behind the
+   sticky Market controls. */
+.sire-home-market-section-head{
+  margin-left:0 !important;
+  margin-right:0 !important;
+  padding-left:0 !important;
+  padding-right:0 !important;
+  background:transparent !important;
+  box-shadow:none !important;
+  overflow:visible;
+}
+
+.sire-home-market-section-head::before{
+  content:"";
+  position:absolute;
+  z-index:-1;
+  left:-18px;
+  right:-18px;
+  top:0;
+  bottom:-18px;
+  pointer-events:none;
+  background:linear-gradient(
+    180deg,
+    rgba(10,7,28,.28) 0%,
+    rgba(10,7,28,.16) 48%,
+    rgba(10,7,28,.04) 78%,
+    rgba(10,7,28,0) 100%
+  );
+  -webkit-mask-image:linear-gradient(
+    90deg,
+    transparent 0%,
+    #000 7%,
+    #000 93%,
+    transparent 100%
+  );
+  mask-image:linear-gradient(
+    90deg,
+    transparent 0%,
+    #000 7%,
+    #000 93%,
+    transparent 100%
+  );
+}
+
+.sire-home-market-filter-shell.watchlist-scroll-enabled{
+  background:linear-gradient(
+    180deg,
+    rgba(10,7,28,.22) 0%,
+    rgba(10,7,28,.13) 48%,
+    rgba(10,7,28,.035) 76%,
+    rgba(10,7,28,0) 100%
+  ) !important;
+  box-shadow:none !important;
+  -webkit-mask-image:linear-gradient(
+    180deg,
+    #000 0%,
+    #000 62%,
+    rgba(0,0,0,.7) 78%,
+    transparent 100%
+  ) !important;
+  mask-image:linear-gradient(
+    180deg,
+    #000 0%,
+    #000 62%,
+    rgba(0,0,0,.7) 78%,
+    transparent 100%
+  ) !important;
+}
+
+/* Remove the previous tint layers completely. */
+.sire-home-watchlist-fade,
+.sire-home-watchlist-viewport.is-scroll-enabled::after{
+  display:none !important;
+  background:none !important;
+}
+
+/* The list uses an alpha mask instead of painting a dark strip over the cards.
+   The negative top margin keeps the first card in the same visual position
+   while the padded mask zone sits above it, so the first card starts fully
+   visible and only fades after it begins moving upward. */
+.sire-home-watchlist-viewport.is-scroll-enabled .sire-home-watchlist{
+  padding:82px 0 46px !important;
+  margin-top:-82px !important;
+  height:calc(100% + 82px) !important;
+  -webkit-mask-image:linear-gradient(
+    180deg,
+    transparent 0px,
+    rgba(0,0,0,.18) 16px,
+    rgba(0,0,0,.58) 42px,
+    #000 82px,
+    #000 calc(100% - 46px),
+    rgba(0,0,0,.58) calc(100% - 24px),
+    rgba(0,0,0,.16) calc(100% - 8px),
+    transparent 100%
+  ) !important;
+  mask-image:linear-gradient(
+    180deg,
+    transparent 0px,
+    rgba(0,0,0,.18) 16px,
+    rgba(0,0,0,.58) 42px,
+    #000 82px,
+    #000 calc(100% - 46px),
+    rgba(0,0,0,.58) calc(100% - 24px),
+    rgba(0,0,0,.16) calc(100% - 8px),
+    transparent 100%
+  ) !important;
+  -webkit-mask-repeat:no-repeat;
+  mask-repeat:no-repeat;
+  -webkit-mask-size:100% 100%;
+  mask-size:100% 100%;
+  -webkit-mask-mode:alpha;
+  mask-mode:alpha;
+  background:transparent !important;
+  border:0 !important;
+  box-shadow:none !important;
+}
+
+@media(max-width:380px){
+  .sire-home-market-section-head{
+    padding-left:0 !important;
+    padding-right:0 !important;
+  }
+}
