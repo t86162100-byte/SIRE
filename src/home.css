@@ -2668,3 +2668,80 @@
   position:relative;
   z-index:1;
 }
+
+
+/* Market card typography/layout refinement. */
+.sire-home-watch-main{
+  grid-template-columns:42px minmax(0,1fr) minmax(82px,auto) !important;
+  gap:11px !important;
+}
+.market-asset-logo{
+  position:relative;
+  overflow:visible !important;
+}
+.market-token-logo{
+  display:block;
+}
+.market-exchange-logo{
+  top:auto !important;
+  right:auto !important;
+  bottom:-5px !important;
+  left:50% !important;
+  transform:translateX(-50%) !important;
+  width:16px !important;
+  height:16px !important;
+  padding:2px !important;
+  border:1px solid rgba(255,255,255,.22) !important;
+}
+.market-exchange-logo img{
+  width:10px !important;
+  height:10px !important;
+}
+.market-asset-name small{
+  text-transform:none;
+}
+.market-asset-name small{
+  font-variant:normal;
+}
+.market-asset-price{
+  min-width:92px !important;
+  justify-content:flex-end !important;
+  align-items:flex-end !important;
+  text-align:right !important;
+}
+.market-asset-price strong{
+  font-size:11px !important;
+  font-weight:850 !important;
+  letter-spacing:-.025em;
+  font-variant-numeric:tabular-nums;
+}
+.market-trade-button{
+  width:58px !important;
+  min-width:58px !important;
+  font-size:8px !important;
+  font-weight:900 !important;
+  letter-spacing:-.02em;
+  font-variant-numeric:tabular-nums;
+  text-transform:none;
+  white-space:nowrap;
+  border:0 !important;
+  border-radius:12px !important;
+}
+@media(max-width:380px){
+  .sire-home-watch-main{
+    grid-template-columns:36px minmax(0,1fr) minmax(67px,auto) !important;
+    gap:7px !important;
+  }
+  .market-asset-price{
+    min-width:67px !important;
+  }
+  .market-trade-button{
+    width:52px !important;
+    min-width:52px !important;
+  }
+  .market-exchange-logo{
+    width:15px !important;
+    height:15px !important;
+    bottom:-4px !important;
+  }
+}
