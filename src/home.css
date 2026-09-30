@@ -2823,6 +2823,24 @@
 }
 
 
+.sire-home-market-head-actions{
+  display:flex;
+  align-items:center;
+  justify-content:flex-end;
+  gap:10px;
+  min-width:0;
+}
+.sire-home-market-head-actions > button{
+  flex:0 0 auto;
+}
+.sire-home-market-head-actions .sire-home-market-lock-row{
+  position:static;
+  min-height:26px;
+  display:flex;
+  align-items:center;
+  justify-content:flex-end;
+  gap:6px;
+}
 /* Watchlist scroll lock: enabled keeps the filter rail at the top and gives
    the instrument catalogue its own continuous scroll surface. Disabled returns
    the entire market section to normal page scrolling. */
