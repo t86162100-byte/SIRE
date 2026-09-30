@@ -59,6 +59,24 @@ export default function HomeView({ instruments, onSelectInstrument, videoSrc = '
     return () => window.clearInterval(timer);
   }, []);
 
+  // Keep the visual system responsive while the user is actively swiping.
+  // This only toggles a CSS class; it does not update React state on every scroll event.
+  useEffect(() => {
+    const scroller = document.querySelector<HTMLElement>('.sire-home-scroll');
+    if (!scroller) return;
+    let settleTimer = 0;
+    const onScroll = () => {
+      scroller.classList.add('is-scrolling');
+      window.clearTimeout(settleTimer);
+      settleTimer = window.setTimeout(() => scroller.classList.remove('is-scrolling'), 120);
+    };
+    scroller.addEventListener('scroll', onScroll, { passive: true });
+    return () => {
+      scroller.removeEventListener('scroll', onScroll);
+      window.clearTimeout(settleTimer);
+    };
+  }, []);
+
   const liveMarkets = useMemo(() => {
     const crypto = instruments.filter(item => item.category?.toLowerCase().includes('crypto')).slice(0, 8);
     return crypto.length ? crypto : instruments.slice(0, 8);
