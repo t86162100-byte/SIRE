@@ -73,14 +73,114 @@ jobs:
           # derivative host blocks the GitHub runner, use a transparent public
           # mirror of the same /fapi/v1 and /dapi/v1 responses rather than
           # inventing or hardcoding symbols.
-          usdm = get_first_symbols([
-              "https://fapi.binance.com/fapi/v1/exchangeInfo",
-              "https://api-dev.pipai.org/fapi/v1/exchangeInfo",
-          ])
-          coinm = get_first_symbols([
-              "https://dapi.binance.com/dapi/v1/exchangeInfo",
-              "https://api-dev.pipai.org/dapi/v1/exchangeInfo",
-          ])
+          try:
+              usdm = get_first_symbols([
+                  "https://fapi.binance.com/fapi/v1/exchangeInfo",
+                  "https://api-dev.pipai.org/fapi/v1/exchangeInfo",
+              ])
+              coinm = get_first_symbols([
+                  "https://dapi.binance.com/dapi/v1/exchangeInfo",
+                  "https://api-dev.pipai.org/dapi/v1/exchangeInfo",
+              ])
+          except Exception as rest_error:
+              print("Binance derivative REST discovery blocked; switching to Binance Futures WebSocket:", rest_error)
+              import subprocess, sys
+              subprocess.check_call([sys.executable, "-m", "pip", "install", "-q", "websocket-client"])
+
+              import websocket, time
+              ws_url = "wss://fstream.binance.com/market/stream?streams=%21miniTicker%40arr/%21contractInfo"
+              ws = websocket.create_connection(
+                  ws_url,
+                  timeout=15,
+                  origin="https://www.binance.com",
+                  header=["User-Agent: SIRE-Binance-Catalogue/1.0"],
+              )
+              contracts = {}
+              tickers = {}
+              deadline = time.time() + 20
+              try:
+                  while time.time() < deadline:
+                      try:
+                          message = json.loads(ws.recv())
+                      except Exception:
+                          continue
+                      data = message.get("data", message)
+                      if isinstance(data, list):
+                          for row in data:
+                              symbol = str(row.get("s") or "").strip()
+                              if symbol:
+                                  tickers[symbol] = row
+                      elif isinstance(data, dict) and data.get("e") == "contractInfo":
+                          symbol = str(data.get("s") or "").strip()
+                          if symbol:
+                              contracts[symbol] = data
+                      # Stop once both USD-M and COIN-M have live symbols and
+                      # at least one perpetual + one delivery contract exist.
+                      if contracts:
+                          has_um = any(int(x.get("st") or 0) == 1 for x in contracts.values())
+                          has_cm = any(int(x.get("st") or 0) == 2 for x in contracts.values())
+                          has_perp = any(str(x.get("ct") or "").upper() == "PERPETUAL" for x in contracts.values())
+                          has_delivery = any(str(x.get("ct") or "").upper() != "PERPETUAL" for x in contracts.values())
+                          if has_um and has_cm and has_perp and has_delivery:
+                              break
+              finally:
+                  ws.close()
+
+              rows = []
+              merged = dict(tickers)
+              for symbol, row in contracts.items():
+                  merged.setdefault(symbol, row)
+
+              for symbol, row in merged.items():
+                  info = contracts.get(symbol, {})
+                  st = int(info.get("st") or row.get("st") or 0)
+                  if st not in (1, 2):
+                      # Before/after migration fallback: infer from symbol shape.
+                      st = 2 if "_PERP" in symbol.upper() or "_" in symbol else 1
+                  ct = str(info.get("ct") or "").upper()
+                  if not ct:
+                      ct = "PERPETUAL" if not "_" in symbol.upper() or symbol.upper().endswith("_PERP") else "CURRENT_QUARTER"
+                  status = str(info.get("cs") or "TRADING").upper()
+                  if status and status != "TRADING":
+                      continue
+                  rows.append({
+                      "symbol": symbol,
+                      "pair": str(row.get("ps") or info.get("ps") or symbol),
+                      "baseAsset": "",
+                      "quoteAsset": "",
+                      "contractType": ct,
+                      "deliveryDate": info.get("dt"),
+                      "onboardDate": info.get("ot"),
+                      "status": "TRADING",
+                      "_streamType": st,
+                  })
+
+              um_stream = [r for r in rows if r["_streamType"] == 1]
+              cm_stream = [r for r in rows if r["_streamType"] == 2]
+              if not um_stream or not cm_stream:
+                  raise RuntimeError("Binance Futures WebSocket returned no complete UM/CM symbol universe")
+
+              # Remove the internal stream marker before normalization.
+              for r in um_stream + cm_stream:
+                  r.pop("_streamType", None)
+                  pair = str(r.get("pair") or r.get("symbol") or "")
+                  symbol = str(r.get("symbol") or "")
+                  if not r.get("baseAsset"):
+                      # Contract-info/miniTicker gives the pair; base/quote are
+                      # display metadata only, so leave them empty when Binance
+                      # does not expose them on this stream.
+                      r["baseAsset"] = pair
+                  if not r.get("quoteAsset"):
+                      r["quoteAsset"] = ""
+
+              usdm = {"symbols": um_stream}
+              coinm = {"symbols": cm_stream}
+              print("Binance WebSocket symbol discovery:", json.dumps({
+                  "um": len(um_stream),
+                  "cm": len(cm_stream),
+                  "perpetuals": sum(1 for x in rows if str(x.get("contractType")).upper() == "PERPETUAL"),
+                  "futures": sum(1 for x in rows if str(x.get("contractType")).upper() != "PERPETUAL"),
+              }))
 
           products = []
           for url in [
