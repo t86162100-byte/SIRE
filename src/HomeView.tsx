@@ -41,6 +41,31 @@ const fallbackLogo = (label: string) => {
   );
 };
 
+const exchangeDomains: Record<string, string> = {
+  bingx: 'bingx.com', bitrue: 'bitrue.com', ascendex: 'ascendex.com', whitebit: 'whitebit.com',
+  coinw: 'coinw.com', xt: 'xt.com', deepcoin: 'deepcoin.com', toobit: 'toobit.com',
+  weex: 'weex.com', bitunix: 'bitunix.com', blofin: 'blofin.com', coincatch: 'coincatch.com',
+  zoomex: 'zoomex.com', btcc: 'btcc.com', digifinex: 'digifinex.com', coinstore: 'coinstore.com',
+  probit: 'probit.com', poloniex: 'poloniex.com', coindcx: 'coindcx.com',
+  binance: 'binance.com', bitget: 'bitget.com', bybit: 'bybit.com', okx: 'okx.com',
+  kraken: 'kraken.com', coinbase: 'coinbase.com', gate: 'gate.io', gateio: 'gate.io',
+  kucoin: 'kucoin.com', mexc: 'mexc.com', gemini: 'gemini.com', bitfinex: 'bitfinex.com',
+  bitstamp: 'bitstamp.net', bitvavo: 'bitvavo.com', coinex: 'coinex.com', lbank: 'lbank.com',
+  cryptocom: 'crypto.com', htx: 'htx.com', upbit: 'upbit.com', bithumb: 'bithumb.com',
+  phemex: 'phemex.com', bitso: 'bitso.com', bitkub: 'bitkub.com', pionex: 'pionex.com',
+  hyperliquid: 'hyperliquid.xyz', oanda: 'oanda.com', woox: 'woo.org',
+  uniswap: 'uniswap.org', curve: 'curve.fi', pancakeswap: 'pancakeswap.finance',
+};
+
+const makeProviderLogoFallback = (item: HomeInstrument) => {
+  const key = String(item.provider || item.providerLabel || '')
+    .trim().toLowerCase().replace(/[^a-z0-9]/g, '');
+  const domain = key === 'deriv'
+    ? 'deriv.com'
+    : (exchangeDomains[key] || (key ? key + '.com' : 'deriv.com'));
+  return 'https://www.google.com/s2/favicons?domain=' + encodeURIComponent(domain) + '&sz=128';
+};
+
 const demoMarkets = [
   { symbol: 'BTC/USDT', price: '$83,572.21', change: '-1.54%', down: true, provider: 'BINANCE' },
   { symbol: 'ETH/USDT', price: '$2,686.32', change: '-0.46%', down: true, provider: 'BYBIT' },
@@ -501,7 +526,7 @@ export default function HomeView({ instruments, onSelectInstrument, videoSrc = '
                     <span className="market-asset-logo">
                       <img className="market-token-logo" src={item.logoUrl || fallbackLogo(displayBase)} alt="" onError={event => { event.currentTarget.onerror = null; event.currentTarget.src = fallbackLogo(displayBase); }} />
                       <span className="market-exchange-logo" aria-label={String(item.providerLabel || item.provider || 'Exchange')}>
-                        <img src={providerLogo(item, String(item.providerLabel || item.provider || 'MARKET'))} alt="" onError={event => { event.currentTarget.onerror = null; event.currentTarget.src = fallbackLogo(String(item.providerLabel || item.provider || 'EX')); }} />
+                        <img src={makeProviderLogoFallback(item)} alt="" onError={event => { event.currentTarget.onerror = null; event.currentTarget.src = fallbackLogo(String(item.providerLabel || item.provider || 'EX')); }} />
                       </span>
                     </span>
                     <span className="market-asset-name">
