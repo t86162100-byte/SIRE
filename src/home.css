@@ -2159,3 +2159,157 @@
     scroll-behavior:auto !important;
   }
 }
+
+
+/* Premium market discovery controls — redesigns only the filter rail, not instrument rows. */
+.sire-home-market-filter-shell{
+  position:sticky;
+  top:0;
+  z-index:18;
+  margin-left:-14px;
+  margin-right:-14px;
+  padding:10px 14px 9px;
+  background:
+    linear-gradient(180deg,rgba(5,7,14,.97) 0%,rgba(5,7,14,.93) 72%,rgba(5,7,14,.72) 90%,rgba(5,7,14,0) 100%);
+  isolation:isolate;
+}
+.sire-home-market-filter-shell::before{
+  content:"";
+  position:absolute;
+  inset:0 0 2px;
+  z-index:-1;
+  border-top:1px solid rgba(255,255,255,.045);
+  border-bottom:1px solid rgba(182,154,255,.07);
+  background:
+    radial-gradient(70% 120% at 80% 0%,rgba(137,92,255,.075),transparent 68%),
+    linear-gradient(180deg,rgba(20,20,35,.32),rgba(7,8,15,.08));
+  box-shadow:0 10px 28px rgba(0,0,0,.18);
+  pointer-events:none;
+}
+.sire-home-market-tabs{
+  position:relative;
+  min-height:40px;
+  margin:0;
+  padding:0;
+  display:flex;
+  align-items:stretch;
+  gap:2px;
+  overflow-x:auto;
+  overflow-y:hidden;
+  scrollbar-width:none;
+  -webkit-overflow-scrolling:touch;
+  background:transparent;
+}
+.sire-home-market-tabs::-webkit-scrollbar{display:none}
+.sire-home-market-tabs button{
+  position:relative;
+  flex:0 0 auto;
+  min-height:40px;
+  padding:0 11px;
+  border:0 !important;
+  border-radius:0;
+  background:transparent !important;
+  color:#777487;
+  box-shadow:none !important;
+  font-size:8px;
+  font-weight:850;
+  letter-spacing:.055em;
+  white-space:nowrap;
+  transition:color .2s ease,transform .2s ease;
+}
+.sire-home-market-tabs button::after{
+  content:"";
+  position:absolute;
+  left:11px;
+  right:11px;
+  bottom:1px;
+  height:2px;
+  border-radius:2px;
+  background:linear-gradient(90deg,#a77cff,#62d7ff);
+  opacity:0;
+  transform:scaleX(.35);
+  transition:opacity .2s ease,transform .2s ease;
+  box-shadow:0 0 12px rgba(160,113,255,.45);
+}
+.sire-home-market-tabs button.active{
+  color:#f5f1ff;
+  text-shadow:0 0 18px rgba(207,181,255,.14);
+}
+.sire-home-market-tabs button.active::after{
+  opacity:1;
+  transform:scaleX(1);
+}
+.sire-home-market-tabs button:active{transform:translateY(1px)}
+
+.sire-home-market-subtabs{
+  min-height:34px;
+  display:flex;
+  align-items:center;
+  gap:9px;
+  padding:5px 0 1px;
+  border-top:1px solid rgba(255,255,255,.045);
+}
+.sire-home-market-subtabs-label{
+  flex:0 0 auto;
+  color:#5e6475;
+  font-size:6px;
+  font-weight:900;
+  letter-spacing:.16em;
+}
+.sire-home-market-subtabs-track{
+  min-width:0;
+  display:flex;
+  align-items:center;
+  gap:3px;
+  overflow-x:auto;
+  scrollbar-width:none;
+  -webkit-overflow-scrolling:touch;
+}
+.sire-home-market-subtabs-track::-webkit-scrollbar{display:none}
+.sire-home-market-subtabs button{
+  position:relative;
+  flex:0 0 auto;
+  min-height:25px;
+  padding:0 9px;
+  border:1px solid transparent;
+  border-radius:7px;
+  background:transparent;
+  color:#777d8c;
+  font-size:7px;
+  font-weight:800;
+  letter-spacing:.035em;
+  white-space:nowrap;
+  transition:background .2s ease,border-color .2s ease,color .2s ease,box-shadow .2s ease;
+}
+.sire-home-market-subtabs button.active{
+  color:#ded4ff;
+  border-color:rgba(178,145,255,.18);
+  background:linear-gradient(135deg,rgba(162,115,246,.16),rgba(81,171,221,.055));
+  box-shadow:inset 0 1px rgba(255,255,255,.08),0 5px 16px rgba(74,43,131,.10);
+}
+.sire-home-market-subtabs button.active::before{
+  content:"";
+  position:absolute;
+  left:7px;
+  right:7px;
+  bottom:2px;
+  height:1px;
+  background:linear-gradient(90deg,rgba(172,127,255,.8),rgba(96,215,239,.65));
+  border-radius:2px;
+}
+@media(max-width:380px){
+  .sire-home-market-filter-shell{
+    margin-left:-14px;
+    margin-right:-14px;
+    padding-left:14px;
+    padding-right:14px;
+  }
+  .sire-home-market-tabs button{padding-left:9px;padding-right:9px}
+  .sire-home-market-tabs button::after{left:9px;right:9px}
+  .sire-home-market-subtabs{gap:7px}
+}
+@media(prefers-reduced-motion:reduce){
+  .sire-home-market-tabs button,
+  .sire-home-market-tabs button::after,
+  .sire-home-market-subtabs button{transition:none}
+}
