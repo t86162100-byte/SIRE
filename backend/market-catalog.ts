@@ -289,6 +289,7 @@ async function coinbase(): Promise<UnifiedInstrument[]> {
   return out;
 }
 
+// Binance catalogue refresh uses the generated official snapshot when available.
 async function binance(): Promise<UnifiedInstrument[]> {
   const out: UnifiedInstrument[] = [];
 
