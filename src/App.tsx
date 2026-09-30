@@ -5,7 +5,7 @@ import ResearchLab from './ResearchLab';
 import HomeView from './HomeView';
 import FinancialChart from './FinancialChart';
 import { fetchDerivInstruments, type DerivInstrument } from './derivMarketData';
-import { fetchBinanceBrowserCatalogue } from './binanceMarketData';
+import { fetchBinanceBrowserCatalogue, fetchBinanceLiveQuotes } from './binanceMarketData';
 import { SireErrorScreen } from './SireErrorBoundary';
 import './nativeTerminal.css';
 
@@ -211,6 +211,26 @@ export default function App() {
     // Binance discovery must be independent of the unified catalogue. It is an
     // official public-data source and must start even if another provider is slow,
     // unavailable, or geo-restricted on the Render server.
+    void (async () => {
+      let liveTimer: number | null = null;
+      const refreshBinanceQuotes = async () => {
+        try {
+          const quotes = await fetchBinanceLiveQuotes();
+          if (cancelled) return;
+          setInstruments(current => current.map(item => {
+            if (item.provider !== 'BINANCE') return item;
+            const quote = quotes[item.id];
+            return quote ? { ...item, ...quote, priceChangePercent: quote.change24h } : item;
+          }));
+        } catch (error) {
+          console.warn('[SIRE BINANCE LIVE] refresh failed:', error);
+        }
+      };
+      await refreshBinanceQuotes();
+      if (!cancelled) liveTimer = window.setInterval(refreshBinanceQuotes, 3000);
+      return () => { if (liveTimer !== null) window.clearInterval(liveTimer); };
+    })();
+
     void (async () => {
       try {
         console.info('[SIRE BINANCE BROWSER] INDEPENDENT START');
