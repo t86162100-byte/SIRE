@@ -1,0 +1,138 @@
+name: Refresh Binance market catalogue
+
+on:
+  push:
+    branches: [render-migration]
+    paths:
+      - '.github/workflows/update-binance-catalogue.yml'
+  schedule:
+    - cron: '*/15 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: render-migration
+
+      - name: Fetch official Binance catalogues
+        shell: python
+        run: |
+          import json, urllib.request, urllib.error, os
+          from pathlib import Path
+
+          def get(url):
+              req = urllib.request.Request(url, headers={
+                  "Accept": "application/json",
+                  "User-Agent": "SIRE-Binance-Catalogue/1.0",
+              })
+              with urllib.request.urlopen(req, timeout=30) as r:
+                  return json.loads(r.read().decode("utf-8"))
+
+          spot = get("https://api.binance.com/api/v3/exchangeInfo?symbolStatus=TRADING")
+          usdm = get("https://fapi.binance.com/fapi/v1/exchangeInfo")
+          coinm = get("https://dapi.binance.com/dapi/v1/exchangeInfo")
+
+          products = []
+          for url in [
+              "https://www.binance.com/bapi/apex/v1/friendly/apex/marketing/complianceSymbolList",
+              "https://www.binance.com/exchange-api/v2/public/asset-service/product/get-products?includeEtf=true",
+              "https://www.binance.com/bapi/asset/v2/public/asset-service/product/get-products?includeEtf=true",
+          ]:
+              try:
+                  payload = get(url)
+                  rows = payload.get("data") if isinstance(payload, dict) else None
+                  if isinstance(rows, list):
+                      products.extend(rows)
+              except Exception as e:
+                  print("metadata source failed:", url, e)
+
+          meta = {}
+          for row in products:
+              base = str(row.get("b") or row.get("baseAsset") or row.get("base") or "").upper()
+              if not base:
+                  continue
+              listing = row.get("listingTime") or row.get("listedAt") or row.get("onboardDate")
+              entry = meta.setdefault(base, {})
+              if listing and not entry.get("listedAt"):
+                  entry["listedAt"] = listing
+              if row.get("newListing") is True:
+                  entry["newListing"] = True
+              if row.get("an") or row.get("fullName") or row.get("name"):
+                  entry["fullName"] = row.get("an") or row.get("fullName") or row.get("name")
+
+          def normalize(rows, market_type, prefix="BINANCE"):
+              out = []
+              for r in rows.get("symbols", []):
+                  status = str(r.get("status") or r.get("contractStatus") or "").upper()
+                  if status and status != "TRADING":
+                      continue
+                  symbol = str(r.get("symbol") or "").strip()
+                  if not symbol:
+                      continue
+                  base = str(r.get("baseAsset") or r.get("baseCoin") or "").strip()
+                  quote = str(r.get("quoteAsset") or r.get("quoteCoin") or "").strip()
+                  out.append({
+                      "id": f"{prefix}:{market_type}:{symbol}",
+                      "provider": "BINANCE",
+                      "providerLabel": "Binance",
+                      "exchange": "BINANCE",
+                      "marketType": market_type,
+                      "category": "Crypto",
+                      "symbol": symbol,
+                      "displaySymbol": symbol,
+                      "name": f"{base} / {quote}" if base and quote else symbol,
+                      "base": base or None,
+                      "quote": quote or None,
+                      "onboardDate": r.get("onboardDate"),
+                      "listedAt": r.get("onboardDate") or r.get("listingTime") or r.get("listedAt"),
+                      "expiry": r.get("deliveryDate") or r.get("expiryDate"),
+                      "contractType": r.get("contractType"),
+                      "settlement": r.get("marginAsset") or r.get("settleAsset") or r.get("settleCoin"),
+                  })
+              return out
+
+          spot_rows = normalize(spot, "Spot")
+          margin_rows = [
+              dict(x, marketType="Margin", id=x["id"].replace(":Spot:", ":Margin:"))
+              for x, raw in zip(spot_rows, spot.get("symbols", []))
+              if raw.get("isMarginTradingAllowed") is True
+          ]
+          um_rows = []
+          for r in usdm.get("symbols", []):
+              mt = "Perpetuals" if str(r.get("contractType","")).upper() == "PERPETUAL" else "Futures"
+              um_rows.extend(normalize({"symbols":[r]}, mt))
+          cm_rows = []
+          for r in coinm.get("symbols", []):
+              mt = "Perpetuals" if str(r.get("contractType","")).upper() == "PERPETUAL" else "Futures"
+              cm_rows.extend(normalize({"symbols":[r]}, mt, "BINANCE:COIN-M"))
+
+          payload = {
+              "generatedAt": int(__import__("time").time() * 1000),
+              "spot": spot_rows,
+              "margin": margin_rows,
+              "derivatives": um_rows + cm_rows,
+              "metadata": meta,
+          }
+          Path("public/binance-catalogue.json").write_text(json.dumps(payload, separators=(",",":")), encoding="utf-8")
+          print(json.dumps({
+              "spot": len(spot_rows),
+              "margin": len(margin_rows),
+              "derivatives": len(um_rows)+len(cm_rows),
+              "metadata": len(meta),
+          }))
+
+      - name: Commit refreshed catalogue
+        shell: bash
+        run: |
+          git config user.name "sire-binance-catalogue"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add public/binance-catalogue.json
+          git diff --cached --quiet && exit 0
+          git commit -m "chore: refresh Binance market catalogue [skip ci]"
+          git push origin HEAD:render-migration
