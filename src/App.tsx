@@ -245,7 +245,7 @@ export default function App() {
                 ? supply * Number(quote.price)
                 : item.marketCap;
               return { ...item, ...quote, priceChangePercent: quote.change24h, marketCap };
-            }));
+            })));
           }, 1000);
         };
         const initialQuotes = await fetchBinanceLiveQuotes();
