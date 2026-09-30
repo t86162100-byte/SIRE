@@ -617,7 +617,7 @@ export default function HomeView({ instruments, onSelectInstrument, videoSrc = '
         </section>
 
         <section className="sire-home-section sire-home-markets">
-          <div className="sire-home-section-head">
+          <div className={`sire-home-section-head sire-home-market-section-head${watchlistScrollEnabled ? ' watchlist-scroll-enabled' : ''}`}>
             <div><span>MARKET DISCOVERY</span><h2>Markets</h2></div>
             <div className="sire-home-market-head-actions">
               <div className="sire-home-market-lock-row">
@@ -676,7 +676,9 @@ export default function HomeView({ instruments, onSelectInstrument, videoSrc = '
               </div>
             )}
           </div>
-          <div className={`sire-home-watchlist${watchlistScrollEnabled ? ' is-scroll-enabled' : ' is-scroll-disabled'}`} aria-label={activeMarketFilter + ' markets'}>
+          <div className={`sire-home-watchlist-viewport${watchlistScrollEnabled ? ' is-scroll-enabled' : ' is-scroll-disabled'}`}>
+            {watchlistScrollEnabled && <div className="sire-home-watchlist-fade" aria-hidden="true" />}
+            <div className={`sire-home-watchlist${watchlistScrollEnabled ? ' is-scroll-enabled' : ' is-scroll-disabled'}`} aria-label={activeMarketFilter + ' markets'}>
             {marketRows.map(item => {
               const raw = item as any;
               const change = Number(raw.change24h ?? raw.changePercent24h ?? raw.priceChangePercent ?? raw.percentChange24h ?? raw.changePercent);
@@ -707,6 +709,7 @@ export default function HomeView({ instruments, onSelectInstrument, videoSrc = '
                 </article>
               );
             })}
+            </div>
           </div>
         </section>
 
