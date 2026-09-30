@@ -1559,6 +1559,7 @@ async function bitget(): Promise<UnifiedInstrument[]> {
       contractType: raw?.type,
       settleCoin: raw?.settleCoin || raw?.settleCcy || raw?.quoteCoin,
       deliveryTime: raw?.deliveryTime,
+      onboardDate: raw?.launchTime || raw?.onboardDate || raw?.listingTime,
       isMarginEnabled: category === 'MARGIN',
     });
     if (!item) return;
@@ -1588,10 +1589,17 @@ async function bitget(): Promise<UnifiedInstrument[]> {
   // dropping non-online rows.
   for (const category of categories) {
     try {
-      const response = await getJsonAny([
-        'https://api.bitget.com/api/v3/market/instruments?category=' + encodeURIComponent(category),
-        'https://api.bitget.com/api/v3/public/instruments?category=' + encodeURIComponent(category),
-      ], 15000);
+      const instrumentUrls = category === 'SPOT'
+        ? [
+            'https://api.bitget.com/api/v2/spot/public/symbols',
+            'https://api.bitget.com/api/v3/market/instruments?category=SPOT',
+            'https://api.bitget.com/api/v3/public/instruments?category=SPOT',
+          ]
+        : [
+            'https://api.bitget.com/api/v3/market/instruments?category=' + encodeURIComponent(category),
+            'https://api.bitget.com/api/v3/public/instruments?category=' + encodeURIComponent(category),
+          ];
+      const response = await getJsonAny(instrumentUrls, 15000);
       if (String(response?.code || '00000') !== '00000') throw new Error(String(response?.msg || 'Bitget instruments request failed'));
       const rows = Array.isArray(response?.data) ? response.data : [];
       for (const raw of rows) add(raw, category);
@@ -1618,6 +1626,61 @@ async function bitget(): Promise<UnifiedInstrument[]> {
     } catch (error) {
       console.warn('[SIRE BITGET] v2 ' + productType + ' failed:', error);
     }
+  }
+
+  // Attach Bitget's live ticker snapshot so Home/Markets can rank the
+  // exchange by price, 24h change and turnover. Spot also supplies the
+  // snapshot used by Margin rows.
+  const tickerCategories = ['SPOT', 'USDT-FUTURES', 'COIN-FUTURES', 'USDC-FUTURES'] as const;
+  const tickerMaps = new Map<string, Map<string, any>>();
+  await Promise.all(tickerCategories.map(async category => {
+    try {
+      const urls = [
+        'https://api.bitget.com/api/v3/market/tickers?category=' + encodeURIComponent(category),
+        category === 'SPOT'
+          ? 'https://api.bitget.com/api/v2/spot/market/tickers'
+          : 'https://api.bitget.com/api/v2/mix/market/tickers?productType=' + encodeURIComponent(category),
+      ];
+      const response = await getJsonAny(urls, 15000);
+      const rows = Array.isArray(response?.data) ? response.data : [];
+      const map = new Map<string, any>();
+      for (const raw of rows) {
+        const symbol = String(raw?.symbol || '').trim();
+        if (symbol) map.set(symbol, raw);
+      }
+      tickerMaps.set(category, map);
+      console.log('[SIRE BITGET] tickers ' + category + ': ' + rows.length);
+    } catch (error) {
+      console.warn('[SIRE BITGET] tickers ' + category + ' failed:', error);
+    }
+  }));
+
+  for (const item of out) {
+    const category = String((item as any).bitgetCategory || '').toUpperCase();
+    const tickerCategory = category === 'MARGIN' ? 'SPOT' : category;
+    const ticker = tickerMaps.get(tickerCategory)?.get(String(item.symbol || ''));
+    if (!ticker) continue;
+    const last = Number(ticker.lastPrice ?? ticker.last ?? ticker.close);
+    const bid = Number(ticker.bid1Price ?? ticker.bidPrice);
+    const ask = Number(ticker.ask1Price ?? ticker.askPrice);
+    const pctRaw = Number(ticker.price24hPcnt ?? ticker.change24h);
+    const turnover = Number(ticker.turnover24h ?? ticker.quoteVolume ?? ticker.volume24h);
+    const baseVolume = Number(ticker.volume24h);
+    if (Number.isFinite(last)) item.price = last;
+    if (Number.isFinite(bid)) item.bid = bid;
+    if (Number.isFinite(ask)) item.ask = ask;
+    if (Number.isFinite(pctRaw)) {
+      const change = Math.abs(pctRaw) <= 1 ? pctRaw * 100 : pctRaw;
+      (item as any).change24h = change;
+      (item as any).priceChangePercent = change;
+    }
+    if (Number.isFinite(turnover)) {
+      (item as any).volume24h = turnover;
+      (item as any).quoteVolume = turnover;
+    } else if (Number.isFinite(baseVolume)) {
+      (item as any).volume24h = baseVolume;
+    }
+    if (Number.isFinite(turnover)) (item as any).turnover24h = turnover;
   }
 
   const unique = out.filter((item, index, all) => all.findIndex(other => other.id === item.id) === index);
