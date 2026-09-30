@@ -2745,3 +2745,62 @@
     bottom:-4px !important;
   }
 }
+
+/* Exchange selector + bounded market rail: keep the catalogue long, but show
+   exactly eight instrument rows at a time and scroll inside the section. */
+.sire-home-market-source{
+  display:flex;
+  align-items:center;
+  gap:4px;
+  min-height:29px;
+  padding:2px 0 7px;
+  overflow-x:auto;
+  scrollbar-width:none;
+  -webkit-overflow-scrolling:touch;
+}
+.sire-home-market-source::-webkit-scrollbar{display:none}
+.sire-home-market-source>span{
+  flex:0 0 auto;
+  margin-right:3px;
+  color:#565d6d;
+  font-size:6px;
+  font-weight:900;
+  letter-spacing:.16em;
+}
+.sire-home-market-source button{
+  flex:0 0 auto;
+  min-height:25px;
+  padding:0 10px;
+  border:1px solid rgba(255,255,255,.055);
+  border-radius:8px;
+  background:rgba(255,255,255,.018);
+  color:#777d8c;
+  font-size:7px;
+  font-weight:850;
+  letter-spacing:.035em;
+  transition:background .18s ease,border-color .18s ease,color .18s ease;
+}
+.sire-home-market-source button.active{
+  color:#e9e1ff;
+  border-color:rgba(178,145,255,.2);
+  background:linear-gradient(135deg,rgba(162,115,246,.16),rgba(81,171,221,.055));
+  box-shadow:inset 0 1px rgba(255,255,255,.07),0 5px 15px rgba(74,43,131,.1);
+}
+.sire-home-watchlist{
+  height:448px;
+  max-height:448px;
+  overflow-y:auto;
+  overflow-x:hidden;
+  overscroll-behavior:contain;
+  -webkit-overflow-scrolling:touch;
+  scrollbar-width:none;
+  touch-action:pan-y;
+}
+.sire-home-watchlist::-webkit-scrollbar{display:none}
+.sire-home-watch-row{
+  flex:0 0 56px;
+}
+@media(max-width:380px){
+  .sire-home-watchlist{height:448px;max-height:448px}
+  .sire-home-market-source button{padding-left:9px;padding-right:9px}
+}
