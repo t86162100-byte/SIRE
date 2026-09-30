@@ -62,10 +62,29 @@ jobs:
                               return found
                   return None
               if isinstance(value, str):
-                  try:
-                      return unwrap_symbol_payload(json.loads(value), depth + 1)
-                  except Exception:
-                      return None
+                  text_value = value.strip()
+                  candidates = []
+                  if "```" in text_value:
+                      for chunk in text_value.split("```"):
+                          chunk = chunk.strip()
+                          if chunk.startswith("json"):
+                              chunk = chunk[4:].strip()
+                          if chunk:
+                              candidates.append(chunk)
+                  candidates.append(text_value)
+                  first = text_value.find("{")
+                  last = text_value.rfind("}")
+                  if first >= 0 and last > first:
+                      candidates.append(text_value[first:last + 1])
+                  for candidate in candidates:
+                      try:
+                          decoded = json.loads(candidate)
+                          found = unwrap_symbol_payload(decoded, depth + 1)
+                          if found:
+                              return found
+                      except Exception:
+                          pass
+                  return None
               return None
 
           def get_first_symbols(urls, attempts=1, timeout=12):
