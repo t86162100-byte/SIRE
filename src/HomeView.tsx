@@ -26,6 +26,8 @@ type HomeInstrument = {
   marketCap?: number;
   circulatingSupply?: number;
   newListing?: boolean;
+  quote?: string;
+  instrumentType?: string;
 };
 
 type Props = {
@@ -83,6 +85,7 @@ export default function HomeView({ instruments, onSelectInstrument, videoSrc = '
   const [query, setQuery] = useState('');
   const [balanceVisible, setBalanceVisible] = useState(true);
   const [activeEvent, setActiveEvent] = useState(0);
+  const [activeMarketProvider, setActiveMarketProvider] = useState<'BINANCE' | 'BITGET'>('BINANCE');
   const [activeMarketFilter, setActiveMarketFilter] = useState('Hot');
   const [activeMarketSubfilter, setActiveMarketSubfilter] = useState('Spot');
   const [favoriteIds, setFavoriteIds] = useState<string[]>(() => { try { const saved = window.localStorage.getItem('sire.home.marketFavorites'); return saved ? JSON.parse(saved) : []; } catch { return []; } });
@@ -91,6 +94,21 @@ export default function HomeView({ instruments, onSelectInstrument, videoSrc = '
     () => instruments.filter(item => item.provider === 'BINANCE'),
     [instruments],
   );
+  const bitgetUniverse = useMemo(
+    () => instruments.filter(item => item.provider === 'BITGET'),
+    [instruments],
+  );
+  const globalMarketCaps = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const item of instruments) {
+      if (item.provider !== 'GLOBALCRYPTO') continue;
+      const raw = item as any;
+      const base = String(raw.base || raw.symbol || '').replace(/[^A-Z0-9]/gi, '').toUpperCase();
+      const cap = Number(raw.marketCap);
+      if (base && Number.isFinite(cap) && cap > 0 && !map.has(base)) map.set(base, cap);
+    }
+    return map;
+  }, [instruments]);
   useEffect(() => {
     let cancelled = false;
     fetch('/api/sire/binance/new-listings', { cache: 'no-store' })
@@ -148,11 +166,13 @@ export default function HomeView({ instruments, onSelectInstrument, videoSrc = '
       case 'Spot':
         return ['All', 'USDT', 'USDC', 'Other'];
       case 'Futures':
-        return ['USD-M', 'COIN-M'];
+        return activeMarketProvider === 'BITGET'
+          ? ['USDT-M', 'COIN-M', 'USDC-M']
+          : ['USD-M', 'COIN-M'];
       default:
         return [];
     }
-  }, [activeMarketFilter]);
+  }, [activeMarketFilter, activeMarketProvider]);
 
   const isCoinM = (item: HomeInstrument) => {
     const id = String(item.id || '').toUpperCase();
@@ -302,6 +322,121 @@ export default function HomeView({ instruments, onSelectInstrument, videoSrc = '
     }
   }, [activeMarketFilter, activeMarketSubfilter, binanceUniverse, binanceSpot, binanceFutures, binanceHotMarkets, binanceHotFutures, binanceNewCrypto, binanceNewFutures, binanceNewAnnouncementRows, favoriteIds]);
 
+  const bitgetSpot = useMemo(() => (
+    bitgetUniverse.filter(isSpot)
+  ), [bitgetUniverse]);
+
+  const bitgetFutures = useMemo(() => (
+    bitgetUniverse
+      .filter(item => isFutures(item))
+      .sort((a, b) => Number((b as any).volume24h || 0) - Number((a as any).volume24h || 0))
+  ), [bitgetUniverse]);
+
+  const bitgetQuoteAsset = (item: HomeInstrument) => {
+    const explicit = String((item as any).quote || '').trim().toUpperCase();
+    if (explicit) return explicit;
+    const symbol = String(item.symbol || '').trim().toUpperCase();
+    const slash = symbol.lastIndexOf('/');
+    if (slash >= 0) return symbol.slice(slash + 1);
+    const known = ['USDT', 'USDC', 'USD1', 'USDE', 'U', 'USD', 'BTC', 'ETH', 'EUR', 'BRL', 'TRY'];
+    return known.find(q => symbol.endsWith(q)) || '';
+  };
+
+  const filterBitgetSpotSubcategory = (rows: HomeInstrument[]) => {
+    if (activeMarketSubfilter === 'All') return rows;
+    return rows.filter(item => {
+      const quote = bitgetQuoteAsset(item);
+      if (activeMarketSubfilter === 'USDT') return quote === 'USDT';
+      if (activeMarketSubfilter === 'USDC') return quote === 'USDC';
+      return quote !== 'USDT' && quote !== 'USDC';
+    });
+  };
+
+  const bitgetFuturesFamily = (item: HomeInstrument) => {
+    const category = String((item as any).bitgetCategory || item.instrumentType || '').toUpperCase();
+    const settlement = String((item as any).settlement || '').toUpperCase();
+    if (category === 'USDT-FUTURES' || settlement === 'USDT') return 'USDT-M';
+    if (category === 'USDC-FUTURES' || settlement === 'USDC') return 'USDC-M';
+    if (category === 'COIN-FUTURES') return 'COIN-M';
+    return settlement === 'USD' ? 'COIN-M' : 'USDT-M';
+  };
+
+  const filterBitgetFuturesSubcategory = (rows: HomeInstrument[]) => {
+    if (activeMarketSubfilter === 'USDT-M') return rows.filter(item => bitgetFuturesFamily(item) === 'USDT-M');
+    if (activeMarketSubfilter === 'COIN-M') return rows.filter(item => bitgetFuturesFamily(item) === 'COIN-M');
+    if (activeMarketSubfilter === 'USDC-M') return rows.filter(item => bitgetFuturesFamily(item) === 'USDC-M');
+    return rows;
+  };
+
+  const bitgetHotMarkets = useMemo(() => {
+    // Bitget's /markets/rank/hot page is its Popular ranking. SIRE keeps the
+    // unified "Hot" label but ranks Bitget symbols by the live turnover that
+    // powers that popularity list.
+    const rows = [...bitgetSpot].filter(item => Number.isFinite(Number((item as any).volume24h)));
+    return rows.sort((a, b) => Number((b as any).volume24h || 0) - Number((a as any).volume24h || 0));
+  }, [bitgetSpot]);
+
+  const bitgetHotFutures = useMemo(() => {
+    return [...bitgetFutures]
+      .filter(item => Number.isFinite(Number((item as any).volume24h)))
+      .sort((a, b) => Number((b as any).volume24h || 0) - Number((a as any).volume24h || 0));
+  }, [bitgetFutures]);
+
+  const bitgetMarketRows = useMemo(() => {
+    const change = (item: HomeInstrument) => Number((item as any).change24h ?? (item as any).priceChangePercent);
+    const volume = (item: HomeInstrument) => Number((item as any).volume24h);
+    const listedAt = (item: HomeInstrument) => Number(item.listedAt ?? item.onboardDate);
+    const marketCap = (item: HomeInstrument) => {
+      const own = Number((item as any).marketCap);
+      if (Number.isFinite(own) && own > 0) return own;
+      const base = String((item as any).base || item.symbol || '').replace(/[^A-Z0-9]/gi, '').toUpperCase();
+      return globalMarketCaps.get(base) ?? NaN;
+    };
+
+    switch (activeMarketFilter) {
+      case 'Favorite':
+        return bitgetUniverse.filter(item => favoriteIds.includes(item.id));
+      case 'Hot':
+        return activeMarketSubfilter === 'Futures' ? bitgetHotFutures : bitgetHotMarkets;
+      case 'Spot':
+        return filterBitgetSpotSubcategory([...bitgetSpot].sort((a, b) => volume(b) - volume(a)));
+      case 'Futures':
+        return filterBitgetFuturesSubcategory([...bitgetFutures]);
+      case 'New':
+        return [...bitgetUniverse]
+          .filter(item => isSpot(item) || isFutures(item))
+          .filter(item => Number.isFinite(listedAt(item)))
+          .sort((a, b) => listedAt(b) - listedAt(a))
+          .filter(item => activeMarketSubfilter === 'Futures' ? isFutures(item) : isSpot(item));
+      case 'Gainers':
+        return [...bitgetUniverse]
+          .filter(item => Number.isFinite(change(item)))
+          .sort((a, b) => change(b) - change(a))
+          .filter(item => activeMarketSubfilter === 'Futures' ? isFutures(item) : isSpot(item));
+      case 'Losers':
+        return [...bitgetUniverse]
+          .filter(item => Number.isFinite(change(item)))
+          .sort((a, b) => change(a) - change(b))
+          .filter(item => activeMarketSubfilter === 'Futures' ? isFutures(item) : isSpot(item));
+      case 'Vol':
+        return [...bitgetUniverse]
+          .filter(item => Number.isFinite(volume(item)))
+          .sort((a, b) => volume(b) - volume(a))
+          .filter(item => activeMarketSubfilter === 'Futures' ? isFutures(item) : isSpot(item));
+      case 'Market Cap':
+        return [...bitgetUniverse]
+          .map(item => {
+            const cap = marketCap(item);
+            return Number.isFinite(cap) ? { ...item, marketCap: cap } : item;
+          })
+          .filter(item => Number.isFinite(marketCap(item)))
+          .sort((a, b) => marketCap(b) - marketCap(a))
+          .filter(item => activeMarketSubfilter === 'Futures' ? isFutures(item) : isSpot(item));
+      default:
+        return bitgetSpot;
+    }
+  }, [activeMarketFilter, activeMarketSubfilter, bitgetUniverse, bitgetSpot, bitgetFutures, bitgetHotMarkets, bitgetHotFutures, favoriteIds, globalMarketCaps]);
+
   useEffect(() => {
     const timer = window.setInterval(() => {
       setActiveEvent(current => (current + 1) % 4);
@@ -339,7 +474,7 @@ export default function HomeView({ instruments, onSelectInstrument, videoSrc = '
     return crypto.length ? crypto : instruments.slice(0, 8);
   }, [instruments]);
 
-  const marketRows = binanceMarketRows;
+  const marketRows = activeMarketProvider === 'BITGET' ? bitgetMarketRows : binanceMarketRows;
 
   const searchResults = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -470,6 +605,25 @@ export default function HomeView({ instruments, onSelectInstrument, videoSrc = '
             <button type="button">See All <ChevronRight size={15} /></button>
           </div>
           <div className="sire-home-market-filter-shell" aria-label="Market discovery filters">
+            <div className="sire-home-market-source" role="tablist" aria-label="Market exchange">
+              <span>EXCHANGE</span>
+              {(['BINANCE', 'BITGET'] as const).map(provider => (
+                <button
+                  key={provider}
+                  type="button"
+                  role="tab"
+                  aria-selected={activeMarketProvider === provider}
+                  className={activeMarketProvider === provider ? 'active' : ''}
+                  onClick={() => {
+                    setActiveMarketProvider(provider);
+                    setActiveMarketFilter('Hot');
+                    setActiveMarketSubfilter('Spot');
+                  }}
+                >
+                  {provider === 'BINANCE' ? 'Binance' : 'Bitget'}
+                </button>
+              ))}
+            </div>
             <div className="sire-home-market-tabs" role="tablist" aria-label="Market filters">
               {['Favorite', 'Hot', 'Spot', 'Futures', 'New', 'Gainers', 'Losers', 'Vol', 'Market Cap'].map(filter => (
                 <button
@@ -517,7 +671,7 @@ export default function HomeView({ instruments, onSelectInstrument, videoSrc = '
             )}
           </div>
           <div className="sire-home-watchlist" aria-label={activeMarketFilter + ' markets'}>
-            {(marketRows.length ? marketRows.slice(0, 8) : []).map(item => {
+            {marketRows.map(item => {
               const raw = item as any;
               const change = Number(raw.change24h ?? raw.changePercent24h ?? raw.priceChangePercent ?? raw.percentChange24h ?? raw.changePercent);
               const volume = Number(raw.volume24h ?? raw.quoteVolume ?? raw.volume);
