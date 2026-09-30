@@ -622,13 +622,7 @@ export default function HomeView({ instruments, onSelectInstrument, videoSrc = '
                   role="tab"
                   aria-selected={activeMarketProvider === provider}
                   className={activeMarketProvider === provider ? 'active' : ''}
-                  onPointerDown={() => {
-                    setActiveMarketProvider(provider);
-                    setActiveMarketFilter('Hot');
-                    setActiveMarketSubfilter('Spot');
-                  }}
-                  onClick={event => {
-                    event.preventDefault();
+                  onClick={() => {
                     setActiveMarketProvider(provider);
                     setActiveMarketFilter('Hot');
                     setActiveMarketSubfilter('Spot');
