@@ -161,6 +161,24 @@ export default function App() {
   const [bitgetPriorityIds, setBitgetPriorityIds] = useState<string[]>([]);
 
   useEffect(() => {
+    const onBitgetPrioritySymbols = (event: Event) => {
+      const detail = (event as CustomEvent).detail as { ids?: unknown } | undefined;
+      const ids = Array.isArray(detail?.ids) ? detail.ids.map(value => String(value)).filter(Boolean) : [];
+      setBitgetPriorityIds(ids);
+    };
+    window.addEventListener('sire:bitget-priority-symbols', onBitgetPrioritySymbols);
+    return () => window.removeEventListener('sire:bitget-priority-symbols', onBitgetPrioritySymbols);
+  }, []);
+
+  const bitgetSubscriptionSignature = useMemo(() => (
+    instruments
+      .filter(item => item.provider === 'BITGET')
+      .map(item => item.id + ':' + getBitgetInstType(item) + ':' + getBitgetInstId(item))
+      .sort()
+      .join('|') + '||priority:' + bitgetPriorityIds.join('|')
+  ), [instruments, bitgetPriorityIds]);
+
+  useEffect(() => {
     if (!instruments.some(item => item.provider === 'BITGET')) return;
     let cancelled = false;
     const refresh = async () => {
