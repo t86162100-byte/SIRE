@@ -56,21 +56,6 @@ export default function HomeView({ instruments, onSelectInstrument, videoSrc = '
   const [activeMarketFilter, setActiveMarketFilter] = useState('Hot');
   const [favoriteIds, setFavoriteIds] = useState<string[]>(() => { try { const saved = window.localStorage.getItem('sire.home.marketFavorites'); return saved ? JSON.parse(saved) : []; } catch { return []; } });
   const binanceHotMarkets = useMemo(() => getBinanceHotFromCatalogue(instruments, 8) as HomeInstrument[], [instruments]);
-  useEffect(() => {
-    let cancelled = false;
-    let timer = 0;
-    const loadHot = async () => {
-      try {
-        const rows = await fetchBinanceHotMarkets(8);
-        if (!cancelled) setBinanceHotMarkets(rows as HomeInstrument[]);
-      } catch (error) {
-        console.warn('[SIRE HOME BINANCE HOT] failed:', error);
-      }
-    };
-    void loadHot();
-    timer = window.setInterval(loadHot, 30000);
-    return () => { cancelled = true; window.clearInterval(timer); };
-  }, []);
 
   useEffect(() => {
     const timer = window.setInterval(() => {
