@@ -133,13 +133,26 @@ export function createBinanceCatalogueLiveFeed(onQuotes: (quotes: Record<string,
           for (const row of rows) {
             const symbol = String(row?.s || '').toUpperCase();
             if (!symbol) continue;
-            const quote = {
-              price: Number.isFinite(Number(row?.c)) ? Number(row.c) : undefined,
-              change24h: Number.isFinite(Number(row?.P)) ? Number(row.P) : (Number.isFinite(Number(row?.c)) && Number.isFinite(Number(row?.o)) && Number(row.o) !== 0 ? ((Number(row.c) - Number(row.o)) / Number(row.o)) * 100 : undefined),
-              volume24h: Number.isFinite(Number(row?.q)) ? Number(row.q) : undefined,
-              tradeCount24h: Number.isFinite(Number(row?.n)) ? Number(row.n) : undefined,
-              timestamp: Number.isFinite(Number(row?.E)) ? Number(row.E) : Date.now(),
-            };
+
+            // Keep the same quote-shape used by the Spot mini-ticker feed, but
+            // also accept Binance's Futures mark-price payload. The mark-price
+            // stream only supplies price/time, so never replace existing 24h
+            // statistics with undefined values.
+            const isMarkPrice = String(row?.e || '').toLowerCase() === 'markpriceupdate' || row?.p !== undefined;
+            const priceValue = isMarkPrice ? Number(row?.p) : Number(row?.c);
+            const changeValue = Number.isFinite(Number(row?.P))
+              ? Number(row.P)
+              : (!isMarkPrice && Number.isFinite(Number(row?.c)) && Number.isFinite(Number(row?.o)) && Number(row.o) !== 0
+                ? ((Number(row.c) - Number(row.o)) / Number(row.o)) * 100
+                : undefined);
+            const volumeValue = Number(row?.q);
+            const tradeCountValue = Number(row?.n);
+            const quote: { price?: number; change24h?: number; volume24h?: number; tradeCount24h?: number; timestamp?: number } = {};
+            if (Number.isFinite(priceValue)) quote.price = priceValue;
+            if (Number.isFinite(changeValue)) quote.change24h = changeValue;
+            if (Number.isFinite(volumeValue) && !isMarkPrice) quote.volume24h = volumeValue;
+            if (Number.isFinite(tradeCountValue) && !isMarkPrice) quote.tradeCount24h = tradeCountValue;
+            quote.timestamp = Number.isFinite(Number(row?.E)) ? Number(row.E) : Date.now();
             for (const marketType of marketTypes) {
               quotes[idPrefix + ':' + marketType + ':' + symbol] = quote;
             }
