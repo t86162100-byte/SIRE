@@ -242,7 +242,7 @@ export function getBinanceHotFromCatalogue(instruments: any[], limit = 8): any[]
 }
 
 
-export async function fetchBinanceMarketMetadata(): Promise<Record<string, { circulatingSupply?: number; marketCap?: number; fullName?: string; listedAt?: number }>> {
+export async function fetchBinanceMarketMetadata(): Promise<Record<string, { circulatingSupply?: number; marketCap?: number; fullName?: string; listedAt?: number; newListing?: boolean }>> {
   const out: Record<string, { circulatingSupply?: number; marketCap?: number; fullName?: string; listedAt?: number }> = {};
   const urls = [
     'https://www.binance.com/bapi/apex/v1/friendly/apex/marketing/complianceSymbolList',
@@ -266,6 +266,7 @@ export async function fetchBinanceMarketMetadata(): Promise<Record<string, { cir
             circulatingSupply: Number.isFinite(supply) ? supply : undefined,
             marketCap: Number.isFinite(marketCap) ? marketCap : undefined,
             listedAt: Number.isFinite(Number(row?.listingTime ?? row?.listedAt ?? row?.onboardDate)) ? Number(row.listingTime ?? row.listedAt ?? row.onboardDate) : undefined,
+            newListing: row?.newListing === true,
             fullName: String(row?.an || row?.fullName || row?.name || '').trim() || undefined,
           };
         }
