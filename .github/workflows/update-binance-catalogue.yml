@@ -49,34 +49,36 @@ jobs:
           # Binance may return HTTP 451 to hosted runners. For every catalogue
           # family, accept only a response containing a real symbols[] array.
           # data-api.binance.vision is Binance's public market-data host.
+          def unwrap_symbol_payload(value, depth=0):
+              if depth > 5:
+                  return None
+              if isinstance(value, dict):
+                  if isinstance(value.get("symbols"), list) and value["symbols"]:
+                      return value
+                  for key in ("data", "content", "text", "body", "result"):
+                      if key in value:
+                          found = unwrap_symbol_payload(value[key], depth + 1)
+                          if found:
+                              return found
+                  return None
+              if isinstance(value, str):
+                  try:
+                      return unwrap_symbol_payload(json.loads(value), depth + 1)
+                  except Exception:
+                      return None
+              return None
+
           def get_first_symbols(urls, attempts=1, timeout=12):
               last = None
               for url in urls:
                   try:
-                      payload = get(url, attempts=attempts, timeout=timeout)
+                      raw_payload = get(url, attempts=attempts, timeout=timeout)
+                      payload = unwrap_symbol_payload(raw_payload) or raw_payload
                       rows = payload.get("symbols") if isinstance(payload, dict) else None
-                      if not (isinstance(rows, list) and rows) and isinstance(payload, dict):
-                          # r.jina.ai can wrap the upstream JSON in a text/content
-                          # field. Unwrap it without changing the Binance payload.
-                          for key in ("content", "text", "data", "body"):
-                              wrapped = payload.get(key)
-                              if isinstance(wrapped, dict) and isinstance(wrapped.get("symbols"), list):
-                                  payload = wrapped
-                                  rows = wrapped["symbols"]
-                                  break
-                              if isinstance(wrapped, str):
-                                  try:
-                                      decoded = json.loads(wrapped)
-                                      if isinstance(decoded, dict) and isinstance(decoded.get("symbols"), list):
-                                          payload = decoded
-                                          rows = decoded["symbols"]
-                                          break
-                                  except Exception:
-                                      pass
                       if isinstance(rows, list) and rows:
                           print("symbol source succeeded:", url, "symbols:", len(rows))
                           return payload
-                      print("symbol source returned no symbols:", url, "keys:", list(payload.keys()) if isinstance(payload, dict) else type(payload).__name__)
+                      print("symbol source returned no symbols:", url, "keys:", list(raw_payload.keys()) if isinstance(raw_payload, dict) else type(raw_payload).__name__)
                   except Exception as e:
                       last = e
                       print("symbol source failed:", url, e)
