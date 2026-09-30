@@ -111,6 +111,61 @@ async function postBrowserDiagnostic(diagnostic: any) {
   }
 }
 
+export function createBinanceCatalogueLiveFeed(onQuotes: (quotes: Record<string, { price?: number; change24h?: number; volume24h?: number }>) => void) {
+  let stopped = false;
+  const sockets: WebSocket[] = [];
+  const reconnectTimers: number[] = [];
+
+  const open = (url: string, marketTypes: string[], idPrefix = 'BINANCE') => {
+    if (stopped) return;
+    try {
+      const socket = new WebSocket(url);
+      sockets.push(socket);
+      socket.onmessage = event => {
+        try {
+          const payload = JSON.parse(String(event.data));
+          const rows = Array.isArray(payload) ? payload : [payload];
+          const quotes: Record<string, { price?: number; change24h?: number; volume24h?: number }> = {};
+          for (const row of rows) {
+            const symbol = String(row?.s || '').toUpperCase();
+            if (!symbol) continue;
+            const quote = {
+              price: Number.isFinite(Number(row?.c)) ? Number(row.c) : undefined,
+              change24h: Number.isFinite(Number(row?.P)) ? Number(row.P) : undefined,
+              volume24h: Number.isFinite(Number(row?.q)) ? Number(row.q) : undefined,
+            };
+            for (const marketType of marketTypes) {
+              quotes[idPrefix + ':' + marketType + ':' + symbol] = quote;
+            }
+          }
+          if (Object.keys(quotes).length) onQuotes(quotes);
+        } catch {}
+      };
+      socket.onclose = () => {
+        if (!stopped) {
+          const timer = window.setTimeout(() => open(url, marketTypes, idPrefix), 1500);
+          reconnectTimers.push(timer);
+        }
+      };
+    } catch {
+      if (!stopped) {
+        const timer = window.setTimeout(() => open(url, marketTypes, idPrefix), 1500);
+        reconnectTimers.push(timer);
+      }
+    }
+  };
+
+  open(BINANCE.spotStream + '/ws/!ticker@arr', ['Spot']);
+  open(BINANCE.usdmStream + '/ws/!ticker@arr', ['Perpetuals', 'Futures']);
+  open(BINANCE.coinmStream + '/ws/!ticker@arr', ['Perpetuals', 'Futures'], 'BINANCE:COIN-M');
+
+  return () => {
+    stopped = true;
+    sockets.forEach(socket => { try { socket.close(); } catch {} });
+    reconnectTimers.forEach(timer => window.clearTimeout(timer));
+  };
+}
+
 export async function fetchBinanceLiveQuotes(): Promise<Record<string, { price?: number; change24h?: number; volume24h?: number }>> {
   const out: Record<string, { price?: number; change24h?: number; volume24h?: number }> = {};
 
