@@ -90,6 +90,23 @@ export default function HomeView({ instruments, onSelectInstrument, videoSrc = '
 
   const binanceHotMarkets = useMemo(() => getBinanceHotFromCatalogue(binanceUniverse, 8) as HomeInstrument[], [binanceUniverse]);
 
+  // Binance's New market is split into Crypto and Futures. Keep both
+  // families in SIRE's single New filter and order them by their actual
+  // listing/onboarding time.
+  const binanceNewCrypto = useMemo(() => {
+    const listedAt = (item: HomeInstrument) => Number(item.listedAt ?? item.onboardDate);
+    return [...binanceSpot]
+      .filter(item => item.newListing === true || Number.isFinite(listedAt(item)))
+      .sort((a, b) => Number(b.newListing === true) - Number(a.newListing === true) || listedAt(b) - listedAt(a));
+  }, [binanceSpot]);
+
+  const binanceNewFutures = useMemo(() => {
+    const listedAt = (item: HomeInstrument) => Number(item.onboardDate ?? item.listedAt);
+    return [...binanceFutures]
+      .filter(item => Number.isFinite(listedAt(item)))
+      .sort((a, b) => listedAt(b) - listedAt(a));
+  }, [binanceFutures]);
+
   const binanceMarketRows = useMemo(() => {
     const change = (item: HomeInstrument) => Number(item.change24h ?? item.priceChangePercent);
     const volume = (item: HomeInstrument) => Number(item.volume24h);
@@ -106,9 +123,12 @@ export default function HomeView({ instruments, onSelectInstrument, videoSrc = '
       case 'Futures':
         return binanceFutures;
       case 'New':
-        return [...binanceSpot]
-          .filter(item => item.newListing === true || Number.isFinite(listedAt(item)))
-          .sort((a, b) => Number(b.newListing === true) - Number(a.newListing === true) || listedAt(b) - listedAt(a));
+        return [...binanceNewCrypto, ...binanceNewFutures]
+          .sort((a, b) => {
+            const aTime = Number(a.onboardDate ?? a.listedAt);
+            const bTime = Number(b.onboardDate ?? b.listedAt);
+            return bTime - aTime;
+          });
       case 'Gainers':
         return [...binanceSpot]
           .filter(item => Number.isFinite(change(item)))
@@ -127,7 +147,7 @@ export default function HomeView({ instruments, onSelectInstrument, videoSrc = '
       default:
         return binanceSpot;
     }
-  }, [activeMarketFilter, binanceUniverse, binanceSpot, binanceFutures, binanceHotMarkets, favoriteIds]);
+  }, [activeMarketFilter, binanceUniverse, binanceSpot, binanceFutures, binanceHotMarkets, binanceNewCrypto, binanceNewFutures, favoriteIds]);
 
   useEffect(() => {
     const timer = window.setInterval(() => {
