@@ -290,8 +290,14 @@ export default function App() {
         const binanceItems = await fetchBinanceBrowserCatalogue();
         if (!cancelled && binanceItems.length) {
           setInstruments(current => {
-            const existing = new Set(current.map(item => item.id));
-            const additions = binanceItems.filter((item:any) => !existing.has(item.id)).map((item:any) => {
+            const incoming = new Map(binanceItems.map((item:any) => [item.id, item]));
+            const mergedCurrent = current.map(item => {
+              const incomingItem = incoming.get(item.id);
+              if (!incomingItem) return item;
+              incoming.delete(item.id);
+              return { ...item, ...incomingItem, price: item.price ?? incomingItem.price };
+            });
+            const additions = Array.from(incoming.values()).map((item:any) => {
               const quote = binanceQuoteCacheRef.current[item.id];
               const meta = binanceMetadataCacheRef.current[String(item.base || '').toUpperCase()];
               const supply = Number(meta?.circulatingSupply);
@@ -308,7 +314,7 @@ export default function App() {
               } as Instrument;
             });
             console.info('[SIRE BINANCE BROWSER] publishing instruments to SIRE', {received:binanceItems.length,added:additions.length});
-            return current.concat(additions);
+            return mergedCurrent.concat(additions);
           });
         }
       } catch (error) {
