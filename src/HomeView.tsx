@@ -4,7 +4,6 @@ import './home.css';
 import {
   ArrowRight, Bell, BrainCircuit, ChevronRight, CircleUserRound, Eye, EyeOff, Flame,
   Grid2X2, LineChart, Search, Sparkles, TrendingUp, Wallet, ArrowDownToLine, ArrowUpFromLine, Repeat2,
-  LockKeyhole, UnlockKeyhole,
   BadgePercent, Megaphone, Trophy, CalendarClock, Gift, MoreHorizontal,
 } from 'lucide-react';
 
@@ -88,7 +87,6 @@ export default function HomeView({ instruments, onSelectInstrument, videoSrc = '
   const [activeEvent, setActiveEvent] = useState(0);
   const [activeMarketFilter, setActiveMarketFilter] = useState('Hot');
   const [activeMarketSubfilter, setActiveMarketSubfilter] = useState('Spot');
-  const [watchlistScrollEnabled, setWatchlistScrollEnabled] = useState(true);
   const [favoriteIds, setFavoriteIds] = useState<string[]>(() => { try { const saved = window.localStorage.getItem('sire.home.marketFavorites'); return saved ? JSON.parse(saved) : []; } catch { return []; } });
   const [binanceNewFeed, setBinanceNewFeed] = useState<Array<{ symbol: string; marketType: string; listedAt: number }>>([]);
   const binanceUniverse = useMemo(
@@ -617,19 +615,11 @@ export default function HomeView({ instruments, onSelectInstrument, videoSrc = '
         </section>
 
         <section className="sire-home-section sire-home-markets">
-          <div className={`sire-home-section-head sire-home-market-section-head${watchlistScrollEnabled ? ' watchlist-scroll-enabled' : ''}`}>
+          <div className="sire-home-section-head">
             <div><span>MARKET DISCOVERY</span><h2>Markets</h2></div>
-            <div className="sire-home-market-head-actions">
-              <div className="sire-home-market-lock-row">
-                <button type="button" className={`sire-home-market-lock${watchlistScrollEnabled ? ' active' : ''}`} aria-label={watchlistScrollEnabled ? 'Disable watchlist scroll' : 'Enable watchlist scroll'} aria-pressed={watchlistScrollEnabled} title={watchlistScrollEnabled ? 'Disable watchlist scroll' : 'Enable watchlist scroll'} onPointerDown={event => event.stopPropagation()} onClick={event => { event.stopPropagation(); setWatchlistScrollEnabled(value => !value); }}>
-                  {watchlistScrollEnabled ? <LockKeyhole size={15} strokeWidth={2.2} /> : <UnlockKeyhole size={15} strokeWidth={2.2} />}
-                </button>
-                <div className={`sire-home-market-lock-status${watchlistScrollEnabled ? ' is-visible' : ''}`} aria-live="polite">{watchlistScrollEnabled ? 'watchlist scroll enabled' : ''}</div>
-              </div>
-              <button type="button">See All <ChevronRight size={15} /></button>
-            </div>
+            <button type="button">See All <ChevronRight size={15} /></button>
           </div>
-          <div className={`sire-home-market-filter-shell${watchlistScrollEnabled ? ' watchlist-scroll-enabled' : ' watchlist-scroll-disabled'}`} aria-label="Market discovery filters">
+          <div className="sire-home-market-filter-shell" aria-label="Market discovery filters">
             <div className="sire-home-market-tabs" role="tablist" aria-label="Market filters">
               {['Favorite', 'Hot', 'Spot', 'Futures', 'New', 'Gainers', 'Losers', 'Vol', 'Market Cap'].map(filter => (
                 <button
@@ -676,10 +666,8 @@ export default function HomeView({ instruments, onSelectInstrument, videoSrc = '
               </div>
             )}
           </div>
-          <div className={`sire-home-watchlist-viewport${watchlistScrollEnabled ? ' is-scroll-enabled' : ' is-scroll-disabled'}`}>
-            {watchlistScrollEnabled && <div className="sire-home-watchlist-fade" aria-hidden="true" />}
-            <div className={`sire-home-watchlist${watchlistScrollEnabled ? ' is-scroll-enabled' : ' is-scroll-disabled'}`} aria-label={activeMarketFilter + ' markets'}>
-            {marketRows.map(item => {
+          <div className="sire-home-watchlist" aria-label={activeMarketFilter + ' markets'}>
+            {marketRows.slice(0, 7).map(item => {
               const raw = item as any;
               const change = Number(raw.change24h ?? raw.changePercent24h ?? raw.priceChangePercent ?? raw.percentChange24h ?? raw.changePercent);
               const volume = Number(raw.volume24h ?? raw.quoteVolume ?? raw.volume);
@@ -709,7 +697,6 @@ export default function HomeView({ instruments, onSelectInstrument, videoSrc = '
                 </article>
               );
             })}
-            </div>
           </div>
         </section>
 
