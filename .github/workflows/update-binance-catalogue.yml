@@ -137,6 +137,7 @@ jobs:
                   req = urllib.request.Request(url, headers={"User-Agent": "SIRE-Binance-Catalogue/1.0"})
                   with urllib.request.urlopen(req, timeout=30) as response:
                       xml = response.read()
+                  print("Binance Vision listing response:", repr(xml[:800]))
                   root = ET.fromstring(xml)
                   ns = {"s3": "http://s3.amazonaws.com/doc/2006-03-01/"}
                   for node in root.findall(".//s3:CommonPrefixes/s3:Prefix", ns):
