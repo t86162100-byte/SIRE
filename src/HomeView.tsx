@@ -68,8 +68,7 @@ export default function HomeView({ instruments, onSelectInstrument, videoSrc = '
   const binanceSpot = useMemo(() => {
     const rows = binanceUniverse
       .filter(item => String(item.marketType || '').toLowerCase().includes('spot'))
-      .filter(item => String(item.symbol || '').toUpperCase().endsWith('USDT'))
-      .filter(item => Number.isFinite(Number(item.price)));
+      .filter(item => String(item.symbol || '').toUpperCase().endsWith('USDT'));
     const byBase = new Map<string, HomeInstrument>();
     for (const item of rows) {
       const base = String((item as any).base || item.symbol).replace(/USDT$/i, '').toUpperCase();
