@@ -1,4 +1,4 @@
-import { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
+import { startTransition, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import { createLinkGroup, type LinkGroup } from 'openalgo-charts';
 import { Search } from 'lucide-react';
 import ResearchLab from './ResearchLab';
@@ -236,7 +236,7 @@ export default function App() {
             const batch = pendingQuotes;
             pendingQuotes = {};
             Object.assign(binanceQuoteCacheRef.current, batch);
-            setInstruments(current => current.map(item => {
+            startTransition(() => setInstruments(current => current.map(item => {
               if (item.provider !== 'BINANCE') return item;
               const quote = batch[item.id] || binanceQuoteCacheRef.current[item.id];
               if (!quote) return item;
@@ -246,7 +246,7 @@ export default function App() {
                 : item.marketCap;
               return { ...item, ...quote, priceChangePercent: quote.change24h, marketCap };
             }));
-          }, 200);
+          }, 1000);
         };
         const initialQuotes = await fetchBinanceLiveQuotes();
         applyQuotes(initialQuotes);
