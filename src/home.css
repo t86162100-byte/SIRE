@@ -2804,3 +2804,20 @@
   .sire-home-watchlist{height:448px;max-height:448px}
   .sire-home-market-source button{padding-left:9px;padding-right:9px}
 }
+
+/* Keep the market catalogue scrollable without asking the browser to paint
+   every off-screen row on every frame. */
+.sire-home-watchlist{
+  contain:layout paint;
+  overscroll-behavior-y:contain;
+  scroll-behavior:auto;
+}
+.sire-home-watch-row{
+  content-visibility:auto;
+  contain:layout paint style;
+  contain-intrinsic-size:56px;
+}
+.sire-home-watch-main,
+.sire-home-watch-row button{
+  touch-action:manipulation;
+}
