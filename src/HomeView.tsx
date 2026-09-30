@@ -63,17 +63,24 @@ export default function HomeView({ instruments, onSelectInstrument, videoSrc = '
   // This only toggles a CSS class; it does not update React state on every scroll event.
   useEffect(() => {
     const scroller = document.querySelector<HTMLElement>('.sire-home-scroll');
-    if (!scroller) return;
+    const homeRoot = scroller?.closest<HTMLElement>('.sire-home');
+    if (!scroller || !homeRoot) return;
     let settleTimer = 0;
     const onScroll = () => {
       scroller.classList.add('is-scrolling');
+      homeRoot.classList.add('is-scrolling');
       window.clearTimeout(settleTimer);
-      settleTimer = window.setTimeout(() => scroller.classList.remove('is-scrolling'), 120);
+      settleTimer = window.setTimeout(() => {
+        scroller.classList.remove('is-scrolling');
+        homeRoot.classList.remove('is-scrolling');
+      }, 120);
     };
     scroller.addEventListener('scroll', onScroll, { passive: true });
     return () => {
       scroller.removeEventListener('scroll', onScroll);
       window.clearTimeout(settleTimer);
+      scroller.classList.remove('is-scrolling');
+      homeRoot.classList.remove('is-scrolling');
     };
   }, []);
 
