@@ -2892,8 +2892,9 @@
   z-index:18;
 }
 .sire-home-watchlist.is-scroll-enabled{
-  height:448px;
-  max-height:448px;
+  height:calc(100svh - 190px);
+  min-height:520px;
+  max-height:calc(100svh - 190px);
   overflow-y:auto;
   overflow-x:hidden;
   overscroll-behavior:contain;
@@ -2929,3 +2930,16 @@
   .sire-home-market-lock,
   .sire-home-market-lock-status{transition:none}
 }
+
+.sire-home-market-filter-shell.watchlist-scroll-enabled{
+  position:sticky;
+  top:0;
+  z-index:30;
+  background:linear-gradient(to bottom,rgba(8,10,15,1) 0%,rgba(8,10,15,.98) 68%,rgba(8,10,15,0) 100%);
+  padding-bottom:18px;
+  margin-bottom:-18px;
+  -webkit-mask-image:linear-gradient(to bottom,#000 0%,#000 68%,transparent 100%);
+  mask-image:linear-gradient(to bottom,#000 0%,#000 68%,transparent 100%);
+}
+.sire-home-watchlist.is-scroll-enabled::-webkit-scrollbar{display:none}
+.sire-home-watchlist.is-scroll-enabled{padding-top:10px}
