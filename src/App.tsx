@@ -98,7 +98,7 @@ const exchangeDomains: Record<string, string> = {
   uniswap: 'uniswap.org', curve: 'curve.fi', pancakeswap: 'pancakeswap.finance',
 };
 
-const makeProviderLogoFallback = (item: Instrument) => {
+const normalizeBinanceMarketType = (value: unknown) => {\n  const marketType = String(value || '').trim();\n  if (/^USD-M\\s+Perpetuals$/i.test(marketType) || /^COIN-M\\s+Perpetuals$/i.test(marketType)) return 'Perpetuals';\n  if (/^USD-M\\s+Futures$/i.test(marketType) || /^COIN-M\\s+Futures$/i.test(marketType)) return 'Futures';\n  return marketType;\n};\n\nconst makeProviderLogoFallback = (item: Instrument) => {
   const key = String(item.exchange || item.providerLabel || item.provider || '')
     .trim().toLowerCase().replace(/[^a-z0-9]/g, '');
   const domain = item.provider === 'DERIV'
@@ -638,7 +638,7 @@ export default function App() {
     const q = deferredSearch.trim().toLowerCase();
     return randomizedInstruments.filter(item => {
       const providerMatch = providerFilter === 'ALL' || item.provider === providerFilter;
-      const marketType = String(item.marketType || '').toLowerCase();
+      const marketType = normalizeBinanceMarketType(item.marketType).toLowerCase();
       const categoryMatch = categoryFilter === 'ALL'
         || item.category === categoryFilter
         || (categoryFilter === 'Options' && marketType.includes('option'))
