@@ -2553,3 +2553,74 @@
 @media (max-width:700px){
   .sire-home-market-filter-shell::before{backdrop-filter:none;-webkit-backdrop-filter:none}
 }
+
+
+/* Final market polish: no enclosing box; soft directional card glow. */
+.sire-home-market-filter-shell{
+  background:transparent !important;
+  border:0 !important;
+  box-shadow:none !important;
+  backdrop-filter:none !important;
+  -webkit-backdrop-filter:none !important;
+}
+.sire-home-market-filter-shell::before{
+  display:none !important;
+}
+.sire-home-market-filter-shell::after{
+  display:none !important;
+}
+.sire-home-watchlist{
+  position:relative;
+  background:transparent !important;
+  border:0 !important;
+  box-shadow:none !important;
+  overflow:visible !important;
+}
+.sire-home-watch-row{
+  position:relative;
+  isolation:isolate;
+  overflow:visible !important;
+  border:0 !important;
+  background:
+    radial-gradient(100% 150% at 96% 0%,rgba(132,91,235,.08),transparent 62%),
+    linear-gradient(105deg,rgba(18,24,39,.78),rgba(7,12,22,.86));
+  box-shadow:
+    inset 0 1px rgba(255,255,255,.055),
+    inset 0 -1px rgba(255,255,255,.018),
+    0 6px 18px rgba(0,0,0,.16);
+}
+.sire-home-watch-row::before{
+  content:"";
+  position:absolute;
+  z-index:-1;
+  left:5%;
+  right:5%;
+  bottom:-10px;
+  height:26px;
+  border-radius:50%;
+  opacity:.38;
+  filter:blur(13px);
+  pointer-events:none;
+  background:var(--market-glow,rgba(125,105,190,.25));
+}
+.sire-home-watch-row:has(.market-trade-button.positive)::before{
+  --market-glow:rgba(28,225,145,.48);
+}
+.sire-home-watch-row:has(.market-trade-button.negative)::before{
+  --market-glow:rgba(246,61,91,.48);
+}
+.sire-home-watch-row:has(.market-trade-button.neutral)::before{
+  --market-glow:rgba(126,111,174,.28);
+}
+.market-trade-button{
+  position:relative;
+  z-index:2;
+  border:0 !important;
+  box-shadow:0 0 13px rgba(255,255,255,.025) !important;
+}
+.market-trade-button.positive{
+  box-shadow:0 0 13px rgba(31,220,143,.18), inset 0 1px rgba(255,255,255,.14) !important;
+}
+.market-trade-button.negative{
+  box-shadow:0 0 13px rgba(245,64,93,.18), inset 0 1px rgba(255,255,255,.14) !important;
+}
