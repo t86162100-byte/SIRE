@@ -2961,3 +2961,150 @@
 }
 .sire-home-watchlist.is-scroll-enabled::-webkit-scrollbar{display:none}
 .sire-home-watchlist.is-scroll-enabled{padding-top:10px}
+
+/* Final market-scroll architecture:
+   the Market heading is the page-level sticky anchor; the filters stay directly
+   below it; only the instrument viewport scrolls. This keeps Market Pulse in
+   normal document flow while the catalogue moves independently. */
+.sire-home-market-section-head{
+  position:sticky !important;
+  top:0 !important;
+  z-index:60 !important;
+  min-height:52px;
+  margin-left:-14px;
+  margin-right:-14px;
+  margin-bottom:0 !important;
+  padding:9px 14px 8px;
+  align-items:center;
+  background:linear-gradient(
+    180deg,
+    rgba(5,3,26,1) 0%,
+    rgba(5,3,26,.98) 72%,
+    rgba(5,3,26,.86) 100%
+  );
+  box-shadow:0 8px 20px rgba(5,3,26,.18);
+}
+
+.sire-home-market-section-head .sire-home-market-head-actions{
+  position:relative;
+  z-index:2;
+}
+
+.sire-home-market-filter-shell.watchlist-scroll-enabled{
+  position:sticky !important;
+  top:52px !important;
+  z-index:50 !important;
+  margin-top:0 !important;
+  margin-bottom:0 !important;
+  padding-top:7px !important;
+  padding-bottom:10px !important;
+  background:linear-gradient(
+    180deg,
+    rgba(5,3,26,.99) 0%,
+    rgba(5,3,26,.97) 64%,
+    rgba(5,3,26,0) 100%
+  ) !important;
+  -webkit-mask-image:none !important;
+  mask-image:none !important;
+}
+
+.sire-home-market-filter-shell.watchlist-scroll-enabled::before,
+.sire-home-market-filter-shell.watchlist-scroll-enabled::after{
+  display:none !important;
+  content:none !important;
+}
+
+.sire-home-watchlist-viewport{
+  position:relative;
+  width:100%;
+  overflow:hidden;
+}
+
+.sire-home-watchlist-viewport.is-scroll-enabled{
+  height:clamp(360px,58svh,520px);
+  max-height:520px;
+  overflow:hidden;
+  overscroll-behavior:contain;
+}
+
+.sire-home-watchlist-viewport.is-scroll-disabled{
+  height:auto;
+  overflow:visible;
+}
+
+.sire-home-watchlist-viewport.is-scroll-enabled .sire-home-watchlist{
+  position:relative;
+  width:100%;
+  height:100%;
+  max-height:none;
+  margin:0 !important;
+  padding:8px 0 12px !important;
+  overflow-y:auto !important;
+  overflow-x:hidden !important;
+  overscroll-behavior-y:contain;
+  -webkit-overflow-scrolling:touch;
+  touch-action:pan-y;
+  scrollbar-width:none;
+  contain:layout paint;
+  scroll-behavior:auto;
+  border:0 !important;
+  background:transparent !important;
+  box-shadow:none !important;
+}
+.sire-home-watchlist-viewport.is-scroll-enabled .sire-home-watchlist::-webkit-scrollbar{
+  display:none;
+}
+
+/* The fade is an overlay, not a boundary line. Cards become transparent
+   gradually before they can reach the filter/header stack. */
+.sire-home-watchlist-fade{
+  position:absolute;
+  left:0;
+  right:0;
+  top:0;
+  height:92px;
+  z-index:20;
+  pointer-events:none;
+  background:linear-gradient(
+    180deg,
+    rgba(5,3,26,1) 0%,
+    rgba(5,3,26,.98) 18%,
+    rgba(5,3,26,.78) 43%,
+    rgba(5,3,26,.38) 67%,
+    rgba(5,3,26,0) 100%
+  );
+}
+
+.sire-home-watchlist-viewport.is-scroll-enabled::after{
+  content:"";
+  position:absolute;
+  left:0;
+  right:0;
+  bottom:0;
+  height:22px;
+  z-index:19;
+  pointer-events:none;
+  background:linear-gradient(
+    180deg,
+    rgba(5,3,26,0),
+    rgba(5,3,26,.82)
+  );
+}
+
+.sire-home-watchlist.is-scroll-enabled .sire-home-watch-row{
+  flex:0 0 68px;
+}
+
+@media(max-width:380px){
+  .sire-home-market-section-head{
+    min-height:50px;
+    padding-left:14px;
+    padding-right:14px;
+  }
+  .sire-home-market-filter-shell.watchlist-scroll-enabled{
+    top:50px !important;
+  }
+  .sire-home-watchlist-viewport.is-scroll-enabled{
+    height:clamp(340px,58svh,500px);
+  }
+}
