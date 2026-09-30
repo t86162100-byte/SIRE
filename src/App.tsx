@@ -449,7 +449,7 @@ export default function App() {
             ...(quote ? { priceChangePercent: quote.change24h } : {}),
             ...(Number.isFinite(supply) ? { circulatingSupply: supply } : {}),
             ...(Number.isFinite(Number(marketCap)) ? { marketCap: Number(marketCap) } : {}),
-            ...(['Spot', 'Margin'].includes(String(item.marketType)) && Number.isFinite(Number(meta?.listedAt)) ? { listedAt: Number(meta.listingAt), onboardDate: Number(meta.listingAt) } : {}),
+            ...(['Spot', 'Margin'].includes(String(item.marketType)) && Number.isFinite(Number(meta?.listedAt)) ? { listedAt: Number(meta.listedAt), onboardDate: Number(meta.listedAt) } : {}),
             ...(['Spot', 'Margin'].includes(String(item.marketType)) && meta?.newListing === true ? { newListing: true } : {}),
           };
         })) : current;
