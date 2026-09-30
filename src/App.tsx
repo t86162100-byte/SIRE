@@ -5,7 +5,7 @@ import ResearchLab from './ResearchLab';
 import HomeView from './HomeView';
 import FinancialChart from './FinancialChart';
 import { fetchDerivInstruments, type DerivInstrument } from './derivMarketData';
-import { fetchBinanceBrowserCatalogue, fetchBinanceLiveQuotes, createBinanceCatalogueLiveFeed } from './binanceMarketData';
+import { fetchBinanceBrowserCatalogue, fetchBinanceLiveQuotes, fetchBinanceMarketMetadata, createBinanceCatalogueLiveFeed } from './binanceMarketData';
 import { SireErrorScreen } from './SireErrorBoundary';
 import './nativeTerminal.css';
 
@@ -23,6 +23,14 @@ type Instrument = DerivInstrument & {
   ask?: number;
   logoUrl: string;
   providerLogoUrl: string;
+  change24h?: number;
+  priceChangePercent?: number;
+  volume24h?: number;
+  tradeCount24h?: number;
+  listedAt?: number;
+  onboardDate?: number;
+  circulatingSupply?: number;
+  marketCap?: number;
 };
 
 const makeLogoFallback = (label: string) => {
@@ -126,6 +134,7 @@ export default function App() {
   const [multiChartPosition, setMultiChartPosition] = useState<'up' | 'down' | 'left' | 'right'>('right');
   const [chartSymbols, setChartSymbols] = useState<string[]>([]);
   const linkGroupRef = useRef<LinkGroup | null>(null);
+  const binanceQuoteCacheRef = useRef<Record<string, any>>({});
 
   useEffect(() => {
     let cancelled = false;
@@ -209,22 +218,44 @@ export default function App() {
       return unique;
     };
 
-    // Binance discovery must be independent of the unified catalogue. It is an
-    // official public-data source and must start even if another provider is slow,
-    // unavailable, or geo-restricted on the Render server.
+    // Binance live data starts immediately, but quotes are cached so a catalogue
+    // that arrives a moment later still receives the latest snapshot.
     void (async () => {
       try {
-        const applyQuotes = (quotes: Record<string, { price?: number; change24h?: number; volume24h?: number }>) => {
+        const applyQuotes = (quotes: Record<string, any>) => {
           if (cancelled) return;
+          Object.assign(binanceQuoteCacheRef.current, quotes);
           setInstruments(current => current.map(item => {
             if (item.provider !== 'BINANCE') return item;
-            const quote = quotes[item.id];
-            return quote ? { ...item, ...quote, priceChangePercent: quote.change24h } : item;
+            const quote = quotes[item.id] || binanceQuoteCacheRef.current[item.id];
+            if (!quote) return item;
+            const supply = Number(item.circulatingSupply);
+            const marketCap = Number.isFinite(supply) && Number.isFinite(Number(quote.price))
+              ? supply * Number(quote.price)
+              : item.marketCap;
+            return { ...item, ...quote, priceChangePercent: quote.change24h, marketCap };
           }));
         };
         const initialQuotes = await fetchBinanceLiveQuotes();
         applyQuotes(initialQuotes);
         closeBinanceStream = createBinanceCatalogueLiveFeed(applyQuotes);
+        void fetchBinanceMarketMetadata().then(metadata => {
+          if (cancelled) return;
+          setInstruments(current => current.map(item => {
+            if (item.provider !== 'BINANCE') return item;
+            const meta = metadata[String(item.base || '').toUpperCase()];
+            if (!meta) return item;
+            const supply = Number(meta.circulatingSupply);
+            const marketCap = Number.isFinite(supply) && Number.isFinite(Number(item.price))
+              ? supply * Number(item.price)
+              : meta.marketCap;
+            return {
+              ...item,
+              circulatingSupply: Number.isFinite(supply) ? supply : item.circulatingSupply,
+              marketCap: Number.isFinite(Number(marketCap)) ? Number(marketCap) : item.marketCap,
+            };
+          }));
+        }).catch(error => console.warn('[SIRE BINANCE] market metadata failed:', error));
       } catch (error) {
         console.warn('[SIRE BINANCE LIVE] stream startup failed:', error);
       }
@@ -244,7 +275,11 @@ export default function App() {
         if (!cancelled && binanceItems.length) {
           setInstruments(current => {
             const existing = new Set(current.map(item => item.id));
-            const additions = binanceItems.filter((item:any) => !existing.has(item.id)) as Instrument[];
+            const additions = binanceItems.filter((item:any) => !existing.has(item.id)).map((item:any) => {
+              const quote = binanceQuoteCacheRef.current[item.id];
+              if (!quote) return item as Instrument;
+              return { ...item, ...quote, priceChangePercent: quote.change24h } as Instrument;
+            });
             console.info('[SIRE BINANCE BROWSER] publishing instruments to SIRE', {received:binanceItems.length,added:additions.length});
             return current.concat(additions);
           });
@@ -267,7 +302,11 @@ export default function App() {
       setInstruments(current => {
         const existing = new Set(current.map(item => item.id));
         const additions = items.filter(item => !existing.has(item.id));
-        const merged = additions.length ? current.concat(additions) : current;
+        const merged = additions.length ? current.concat(additions.map((item: any) => {
+          if (item.provider !== 'BINANCE') return item;
+          const quote = binanceQuoteCacheRef.current[item.id];
+          return quote ? { ...item, ...quote, priceChangePercent: quote.change24h } : item;
+        })) : current;
         console.info('[SIRE MARKET STARTUP] publishing unified catalogue', {
           received: items.length,
           added: additions.length,
