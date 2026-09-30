@@ -11,7 +11,6 @@ let pointerStartX: number | null = null;
 let pointerStartY: number | null = null;
 let pointerRevealed = false;
 let barCollapseTimer: number | undefined;
-let barObserver: MutationObserver | undefined;
 
 function currentGlassBar() {
   return document.querySelector('.sire-bottom-glass-bar') as HTMLElement | null;
@@ -63,15 +62,6 @@ function wireGlassBar() {
   }, { passive: true });
   bar.addEventListener('click', () => armBarCollapse(), { passive: true });
   armBarCollapse();
-}
-
-function bindBarObserver() {
-  if (barObserver) return;
-  barObserver = new MutationObserver(() => {
-    wireGlassBar();
-    if (replayIsActive()) rollBarUp();
-  });
-  barObserver.observe(document.documentElement, { childList: true, subtree: true });
 }
 
 function style() {
@@ -213,14 +203,9 @@ function start() {
   wireTouchSwipe();
   wirePointerSwipe();
   hideTimer = window.setTimeout(hideIfInactive, HIDE_AFTER);
-
-  const observer = new MutationObserver(() => { bindNav(); wireGlassBar(); if (replayIsActive()) rollBarUp(); });
-  observer.observe(document.documentElement, { childList: true, subtree: true });
-  bindBarObserver();
-  window.setInterval(() => {
-    bindNav();
-    hideIfInactive();
-  }, 300);
+  window.addEventListener('sire:navigation-mounted', () => { bindNav(); wireGlassBar(); });
+  window.addEventListener('sire:tab-changed', () => { bindNav(); wireGlassBar(); });
+  wireGlassBar();
 }
 
 if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start, { once: true });
