@@ -131,6 +131,7 @@ export default function App() {
     let cancelled = false;
     let retryTimer: number | null = null;
     let globalCryptoRefresh: number | null = null;
+    let closeBinanceStream: (() => void) | null = null;
 
     const startup = async (): Promise<Instrument[]> => {
       const providers: MarketProvider[] = ['BINGX','BITRUE','ASCENDEX','WHITEBIT','COINW','DERIV','BINANCE','COINBASE','KRAKEN','BYBIT','OKX','BITGET','GATEIO','KUCOIN','MEXC','CRYPTOCOM','BITFINEX','GEMINI','BITSTAMP','COINEX','HTX','LBANK','BITTREX','BITMART','PHEMEX','BLANK','XT','DEEPCOIN','TOOBIT','WEEX','BITUNIX','BLOFIN','COINCATCH','ZOOMEX','BTCC','DIGIFINEX','COINSTORE','PROBIT','POLONIEX','COINDCX','BITHUMB','UPBIT','PIONEX','POLYMARKET','KALSHI','OPINION','UNISWAP','CURVE','PANCAKESWAP','SUSHISWAP','RAYDIUM','JUPITER','ORCA','AERODROME','TRADERJOE','ONEINCH','COWSWAP','BALANCER'];
@@ -223,8 +224,7 @@ export default function App() {
         };
         const initialQuotes = await fetchBinanceLiveQuotes();
         applyQuotes(initialQuotes);
-        const closeStream = createBinanceCatalogueLiveFeed(applyQuotes);
-        return closeStream;
+        closeBinanceStream = createBinanceCatalogueLiveFeed(applyQuotes);
       } catch (error) {
         console.warn('[SIRE BINANCE LIVE] stream startup failed:', error);
       }
@@ -356,6 +356,7 @@ export default function App() {
       cancelled = true;
       if (retryTimer !== null) window.clearTimeout(retryTimer);
       if (globalCryptoRefresh !== null) window.clearInterval(globalCryptoRefresh);
+      if (closeBinanceStream) closeBinanceStream();
     };
   }, []);
 
