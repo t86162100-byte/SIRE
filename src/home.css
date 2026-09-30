@@ -2827,14 +2827,15 @@
    the instrument catalogue its own continuous scroll surface. Disabled returns
    the entire market section to normal page scrolling. */
 .sire-home-market-lock-row{
-  position:relative;
-  min-height:20px;
+  position:absolute;
+  top:7px;
+  right:13px;
+  min-height:26px;
   display:flex;
   align-items:center;
   justify-content:flex-end;
   gap:7px;
-  padding:0 1px 3px 0;
-  z-index:3;
+  z-index:20;
 }
 .sire-home-market-lock-status{
   color:#8b8498;
@@ -2876,6 +2877,9 @@
   opacity:1;
   filter:drop-shadow(0 0 7px rgba(171,126,255,.48));
   background:rgba(164,119,247,.055);
+}
+.sire-home-market-filter-shell{
+  padding-top:10px;
 }
 .sire-home-market-filter-shell.watchlist-scroll-disabled{
   position:relative;
