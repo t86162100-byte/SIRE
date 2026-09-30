@@ -165,6 +165,9 @@ export function createBinanceCatalogueLiveFeed(onQuotes: (quotes: Record<string,
   // stream host directly so the Home market list receives fresh ticks continuously.
   open(BINANCE.spotStream + '/ws/!miniTicker@arr', ['Spot']);
   open(BINANCE.usdmStream + '/market/ws/!miniTicker@arr', ['Perpetuals', 'Futures']);
+  // Mark-price stream is an independent 1-second source for live Futures prices.
+  // It remains useful even when the rolling mini-ticker has not changed yet.
+  open(BINANCE.usdmStream + '/market/ws/!markPrice@arr@1s', ['Perpetuals', 'Futures']);
   open(BINANCE.coinmStream + '/ws/!miniTicker@arr', ['Perpetuals', 'Futures'], 'BINANCE:COIN-M');
 
   return () => {
