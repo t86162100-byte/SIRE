@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { fetchBinanceHotMarkets } from './binanceMarketData';
+import { getBinanceHotFromCatalogue } from './binanceMarketData';
 import './home.css';
 import {
   ArrowRight, Bell, BrainCircuit, ChevronRight, CircleUserRound, Eye, EyeOff, Flame,
@@ -18,6 +18,9 @@ type HomeInstrument = {
   marketType?: string;
   price?: number;
   logoUrl?: string;
+  change24h?: number;
+  volume24h?: number;
+  tradeCount24h?: number;
 };
 
 type Props = {
@@ -52,8 +55,7 @@ export default function HomeView({ instruments, onSelectInstrument, videoSrc = '
   const [activeEvent, setActiveEvent] = useState(0);
   const [activeMarketFilter, setActiveMarketFilter] = useState('Hot');
   const [favoriteIds, setFavoriteIds] = useState<string[]>(() => { try { const saved = window.localStorage.getItem('sire.home.marketFavorites'); return saved ? JSON.parse(saved) : []; } catch { return []; } });
-  const [binanceHotMarkets, setBinanceHotMarkets] = useState<HomeInstrument[]>([]);
-
+  const binanceHotMarkets = useMemo(() => getBinanceHotFromCatalogue(instruments, 8) as HomeInstrument[], [instruments]);
   useEffect(() => {
     let cancelled = false;
     let timer = 0;
