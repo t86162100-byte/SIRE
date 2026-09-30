@@ -25,6 +25,8 @@ export interface UnifiedInstrument {
   strike?: number;
   optionType?: string;
   supportsMargin?: boolean;
+  listedAt?: number;
+  onboardDate?: number;
 }
 
 import { execFile } from 'node:child_process';
@@ -169,6 +171,10 @@ function cryptoItem(provider: MarketProvider, marketType: string, category: stri
     strike: Number.isFinite(Number(raw?.strikePrice ?? raw?.strike_price ?? raw?.strike)) ? Number(raw?.strikePrice ?? raw?.strike_price ?? raw?.strike) : undefined,
     optionType: raw?.optionsType || raw?.optionType || (raw?.is_call === true ? 'Call' : raw?.is_call === false ? 'Put' : undefined),
     supportsMargin: Boolean(raw?.isMarginEnabled || raw?.marginEnabled || raw?.margin),
+    onboardDate: Number.isFinite(Number(raw?.onboardDate)) ? Number(raw.onboardDate) : undefined,
+    listedAt: Number.isFinite(Number(raw?.onboardDate ?? raw?.listingTime ?? raw?.listedAt))
+      ? Number(raw.onboardDate ?? raw.listingTime ?? raw.listedAt)
+      : undefined,
   };
 }
 
