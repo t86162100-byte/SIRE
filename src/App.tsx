@@ -411,9 +411,8 @@ export default function App() {
                 ...(quote ? { priceChangePercent: quote.change24h } : {}),
                 ...(Number.isFinite(supply) ? { circulatingSupply: supply } : {}),
                 ...(Number.isFinite(Number(marketCap)) ? { marketCap: Number(marketCap) } : {}),
-                ...(Number.isFinite(Number(meta?.listedAt)) ? { listedAt: Number(meta.listedAt), onboardDate: Number(meta.listedAt) } : {}),
-            ...(meta?.newListing === true ? { newListing: true } : {}),
-                ...(meta?.newListing === true ? { newListing: true } : {}),
+                ...(['Spot', 'Margin'].includes(String(item.marketType)) && Number.isFinite(Number(meta?.listedAt)) ? { listedAt: Number(meta.listedAt), onboardDate: Number(meta.listedAt) } : {}),
+                ...(['Spot', 'Margin'].includes(String(item.marketType)) && meta?.newListing === true ? { newListing: true } : {}),
               } as Instrument;
             });
             console.info('[SIRE BINANCE BROWSER] publishing instruments to SIRE', {received:browserItems.length,added:additions.length});
@@ -450,8 +449,8 @@ export default function App() {
             ...(quote ? { priceChangePercent: quote.change24h } : {}),
             ...(Number.isFinite(supply) ? { circulatingSupply: supply } : {}),
             ...(Number.isFinite(Number(marketCap)) ? { marketCap: Number(marketCap) } : {}),
-            ...(Number.isFinite(Number(meta?.listedAt)) ? { listedAt: Number(meta.listedAt), onboardDate: Number(meta.listedAt) } : {}),
-            ...(meta?.newListing === true ? { newListing: true } : {}),
+            ...(['Spot', 'Margin'].includes(String(item.marketType)) && Number.isFinite(Number(meta?.listedAt)) ? { listedAt: Number(meta.listingAt), onboardDate: Number(meta.listingAt) } : {}),
+            ...(['Spot', 'Margin'].includes(String(item.marketType)) && meta?.newListing === true ? { newListing: true } : {}),
           };
         })) : current;
         console.info('[SIRE MARKET STARTUP] publishing unified catalogue', {
