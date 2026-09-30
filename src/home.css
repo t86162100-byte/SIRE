@@ -2624,3 +2624,25 @@
 .market-trade-button.negative{
   box-shadow:0 0 13px rgba(245,64,93,.18), inset 0 1px rgba(255,255,255,.14) !important;
 }
+
+
+/* Market cards: remove all parent side-insets so rows float independently. */
+.sire-home-watchlist{
+  width:100% !important;
+  margin-left:0 !important;
+  margin-right:0 !important;
+  padding-left:0 !important;
+  padding-right:0 !important;
+  border-left:0 !important;
+  border-right:0 !important;
+  background:transparent !important;
+  box-shadow:none !important;
+}
+.sire-home-watch-row{
+  width:100% !important;
+  margin-left:0 !important;
+  margin-right:0 !important;
+}
+.sire-home-watch-row + .sire-home-watch-row{
+  margin-top:0;
+}
