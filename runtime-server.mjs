@@ -923,6 +923,62 @@ const server = http.createServer(async (req,res) => {
       console.log('[SIRE BINANCE BROWSER REPORT]', JSON.stringify({source:'browser',total,counts,failures,reportedAt:parsed.reportedAt||Date.now()}));
       return res.writeHead(200,{ 'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8' }).end(JSON.stringify({ok:true,total,counts,failures}));
     }
+    if (req.method === 'GET' && pathname === '/api/sire/binance/new-listings') {
+      try {
+        const cacheKey = 'binance-new-listings-v1';
+        const now = Date.now();
+        globalThis.__sireBinanceNewCache = globalThis.__sireBinanceNewCache || new Map();
+        const cached = globalThis.__sireBinanceNewCache.get(cacheKey);
+        if (cached && now - cached.at < 5 * 60 * 1000) {
+          return res.writeHead(200,{ 'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8' }).end(JSON.stringify(cached.value));
+        }
+        const url = 'https://www.binance.com/bapi/composite/v1/public/cms/article/list/query?type=1&pageNo=1&pageSize=50&category=48';
+        const response = await fetch(url, {
+          headers: {
+            Accept: 'application/json',
+            'User-Agent': 'SIRE-market-data/1.0',
+            Referer: 'https://www.binance.com/en/support/announcement/list/48',
+          },
+        });
+        if (!response.ok) throw new Error('Binance announcement API HTTP ' + response.status);
+        const payload = await response.json();
+        const articles = Array.isArray(payload?.data?.articles) ? payload.data.articles : [];
+        const output = [];
+        const seen = new Set();
+        const collectStrings = (value, out = []) => {
+          if (typeof value === 'string') out.push(value);
+          else if (Array.isArray(value)) value.forEach(v => collectStrings(v, out));
+          else if (value && typeof value === 'object') Object.values(value).forEach(v => collectStrings(v, out));
+          return out;
+        };
+        for (const article of articles) {
+          const strings = collectStrings(article);
+          const title = strings.find(s => /Binance|Futures|Spot|List|Add|Launch/i.test(s)) || '';
+          const blob = strings.join(' ');
+          const future = /\bFutures?\b|Perpetual|USDⓈ-M|COIN-M|Delivery Contract|Pre-IPO/i.test(blob);
+          const dateRaw = article?.releaseDate || article?.publishDate || article?.createTime || article?.updateTime || article?.releaseTime;
+          const timestamp = Number.isFinite(Number(dateRaw)) ? Number(dateRaw) : (dateRaw ? Date.parse(String(dateRaw)) : NaN);
+          const date = Number.isFinite(timestamp) ? timestamp : Date.now();
+          const symbols = new Set();
+          for (const match of blob.matchAll(/\b([A-Z0-9]{2,20}(?:USDT|USDC|BUSD))\b/g)) symbols.add(match[1]);
+          for (const match of blob.matchAll(/\(([A-Z][A-Z0-9]{1,15})\)/g)) symbols.add(match[1]);
+          for (const symbol of symbols) {
+            const key = (future ? 'F:' : 'S:') + symbol;
+            if (seen.has(key)) continue;
+            seen.add(key);
+            output.push({ symbol, marketType: future ? 'Futures' : 'Spot', listedAt: date, title });
+          }
+        }
+        output.sort((a,b) => Number(b.listedAt) - Number(a.listedAt));
+        const value = { ok: true, generatedAt: now, items: output };
+        globalThis.__sireBinanceNewCache.set(cacheKey, { at: now, value });
+        console.log('[SIRE BINANCE NEW] refreshed', JSON.stringify({articles: articles.length, items: output.length}));
+        return res.writeHead(200,{ 'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8' }).end(JSON.stringify(value));
+      } catch (error) {
+        console.warn('[SIRE BINANCE NEW] failed:', error);
+        return res.writeHead(502,{ 'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8' }).end(JSON.stringify({ok:false,error:String(error?.message || error),items:[]}));
+      }
+    }
     if (req.method === 'GET' && pathname.startsWith('/api/sire/markets/provider/')) {
       const provider = decodeURIComponent(pathname.slice('/api/sire/markets/provider/'.length)).toUpperCase();
       const allowed = new Set(['BINGX','BITRUE','ASCENDEX','WHITEBIT','COINW','DERIV','BINANCE','COINBASE','KRAKEN','BYBIT','OKX','BITGET','GATEIO','KUCOIN','MEXC','CRYPTOCOM','BITFINEX','GEMINI','BITSTAMP','COINEX','HTX','LBANK','BITTREX','BITMART','PHEMEX','BLANK','XT','DEEPCOIN','TOOBIT','WEEX','BITUNIX','BLOFIN','COINCATCH','ZOOMEX','BTCC','DIGIFINEX','BITHUMB','UPBIT','PIONEX','COINSTORE','PROBIT','POLONIEX','COINDCX','POLYMARKET','KALSHI','OPINION','UNISWAP','CURVE']);
