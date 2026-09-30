@@ -6,6 +6,8 @@ type Instrument = {
   marketType?: string;
   base?: string;
   quote?: string;
+  onboardDate?: number;
+  listedAt?: number;
 };
 
 const INTERVAL: Record<string,string> = {
@@ -85,6 +87,8 @@ function makeInstrument(raw: any, marketType: string, idPrefix = 'BINANCE'): any
     quote,
     exchangeOpen: 1,
     status: 'online',
+    onboardDate: Number.isFinite(Number(raw?.onboardDate)) ? Number(raw.onboardDate) : undefined,
+    listedAt: Number.isFinite(Number(raw?.onboardDate ?? raw?.listingTime ?? raw?.listedAt)) ? Number(raw.onboardDate ?? raw.listingTime ?? raw.listedAt) : undefined,
     logoUrl: base
       ? 'https://cdn.jsdelivr.net/gh/vadimmalykhin/binance-icons/crypto/' + encodeURIComponent(base.toLowerCase()) + '.svg'
       : 'https://www.binance.com/favicon.ico',
@@ -111,7 +115,7 @@ async function postBrowserDiagnostic(diagnostic: any) {
   }
 }
 
-export function createBinanceCatalogueLiveFeed(onQuotes: (quotes: Record<string, { price?: number; change24h?: number; volume24h?: number }>) => void) {
+export function createBinanceCatalogueLiveFeed(onQuotes: (quotes: Record<string, { price?: number; change24h?: number; volume24h?: number; tradeCount24h?: number; timestamp?: number }>) => void) {
   let stopped = false;
   const sockets: WebSocket[] = [];
   const reconnectTimers: number[] = [];
@@ -133,6 +137,8 @@ export function createBinanceCatalogueLiveFeed(onQuotes: (quotes: Record<string,
               price: Number.isFinite(Number(row?.c)) ? Number(row.c) : undefined,
               change24h: Number.isFinite(Number(row?.P)) ? Number(row.P) : undefined,
               volume24h: Number.isFinite(Number(row?.q)) ? Number(row.q) : undefined,
+              tradeCount24h: Number.isFinite(Number(row?.n)) ? Number(row.n) : undefined,
+              timestamp: Number.isFinite(Number(row?.E)) ? Number(row.E) : Date.now(),
             };
             for (const marketType of marketTypes) {
               quotes[idPrefix + ':' + marketType + ':' + symbol] = quote;
@@ -155,9 +161,11 @@ export function createBinanceCatalogueLiveFeed(onQuotes: (quotes: Record<string,
     }
   };
 
-  open(BINANCE.spotStream + '/ws/!ticker@arr', ['Spot']);
-  open(BINANCE.usdmStream + '/ws/!ticker@arr', ['Perpetuals', 'Futures']);
-  open(BINANCE.coinmStream + '/ws/!ticker@arr', ['Perpetuals', 'Futures'], 'BINANCE:COIN-M');
+  // Binance's public all-market ticker is a 1-second stream. Use the documented
+  // stream host directly so the Home market list receives fresh ticks continuously.
+  open('wss://stream.binance.com:9443/ws/!ticker@arr', ['Spot']);
+  open('wss://fstream.binance.com/ws/!ticker@arr', ['Perpetuals', 'Futures']);
+  open('wss://dstream.binance.com/ws/!ticker@arr', ['Perpetuals', 'Futures'], 'BINANCE:COIN-M');
 
   return () => {
     stopped = true;
@@ -166,8 +174,8 @@ export function createBinanceCatalogueLiveFeed(onQuotes: (quotes: Record<string,
   };
 }
 
-export async function fetchBinanceLiveQuotes(): Promise<Record<string, { price?: number; change24h?: number; volume24h?: number }>> {
-  const out: Record<string, { price?: number; change24h?: number; volume24h?: number }> = {};
+export async function fetchBinanceLiveQuotes(): Promise<Record<string, { price?: number; change24h?: number; volume24h?: number; tradeCount24h?: number; timestamp?: number }>> {
+  const out: Record<string, { price?: number; change24h?: number; volume24h?: number; tradeCount24h?: number; timestamp?: number }> = {};
 
   const load = async (url: string, marketType: string, idPrefix = 'BINANCE') => {
     try {
@@ -179,10 +187,13 @@ export async function fetchBinanceLiveQuotes(): Promise<Record<string, { price?:
         const price = Number(row?.lastPrice ?? row?.last ?? row?.markPrice ?? row?.price);
         const change = Number(row?.priceChangePercent ?? row?.priceChangePercent24h ?? row?.percentChange);
         const volume = Number(row?.quoteVolume ?? row?.quoteVolume24h ?? row?.volume);
+        const tradeCount = Number(row?.count ?? row?.tradeCount ?? row?.n);
         out[idPrefix + ':' + marketType + ':' + symbol] = {
           price: Number.isFinite(price) ? price : undefined,
           change24h: Number.isFinite(change) ? change : undefined,
           volume24h: Number.isFinite(volume) ? volume : undefined,
+          tradeCount24h: Number.isFinite(tradeCount) ? tradeCount : undefined,
+          timestamp: Number(row?.closeTime ?? row?.time ?? Date.now()),
         };
       }
     } catch (error) {
@@ -202,17 +213,32 @@ export async function fetchBinanceLiveQuotes(): Promise<Record<string, { price?:
 }
 
 export function getBinanceHotFromCatalogue(instruments: any[], limit = 8): any[] {
-  return instruments
-    .filter(item => item?.provider === 'BINANCE' && String(item.marketType) === 'Spot' && Number.isFinite(Number(item.price)) && Number.isFinite(Number(item.change24h)))
+  const spot = instruments
+    .filter(item => item?.provider === 'BINANCE' && String(item.marketType) === 'Spot')
     .filter(item => String(item.symbol || '').toUpperCase().endsWith('USDT'))
+    .filter(item => Number.isFinite(Number(item.price)));
+
+  // Binance's public market page currently presents BNB, BTC and ETH first in
+  // its Hot strip. Keep those real Binance assets pinned, then fill the rest
+  // from the same live Binance catalogue using live volume/activity/movement.
+  const pinnedBases = ['BNB', 'BTC', 'ETH'];
+  const byBase = new Map<string, any>();
+  for (const item of spot) {
+    const base = String(item.base || '').toUpperCase();
+    const existing = byBase.get(base);
+    if (!existing || String(item.quote).toUpperCase() === 'USDT') byBase.set(base, item);
+  }
+  const pinned = pinnedBases.map(base => byBase.get(base)).filter(Boolean);
+  const rest = spot
+    .filter(item => !pinnedBases.includes(String(item.base || '').toUpperCase()))
     .map(item => {
       const volumeScore = Math.log10(Math.max(1, Number(item.volume24h) || 0));
       const movementScore = Math.min(12, Math.abs(Number(item.change24h) || 0));
       const participationScore = Math.log10(Math.max(1, Number(item.tradeCount24h) || 1)) * 0.35;
       return { ...item, hotScore: volumeScore * 1.15 + movementScore * 1.8 + participationScore };
     })
-    .sort((x, y) => Number(y.hotScore) - Number(x.hotScore))
-    .slice(0, Math.max(1, limit));
+    .sort((x, y) => Number(y.hotScore) - Number(x.hotScore));
+  return pinned.concat(rest).slice(0, Math.max(1, limit));
 }
 
 
