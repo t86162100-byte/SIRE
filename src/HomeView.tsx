@@ -4,6 +4,7 @@ import './home.css';
 import {
   ArrowRight, Bell, BrainCircuit, ChevronRight, CircleUserRound, Eye, EyeOff, Flame,
   Grid2X2, LineChart, Search, Sparkles, TrendingUp, Wallet, ArrowDownToLine, ArrowUpFromLine, Repeat2,
+  LockKeyhole,
   BadgePercent, Megaphone, Trophy, CalendarClock, Gift, MoreHorizontal,
 } from 'lucide-react';
 
@@ -88,6 +89,7 @@ export default function HomeView({ instruments, onSelectInstrument, videoSrc = '
   const [activeMarketProvider, setActiveMarketProvider] = useState<'BINANCE' | 'BITGET'>('BINANCE');
   const [activeMarketFilter, setActiveMarketFilter] = useState('Hot');
   const [activeMarketSubfilter, setActiveMarketSubfilter] = useState('Spot');
+  const [watchlistScrollEnabled, setWatchlistScrollEnabled] = useState(true);
   const [favoriteIds, setFavoriteIds] = useState<string[]>(() => { try { const saved = window.localStorage.getItem('sire.home.marketFavorites'); return saved ? JSON.parse(saved) : []; } catch { return []; } });
   const [binanceNewFeed, setBinanceNewFeed] = useState<Array<{ symbol: string; marketType: string; listedAt: number }>>([]);
   const binanceUniverse = useMemo(
@@ -604,7 +606,13 @@ export default function HomeView({ instruments, onSelectInstrument, videoSrc = '
             <div><span>MARKET DISCOVERY</span><h2>Markets</h2></div>
             <button type="button">See All <ChevronRight size={15} /></button>
           </div>
-          <div className="sire-home-market-filter-shell" aria-label="Market discovery filters">
+          <div className={`sire-home-market-filter-shell${watchlistScrollEnabled ? ' watchlist-scroll-enabled' : ' watchlist-scroll-disabled'}`} aria-label="Market discovery filters">
+            <div className="sire-home-market-lock-row">
+              <div className={`sire-home-market-lock-status${watchlistScrollEnabled ? ' is-visible' : ''}`} aria-live="polite">{watchlistScrollEnabled ? 'watchlist scroll enabled' : ''}</div>
+              <button type="button" className={`sire-home-market-lock${watchlistScrollEnabled ? ' active' : ''}`} aria-label={watchlistScrollEnabled ? 'Disable watchlist scroll' : 'Enable watchlist scroll'} aria-pressed={watchlistScrollEnabled} title={watchlistScrollEnabled ? 'Disable watchlist scroll' : 'Enable watchlist scroll'} onClick={() => setWatchlistScrollEnabled(value => !value)}>
+                <LockKeyhole size={15} strokeWidth={2.2} />
+              </button>
+            </div>
             <div className="sire-home-market-source" role="tablist" aria-label="Market exchange">
               <span>EXCHANGE</span>
               {(['BINANCE', 'BITGET'] as const).map(provider => (
@@ -614,7 +622,13 @@ export default function HomeView({ instruments, onSelectInstrument, videoSrc = '
                   role="tab"
                   aria-selected={activeMarketProvider === provider}
                   className={activeMarketProvider === provider ? 'active' : ''}
-                  onClick={() => {
+                  onPointerDown={() => {
+                    setActiveMarketProvider(provider);
+                    setActiveMarketFilter('Hot');
+                    setActiveMarketSubfilter('Spot');
+                  }}
+                  onClick={event => {
+                    event.preventDefault();
                     setActiveMarketProvider(provider);
                     setActiveMarketFilter('Hot');
                     setActiveMarketSubfilter('Spot');
@@ -670,7 +684,7 @@ export default function HomeView({ instruments, onSelectInstrument, videoSrc = '
               </div>
             )}
           </div>
-          <div className="sire-home-watchlist" aria-label={activeMarketFilter + ' markets'}>
+          <div className={`sire-home-watchlist${watchlistScrollEnabled ? ' is-scroll-enabled' : ' is-scroll-disabled'}`} aria-label={activeMarketFilter + ' markets'}>
             {marketRows.map(item => {
               const raw = item as any;
               const change = Number(raw.change24h ?? raw.changePercent24h ?? raw.priceChangePercent ?? raw.percentChange24h ?? raw.changePercent);
