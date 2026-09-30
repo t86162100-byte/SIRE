@@ -22,7 +22,10 @@ function syncGlassInstrumentLabel() {
 
 function installBridge() {
   syncGlassInstrumentLabel();
-  window.setInterval(syncGlassInstrumentLabel, 400);
+  window.addEventListener('sire:tab-changed', syncGlassInstrumentLabel);
+  const observer = new MutationObserver(() => syncGlassInstrumentLabel());
+  const root = document.querySelector('.chart-subbar');
+  if (root) observer.observe(root, { childList: true, subtree: true, characterData: true });
 }
 
 if (document.readyState === 'loading') {
