@@ -3,7 +3,7 @@ import './home.css';
 import {
   ArrowRight, Bell, BrainCircuit, ChevronRight, CircleUserRound, Eye, EyeOff, Flame,
   Grid2X2, LineChart, Search, Sparkles, TrendingUp, Wallet, ArrowDownToLine, ArrowUpFromLine, Repeat2,
-  BadgePercent, Megaphone, Trophy, CalendarClock, Gift, MoreHorizontal, Star,
+  BadgePercent, Megaphone, Trophy, CalendarClock, Gift, MoreHorizontal,
 } from 'lucide-react';
 
 type HomeInstrument = {
@@ -200,7 +200,7 @@ export default function HomeView({ instruments, onSelectInstrument, videoSrc = '
             ))}
           </div>
           <div className="sire-home-watchlist" aria-label={activeMarketFilter + ' markets'}>
-            {(liveMarkets.length ? liveMarkets.slice(0, 12) : []).map(item => {
+            {(liveMarkets.length ? liveMarkets.slice(0, 8) : []).map(item => {
               const raw = item as any;
               const change = Number(raw.change24h ?? raw.changePercent24h ?? raw.priceChangePercent ?? raw.percentChange24h ?? raw.changePercent);
               const volume = Number(raw.volume24h ?? raw.quoteVolume ?? raw.volume);
@@ -213,15 +213,9 @@ export default function HomeView({ instruments, onSelectInstrument, videoSrc = '
                 activeMarketFilter === 'New' ? (Number.isFinite(listedAt) ? Date.now() - listedAt < 30 * 86400000 : true) : true;
               if (!showItem) return null;
               const displayBase = String(raw.base || item.displaySymbol || item.symbol).replace(/\/USDT$|\/USD$|USDT$|USD$/i, '').toUpperCase();
+              const tradeTone = Number.isFinite(change) ? (change > 0 ? 'positive' : change < 0 ? 'negative' : 'neutral') : 'neutral';
               return (
                 <article key={item.id} className="sire-home-watch-row">
-                  <button type="button" className={isFavorite ? 'market-favorite is-active' : 'market-favorite'} aria-label={isFavorite ? 'Remove from favorites' : 'Add to favorites'} onClick={() => {
-                    setFavoriteIds(current => {
-                      const next = current.includes(item.id) ? current.filter(id => id !== item.id) : [...current, item.id];
-                      try { window.localStorage.setItem('sire.home.marketFavorites', JSON.stringify(next)); } catch {}
-                      return next;
-                    });
-                  }}><Star size={14} fill={isFavorite ? 'currentColor' : 'none'} /></button>
                   <button type="button" className="sire-home-watch-main" onClick={() => onSelectInstrument?.(item)}>
                     <span className="market-asset-logo">
                       <img src={item.logoUrl || fallbackLogo(displayBase)} alt="" onError={event => { event.currentTarget.onerror = null; event.currentTarget.src = fallbackLogo(displayBase); }} />
@@ -240,7 +234,7 @@ export default function HomeView({ instruments, onSelectInstrument, videoSrc = '
                     </span>
                     <span className="market-asset-volume"><small>24H VOL</small><b>{Number.isFinite(volume) ? money(volume) : '—'}</b></span>
                   </button>
-                  <button type="button" className="market-trade-button" onClick={() => onSelectInstrument?.(item)}>Trade</button>
+                  <button type="button" className={`market-trade-button ${tradeTone}`} onClick={() => onSelectInstrument?.(item)}>Trade</button>
                 </article>
               );
             })}
