@@ -243,7 +243,7 @@ export function getBinanceHotFromCatalogue(instruments: any[], limit = 8): any[]
 
 
 export async function fetchBinanceMarketMetadata(): Promise<Record<string, { circulatingSupply?: number; marketCap?: number; fullName?: string; listedAt?: number; newListing?: boolean }>> {
-  const out: Record<string, { circulatingSupply?: number; marketCap?: number; fullName?: string; listedAt?: number }> = {};
+  const out: Record<string, { circulatingSupply?: number; marketCap?: number; fullName?: string; listedAt?: number; newListing?: boolean }> = {};
   const urls = [
     'https://www.binance.com/bapi/apex/v1/friendly/apex/marketing/complianceSymbolList',
     'https://www.binance.com/exchange-api/v2/public/asset-service/product/get-products?includeEtf=true',
