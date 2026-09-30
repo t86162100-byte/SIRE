@@ -242,6 +242,41 @@ export function getBinanceHotFromCatalogue(instruments: any[], limit = 8): any[]
 }
 
 
+export async function fetchBinanceMarketMetadata(): Promise<Record<string, { circulatingSupply?: number; marketCap?: number; fullName?: string }>> {
+  const out: Record<string, { circulatingSupply?: number; marketCap?: number; fullName?: string }> = {};
+  const urls = [
+    'https://www.binance.com/exchange-api/v2/public/asset-service/product/get-products?includeEtf=true',
+    'https://www.binance.com/bapi/asset/v2/public/asset-service/product/get-products?includeEtf=true',
+  ];
+  for (const url of urls) {
+    try {
+      const payload = await fetchJson(url, 'Binance asset metadata', 15000);
+      const rows = Array.isArray(payload?.data) ? payload.data : [];
+      for (const row of rows) {
+        const base = String(row?.b || row?.baseAsset || row?.base || '').toUpperCase();
+        if (!base) continue;
+        const supply = Number(row?.cs ?? row?.circulatingSupply);
+        const price = Number(row?.c ?? row?.lastPrice);
+        const cap = Number(row?.marketCap);
+        const marketCap = Number.isFinite(cap) ? cap : (Number.isFinite(supply) && Number.isFinite(price) ? supply * price : undefined);
+        const existing = out[base];
+        if (!existing || (Number.isFinite(marketCap) && !Number.isFinite(existing.marketCap))) {
+          out[base] = {
+            circulatingSupply: Number.isFinite(supply) ? supply : undefined,
+            marketCap: Number.isFinite(marketCap) ? marketCap : undefined,
+            fullName: String(row?.an || row?.name || '').trim() || undefined,
+          };
+        }
+      }
+      if (Object.keys(out).length) return out;
+    } catch (error) {
+      console.warn('[SIRE BINANCE] market metadata endpoint failed:', error);
+    }
+  }
+  return out;
+}
+
+
 export async function fetchBinanceBrowserCatalogue(): Promise<any[]> {
   const out: any[] = [];
   const counts: Record<string, number> = {};
