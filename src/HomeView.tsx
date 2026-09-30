@@ -86,7 +86,6 @@ export default function HomeView({ instruments, onSelectInstrument, videoSrc = '
   const [query, setQuery] = useState('');
   const [balanceVisible, setBalanceVisible] = useState(true);
   const [activeEvent, setActiveEvent] = useState(0);
-  const [activeMarketProvider, setActiveMarketProvider] = useState<'BINANCE' | 'BITGET'>('BINANCE');
   const [activeMarketFilter, setActiveMarketFilter] = useState('Hot');
   const [activeMarketSubfilter, setActiveMarketSubfilter] = useState('Spot');
   const [watchlistScrollEnabled, setWatchlistScrollEnabled] = useState(true);
@@ -137,7 +136,7 @@ export default function HomeView({ instruments, onSelectInstrument, videoSrc = '
     [binanceUniverse],
   );
 
-  const binanceHotMarkets = useMemo(() => getBinanceHotFromCatalogue(binanceUniverse, 8) as HomeInstrument[], [binanceUniverse]);
+  const binanceHotMarkets = useMemo(() => getBinanceHotFromCatalogue(binanceUniverse, 80) as HomeInstrument[], [binanceUniverse]);
 
   const binanceHotFutures = useMemo(() => {
     const change = (item: HomeInstrument) => Number(item.change24h ?? (item as any).priceChangePercent);
@@ -168,13 +167,11 @@ export default function HomeView({ instruments, onSelectInstrument, videoSrc = '
       case 'Spot':
         return ['All', 'USDT', 'USDC', 'Other'];
       case 'Futures':
-        return activeMarketProvider === 'BITGET'
-          ? ['USDT-M', 'COIN-M', 'USDC-M']
-          : ['USD-M', 'COIN-M'];
+        return ['USD-M', 'USDT-M', 'COIN-M', 'USDC-M'];
       default:
         return [];
     }
-  }, [activeMarketFilter, activeMarketProvider]);
+  }, [activeMarketFilter]);
 
   const isCoinM = (item: HomeInstrument) => {
     const id = String(item.id || '').toUpperCase();
@@ -476,7 +473,25 @@ export default function HomeView({ instruments, onSelectInstrument, videoSrc = '
     return crypto.length ? crypto : instruments.slice(0, 8);
   }, [instruments]);
 
-  const marketRows = activeMarketProvider === 'BITGET' ? bitgetMarketRows : binanceMarketRows;
+  const marketRows = useMemo(() => {
+    const combined = [...binanceMarketRows, ...bitgetMarketRows];
+    const seen = new Set<string>();
+    const mixed = combined.filter(item => {
+      if (seen.has(item.id)) return false;
+      seen.add(item.id);
+      return true;
+    });
+    const bins = mixed.filter(item => item.provider === 'BINANCE');
+    const bits = mixed.filter(item => item.provider === 'BITGET');
+    const others = mixed.filter(item => item.provider !== 'BINANCE' && item.provider !== 'BITGET');
+    const out: HomeInstrument[] = [];
+    let bi = 0, gi = 0;
+    while (bi < bins.length || gi < bits.length) {
+      if (bi < bins.length) out.push(bins[bi++]);
+      if (gi < bits.length) out.push(bits[gi++]);
+    }
+    return out.concat(others);
+  }, [binanceMarketRows, bitgetMarketRows]);
 
   const searchResults = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -612,25 +627,6 @@ export default function HomeView({ instruments, onSelectInstrument, videoSrc = '
               <button type="button" className={`sire-home-market-lock${watchlistScrollEnabled ? ' active' : ''}`} aria-label={watchlistScrollEnabled ? 'Disable watchlist scroll' : 'Enable watchlist scroll'} aria-pressed={watchlistScrollEnabled} title={watchlistScrollEnabled ? 'Disable watchlist scroll' : 'Enable watchlist scroll'} onClick={() => setWatchlistScrollEnabled(value => !value)}>
                 <LockKeyhole size={15} strokeWidth={2.2} />
               </button>
-            </div>
-            <div className="sire-home-market-source" role="tablist" aria-label="Market exchange">
-              <span>EXCHANGE</span>
-              {(['BINANCE', 'BITGET'] as const).map(provider => (
-                <button
-                  key={provider}
-                  type="button"
-                  role="tab"
-                  aria-selected={activeMarketProvider === provider}
-                  className={activeMarketProvider === provider ? 'active' : ''}
-                  onClick={() => {
-                    setActiveMarketProvider(provider);
-                    setActiveMarketFilter('Hot');
-                    setActiveMarketSubfilter('Spot');
-                  }}
-                >
-                  {provider === 'BINANCE' ? 'Binance' : 'Bitget'}
-                </button>
-              ))}
             </div>
             <div className="sire-home-market-tabs" role="tablist" aria-label="Market filters">
               {['Favorite', 'Hot', 'Spot', 'Futures', 'New', 'Gainers', 'Losers', 'Vol', 'Market Cap'].map(filter => (
