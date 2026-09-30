@@ -6,7 +6,7 @@ on:
     paths:
       - '.github/workflows/update-binance-catalogue.yml'
   schedule:
-    - cron: '*/15 * * * *'
+    - cron: '*/5 * * * *'
   workflow_dispatch:
 
 permissions:
@@ -98,11 +98,11 @@ jobs:
               return out
 
           spot_rows = normalize(spot, "Spot")
-          margin_rows = [
-              dict(x, marketType="Margin", id=x["id"].replace(":Spot:", ":Margin:"))
-              for x, raw in zip(spot_rows, spot.get("symbols", []))
-              if raw.get("isMarginTradingAllowed") is True
-          ]
+          margin_rows = []
+          for raw in spot.get("symbols", []):
+              if raw.get("isMarginTradingAllowed") is not True:
+                  continue
+              margin_rows.extend(normalize({"symbols":[raw]}, "Margin"))
           um_rows = []
           for r in usdm.get("symbols", []):
               mt = "Perpetuals" if str(r.get("contractType","")).upper() == "PERPETUAL" else "Futures"
