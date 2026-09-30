@@ -2073,3 +2073,89 @@
 @media(max-width:380px){
   .sire-home-watch-row{padding-left:5px;padding-right:5px}
 }
+
+
+/* Mobile scroll-performance pass.
+   Preserve the visual language, but stop expensive paint work while a finger is moving. */
+@media (max-width: 700px){
+  .sire-home-scroll{
+    -webkit-overflow-scrolling:touch;
+    touch-action:pan-y;
+    contain:layout style;
+  }
+
+  /* Let off-screen Home sections skip layout/paint until they approach the viewport. */
+  .sire-home-scroll > section:not(.sire-home-hero){
+    content-visibility:auto;
+    contain:layout paint style;
+    contain-intrinsic-size:240px;
+  }
+
+  /* These effects are decorative; the static gradients underneath remain visible. */
+  .sire-home-scroll.is-scrolling .sire-home:before,
+  .sire-home-scroll.is-scrolling .sire-home:after,
+  .sire-home-scroll.is-scrolling .sire-home-hero:before,
+  .sire-home-scroll.is-scrolling .sire-home-market-card:before,
+  .sire-home-scroll.is-scrolling .sire-home-intelligence:before,
+  .sire-home-scroll.is-scrolling .sire-home-watchlist:before,
+  .sire-home-scroll.is-scrolling .sire-home-actions-grid button:before,
+  .sire-home-scroll.is-scrolling .sire-home-copy-card:before,
+  .sire-home-scroll.is-scrolling .sire-home-ai-card:before,
+  .sire-home-scroll.is-scrolling .sire-home-earn-grid button:before,
+  .sire-home-scroll.is-scrolling .sire-home-new-grid button:before,
+  .sire-home-scroll.is-scrolling .sire-home-brief:before,
+  .sire-home-scroll.is-scrolling .sire-home-copy-orbit div:nth-child(3){
+    animation:none !important;
+  }
+
+  /* Avoid GPU-expensive backdrop filtering across the long scrolling surface. */
+  .sire-home-market-card,
+  .sire-home-intelligence,
+  .sire-home-watchlist,
+  .sire-home-actions-grid button,
+  .sire-home-copy-card,
+  .sire-home-ai-card,
+  .sire-home-earn-grid button,
+  .sire-home-new-grid button,
+  .sire-home-brief{
+    -webkit-backdrop-filter:none !important;
+    backdrop-filter:none !important;
+  }
+
+  .sire-home-event-media-art > div,
+  .sire-home-events-dots{
+    -webkit-backdrop-filter:none !important;
+    backdrop-filter:none !important;
+  }
+
+  /* The page is vertically scrolled; horizontal rails retain native swipe behavior. */
+  .sire-home-market-tabs,
+  .sire-home-market-row,
+  .sire-home-prompts{
+    touch-action:pan-x;
+    overscroll-behavior-x:contain;
+  }
+
+  /* The event slide transition is the only animation that should remain important to
+     the content itself; keep it lightweight and avoid blur/filter interpolation. */
+  .sire-home-event-media{
+    will-change:auto;
+  }
+
+  .sire-home-watch-row,
+  .sire-home-market-card,
+  .sire-home-intelligence,
+  .sire-home-copy-card,
+  .sire-home-ai-card,
+  .sire-home-earn-grid button,
+  .sire-home-new-grid button,
+  .sire-home-brief{
+    contain:layout paint;
+  }
+}
+
+@media (max-width: 700px) and (prefers-reduced-motion: reduce){
+  .sire-home-scroll{
+    scroll-behavior:auto !important;
+  }
+}
