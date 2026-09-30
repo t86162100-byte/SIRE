@@ -4,7 +4,7 @@ import './home.css';
 import {
   ArrowRight, Bell, BrainCircuit, ChevronRight, CircleUserRound, Eye, EyeOff, Flame,
   Grid2X2, LineChart, Search, Sparkles, TrendingUp, Wallet, ArrowDownToLine, ArrowUpFromLine, Repeat2,
-  LockKeyhole,
+  LockKeyhole, UnlockKeyhole,
   BadgePercent, Megaphone, Trophy, CalendarClock, Gift, MoreHorizontal,
 } from 'lucide-react';
 
@@ -621,8 +621,8 @@ export default function HomeView({ instruments, onSelectInstrument, videoSrc = '
             <div><span>MARKET DISCOVERY</span><h2>Markets</h2></div>
             <div className="sire-home-market-head-actions">
               <div className="sire-home-market-lock-row">
-                <button type="button" className={`sire-home-market-lock${watchlistScrollEnabled ? ' active' : ''}`} aria-label={watchlistScrollEnabled ? 'Disable watchlist scroll' : 'Enable watchlist scroll'} aria-pressed={watchlistScrollEnabled} title={watchlistScrollEnabled ? 'Disable watchlist scroll' : 'Enable watchlist scroll'} onClick={() => setWatchlistScrollEnabled(value => !value)}>
-                  <LockKeyhole size={15} strokeWidth={2.2} />
+                <button type="button" className={`sire-home-market-lock${watchlistScrollEnabled ? ' active' : ''}`} aria-label={watchlistScrollEnabled ? 'Disable watchlist scroll' : 'Enable watchlist scroll'} aria-pressed={watchlistScrollEnabled} title={watchlistScrollEnabled ? 'Disable watchlist scroll' : 'Enable watchlist scroll'} onPointerDown={event => event.stopPropagation()} onClick={event => { event.stopPropagation(); setWatchlistScrollEnabled(value => !value); }}>
+                  {watchlistScrollEnabled ? <LockKeyhole size={15} strokeWidth={2.2} /> : <UnlockKeyhole size={15} strokeWidth={2.2} />}
                 </button>
                 <div className={`sire-home-market-lock-status${watchlistScrollEnabled ? ' is-visible' : ''}`} aria-live="polite">{watchlistScrollEnabled ? 'watchlist scroll enabled' : ''}</div>
               </div>
