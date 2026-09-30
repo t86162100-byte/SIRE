@@ -3235,3 +3235,137 @@
     padding-right:0 !important;
   }
 }
+
+
+/* Market filter atmosphere:
+   a soft blue/violet light field sits behind the sticky controls. It is made
+   from blurred radial reflections rather than a rectangular background. */
+.sire-home-market-filter-shell.watchlist-scroll-enabled{
+  position:sticky !important;
+  top:52px !important;
+  z-index:50 !important;
+  overflow:visible !important;
+  background:transparent !important;
+  -webkit-mask-image:none !important;
+  mask-image:none !important;
+  isolation:isolate;
+}
+
+.sire-home-market-filter-shell.watchlist-scroll-enabled::before{
+  content:"";
+  position:absolute;
+  z-index:-1;
+  pointer-events:none;
+  left:-22px;
+  right:-22px;
+  top:-8px;
+  bottom:-34px;
+  background:
+    radial-gradient(ellipse 42% 62% at 18% 28%, rgba(73,103,255,.34) 0%, rgba(73,103,255,.15) 38%, transparent 72%),
+    radial-gradient(ellipse 48% 68% at 78% 22%, rgba(164,91,255,.36) 0%, rgba(164,91,255,.16) 40%, transparent 74%),
+    radial-gradient(ellipse 34% 55% at 51% 62%, rgba(68,145,255,.16) 0%, rgba(120,76,255,.10) 38%, transparent 76%),
+    linear-gradient(180deg, rgba(18,14,48,.18), rgba(18,14,48,0));
+  filter:blur(18px);
+  opacity:.92;
+  -webkit-mask-image:linear-gradient(
+    180deg,
+    #000 0%,
+    #000 52%,
+    rgba(0,0,0,.72) 68%,
+    rgba(0,0,0,.28) 84%,
+    transparent 100%
+  );
+  mask-image:linear-gradient(
+    180deg,
+    #000 0%,
+    #000 52%,
+    rgba(0,0,0,.72) 68%,
+    rgba(0,0,0,.28) 84%,
+    transparent 100%
+  );
+}
+
+.sire-home-market-filter-shell.watchlist-scroll-enabled::after{
+  content:"";
+  position:absolute;
+  z-index:-1;
+  pointer-events:none;
+  left:8%;
+  right:5%;
+  top:-4px;
+  height:72px;
+  background:
+    radial-gradient(ellipse at 25% 40%, rgba(91,139,255,.18), transparent 58%),
+    radial-gradient(ellipse at 72% 35%, rgba(196,116,255,.20), transparent 60%);
+  filter:blur(14px);
+  opacity:.72;
+}
+
+/* The Market heading remains clean; the atmosphere belongs behind the filters. */
+.sire-home-market-section-head{
+  background:transparent !important;
+  box-shadow:none !important;
+}
+
+/* Do not tint the first instrument. Give it a clear landing zone, then let
+   the card pixels themselves dissolve as they move upward behind the filters. */
+.sire-home-watchlist-viewport.is-scroll-enabled .sire-home-watchlist{
+  padding:76px 0 34px !important;
+  margin-top:-76px !important;
+  height:calc(100% + 76px) !important;
+  -webkit-mask-image:linear-gradient(
+    180deg,
+    #000 0px,
+    #000 58px,
+    rgba(0,0,0,.94) 76px,
+    rgba(0,0,0,.68) 100px,
+    rgba(0,0,0,.30) 126px,
+    transparent 154px,
+    transparent calc(100% - 34px),
+    rgba(0,0,0,.45) calc(100% - 16px),
+    transparent 100%
+  ) !important;
+  mask-image:linear-gradient(
+    180deg,
+    #000 0px,
+    #000 58px,
+    rgba(0,0,0,.94) 76px,
+    rgba(0,0,0,.68) 100px,
+    rgba(0,0,0,.30) 126px,
+    transparent 154px,
+    transparent calc(100% - 34px),
+    rgba(0,0,0,.45) calc(100% - 16px),
+    transparent 100%
+  ) !important;
+}
+
+.sire-home-watchlist-viewport.is-scroll-enabled{
+  background:transparent !important;
+}
+
+/* Keep the lock above every decorative layer so its on/off control remains
+   directly tappable on mobile. */
+.sire-home-market-head-actions,
+.sire-home-market-lock-row,
+.sire-home-market-lock{
+  position:relative;
+  z-index:100 !important;
+  pointer-events:auto !important;
+}
+
+.sire-home-market-lock{
+  cursor:pointer;
+}
+
+.sire-home-market-lock:not(.active){
+  color:rgba(225,225,240,.56);
+  opacity:.82;
+  filter:none;
+  background:rgba(255,255,255,.025);
+}
+
+@media(max-width:380px){
+  .sire-home-market-filter-shell.watchlist-scroll-enabled{
+    top:50px !important;
+  }
+}
