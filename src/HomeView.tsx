@@ -3,7 +3,7 @@ import './home.css';
 import {
   ArrowRight, Bell, BrainCircuit, ChevronRight, CircleUserRound, Eye, EyeOff, Flame,
   Grid2X2, LineChart, Search, Sparkles, TrendingUp, Wallet, ArrowDownToLine, ArrowUpFromLine, Repeat2,
-  BadgePercent, Megaphone, Trophy, CalendarClock, Gift, MoreHorizontal,
+  BadgePercent, Megaphone, Trophy, CalendarClock, Gift, MoreHorizontal, Star,
 } from 'lucide-react';
 
 type HomeInstrument = {
@@ -49,7 +49,8 @@ export default function HomeView({ instruments, onSelectInstrument, videoSrc = '
   const [query, setQuery] = useState('');
   const [balanceVisible, setBalanceVisible] = useState(true);
   const [activeEvent, setActiveEvent] = useState(0);
-  const [activeMarketFilter, setActiveMarketFilter] = useState('Favorite');
+  const [activeMarketFilter, setActiveMarketFilter] = useState('Hot');
+  const [favoriteIds, setFavoriteIds] = useState<string[]>(() => { try { const saved = window.localStorage.getItem('sire.home.marketFavorites'); return saved ? JSON.parse(saved) : []; } catch { return []; } });
 
   useEffect(() => {
     const timer = window.setInterval(() => {
@@ -186,32 +187,63 @@ export default function HomeView({ instruments, onSelectInstrument, videoSrc = '
           </div>
         </section>
 
-        <section className="sire-home-section">
-          <div className="sire-home-section-head"><div><span>DISCOVER</span><h2>Markets</h2></div><button type="button">See All <ChevronRight size={15} /></button></div>
+        <section className="sire-home-section sire-home-markets">
+          <div className="sire-home-section-head">
+            <div><span>MARKET DISCOVERY</span><h2>Markets</h2></div>
+            <button type="button">See All <ChevronRight size={15} /></button>
+          </div>
           <div className="sire-home-market-tabs" role="tablist" aria-label="Market filters">
             {['Favorite', 'Hot', 'Spot', 'Futures', 'New', 'Gainers', 'Losers', 'Vol', 'Market Cap'].map(filter => (
-              <button
-                key={filter}
-                type="button"
-                role="tab"
-                aria-selected={activeMarketFilter === filter}
-                className={activeMarketFilter === filter ? 'active' : ''}
-                onClick={() => setActiveMarketFilter(filter)}
-              >
+              <button key={filter} type="button" role="tab" aria-selected={activeMarketFilter === filter} className={activeMarketFilter === filter ? 'active' : ''} onClick={() => setActiveMarketFilter(filter)}>
                 {filter}
               </button>
             ))}
           </div>
-          <div className="sire-home-watchlist">
-            {(liveMarkets.length ? liveMarkets.slice(0, 5) : []).map((item, index) => (
-              <button type="button" key={item.id} onClick={() => onSelectInstrument?.(item)} className="sire-home-watch-row">
-                <img src={item.logoUrl || fallbackLogo(item.displaySymbol || item.symbol)} alt="" onError={event => { event.currentTarget.onerror = null; event.currentTarget.src = fallbackLogo(item.displaySymbol || item.symbol); }} />
-                <span><b>{String(item.displaySymbol || item.symbol).toUpperCase()}</b><small>{String(item.providerLabel || item.provider || 'MARKET').toUpperCase()}</small></span>
-                <strong>{money(item.price) === '—' ? ['—', '$2,686.32', '$142.38', '$2.45', '$83,572.21'][index] : money(item.price)}</strong>
-                <em className={index % 3 === 0 ? 'down' : 'up'}>{index % 3 === 0 ? '-0.46%' : '+' + (1.12 + index * .37).toFixed(2) + '%'}</em>
-                <LineChart size={28} />
-              </button>
-            ))}
+          <div className="sire-home-watchlist" aria-label={activeMarketFilter + ' markets'}>
+            {(liveMarkets.length ? liveMarkets.slice(0, 12) : []).map(item => {
+              const raw = item as any;
+              const change = Number(raw.change24h ?? raw.changePercent24h ?? raw.priceChangePercent ?? raw.percentChange24h ?? raw.changePercent);
+              const volume = Number(raw.volume24h ?? raw.quoteVolume ?? raw.volume);
+              const listedAt = Number(raw.listedAt ?? raw.dateListed ?? raw.createdAt);
+              const marketType = String(item.marketType || '').toLowerCase();
+              const isFavorite = favoriteIds.includes(item.id);
+              const showItem = activeMarketFilter === 'Favorite' ? isFavorite :
+                activeMarketFilter === 'Spot' ? marketType.includes('spot') || marketType.includes('margin') :
+                activeMarketFilter === 'Futures' ? marketType.includes('future') || marketType.includes('perpetual') :
+                activeMarketFilter === 'New' ? (Number.isFinite(listedAt) ? Date.now() - listedAt < 30 * 86400000 : true) : true;
+              if (!showItem) return null;
+              const displayBase = String(raw.base || item.displaySymbol || item.symbol).replace(/\/USDT$|\/USD$|USDT$|USD$/i, '').toUpperCase();
+              return (
+                <article key={item.id} className="sire-home-watch-row">
+                  <button type="button" className={isFavorite ? 'market-favorite is-active' : 'market-favorite'} aria-label={isFavorite ? 'Remove from favorites' : 'Add to favorites'} onClick={() => {
+                    setFavoriteIds(current => {
+                      const next = current.includes(item.id) ? current.filter(id => id !== item.id) : [...current, item.id];
+                      try { window.localStorage.setItem('sire.home.marketFavorites', JSON.stringify(next)); } catch {}
+                      return next;
+                    });
+                  }}><Star size={14} fill={isFavorite ? 'currentColor' : 'none'} /></button>
+                  <button type="button" className="sire-home-watch-main" onClick={() => onSelectInstrument?.(item)}>
+                    <span className="market-asset-logo">
+                      <img src={item.logoUrl || fallbackLogo(displayBase)} alt="" onError={event => { event.currentTarget.onerror = null; event.currentTarget.src = fallbackLogo(displayBase); }} />
+                      <i>{String(item.providerLabel || item.provider || 'MARKET').slice(0, 1).toUpperCase()}</i>
+                    </span>
+                    <span className="market-asset-name">
+                      <b>{displayBase}</b>
+                      <small>{String(item.name || item.displaySymbol || item.symbol).replace(/_/g, ' ')} · {String(item.providerLabel || item.provider || 'MARKET')}</small>
+                    </span>
+                    <span className="market-asset-price">
+                      <strong>{money(item.price)}</strong>
+                      <small>{Number.isFinite(change) ? ((change >= 0 ? '+' : '') + change.toFixed(2) + '%') : '24h —'}</small>
+                    </span>
+                    <span className={Number.isFinite(change) ? (change >= 0 ? 'market-change up' : 'market-change down') : 'market-change'}>
+                      {Number.isFinite(change) ? ((change >= 0 ? '+' : '') + change.toFixed(2) + '%') : '—'}
+                    </span>
+                    <span className="market-asset-volume"><small>24H VOL</small><b>{Number.isFinite(volume) ? money(volume) : '—'}</b></span>
+                  </button>
+                  <button type="button" className="market-trade-button" onClick={() => onSelectInstrument?.(item)}>Trade</button>
+                </article>
+              );
+            })}
           </div>
         </section>
 
