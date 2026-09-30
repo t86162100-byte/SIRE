@@ -270,7 +270,7 @@ export async function fetchBinanceMarketMetadata(): Promise<Record<string, { cir
           };
         }
       }
-      if (Object.keys(out).length) return out;
+      // Continue merging Binance metadata endpoints so listing dates and supply data are not lost.
     } catch (error) {
       console.warn('[SIRE BINANCE] market metadata endpoint failed:', error);
     }
