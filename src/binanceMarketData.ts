@@ -164,7 +164,7 @@ export function createBinanceCatalogueLiveFeed(onQuotes: (quotes: Record<string,
   // Binance's public all-market ticker is a 1-second stream. Use the documented
   // stream host directly so the Home market list receives fresh ticks continuously.
   open(BINANCE.spotStream + '/ws/!miniTicker@arr', ['Spot']);
-  open(BINANCE.usdmStream + '/ws/!miniTicker@arr', ['Perpetuals', 'Futures']);
+  open(BINANCE.usdmStream + '/market/ws/!miniTicker@arr', ['Perpetuals', 'Futures']);
   open(BINANCE.coinmStream + '/ws/!miniTicker@arr', ['Perpetuals', 'Futures'], 'BINANCE:COIN-M');
 
   return () => {
