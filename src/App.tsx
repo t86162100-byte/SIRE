@@ -98,7 +98,14 @@ const exchangeDomains: Record<string, string> = {
   uniswap: 'uniswap.org', curve: 'curve.fi', pancakeswap: 'pancakeswap.finance',
 };
 
-const normalizeBinanceMarketType = (value: unknown) => {\n  const marketType = String(value || '').trim();\n  if (/^USD-M\\s+Perpetuals$/i.test(marketType) || /^COIN-M\\s+Perpetuals$/i.test(marketType)) return 'Perpetuals';\n  if (/^USD-M\\s+Futures$/i.test(marketType) || /^COIN-M\\s+Futures$/i.test(marketType)) return 'Futures';\n  return marketType;\n};\n\nconst makeProviderLogoFallback = (item: Instrument) => {
+const normalizeBinanceMarketType = (value: unknown) => {
+  const marketType = String(value || '').trim();
+  if (/^USD-M\s+Perpetuals$/i.test(marketType) || /^COIN-M\s+Perpetuals$/i.test(marketType)) return 'Perpetuals';
+  if (/^USD-M\s+Futures$/i.test(marketType) || /^COIN-M\s+Futures$/i.test(marketType)) return 'Futures';
+  return marketType;
+};
+
+const makeProviderLogoFallback = (item: Instrument) => {
   const key = String(item.exchange || item.providerLabel || item.provider || '')
     .trim().toLowerCase().replace(/[^a-z0-9]/g, '');
   const domain = item.provider === 'DERIV'
