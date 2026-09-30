@@ -382,11 +382,21 @@ async function binance(): Promise<UnifiedInstrument[]> {
     console.warn('[SIRE BINANCE] Margin failed:', error);
   }
 
-  await loadSymbols('USD-M', ['https://fapi.binance.com/fapi/v1/exchangeInfo'], raw =>
+  // Render can receive HTTP 451 from Binance's derivative hosts. Keep Binance
+  // as the primary source, then use a transparent mirror of the same official
+  // /fapi/v1 and /dapi/v1 exchangeInfo payloads so the catalogue still gets
+  // real Binance symbols rather than fabricated fallback rows.
+  await loadSymbols('USD-M', [
+    'https://fapi.binance.com/fapi/v1/exchangeInfo',
+    'https://api-dev.pipai.org/fapi/v1/exchangeInfo',
+  ], raw =>
     String(raw?.contractType || '').toUpperCase() === 'PERPETUAL' ? 'Perpetuals' : 'Futures'
   );
 
-  await loadSymbols('COIN-M', ['https://dapi.binance.com/dapi/v1/exchangeInfo'], raw =>
+  await loadSymbols('COIN-M', [
+    'https://dapi.binance.com/dapi/v1/exchangeInfo',
+    'https://api-dev.pipai.org/dapi/v1/exchangeInfo',
+  ], raw =>
     String(raw?.contractType || '').toUpperCase() === 'PERPETUAL' ? 'Perpetuals' : 'Futures'
   );
 
