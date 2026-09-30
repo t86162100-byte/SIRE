@@ -55,10 +55,24 @@ jobs:
                   try:
                       payload = get(url, attempts=attempts, timeout=timeout)
                       rows = payload.get("symbols") if isinstance(payload, dict) else None
+                      if not (isinstance(rows, list) and rows) and isinstance(payload, dict):
+                          # r.jina.ai can wrap the upstream JSON in a text/content
+                          # field. Unwrap it without changing the Binance payload.
+                          for key in ("content", "text", "data", "body"):
+                              wrapped = payload.get(key)
+                              if isinstance(wrapped, str):
+                                  try:
+                                      decoded = json.loads(wrapped)
+                                      if isinstance(decoded, dict) and isinstance(decoded.get("symbols"), list):
+                                          payload = decoded
+                                          rows = decoded["symbols"]
+                                          break
+                                  except Exception:
+                                      pass
                       if isinstance(rows, list) and rows:
                           print("symbol source succeeded:", url, "symbols:", len(rows))
                           return payload
-                      print("symbol source returned no symbols:", url)
+                      print("symbol source returned no symbols:", url, "keys:", list(payload.keys()) if isinstance(payload, dict) else type(payload).__name__)
                   except Exception as e:
                       last = e
                       print("symbol source failed:", url, e)
