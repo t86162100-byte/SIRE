@@ -255,6 +255,8 @@ export default function App() {
               ...item,
               circulatingSupply: Number.isFinite(supply) ? supply : item.circulatingSupply,
               marketCap: Number.isFinite(Number(marketCap)) ? Number(marketCap) : item.marketCap,
+              listedAt: Number.isFinite(Number(meta.listedAt)) ? Number(meta.listedAt) : item.listedAt,
+              onboardDate: Number.isFinite(Number(meta.listedAt)) ? Number(meta.listedAt) : item.onboardDate,
             };
           }));
         }).catch(error => console.warn('[SIRE BINANCE] market metadata failed:', error));
