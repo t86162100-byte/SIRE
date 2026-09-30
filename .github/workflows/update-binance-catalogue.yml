@@ -108,7 +108,7 @@ jobs:
                       if isinstance(rows, list) and rows:
                           print("symbol source succeeded:", url, "symbols:", len(rows))
                           return payload
-                      print("symbol source returned no symbols:", url, "keys:", list(raw_payload.keys()) if isinstance(raw_payload, dict) else type(raw_payload).__name__)\n                      if "r.jina.ai" in url and isinstance(raw_payload, dict):\n                          print("Jina data type:", type(raw_payload.get("data")).__name__)\n                          if isinstance(raw_payload.get("data"), dict):\n                              print("Jina data keys:", list(raw_payload["data"].keys()))\n                              print("Jina content preview:", repr(str(raw_payload["data"].get("content", ""))[:1200]))
+                      print("symbol source returned no symbols:", url, "keys:", list(raw_payload.keys()) if isinstance(raw_payload, dict) else type(raw_payload).__name__)
                   except Exception as e:
                       last = e
                       print("symbol source failed:", url, e)
