@@ -60,6 +60,10 @@ jobs:
                           # field. Unwrap it without changing the Binance payload.
                           for key in ("content", "text", "data", "body"):
                               wrapped = payload.get(key)
+                              if isinstance(wrapped, dict) and isinstance(wrapped.get("symbols"), list):
+                                  payload = wrapped
+                                  rows = wrapped["symbols"]
+                                  break
                               if isinstance(wrapped, str):
                                   try:
                                       decoded = json.loads(wrapped)
