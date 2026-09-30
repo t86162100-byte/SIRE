@@ -1025,6 +1025,96 @@ const server = http.createServer(async (req,res) => {
 });
 
 const wss = new WebSocketServer({ noServer:true });
+
+/*
+ * Binance USD-M Futures relay.
+ * The browser can reach Binance Spot directly, but Futures WebSockets can be
+ * unavailable from some client networks. Keep the same live-tick pattern while
+ * relaying the public Futures streams through the SIRE Render server.
+ */
+const binanceFuturesClients = new Set();
+let binanceFuturesMini = null;
+let binanceFuturesMark = null;
+let binanceFuturesReconnectTimer = null;
+let binanceFuturesTickLogged = false;
+
+function broadcastBinanceFutures(data) {
+  const text = typeof data === 'string' ? data : JSON.stringify(data);
+  for (const client of binanceFuturesClients) {
+    if (client.readyState === WebSocket.OPEN) {
+      try { client.send(text); } catch {}
+    }
+  }
+}
+
+function connectBinanceFuturesRelay() {
+  if (binanceFuturesReconnectTimer) {
+    clearTimeout(binanceFuturesReconnectTimer);
+    binanceFuturesReconnectTimer = null;
+  }
+  try {
+    binanceFuturesMini = new WebSocket('wss://fstream.binance.com/market/ws/!miniTicker@arr');
+    binanceFuturesMini.on('open', () => console.log('[BINANCE FUTURES RELAY] mini ticker connected'));
+    binanceFuturesMini.on('message', data => {
+      try {
+        const parsed = JSON.parse(String(data));
+        const rows = Array.isArray(parsed) ? parsed : [parsed];
+        if (rows.some(row => row?.s && (row?.c || row?.p))) {
+          if (!binanceFuturesTickLogged) {
+            binanceFuturesTickLogged = true;
+            const row = rows.find(item => item?.s && (item?.c || item?.p));
+            console.log('[BINANCE FUTURES RELAY] TICK', JSON.stringify({ symbol: row?.s, price: row?.c ?? row?.p, eventTime: row?.E ?? Date.now() }));
+          }
+          broadcastBinanceFutures(parsed);
+        }
+      } catch {}
+    });
+    binanceFuturesMini.on('error', error => console.error('[BINANCE FUTURES RELAY] mini error', error instanceof Error ? error.message : String(error)));
+    binanceFuturesMini.on('close', () => {
+      console.warn('[BINANCE FUTURES RELAY] mini disconnected');
+      scheduleBinanceFuturesRelayReconnect();
+    });
+
+    binanceFuturesMark = new WebSocket('wss://fstream.binance.com/market/ws/!markPrice@arr@1s');
+    binanceFuturesMark.on('open', () => console.log('[BINANCE FUTURES RELAY] mark-price connected'));
+    binanceFuturesMark.on('message', data => {
+      try {
+        const parsed = JSON.parse(String(data));
+        const rows = Array.isArray(parsed) ? parsed : [parsed];
+        if (rows.some(row => row?.s && Number.isFinite(Number(row?.p)))) {
+          if (!binanceFuturesTickLogged) {
+            binanceFuturesTickLogged = true;
+            const row = rows.find(item => item?.s && Number.isFinite(Number(item?.p)));
+            console.log('[BINANCE FUTURES RELAY] TICK', JSON.stringify({ symbol: row?.s, price: row?.p, eventTime: row?.E ?? Date.now() }));
+          }
+          broadcastBinanceFutures(parsed);
+        }
+      } catch {}
+    });
+    binanceFuturesMark.on('error', error => console.error('[BINANCE FUTURES RELAY] mark error', error instanceof Error ? error.message : String(error)));
+    binanceFuturesMark.on('close', () => {
+      console.warn('[BINANCE FUTURES RELAY] mark-price disconnected');
+      scheduleBinanceFuturesRelayReconnect();
+    });
+  } catch (error) {
+    console.error('[BINANCE FUTURES RELAY] connect failed', error instanceof Error ? error.message : String(error));
+    scheduleBinanceFuturesRelayReconnect();
+  }
+}
+
+function scheduleBinanceFuturesRelayReconnect() {
+  if (binanceFuturesReconnectTimer) return;
+  binanceFuturesReconnectTimer = setTimeout(() => {
+    binanceFuturesReconnectTimer = null;
+    try { binanceFuturesMini?.close(); } catch {}
+    try { binanceFuturesMark?.close(); } catch {}
+    binanceFuturesMini = null;
+    binanceFuturesMark = null;
+    connectBinanceFuturesRelay();
+  }, 2000);
+}
+
+connectBinanceFuturesRelay();
 server.on('upgrade',(req,socket,head)=>{
   const url=new URL(req.url||'/',`http://${req.headers.host||'localhost'}`);
   if(url.pathname==='/deriv/ws'){
