@@ -47,8 +47,34 @@ jobs:
               raise last
 
           spot = get("https://api.binance.com/api/v3/exchangeInfo?symbolStatus=TRADING")
-          usdm = get("https://fapi.binance.com/fapi/v1/exchangeInfo")
-          coinm = get("https://dapi.binance.com/dapi/v1/exchangeInfo")
+
+          # Derivatives are official Binance exchangeInfo data. If Binance's
+          # derivative host blocks the GitHub runner, use a transparent public
+          # mirror of the same /fapi/v1 and /dapi/v1 responses rather than
+          # inventing or hardcoding symbols.
+          def get_first(urls):
+              last = None
+              for url in urls:
+                  try:
+                      payload = get(url)
+                      rows = payload.get("symbols") if isinstance(payload, dict) else None
+                      if isinstance(rows, list) and rows:
+                          print("derivative source succeeded:", url, "symbols:", len(rows))
+                          return payload
+                      print("derivative source returned no symbols:", url)
+                  except Exception as e:
+                      last = e
+                      print("derivative source failed:", url, e)
+              raise last or RuntimeError("All derivative symbol sources returned zero symbols")
+
+          usdm = get_first([
+              "https://fapi.binance.com/fapi/v1/exchangeInfo",
+              "https://api-dev.pipai.org/fapi/v1/exchangeInfo",
+          ])
+          coinm = get_first([
+              "https://dapi.binance.com/dapi/v1/exchangeInfo",
+              "https://api-dev.pipai.org/dapi/v1/exchangeInfo",
+          ])
 
           products = []
           for url in [
