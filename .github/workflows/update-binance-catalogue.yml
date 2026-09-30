@@ -119,179 +119,100 @@ jobs:
               "https://api.binance.com/api/v3/exchangeInfo?symbolStatus=TRADING",
           ], attempts=2, timeout=20)
 
-          # Derivatives are official Binance exchangeInfo data. If Binance's
-          # derivative host blocks the GitHub runner, use a transparent public
-          # mirror of the same /fapi/v1 and /dapi/v1 responses rather than
-          # inventing or hardcoding symbols.
+          # Binance derivative REST/WebSocket hosts can be region-blocked from
+          # hosted runners. Binance Vision is the official public-data archive.
+          # Identify currently active contracts by checking recent daily kline
+          # objects, so every emitted symbol has real recent Binance data.
+          import datetime, concurrent.futures, xml.etree.ElementTree as ET
+
+          def vision_active_symbols(market):
+              prefix = "data/futures/" + market + "/daily/klines/"
+              symbols = []
+              token = ""
+              while True:
+                  params = {"prefix": prefix, "delimiter": "/", "max-keys": "1000"}
+                  if token:
+                      params["continuation-token"] = token
+                  url = "https://data.binance.vision/?" + urllib.parse.urlencode(params)
+                  req = urllib.request.Request(url, headers={"User-Agent": "SIRE-Binance-Catalogue/1.0"})
+                  with urllib.request.urlopen(req, timeout=30) as response:
+                      xml = response.read()
+                  root = ET.fromstring(xml)
+                  ns = {"s3": "http://s3.amazonaws.com/doc/2006-03-01/"}
+                  for node in root.findall(".//s3:CommonPrefixes/s3:Prefix", ns):
+                      value = str(node.text or "")
+                      if value.startswith(prefix):
+                          symbol = value[len(prefix):].strip("/")
+                          if symbol:
+                              symbols.append(symbol)
+                  token_node = root.find(".//s3:NextContinuationToken", ns)
+                  token = str(token_node.text or "") if token_node is not None else ""
+                  if not token:
+                      break
+              return sorted(set(symbols))
+
+          def vision_object_exists(market, symbol, day):
+              key = "data/futures/" + market + "/daily/klines/" + urllib.parse.quote(symbol, safe="") + "/1d/" + urllib.parse.quote(symbol, safe="") + "-1d-" + day.strftime("%Y-%m-%d") + ".zip"
+              url = "https://data.binance.vision/" + key
+              try:
+                  req = urllib.request.Request(url, method="HEAD", headers={"User-Agent": "SIRE-Binance-Catalogue/1.0"})
+                  with urllib.request.urlopen(req, timeout=10) as response:
+                      return 200 <= response.status < 400
+              except Exception:
+                  return False
+
+          def vision_derivative_exchange_info(market):
+              candidates = vision_active_symbols(market)
+              days = [datetime.date.today() - datetime.timedelta(days=n) for n in (1, 2, 3)]
+              active = []
+              def check(symbol):
+                  return symbol if any(vision_object_exists(market, symbol, day) for day in days) else None
+              with concurrent.futures.ThreadPoolExecutor(max_workers=32) as pool:
+                  for symbol in pool.map(check, candidates):
+                      if symbol:
+                          active.append(symbol)
+
+              rows = []
+              for symbol in active:
+                  upper = symbol.upper()
+                  is_delivery = "_" in upper and not upper.endswith("_PERP")
+                  contract_type = "CURRENT_QUARTER" if is_delivery else "PERPETUAL"
+                  pair = upper.split("_", 1)[0]
+                  quote = ""
+                  base = pair
+                  for suffix in ("USDT", "USDC", "BUSD", "USD"):
+                      if pair.endswith(suffix) and len(pair) > len(suffix):
+                          quote = suffix
+                          base = pair[:-len(suffix)]
+                          break
+                  rows.append({
+                      "symbol": upper,
+                      "pair": pair,
+                      "contractType": contract_type,
+                      "deliveryDate": None,
+                      "onboardDate": None,
+                      "status": "TRADING",
+                      "baseAsset": base,
+                      "quoteAsset": quote,
+                  })
+              return {"symbols": rows}
+
           try:
               usdm = get_first_symbols([
                   "https://fapi.binance.com/fapi/v1/exchangeInfo",
-                  "https://r.jina.ai/https://fapi.binance.com/fapi/v1/exchangeInfo",
-              ], attempts=2, timeout=30)
+              ], attempts=1, timeout=8)
               coinm = get_first_symbols([
                   "https://dapi.binance.com/dapi/v1/exchangeInfo",
-                  "https://r.jina.ai/https://dapi.binance.com/dapi/v1/exchangeInfo",
-              ], attempts=2, timeout=30)
+              ], attempts=1, timeout=8)
           except Exception as rest_error:
-              print("Binance derivative REST discovery blocked; switching to Binance Futures WebSocket:", rest_error)
-              import socket, ssl, base64, hashlib, os, struct, time
-              ws_url_path = "/market/stream?streams=%21miniTicker%40arr/%21contractInfo"
-              host = "fstream.binance.com"
-
-              raw_sock = socket.create_connection((host, 443), timeout=12)
-              ws = ssl.create_default_context().wrap_socket(raw_sock, server_hostname=host)
-              key = base64.b64encode(os.urandom(16)).decode("ascii")
-              request = (
-                  "GET " + ws_url_path + " HTTP/1.1\\r\\n"
-                  "Host: " + host + "\\r\\n"
-                  "Upgrade: websocket\\r\\n"
-                  "Connection: Upgrade\\r\\n"
-                  "Sec-WebSocket-Key: " + key + "\\r\\n"
-                  "Sec-WebSocket-Version: 13\\r\\n"
-                  "Origin: https://www.binance.com\\r\\n"
-                  "User-Agent: SIRE-Binance-Catalogue/1.0\\r\\n\\r\\n"
-              ).encode("ascii")
-              ws.sendall(request)
-
-              response = b""
-              while b"\\r\\n\\r\\n" not in response:
-                  chunk = ws.recv(4096)
-                  if not chunk:
-                      raise RuntimeError("Binance WebSocket closed during handshake")
-                  response += chunk
-              if b" 101 " not in response.split(b"\\r\\n", 1)[0]:
-                  raise RuntimeError("Binance WebSocket handshake failed: " + response[:200].decode("latin1", "ignore"))
-
-              contracts = {}
-              tickers = {}
-              buffer = response.split(b"\\r\\n\\r\\n", 1)[1]
-              deadline = time.time() + 20
-
-              def send_pong(payload):
-                  mask = os.urandom(4)
-                  body = bytes(payload)
-                  header = bytearray([0x8A])
-                  length = len(body)
-                  if length < 126:
-                      header.append(0x80 | length)
-                  elif length < 65536:
-                      header.append(0x80 | 126)
-                      header.extend(struct.pack("!H", length))
-                  else:
-                      header.append(0x80 | 127)
-                      header.extend(struct.pack("!Q", length))
-                  masked = bytes(body[i] ^ mask[i % 4] for i in range(length))
-                  ws.sendall(bytes(header) + mask + masked)
-
-              def read_frame():
-                  nonlocal_buffer = None
-                  while True:
-                      first = ws.recv(2)
-                      if len(first) < 2:
-                          raise RuntimeError("Binance WebSocket frame truncated")
-                      b1, b2 = first[0], first[1]
-                      opcode = b1 & 0x0F
-                      masked = (b2 & 0x80) != 0
-                      length = b2 & 0x7F
-                      if length == 126:
-                          length = struct.unpack("!H", ws.recv(2))[0]
-                      elif length == 127:
-                          length = struct.unpack("!Q", ws.recv(8))[0]
-                      mask = ws.recv(4) if masked else b""
-                      payload = b""
-                      while len(payload) < length:
-                          chunk = ws.recv(min(65536, length - len(payload)))
-                          if not chunk:
-                              raise RuntimeError("Binance WebSocket frame truncated")
-                          payload += chunk
-                      if masked:
-                          payload = bytes(payload[i] ^ mask[i % 4] for i in range(length))
-                      if opcode == 9:
-                          send_pong(payload)
-                          continue
-                      if opcode == 8:
-                          raise RuntimeError("Binance WebSocket closed")
-                      return opcode, payload
-
-              try:
-                  while time.time() < deadline:
-                      opcode, payload = read_frame()
-                      if opcode != 1:
-                          continue
-                      try:
-                          message = json.loads(payload.decode("utf-8"))
-                      except Exception:
-                          continue
-                      data = message.get("data", message)
-                      if isinstance(data, list):
-                          for row in data:
-                              symbol = str(row.get("s") or "").strip()
-                              if symbol:
-                                  tickers[symbol] = row
-                      elif isinstance(data, dict) and data.get("e") == "contractInfo":
-                          symbol = str(data.get("s") or "").strip()
-                          if symbol:
-                              contracts[symbol] = data
-                      if contracts and tickers:
-                          has_um = any(int(x.get("st") or 0) == 1 for x in contracts.values())
-                          has_cm = any(int(x.get("st") or 0) == 2 for x in contracts.values())
-                          has_perp = any(str(x.get("ct") or "").upper() == "PERPETUAL" for x in contracts.values())
-                          has_delivery = any(str(x.get("ct") or "").upper() != "PERPETUAL" for x in contracts.values())
-                          if has_um and has_cm and has_perp and has_delivery:
-                              break
-              finally:
-                  try:
-                      ws.close()
-                  except Exception:
-                      pass
-
-              rows = []
-              merged = dict(tickers)
-              for symbol, row in contracts.items():
-                  merged.setdefault(symbol, row)
-
-              for symbol, row in merged.items():
-                  info = contracts.get(symbol, {})
-                  st = int(info.get("st") or row.get("st") or 0)
-                  if st not in (1, 2):
-                      continue
-                  ct = str(info.get("ct") or "").upper()
-                  if not ct:
-                      upper = symbol.upper()
-                      ct = "PERPETUAL" if not ("_" in upper and not upper.endswith("_PERP")) else "CURRENT_QUARTER"
-                  status = str(info.get("cs") or "TRADING").upper()
-                  if status and status != "TRADING":
-                      continue
-                  rows.append({
-                      "symbol": symbol,
-                      "pair": str(row.get("ps") or info.get("ps") or symbol),
-                      "baseAsset": "",
-                      "quoteAsset": "",
-                      "contractType": ct,
-                      "deliveryDate": info.get("dt"),
-                      "onboardDate": info.get("ot"),
-                      "status": "TRADING",
-                      "_streamType": st,
-                  })
-
-              um_stream = [r for r in rows if r["_streamType"] == 1]
-              cm_stream = [r for r in rows if r["_streamType"] == 2]
-              if not um_stream or not cm_stream:
-                  raise RuntimeError("Binance Futures WebSocket returned no complete UM/CM symbol universe")
-
-              for r in um_stream + cm_stream:
-                  r.pop("_streamType", None)
-                  pair = str(r.get("pair") or r.get("symbol") or "")
-                  r["baseAsset"] = pair
-                  r["quoteAsset"] = ""
-
-              usdm = {"symbols": um_stream}
-              coinm = {"symbols": cm_stream}
-              print("Binance WebSocket symbol discovery:", json.dumps({
-                  "um": len(um_stream),
-                  "cm": len(cm_stream),
-                  "perpetuals": sum(1 for x in rows if str(x.get("contractType")).upper() == "PERPETUAL"),
-                  "futures": sum(1 for x in rows if str(x.get("contractType")).upper() != "PERPETUAL"),
+              print("Binance derivative REST blocked; using Binance Vision recent-data discovery:", rest_error)
+              usdm = vision_derivative_exchange_info("um")
+              coinm = vision_derivative_exchange_info("cm")
+              print("Binance Vision derivative discovery:", json.dumps({
+                  "um": len(usdm.get("symbols", [])),
+                  "cm": len(coinm.get("symbols", [])),
+                  "futures": sum(1 for x in usdm.get("symbols", []) + coinm.get("symbols", []) if x["contractType"] != "PERPETUAL"),
+                  "perpetuals": sum(1 for x in usdm.get("symbols", []) + coinm.get("symbols", []) if x["contractType"] == "PERPETUAL"),
               }))
 
           products = []
