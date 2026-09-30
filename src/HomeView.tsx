@@ -59,6 +59,7 @@ export default function HomeView({ instruments, onSelectInstrument, videoSrc = '
   const [balanceVisible, setBalanceVisible] = useState(true);
   const [activeEvent, setActiveEvent] = useState(0);
   const [activeMarketFilter, setActiveMarketFilter] = useState('Hot');
+  const [activeMarketSubfilter, setActiveMarketSubfilter] = useState('Spot');
   const [favoriteIds, setFavoriteIds] = useState<string[]>(() => { try { const saved = window.localStorage.getItem('sire.home.marketFavorites'); return saved ? JSON.parse(saved) : []; } catch { return []; } });
   const [binanceNewFeed, setBinanceNewFeed] = useState<Array<{ symbol: string; marketType: string; listedAt: number }>>([]);
   const binanceUniverse = useMemo(
@@ -100,6 +101,68 @@ export default function HomeView({ instruments, onSelectInstrument, videoSrc = '
   );
 
   const binanceHotMarkets = useMemo(() => getBinanceHotFromCatalogue(binanceUniverse, 8) as HomeInstrument[], [binanceUniverse]);
+
+  const binanceHotFutures = useMemo(() => {
+    const change = (item: HomeInstrument) => Number(item.change24h ?? (item as any).priceChangePercent);
+    const volume = (item: HomeInstrument) => Number(item.volume24h);
+    return [...binanceFutures]
+      .filter(item => Number.isFinite(Number(item.price)))
+      .sort((a, b) => {
+        const score = (item: HomeInstrument) => {
+          const volumeScore = Math.log10(Math.max(1, volume(item) || 0));
+          const movementScore = Math.min(12, Math.abs(change(item) || 0));
+          const participationScore = Math.log10(Math.max(1, Number(item.tradeCount24h) || 1)) * 0.35;
+          return volumeScore * 1.15 + movementScore * 1.8 + participationScore;
+        };
+        return score(b) - score(a);
+      })
+      .slice(0, 8);
+  }, [binanceFutures]);
+
+  const marketSubfilters = useMemo(() => {
+    switch (activeMarketFilter) {
+      case 'Hot':
+      case 'New':
+      case 'Gainers':
+      case 'Losers':
+      case 'Vol':
+      case 'Market Cap':
+        return ['Spot', 'Futures'];
+      case 'Spot':
+        return ['All', 'USDT', 'USDC', 'Other'];
+      case 'Futures':
+        return ['USD-M', 'COIN-M'];
+      default:
+        return [];
+    }
+  }, [activeMarketFilter]);
+
+  const isCoinM = (item: HomeInstrument) => {
+    const id = String(item.id || '').toUpperCase();
+    const symbol = String(item.symbol || '').toUpperCase();
+    return id.startsWith('BINANCE:COIN-M:') || symbol.includes('_');
+  };
+
+  const isFutures = (item: HomeInstrument) => {
+    const mt = String(item.marketType || '').toLowerCase();
+    return mt.includes('future') || mt.includes('perpetual');
+  };
+
+  const filterSpotSubcategory = (rows: HomeInstrument[]) => {
+    if (activeMarketSubfilter === 'All') return rows;
+    return rows.filter(item => {
+      const quote = String((item as any).quote || '').toUpperCase();
+      if (activeMarketSubfilter === 'USDT') return quote === 'USDT' || (!quote && String(item.symbol || '').toUpperCase().endsWith('USDT'));
+      if (activeMarketSubfilter === 'USDC') return quote === 'USDC' || (!quote && String(item.symbol || '').toUpperCase().endsWith('USDC'));
+      return quote !== 'USDT' && quote !== 'USDC';
+    });
+  };
+
+  const filterFuturesSubcategory = (rows: HomeInstrument[]) => {
+    if (activeMarketSubfilter === 'COIN-M') return rows.filter(isCoinM);
+    if (activeMarketSubfilter === 'USD-M') return rows.filter(item => !isCoinM(item));
+    return rows;
+  };
 
   // Binance's New market is split into Crypto and Futures. Keep both
   // families in SIRE's single New filter and order them by their actual
@@ -148,39 +211,51 @@ export default function HomeView({ instruments, onSelectInstrument, videoSrc = '
       case 'Favorite':
         return binanceUniverse.filter(item => favoriteIds.includes(item.id) && Number.isFinite(Number(item.price)));
       case 'Hot':
-        return binanceHotMarkets;
+        return activeMarketSubfilter === 'Futures' ? binanceHotFutures : binanceHotMarkets;
       case 'Spot':
-        return [...binanceSpot].sort((a, b) => volume(b) - volume(a));
+        return filterSpotSubcategory([...binanceSpot].sort((a, b) => volume(b) - volume(a)));
       case 'Futures':
-        return binanceFutures;
-      case 'New':
-        return binanceNewAnnouncementRows.length
+        return filterFuturesSubcategory(binanceFutures);
+      case 'New': {
+        const rows = binanceNewAnnouncementRows.length
           ? binanceNewAnnouncementRows
-          : [...binanceNewCrypto, ...binanceNewFutures]
-              .sort((a, b) => {
-                const aTime = Number(a.onboardDate ?? a.listedAt);
-                const bTime = Number(b.onboardDate ?? b.listedAt);
-                return bTime - aTime;
-              });
-      case 'Gainers':
-        return [...binanceSpot]
-          .filter(item => Number.isFinite(change(item)))
-          .sort((a, b) => change(b) - change(a));
-      case 'Losers':
-        return [...binanceSpot]
-          .filter(item => Number.isFinite(change(item)))
-          .sort((a, b) => change(a) - change(b));
-      case 'Vol':
-        return [...binanceSpot]
-          .filter(item => Number.isFinite(volume(item)))
-          .sort((a, b) => volume(b) - volume(a));
-      case 'Market Cap':
-        return [...binanceSpot]
-          .sort((a, b) => marketCap(b) - marketCap(a));
+          : [...binanceNewCrypto, ...binanceNewFutures].sort((a, b) => {
+              const aTime = Number(a.onboardDate ?? a.listedAt);
+              const bTime = Number(b.onboardDate ?? b.listedAt);
+              return bTime - aTime;
+            });
+        return activeMarketSubfilter === 'Futures'
+          ? rows.filter(isFutures)
+          : rows.filter(item => !isFutures(item));
+      }
+      case 'Gainers': {
+        const rows = [...binanceUniverse].filter(item => Number.isFinite(change(item))).sort((a, b) => change(b) - change(a));
+        return activeMarketSubfilter === 'Futures'
+          ? rows.filter(isFutures)
+          : rows.filter(item => !isFutures(item));
+      }
+      case 'Losers': {
+        const rows = [...binanceUniverse].filter(item => Number.isFinite(change(item))).sort((a, b) => change(a) - change(b));
+        return activeMarketSubfilter === 'Futures'
+          ? rows.filter(isFutures)
+          : rows.filter(item => !isFutures(item));
+      }
+      case 'Vol': {
+        const rows = [...binanceUniverse].filter(item => Number.isFinite(volume(item))).sort((a, b) => volume(b) - volume(a));
+        return activeMarketSubfilter === 'Futures'
+          ? rows.filter(isFutures)
+          : rows.filter(item => !isFutures(item));
+      }
+      case 'Market Cap': {
+        const rows = [...binanceUniverse].filter(item => Number.isFinite(marketCap(item))).sort((a, b) => marketCap(b) - marketCap(a));
+        return activeMarketSubfilter === 'Futures'
+          ? rows.filter(isFutures)
+          : rows.filter(item => !isFutures(item));
+      }
       default:
         return binanceSpot;
     }
-  }, [activeMarketFilter, binanceUniverse, binanceSpot, binanceFutures, binanceHotMarkets, binanceNewCrypto, binanceNewFutures, binanceNewAnnouncementRows, favoriteIds]);
+  }, [activeMarketFilter, activeMarketSubfilter, binanceUniverse, binanceSpot, binanceFutures, binanceHotMarkets, binanceHotFutures, binanceNewCrypto, binanceNewFutures, binanceNewAnnouncementRows, favoriteIds]);
 
   useEffect(() => {
     const timer = window.setInterval(() => {
@@ -349,12 +424,52 @@ export default function HomeView({ instruments, onSelectInstrument, videoSrc = '
             <div><span>MARKET DISCOVERY</span><h2>Markets</h2></div>
             <button type="button">See All <ChevronRight size={15} /></button>
           </div>
-          <div className="sire-home-market-tabs" role="tablist" aria-label="Market filters">
-            {['Favorite', 'Hot', 'Spot', 'Futures', 'New', 'Gainers', 'Losers', 'Vol', 'Market Cap'].map(filter => (
-              <button key={filter} type="button" role="tab" aria-selected={activeMarketFilter === filter} className={activeMarketFilter === filter ? 'active' : ''} onClick={() => setActiveMarketFilter(filter)}>
-                {filter}
-              </button>
-            ))}
+          <div className="sire-home-market-filter-shell" aria-label="Market discovery filters">
+            <div className="sire-home-market-tabs" role="tablist" aria-label="Market filters">
+              {['Favorite', 'Hot', 'Spot', 'Futures', 'New', 'Gainers', 'Losers', 'Vol', 'Market Cap'].map(filter => (
+                <button
+                  key={filter}
+                  type="button"
+                  role="tab"
+                  aria-selected={activeMarketFilter === filter}
+                  className={activeMarketFilter === filter ? 'active' : ''}
+                  onClick={() => {
+                    setActiveMarketFilter(filter);
+                    setActiveMarketSubfilter(({
+                      Hot: 'Spot',
+                      Spot: 'All',
+                      Futures: 'USD-M',
+                      New: 'Spot',
+                      Gainers: 'Spot',
+                      Losers: 'Spot',
+                      Vol: 'Spot',
+                      'Market Cap': 'Spot',
+                    } as Record<string, string>)[filter] || '');
+                  }}
+                >
+                  {filter}
+                </button>
+              ))}
+            </div>
+            {marketSubfilters.length > 0 && (
+              <div className="sire-home-market-subtabs" role="tablist" aria-label={activeMarketFilter + ' categories'}>
+                <span className="sire-home-market-subtabs-label">VIEW</span>
+                <div className="sire-home-market-subtabs-track">
+                  {marketSubfilters.map(filter => (
+                    <button
+                      key={filter}
+                      type="button"
+                      role="tab"
+                      aria-selected={activeMarketSubfilter === filter}
+                      className={activeMarketSubfilter === filter ? 'active' : ''}
+                      onClick={() => setActiveMarketSubfilter(filter)}
+                    >
+                      {filter}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
           <div className="sire-home-watchlist" aria-label={activeMarketFilter + ' markets'}>
             {(marketRows.length ? marketRows.slice(0, 8) : []).map(item => {
