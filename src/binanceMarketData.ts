@@ -242,9 +242,10 @@ export function getBinanceHotFromCatalogue(instruments: any[], limit = 8): any[]
 }
 
 
-export async function fetchBinanceMarketMetadata(): Promise<Record<string, { circulatingSupply?: number; marketCap?: number; fullName?: string }>> {
-  const out: Record<string, { circulatingSupply?: number; marketCap?: number; fullName?: string }> = {};
+export async function fetchBinanceMarketMetadata(): Promise<Record<string, { circulatingSupply?: number; marketCap?: number; fullName?: string; listedAt?: number }>> {
+  const out: Record<string, { circulatingSupply?: number; marketCap?: number; fullName?: string; listedAt?: number }> = {};
   const urls = [
+    'https://www.binance.com/bapi/apex/v1/friendly/apex/marketing/complianceSymbolList',
     'https://www.binance.com/exchange-api/v2/public/asset-service/product/get-products?includeEtf=true',
     'https://www.binance.com/bapi/asset/v2/public/asset-service/product/get-products?includeEtf=true',
   ];
@@ -256,7 +257,7 @@ export async function fetchBinanceMarketMetadata(): Promise<Record<string, { cir
         const base = String(row?.b || row?.baseAsset || row?.base || '').toUpperCase();
         if (!base) continue;
         const supply = Number(row?.cs ?? row?.circulatingSupply);
-        const price = Number(row?.c ?? row?.lastPrice);
+        const price = Number(row?.c ?? row?.lastPrice ?? row?.price);
         const cap = Number(row?.marketCap);
         const marketCap = Number.isFinite(cap) ? cap : (Number.isFinite(supply) && Number.isFinite(price) ? supply * price : undefined);
         const existing = out[base];
@@ -264,7 +265,9 @@ export async function fetchBinanceMarketMetadata(): Promise<Record<string, { cir
           out[base] = {
             circulatingSupply: Number.isFinite(supply) ? supply : undefined,
             marketCap: Number.isFinite(marketCap) ? marketCap : undefined,
-            fullName: String(row?.an || row?.name || '').trim() || undefined,
+            listedAt: Number.isFinite(Number(row?.listingTime ?? row?.listedAt ?? row?.onboardDate)) ? Number(row.listingTime ?? row.listedAt ?? row.onboardDate) : undefined,
+            fullName: String(row?.an || row?.fullName || row?.name || '').trim() || undefined,
+            listedAt: Number.isFinite(Number(row?.listingTime ?? row?.listedAt ?? row?.onboardDate)) ? Number(row.listingTime ?? row.listedAt ?? row.onboardDate) : undefined,
           };
         }
       }
