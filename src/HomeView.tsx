@@ -25,6 +25,7 @@ type HomeInstrument = {
   onboardDate?: number;
   marketCap?: number;
   circulatingSupply?: number;
+  newListing?: boolean;
 };
 
 type Props = {
@@ -84,7 +85,6 @@ export default function HomeView({ instruments, onSelectInstrument, videoSrc = '
         const mt = String(item.marketType || '').toLowerCase();
         return mt.includes('future') || mt.includes('perpetual');
       })
-      .filter(item => Number.isFinite(Number(item.price)))
       .sort((a, b) => Number(b.volume24h || 0) - Number(a.volume24h || 0)),
     [binanceUniverse],
   );
@@ -108,8 +108,8 @@ export default function HomeView({ instruments, onSelectInstrument, videoSrc = '
         return binanceFutures;
       case 'New':
         return [...binanceSpot]
-          .filter(item => Number.isFinite(listedAt(item)))
-          .sort((a, b) => listedAt(b) - listedAt(a));
+          .filter(item => item.newListing === true || Number.isFinite(listedAt(item)))
+          .sort((a, b) => Number(b.newListing === true) - Number(a.newListing === true) || listedAt(b) - listedAt(a));
       case 'Gainers':
         return [...binanceSpot]
           .filter(item => Number.isFinite(change(item)))
@@ -124,7 +124,6 @@ export default function HomeView({ instruments, onSelectInstrument, videoSrc = '
           .sort((a, b) => volume(b) - volume(a));
       case 'Market Cap':
         return [...binanceSpot]
-          .filter(item => Number.isFinite(marketCap(item)))
           .sort((a, b) => marketCap(b) - marketCap(a));
       default:
         return binanceSpot;
