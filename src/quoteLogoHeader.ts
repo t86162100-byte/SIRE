@@ -71,17 +71,11 @@ function install() {
   window.setTimeout(mount, 800);
 }
 
-if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', install, { once: true });
-else install();
+if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', () => mount(), { once: true });
+else mount();
 
-const observer = new MutationObserver(() => mount());
-observer.observe(document.documentElement, { childList: true, subtree: true });
-
-// Quote can be activated by a class change after its DOM already exists.
-const rootObserver = new MutationObserver(() => mount());
-rootObserver.observe(document.getElementById('root') || document.documentElement, {
-  attributes: true,
-  attributeFilter: ['class'],
+window.addEventListener('sire:tab-changed', (event: Event) => {
+  const tab = (event as CustomEvent<{tab?: string}>).detail?.tab;
+  if (tab === 'market') mount();
 });
-
-window.setInterval(mount, 300);
+window.addEventListener('sire:open-market', mount);
