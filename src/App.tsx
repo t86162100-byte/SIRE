@@ -266,9 +266,9 @@ export default function App() {
               ...item,
               circulatingSupply: Number.isFinite(supply) ? supply : item.circulatingSupply,
               marketCap: Number.isFinite(Number(marketCap)) ? Number(marketCap) : item.marketCap,
-              listedAt: Number.isFinite(Number(meta.listedAt)) ? Number(meta.listedAt) : item.listedAt,
-              onboardDate: Number.isFinite(Number(meta.listedAt)) ? Number(meta.listedAt) : item.onboardDate,
-              newListing: meta.newListing === true ? true : item.newListing,
+              listedAt: ['Spot', 'Margin'].includes(String(item.marketType)) && Number.isFinite(Number(meta.listedAt)) ? Number(meta.listedAt) : item.listedAt,
+              onboardDate: ['Spot', 'Margin'].includes(String(item.marketType)) && Number.isFinite(Number(meta.listedAt)) ? Number(meta.listedAt) : item.onboardDate,
+              newListing: ['Spot', 'Margin'].includes(String(item.marketType)) && meta.newListing === true ? true : item.newListing,
             };
           }));
         }).catch(error => console.warn('[SIRE BINANCE] market metadata failed:', error));
@@ -308,8 +308,8 @@ export default function App() {
                     ...item,
                     ...incomingItem,
                     price: item.price ?? incomingItem.price,
-                    ...(Number.isFinite(Number(meta?.listedAt)) ? { listedAt: Number(meta.listedAt), onboardDate: Number(meta.listedAt) } : {}),
-                    ...(meta?.newListing === true ? { newListing: true } : {}),
+                    ...(['Spot', 'Margin'].includes(String(item.marketType)) && Number.isFinite(Number(meta?.listedAt)) ? { listedAt: Number(meta.listedAt), onboardDate: Number(meta.listedAt) } : {}),
+                    ...(['Spot', 'Margin'].includes(String(item.marketType)) && meta?.newListing === true ? { newListing: true } : {}),
                   };
                 });
                 const additions = Array.from(incoming.values()).map((item:any) => {
@@ -319,8 +319,8 @@ export default function App() {
                     ...item,
                     ...(quote || {}),
                     ...(quote ? { priceChangePercent: quote.change24h } : {}),
-                    ...(Number.isFinite(Number(meta?.listedAt)) ? { listedAt: Number(meta.listedAt), onboardDate: Number(meta.listedAt) } : {}),
-                    ...(meta?.newListing === true ? { newListing: true } : {}),
+                    ...(['Spot', 'Margin'].includes(String(item.marketType)) && Number.isFinite(Number(meta?.listedAt)) ? { listedAt: Number(meta.listedAt), onboardDate: Number(meta.listedAt) } : {}),
+                    ...(['Spot', 'Margin'].includes(String(item.marketType)) && meta?.newListing === true ? { newListing: true } : {}),
                   };
                 });
                 console.info('[SIRE BINANCE HOSTED CATALOGUE] publishing', {
