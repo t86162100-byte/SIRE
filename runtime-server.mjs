@@ -979,7 +979,26 @@ const server = http.createServer(async (req,res) => {
         return res.writeHead(502,{ 'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8' }).end(JSON.stringify({ok:false,error:String(error?.message || error),items:[]}));
       }
     }
-    if (req.method === 'GET' && pathname.startsWith('/api/sire/markets/provider/')) {
+    if (req.method === 'GET' && pathname === '/api/sire/bitget/tickers') {
+      const url = new URL(req.url || '/', 'http://sire.local');
+      const category = String(url.searchParams.get('category') || 'SPOT').toUpperCase();
+      const allowedCategories = new Set(['SPOT','USDT-FUTURES','COIN-FUTURES','USDC-FUTURES']);
+      if (!allowedCategories.has(category)) {
+        return res.writeHead(400,{ 'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8' }).end(JSON.stringify({ok:false,error:'Unsupported Bitget category'}));
+      }
+      try {
+        const endpoint = 'https://api.bitget.com/api/v3/market/tickers?category=' + encodeURIComponent(category);
+        const response = await fetch(endpoint, { headers: { Accept: 'application/json' } });
+        const payload = await response.json();
+        if (!response.ok || String(payload?.code || '00000') !== '00000') throw new Error(String(payload?.msg || ('HTTP ' + response.status)));
+        return res.writeHead(200,{ 'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8' }).end(JSON.stringify({ok:true,category,data:Array.isArray(payload?.data) ? payload.data : []}));
+      } catch (cause) {
+        const message = cause instanceof Error ? cause.message : String(cause);
+        console.warn('[SIRE BITGET LIVE REST] failed', JSON.stringify({category,error:message}));
+        return res.writeHead(502,{ 'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8' }).end(JSON.stringify({ok:false,category,error:message,data:[]}));
+      }
+    }
+    if (req.method === 'GET' && pathname.startsWith('/api/sire/markets/provider/') {
       const provider = decodeURIComponent(pathname.slice('/api/sire/markets/provider/'.length)).toUpperCase();
       const allowed = new Set(['BINGX','BITRUE','ASCENDEX','WHITEBIT','COINW','DERIV','BINANCE','COINBASE','KRAKEN','BYBIT','OKX','BITGET','GATEIO','KUCOIN','MEXC','CRYPTOCOM','BITFINEX','GEMINI','BITSTAMP','COINEX','HTX','LBANK','BITTREX','BITMART','PHEMEX','BLANK','XT','DEEPCOIN','TOOBIT','WEEX','BITUNIX','BLOFIN','COINCATCH','ZOOMEX','BTCC','DIGIFINEX','BITHUMB','UPBIT','PIONEX','COINSTORE','PROBIT','POLONIEX','COINDCX','POLYMARKET','KALSHI','OPINION','UNISWAP','CURVE']);
       if (!allowed.has(provider)) {
