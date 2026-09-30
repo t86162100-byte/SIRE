@@ -60,10 +60,21 @@ export default function HomeView({ instruments, onSelectInstrument, videoSrc = '
   const [activeEvent, setActiveEvent] = useState(0);
   const [activeMarketFilter, setActiveMarketFilter] = useState('Hot');
   const [favoriteIds, setFavoriteIds] = useState<string[]>(() => { try { const saved = window.localStorage.getItem('sire.home.marketFavorites'); return saved ? JSON.parse(saved) : []; } catch { return []; } });
+  const [binanceNewFeed, setBinanceNewFeed] = useState<Array<{ symbol: string; marketType: string; listedAt: number }>>([]);
   const binanceUniverse = useMemo(
     () => instruments.filter(item => item.provider === 'BINANCE'),
     [instruments],
   );
+  useEffect(() => {
+    let cancelled = false;
+    fetch('/api/sire/binance/new-listings', { cache: 'no-store' })
+      .then(response => response.ok ? response.json() : null)
+      .then(payload => {
+        if (!cancelled && Array.isArray(payload?.items)) setBinanceNewFeed(payload.items);
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
 
   const binanceSpot = useMemo(() => {
     const rows = binanceUniverse
@@ -107,6 +118,26 @@ export default function HomeView({ instruments, onSelectInstrument, videoSrc = '
       .sort((a, b) => listedAt(b) - listedAt(a));
   }, [binanceFutures]);
 
+  const binanceNewAnnouncementRows = useMemo(() => {
+    if (!binanceNewFeed.length) return [] as HomeInstrument[];
+    const out: HomeInstrument[] = [];
+    const seen = new Set<string>();
+    for (const entry of binanceNewFeed) {
+      const target = String(entry.symbol || '').toUpperCase();
+      const future = String(entry.marketType || '').toLowerCase().includes('future');
+      const pool = future ? binanceFutures : binanceSpot;
+      for (const item of pool) {
+        const symbol = String(item.symbol || '').toUpperCase();
+        const base = String((item as any).base || '').toUpperCase();
+        const matches = symbol === target || base === target || symbol.replace(/USDT$|USDC$|BUSD$/,'') === target;
+        if (!matches || seen.has(item.id)) continue;
+        seen.add(item.id);
+        out.push({ ...item, listedAt: Number(entry.listedAt), onboardDate: Number(entry.listedAt), newListing: true });
+      }
+    }
+    return out.sort((a,b) => Number(b.listedAt ?? 0) - Number(a.listedAt ?? 0));
+  }, [binanceNewFeed, binanceSpot, binanceFutures]);
+
   const binanceMarketRows = useMemo(() => {
     const change = (item: HomeInstrument) => Number(item.change24h ?? item.priceChangePercent);
     const volume = (item: HomeInstrument) => Number(item.volume24h);
@@ -123,12 +154,14 @@ export default function HomeView({ instruments, onSelectInstrument, videoSrc = '
       case 'Futures':
         return binanceFutures;
       case 'New':
-        return [...binanceNewCrypto, ...binanceNewFutures]
-          .sort((a, b) => {
-            const aTime = Number(a.onboardDate ?? a.listedAt);
-            const bTime = Number(b.onboardDate ?? b.listedAt);
-            return bTime - aTime;
-          });
+        return binanceNewAnnouncementRows.length
+          ? binanceNewAnnouncementRows
+          : [...binanceNewCrypto, ...binanceNewFutures]
+              .sort((a, b) => {
+                const aTime = Number(a.onboardDate ?? a.listedAt);
+                const bTime = Number(b.onboardDate ?? b.listedAt);
+                return bTime - aTime;
+              });
       case 'Gainers':
         return [...binanceSpot]
           .filter(item => Number.isFinite(change(item)))
@@ -147,7 +180,7 @@ export default function HomeView({ instruments, onSelectInstrument, videoSrc = '
       default:
         return binanceSpot;
     }
-  }, [activeMarketFilter, binanceUniverse, binanceSpot, binanceFutures, binanceHotMarkets, binanceNewCrypto, binanceNewFutures, favoriteIds]);
+  }, [activeMarketFilter, binanceUniverse, binanceSpot, binanceFutures, binanceHotMarkets, binanceNewCrypto, binanceNewFutures, binanceNewAnnouncementRows, favoriteIds]);
 
   useEffect(() => {
     const timer = window.setInterval(() => {
