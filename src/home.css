@@ -2048,3 +2048,18 @@
   .sire-home-watch-main{grid-template-columns:34px minmax(0,1fr) auto 43px;gap:7px}
   .market-trade-button{width:43px}
 }
+
+
+/* Market discovery: keep the Home content/card margins; align row content close to the card edges. */
+.sire-home-watchlist{
+  margin-left:0;
+  margin-right:0;
+}
+.sire-home-watch-row{
+  padding-left:0;
+  padding-right:0;
+}
+@media(max-width:380px){
+  .sire-home-watchlist{margin-left:0;margin-right:0}
+  .sire-home-watch-row{padding-left:0;padding-right:0}
+}
