@@ -290,6 +290,7 @@ export default function App() {
                 ...(quote ? { priceChangePercent: quote.change24h } : {}),
                 ...(Number.isFinite(supply) ? { circulatingSupply: supply } : {}),
                 ...(Number.isFinite(Number(marketCap)) ? { marketCap: Number(marketCap) } : {}),
+                ...(Number.isFinite(Number(meta?.listedAt)) ? { listedAt: Number(meta.listedAt), onboardDate: Number(meta.listedAt) } : {}),
               } as Instrument;
             });
             console.info('[SIRE BINANCE BROWSER] publishing instruments to SIRE', {received:binanceItems.length,added:additions.length});
@@ -326,6 +327,7 @@ export default function App() {
             ...(quote ? { priceChangePercent: quote.change24h } : {}),
             ...(Number.isFinite(supply) ? { circulatingSupply: supply } : {}),
             ...(Number.isFinite(Number(marketCap)) ? { marketCap: Number(marketCap) } : {}),
+            ...(Number.isFinite(Number(meta?.listedAt)) ? { listedAt: Number(meta.listedAt), onboardDate: Number(meta.listedAt) } : {}),
           };
         })) : current;
         console.info('[SIRE MARKET STARTUP] publishing unified catalogue', {
