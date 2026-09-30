@@ -60,8 +60,8 @@ export default function HomeView({ instruments, onSelectInstrument, videoSrc = '
   }, []);
 
   const liveMarkets = useMemo(() => {
-    const crypto = instruments.filter(item => item.category?.toLowerCase().includes('crypto')).slice(0, 12);
-    return crypto.length ? crypto : instruments.slice(0, 12);
+    const crypto = instruments.filter(item => item.category?.toLowerCase().includes('crypto')).slice(0, 8);
+    return crypto.length ? crypto : instruments.slice(0, 8);
   }, [instruments]);
 
   const searchResults = useMemo(() => {
