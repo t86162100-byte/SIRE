@@ -338,14 +338,14 @@ export default function App() {
           console.warn('[SIRE BINANCE HOSTED CATALOGUE] failed:', error);
         }
 
-        const binanceItems = await fetchBinanceBrowserCatalogue();
+        const browserItems = await fetchBinanceBrowserCatalogue();
         await fetch('/api/sire/binance/browser-diagnostic', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ source: 'browser-start', total: 0, counts: {}, failures: {}, reportedAt: Date.now() }),
           keepalive: true,
         });
-        const binanceItems = await fetchBinanceBrowserCatalogue();
+        const browserItems = await fetchBinanceBrowserCatalogue();
         // Render can receive HTTP 451 from Binance's derivatives REST endpoints.
         // The live miniTicker streams still expose every actively trading contract,
         // so materialize those real symbols into the catalogue when exchangeInfo is blocked.
@@ -385,8 +385,8 @@ export default function App() {
             contractType: marketType === 'Perpetuals' ? 'PERPETUAL' : 'FUTURE',
           });
         }
-        const catalogueWithLiveDerivatives = binanceItems.concat(liveFallbackItems.filter(item =>
-          !binanceItems.some(existing => existing.id === item.id)
+        const catalogueWithLiveDerivatives = browserItems.concat(liveFallbackItems.filter(item =>
+          !browserItems.some(existing => existing.id === item.id)
         ));
         if (!cancelled && catalogueWithLiveDerivatives.length) {
           if (liveFallbackItems.length) {
@@ -394,7 +394,7 @@ export default function App() {
           }
           const binanceItems = catalogueWithLiveDerivatives;
           setInstruments(current => {
-            const incoming = new Map(binanceItems.map((item:any) => [item.id, item]));
+            const incoming = new Map(browserItems.map((item:any) => [item.id, item]));
             const mergedCurrent = current.map(item => {
               const incomingItem = incoming.get(item.id);
               if (!incomingItem) return item;
@@ -417,7 +417,7 @@ export default function App() {
                 ...(meta?.newListing === true ? { newListing: true } : {}),
               } as Instrument;
             });
-            console.info('[SIRE BINANCE BROWSER] publishing instruments to SIRE', {received:binanceItems.length,added:additions.length});
+            console.info('[SIRE BINANCE BROWSER] publishing instruments to SIRE', {received:browserItems.length,added:additions.length});
             return mergedCurrent.concat(additions);
           });
         }
