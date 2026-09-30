@@ -29,6 +29,7 @@ export interface UnifiedInstrument {
   onboardDate?: number;
 }
 
+import { readFile } from 'node:fs/promises';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 const execFileAsync = promisify(execFile);
@@ -290,6 +291,55 @@ async function coinbase(): Promise<UnifiedInstrument[]> {
 
 async function binance(): Promise<UnifiedInstrument[]> {
   const out: UnifiedInstrument[] = [];
+
+  // Binance's public derivative REST endpoints can return HTTP 451 from hosted
+  // environments. GitHub Actions refreshes public/binance-catalogue.json from
+  // Binance's official exchangeInfo endpoints, so prefer that authoritative
+  // snapshot before attempting live discovery.
+  try {
+    const file = await readFile(process.cwd() + '/public/binance-catalogue.json', 'utf8');
+    const payload = JSON.parse(file);
+    const rows = [
+      ...(Array.isArray(payload?.spot) ? payload.spot : []),
+      ...(Array.isArray(payload?.margin) ? payload.margin : []),
+      ...(Array.isArray(payload?.derivatives) ? payload.derivatives : []),
+    ];
+    const items = rows.map((raw: any) => {
+      const marketType = String(raw?.marketType || '');
+      return cryptoItem('BINANCE', marketType, 'Crypto', {
+        ...raw,
+        symbol: raw?.symbol || raw?.displaySymbol,
+        baseAsset: raw?.base || raw?.baseAsset,
+        quoteAsset: raw?.quote || raw?.quoteAsset,
+        fullName: raw?.name,
+        status: raw?.status || 'TRADING',
+        contractType: raw?.contractType,
+        settleCoin: raw?.settlement,
+        onboardDate: raw?.onboardDate,
+        listingTime: raw?.listedAt,
+        deliveryTime: raw?.expiry,
+      });
+    }).filter(Boolean) as UnifiedInstrument[];
+    const derivatives = items.filter(item => item.marketType === 'Futures' || item.marketType === 'Perpetuals');
+    if (derivatives.length > 0) {
+      console.log('[SIRE BINANCE] static official catalogue:', JSON.stringify({
+        total: items.length,
+        spot: items.filter(item => item.marketType === 'Spot').length,
+        margin: items.filter(item => item.marketType === 'Margin').length,
+        futures: items.filter(item => item.marketType === 'Futures').length,
+        perpetuals: items.filter(item => item.marketType === 'Perpetuals').length,
+      }));
+      const seen = new Set<string>();
+      return items.filter(item => {
+        if (seen.has(item.id)) return false;
+        seen.add(item.id);
+        return true;
+      });
+    }
+    console.warn('[SIRE BINANCE] static catalogue exists but contains no Futures/Perpetuals; falling back to live endpoints');
+  } catch (error) {
+    console.warn('[SIRE BINANCE] static official catalogue unavailable; falling back to live endpoints:', error);
+  }
 
   const loadSymbols = async (label: string, urls: string[], marketTypeForRow: (raw: any) => string) => {
     try {
