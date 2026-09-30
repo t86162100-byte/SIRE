@@ -21,6 +21,10 @@ type HomeInstrument = {
   change24h?: number;
   volume24h?: number;
   tradeCount24h?: number;
+  listedAt?: number;
+  onboardDate?: number;
+  marketCap?: number;
+  circulatingSupply?: number;
 };
 
 type Props = {
@@ -55,7 +59,77 @@ export default function HomeView({ instruments, onSelectInstrument, videoSrc = '
   const [activeEvent, setActiveEvent] = useState(0);
   const [activeMarketFilter, setActiveMarketFilter] = useState('Hot');
   const [favoriteIds, setFavoriteIds] = useState<string[]>(() => { try { const saved = window.localStorage.getItem('sire.home.marketFavorites'); return saved ? JSON.parse(saved) : []; } catch { return []; } });
-  const binanceHotMarkets = useMemo(() => getBinanceHotFromCatalogue(instruments, 8) as HomeInstrument[], [instruments]);
+  const binanceUniverse = useMemo(
+    () => instruments.filter(item => item.provider === 'BINANCE'),
+    [instruments],
+  );
+
+  const binanceSpot = useMemo(() => {
+    const rows = binanceUniverse
+      .filter(item => String(item.marketType || '').toLowerCase().includes('spot'))
+      .filter(item => String(item.symbol || '').toUpperCase().endsWith('USDT'))
+      .filter(item => Number.isFinite(Number(item.price)));
+    const byBase = new Map<string, HomeInstrument>();
+    for (const item of rows) {
+      const base = String((item as any).base || item.symbol).replace(/USDT$/i, '').toUpperCase();
+      const current = byBase.get(base);
+      if (!current || String((item as any).quote || '').toUpperCase() === 'USDT') byBase.set(base, item);
+    }
+    return Array.from(byBase.values());
+  }, [binanceUniverse]);
+
+  const binanceFutures = useMemo(
+    () => binanceUniverse
+      .filter(item => {
+        const mt = String(item.marketType || '').toLowerCase();
+        return mt.includes('future') || mt.includes('perpetual');
+      })
+      .filter(item => Number.isFinite(Number(item.price)))
+      .sort((a, b) => Number(b.volume24h || 0) - Number(a.volume24h || 0)),
+    [binanceUniverse],
+  );
+
+  const binanceHotMarkets = useMemo(() => getBinanceHotFromCatalogue(binanceUniverse, 8) as HomeInstrument[], [binanceUniverse]);
+
+  const binanceMarketRows = useMemo(() => {
+    const change = (item: HomeInstrument) => Number(item.change24h ?? item.priceChangePercent);
+    const volume = (item: HomeInstrument) => Number(item.volume24h);
+    const listedAt = (item: HomeInstrument) => Number(item.listedAt ?? item.onboardDate);
+    const marketCap = (item: HomeInstrument) => Number(item.marketCap);
+
+    switch (activeMarketFilter) {
+      case 'Favorite':
+        return binanceUniverse.filter(item => favoriteIds.includes(item.id) && Number.isFinite(Number(item.price)));
+      case 'Hot':
+        return binanceHotMarkets;
+      case 'Spot':
+        return [...binanceSpot].sort((a, b) => volume(b) - volume(a));
+      case 'Futures':
+        return binanceFutures;
+      case 'New':
+        return [...binanceSpot]
+          .filter(item => Number.isFinite(listedAt(item)))
+          .sort((a, b) => listedAt(b) - listedAt(a));
+      case 'Gainers':
+        return [...binanceSpot]
+          .filter(item => Number.isFinite(change(item)))
+          .sort((a, b) => change(b) - change(a));
+      case 'Losers':
+        return [...binanceSpot]
+          .filter(item => Number.isFinite(change(item)))
+          .sort((a, b) => change(a) - change(b));
+      case 'Vol':
+        return [...binanceSpot]
+          .filter(item => Number.isFinite(volume(item)))
+          .sort((a, b) => volume(b) - volume(a));
+      case 'Market Cap':
+        return [...binanceSpot]
+          .filter(item => Number.isFinite(marketCap(item)))
+          .sort((a, b) => marketCap(b) - marketCap(a));
+      default:
+        return binanceSpot;
+    }
+  }, [activeMarketFilter, binanceUniverse, binanceSpot, binanceFutures, binanceHotMarkets, favoriteIds]);
 
   useEffect(() => {
     const timer = window.setInterval(() => {
@@ -94,10 +168,7 @@ export default function HomeView({ instruments, onSelectInstrument, videoSrc = '
     return crypto.length ? crypto : instruments.slice(0, 8);
   }, [instruments]);
 
-  const marketRows = useMemo(() => {
-    if (activeMarketFilter === 'Hot') return binanceHotMarkets;
-    return liveMarkets;
-  }, [activeMarketFilter, binanceHotMarkets, liveMarkets]);
+  const marketRows = binanceMarketRows;
 
   const searchResults = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -240,13 +311,8 @@ export default function HomeView({ instruments, onSelectInstrument, videoSrc = '
               const change = Number(raw.change24h ?? raw.changePercent24h ?? raw.priceChangePercent ?? raw.percentChange24h ?? raw.changePercent);
               const volume = Number(raw.volume24h ?? raw.quoteVolume ?? raw.volume);
               const listedAt = Number(raw.listedAt ?? raw.dateListed ?? raw.createdAt);
-              const marketType = String(item.marketType || '').toLowerCase();
               const isFavorite = favoriteIds.includes(item.id);
-              const showItem = activeMarketFilter === 'Favorite' ? isFavorite :
-                activeMarketFilter === 'Spot' ? marketType.includes('spot') || marketType.includes('margin') :
-                activeMarketFilter === 'Futures' ? marketType.includes('future') || marketType.includes('perpetual') :
-                activeMarketFilter === 'New' ? (Number.isFinite(listedAt) ? Date.now() - listedAt < 30 * 86400000 : true) : true;
-              if (!showItem) return null;
+              if (activeMarketFilter === 'Favorite' && !isFavorite) return null;
               const displayBase = String(raw.base || item.displaySymbol || item.symbol).replace(/\/USDT$|\/USD$|USDT$|USD$/i, '').toUpperCase();
               const tradeTone = Number.isFinite(change) ? (change > 0 ? 'positive' : change < 0 ? 'negative' : 'neutral') : 'neutral';
               return (
