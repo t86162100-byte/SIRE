@@ -288,7 +288,53 @@ export default function App() {
           keepalive: true,
         });
         const binanceItems = await fetchBinanceBrowserCatalogue();
-        if (!cancelled && binanceItems.length) {
+        // Render can receive HTTP 451 from Binance's derivatives REST endpoints.
+        // The live miniTicker streams still expose every actively trading contract,
+        // so materialize those real symbols into the catalogue when exchangeInfo is blocked.
+        const liveFallbackItems: any[] = [];
+        for (const [id, quote] of Object.entries(binanceQuoteCacheRef.current)) {
+          const match = id.match(/^(BINANCE(?::COIN-M)?):(Perpetuals|Futures):(.+)$/);
+          if (!match) continue;
+          const [, prefix, marketType, symbol] = match;
+          const base = symbol.includes('_')
+            ? symbol.split('_')[0]
+            : symbol.replace(/USDT$|USDC$|BUSD$|USD$/i, '');
+          const quoteAsset = symbol.includes('_')
+            ? symbol.split('_')[1]
+            : (symbol.match(/(USDT|USDC|BUSD|USD)$/i)?.[1] || 'USDT').toUpperCase();
+          liveFallbackItems.push({
+            id,
+            provider: 'BINANCE',
+            providerLabel: 'Binance',
+            exchange: 'BINANCE',
+            marketType,
+            category: 'Crypto',
+            symbol,
+            displaySymbol: symbol,
+            name: base && quoteAsset ? base + ' / ' + quoteAsset : symbol,
+            base,
+            quote: quoteAsset,
+            exchangeOpen: 1,
+            status: 'online',
+            price: (quote as any)?.price,
+            change24h: (quote as any)?.change24h,
+            priceChangePercent: (quote as any)?.change24h,
+            volume24h: (quote as any)?.volume24h,
+            tradeCount24h: (quote as any)?.tradeCount24h,
+            logoUrl: 'https://cdn.jsdelivr.net/gh/vadimmalykhin/binance-icons/crypto/' + encodeURIComponent(String(base).toLowerCase()) + '.svg',
+            providerLogoUrl: 'https://www.binance.com/favicon.ico',
+            instrumentType: marketType,
+            contractType: marketType === 'Perpetuals' ? 'PERPETUAL' : 'FUTURE',
+          });
+        }
+        const catalogueWithLiveDerivatives = binanceItems.concat(liveFallbackItems.filter(item =>
+          !binanceItems.some(existing => existing.id === item.id)
+        ));
+        if (!cancelled && catalogueWithLiveDerivatives.length) {
+          if (liveFallbackItems.length) {
+            console.info('[SIRE BINANCE BROWSER] live derivatives fallback', { count: liveFallbackItems.length });
+          }
+          const binanceItems = catalogueWithLiveDerivatives;
           setInstruments(current => {
             const incoming = new Map(binanceItems.map((item:any) => [item.id, item]));
             const mergedCurrent = current.map(item => {
