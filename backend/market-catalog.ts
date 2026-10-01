@@ -142,6 +142,40 @@ async function withProviderTimeout<T>(provider: string, promise: Promise<T>, tim
   }
 }
 
+function classifyBinanceCrypto(raw: any, marketType: string) {
+  const quote = String(raw?.quote || raw?.quoteAsset || raw?.quoteCoin || raw?.quoteCcy || '').trim().toUpperCase();
+  const base = String(raw?.base || raw?.baseAsset || raw?.baseCoin || raw?.baseCcy || '').trim().toUpperCase();
+  const type = String(marketType || '').trim();
+  const isSpot = type === 'Spot';
+  const isMargin = type === 'Margin';
+  const isFuture = type === 'Futures' || type === 'Perpetuals';
+  let marketSubcategory = isSpot ? 'Spot' : isMargin ? 'Margin' : isFuture ? 'Futures' : type || 'Other';
+  let marketFilter = 'ALL';
+
+  if (isSpot) {
+    const fiatQuotes = new Set(['EUR','GBP','AUD','BRL','TRY','ZAR','NGN','RUB','UAH','PLN','ARS','MXN']);
+    if (quote === 'USDT') marketFilter = 'USDT';
+    else if (quote === 'USDC') marketFilter = 'USDC';
+    else if (quote === 'USD') marketFilter = 'USD';
+    else if (quote === 'BNB') marketFilter = 'BNB';
+    else if (quote === 'BTC') marketFilter = 'BTC';
+    else if (quote === 'BTCC') marketFilter = 'BTCC';
+    else if (quote === 'ETH') marketFilter = 'ETH';
+    else if (fiatQuotes.has(quote)) marketFilter = 'FIAT';
+    else marketFilter = 'ALTs';
+  } else if (isMargin) {
+    const marginAssets = new Set(['ETH','XAU','BTC','XAG','SOL','XRP','DOGE']);
+    marketFilter = marginAssets.has(base) ? base : 'ALL';
+  } else if (isFuture) {
+    const settle = String(raw?.settlement || raw?.settleCoin || raw?.settleCcy || raw?.marginAsset || '').toUpperCase();
+    marketSubcategory = settle === 'USDC' ? 'USDT-M' : (type === 'Perpetuals' || type === 'Futures' ? (String(raw?.marketSubcategory || '').toUpperCase() === 'COIN-M' ? 'COIN-M' : 'USDT-M') : 'Futures');
+    if (marketSubcategory === 'COIN-M') marketFilter = 'All';
+    else if (settle === 'USDC') marketFilter = 'USDC';
+    else marketFilter = 'All';
+  }
+  return { marketGroup: 'Crypto', marketSubcategory, marketFilter };
+}
+
 function cryptoItem(provider: MarketProvider, marketType: string, category: string, raw: any, price?: any): UnifiedInstrument | null {
   const symbol = String(raw?.symbol || raw?.instId || '').trim();
   if (!symbol) return null;
@@ -312,7 +346,8 @@ async function binance(): Promise<UnifiedInstrument[]> {
     ];
     const items = rows.map((raw: any) => {
       const marketType = String(raw?.marketType || '');
-      return cryptoItem('BINANCE', marketType, 'Crypto', {
+      const taxonomy = classifyBinanceCrypto(raw, marketType);
+      return Object.assign(cryptoItem('BINANCE', marketType, 'Crypto', {
         ...raw,
         symbol: raw?.symbol || raw?.displaySymbol,
         baseAsset: raw?.base || raw?.baseAsset,
@@ -324,7 +359,7 @@ async function binance(): Promise<UnifiedInstrument[]> {
         onboardDate: raw?.onboardDate,
         listingTime: raw?.listedAt,
         deliveryTime: raw?.expiry,
-      });
+      }), taxonomy);
     }).filter(Boolean) as UnifiedInstrument[];
     const derivatives = items.filter(item => item.marketType === 'Futures' || item.marketType === 'Perpetuals');
     if (derivatives.length > 0) {
@@ -356,6 +391,7 @@ async function binance(): Promise<UnifiedInstrument[]> {
         if (status && status !== 'TRADING') continue;
         const marketType = marketTypeForRow(raw);
         const item = cryptoItem('BINANCE', marketType, 'Crypto', raw);
+        if (item) Object.assign(item, classifyBinanceCrypto(raw, marketType));
         if (item) out.push(item);
       }
       console.log('[SIRE BINANCE] ' + label + ': ' + rows.length);
@@ -381,7 +417,7 @@ async function binance(): Promise<UnifiedInstrument[]> {
     const rows = Array.isArray(response?.symbols) ? response.symbols : [];
     for (const raw of rows.filter((item: any) => item?.isMarginTradingAllowed === true)) {
       const item = cryptoItem('BINANCE', 'Margin', 'Crypto', raw);
-      if (item) out.push(item);
+      if (item) { Object.assign(item, classifyBinanceCrypto(raw, 'Margin')); out.push(item); }
     }
     console.log('[SIRE BINANCE] Margin: ' + out.filter(item => item.marketType === 'Margin').length);
   } catch (error) {
@@ -417,7 +453,7 @@ async function binance(): Promise<UnifiedInstrument[]> {
         quoteAsset: raw?.quoteAsset || 'USDT'
       };
       const item = cryptoItem('BINANCE', 'Options', 'Crypto', normalized);
-      if (item) out.push(item);
+      if (item) { Object.assign(item, { marketGroup: 'Crypto', marketSubcategory: 'Options', marketFilter: 'ALL' }); out.push(item); }
     }
     console.log('[SIRE BINANCE] Options: ' + rows.length);
   } catch (error) {
