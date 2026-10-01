@@ -137,13 +137,6 @@ export default function HomeView({ instruments, onSelectInstrument, videoSrc = '
             };
             next.set(market + ':' + symbol, quote);
             next.set(market + ':' + normalizedSymbol, quote);
-              price,
-              bid: Number.isFinite(Number(row?.highest_bid ?? row?.highest_bid_price)) ? Number(row?.highest_bid ?? row?.highest_bid_price) : undefined,
-              ask: Number.isFinite(Number(row?.lowest_ask ?? row?.lowest_ask_price)) ? Number(row?.lowest_ask ?? row?.lowest_ask_price) : undefined,
-              change24h: Number.isFinite(change) ? change : undefined,
-              priceChangePercent: Number.isFinite(change) ? change : undefined,
-              volume24h: Number.isFinite(volume) ? volume : undefined,
-            });
           }
         } catch {}
       }));
