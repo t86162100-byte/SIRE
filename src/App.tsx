@@ -929,13 +929,18 @@ export default function App() {
       const selectedTaxonomy = String(marketSubcategoryFilter || 'ALL');
       const itemSubcategory = String((item as any).marketSubcategory || '');
       const itemFilter = String((item as any).marketFilter || 'ALL');
+      const itemFilters = Array.isArray((item as any).marketFilters) ? (item as any).marketFilters.map((value: unknown) => String(value)) : [];
+      const taxonomyMatches = itemFilters.length
+        ? itemFilters.some(value => value === selectedTaxonomy || value === selectedTaxonomy.replace(/^Futures:/, ''))
+        : selectedTaxonomy === itemFilter || selectedTaxonomy === itemFilter.split(':')[0];
       const subcategoryMatch = !isBinance
         ? (categoryFilter !== 'Onchain' || selectedTaxonomy === 'ALL' || itemSubcategory === selectedTaxonomy)
         : (selectedTaxonomy === 'ALL'
           || selectedTaxonomy === itemSubcategory
-          || (itemSubcategory === 'Spot' && selectedTaxonomy === 'Spot:' + itemFilter)
-          || (itemSubcategory === 'Margin' && selectedTaxonomy === 'Margin:' + itemFilter)
-          || (itemSubcategory === 'Futures' && (selectedTaxonomy === itemFilter || selectedTaxonomy === itemFilter.split(':')[0] || selectedTaxonomy === 'Futures:' + itemFilter)));
+          || (itemSubcategory === 'Spot' && (selectedTaxonomy === 'Spot:' + itemFilter || selectedTaxonomy === itemFilter))
+          || (itemSubcategory === 'Margin' && (selectedTaxonomy === 'Margin:' + itemFilter || selectedTaxonomy === itemFilter))
+          || (itemSubcategory === 'Futures' && (selectedTaxonomy === 'Futures:' + itemFilter || selectedTaxonomy === itemFilter || selectedTaxonomy === itemFilter.split(':')[0] || taxonomyMatches))
+          || (itemSubcategory === 'Alpha' && (selectedTaxonomy === 'Alpha:' + itemFilter || taxonomyMatches)));
       const categoryMatch = categoryFilter === 'ALL'
         || item.category === categoryFilter
         || (categoryFilter === 'Options' && marketType.includes('option'))
@@ -1034,6 +1039,26 @@ export default function App() {
           ).map(category => (
             <button key={category} type="button" className={categoryFilter === category ? 'active' : ''} onClick={() => { setCategoryFilter(category); setMarketSubcategoryFilter('ALL'); }}>{category}</button>
           ))}
+          {providerFilter === 'BINANCE' && categoryFilter === 'Alpha' && <div className="sire-market-providers sire-market-subcategories">
+            {(['ALL','Point+','Tokenized Securities','BSC','Robinhood','Ethereum','Solana','Base','Arbitrum','Sonic','Sui','TRON'] as const).map(filter => {
+              const value = filter === 'ALL' ? 'ALL' : 'Alpha:' + filter;
+              return <button key={filter} type="button" className={marketSubcategoryFilter === value ? 'active' : ''} onClick={() => setMarketSubcategoryFilter(value)}>{filter}</button>;
+            })}
+          </div>}
+          {providerFilter === 'BINANCE' && categoryFilter === 'TradFi' && <div className="sire-market-providers sire-market-subcategories">
+            {(['Stocks','Futures','Spot'] as const).map(subcategory => (
+              <button key={subcategory} type="button" className={marketSubcategoryFilter === subcategory ? 'active' : ''} onClick={() => setMarketSubcategoryFilter(subcategory)}>{subcategory}</button>
+            ))}
+            {marketSubcategoryFilter === 'Stocks' && <div className="sire-market-providers sire-market-subcategories">
+              {(['U.S. stock','ETFs'] as const).map(filter => <button key={filter} type="button" className={marketSubcategoryFilter === 'Stocks:' + filter ? 'active' : ''} onClick={() => setMarketSubcategoryFilter('Stocks:' + filter)}>{filter}</button>)}
+            </div>}
+            {marketSubcategoryFilter === 'Futures' && <div className="sire-market-providers sire-market-subcategories">
+              {(['Commodities','ETFs','Stocks','FX','Pre-IPO'] as const).map(filter => <button key={filter} type="button" className={marketSubcategoryFilter === 'Futures:' + filter ? 'active' : ''} onClick={() => setMarketSubcategoryFilter('Futures:' + filter)}>{filter}</button>)}
+            </div>}
+            {marketSubcategoryFilter === 'Spot' && <div className="sire-market-providers sire-market-subcategories">
+              {(['Stocks','Commodities'] as const).map(filter => <button key={filter} type="button" className={marketSubcategoryFilter === 'Spot:' + filter ? 'active' : ''} onClick={() => setMarketSubcategoryFilter('Spot:' + filter)}>{filter}</button>)}
+            </div>}
+          </div>}
           {providerFilter === 'BINANCE' && categoryFilter === 'Crypto' && <div className="sire-market-providers sire-market-subcategories">
             {(['ALL','Spot','Futures','Margin'] as const).map(subcategory => (
               <button key={subcategory} type="button" className={marketSubcategoryFilter === subcategory ? 'active' : ''} onClick={() => setMarketSubcategoryFilter(subcategory)}>{subcategory}</button>
