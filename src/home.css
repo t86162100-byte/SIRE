@@ -5262,3 +5262,24 @@
   }
 
 }
+
+
+/* MOBILE SCROLL PERFORMANCE — preserve the card appearance, remove only
+   continuously animated/blurred layers that force expensive repaints while
+   the finger is scrolling. */
+@media(max-width:700px){
+  .sire-home-watch-row{
+    animation:none !important;
+    backdrop-filter:none !important;
+    -webkit-backdrop-filter:none !important;
+  }
+
+  .sire-home-watch-row::before,
+  .sire-home-watch-row::after,
+  .sire-home-watch-main::after,
+  .sire-home-watch-row > .market-trade-button::before{
+    animation:none !important;
+    filter:none !important;
+    mix-blend-mode:normal !important;
+  }
+}
