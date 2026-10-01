@@ -126,8 +126,17 @@ export default function HomeView({ instruments, onSelectInstrument, videoSrc = '
             if (!symbol || !Number.isFinite(price)) continue;
             const change = Number(row?.change_percentage);
             const volume = Number(row?.quote_volume ?? row?.volume_24h_quote ?? row?.volume_24h_usd ?? row?.volume_24h);
-            const key = market + ':' + symbol;
-            next.set(key, {
+            const normalizedSymbol = symbol.replace(/[^A-Z0-9]/g, '');
+            const quote = {
+              price,
+              bid: Number.isFinite(Number(row?.highest_bid ?? row?.highest_bid_price)) ? Number(row?.highest_bid ?? row?.highest_bid_price) : undefined,
+              ask: Number.isFinite(Number(row?.lowest_ask ?? row?.lowest_ask_price)) ? Number(row?.lowest_ask ?? row?.lowest_ask_price) : undefined,
+              change24h: Number.isFinite(change) ? change : undefined,
+              priceChangePercent: Number.isFinite(change) ? change : undefined,
+              volume24h: Number.isFinite(volume) ? volume : undefined,
+            };
+            next.set(market + ':' + symbol, quote);
+            next.set(market + ':' + normalizedSymbol, quote);
               price,
               bid: Number.isFinite(Number(row?.highest_bid ?? row?.highest_bid_price)) ? Number(row?.highest_bid ?? row?.highest_bid_price) : undefined,
               ask: Number.isFinite(Number(row?.lowest_ask ?? row?.lowest_ask_price)) ? Number(row?.lowest_ask ?? row?.lowest_ask_price) : undefined,
@@ -150,15 +159,17 @@ export default function HomeView({ instruments, onSelectInstrument, videoSrc = '
     gateioUniverse.map(item => {
       const settlement = String((item as any).settlement || '').toLowerCase();
       const marketType = String(item.marketType || '').toLowerCase();
+      const itemQuote = String((item as any).quote || '').toLowerCase();
       const market = marketType === 'spot'
         ? 'spot'
-        : settlement === 'btc'
+        : settlement === 'btc' || itemQuote === 'btc' || String(item.symbol || '').toUpperCase().endsWith('_BTC')
           ? 'btc'
-          : settlement === 'usd1'
+          : settlement === 'usd1' || itemQuote === 'usd1' || String(item.symbol || '').toUpperCase().endsWith('_USD1')
             ? 'usd1'
             : 'usdt';
-      const key = market + ':' + String(item.symbol || '').toUpperCase();
-      const update = gateioQuotes.get(key);
+      const rawSymbol = String(item.symbol || '').toUpperCase();
+      const normalizedSymbol = rawSymbol.replace(/[^A-Z0-9]/g, '');
+      const update = gateioQuotes.get(market + ':' + rawSymbol) || gateioQuotes.get(market + ':' + normalizedSymbol);
       return update ? { ...item, ...update } : item;
     })
   ), [gateioUniverse, gateioQuotes]);
@@ -523,7 +534,7 @@ export default function HomeView({ instruments, onSelectInstrument, videoSrc = '
           .sort((a, b) => listedAt(b) - listedAt(a))
           .filter(item => activeMarketSubfilter === 'Futures' ? isFutures(item) : isSpot(item));
       case 'Gainers':
-        return [...gateioUniverse]
+        return [...gateioLiveUniverse]
           .filter(item => Number.isFinite(change(item)))
           .sort((a, b) => change(b) - change(a))
           .filter(item => activeMarketSubfilter === 'Futures' ? isFutures(item) : isSpot(item));
@@ -533,12 +544,12 @@ export default function HomeView({ instruments, onSelectInstrument, videoSrc = '
           .sort((a, b) => change(a) - change(b))
           .filter(item => activeMarketSubfilter === 'Futures' ? isFutures(item) : isSpot(item));
       case 'Vol':
-        return [...gateioUniverse]
+        return [...gateioLiveUniverse]
           .filter(item => Number.isFinite(volume(item)))
           .sort((a, b) => volume(b) - volume(a))
           .filter(item => activeMarketSubfilter === 'Futures' ? isFutures(item) : isSpot(item));
       case 'Market Cap':
-        return [...gateioUniverse]
+        return [...gateioLiveUniverse]
           .map(item => {
             const cap = marketCap(item);
             return Number.isFinite(cap) ? { ...item, marketCap: cap } : item;
