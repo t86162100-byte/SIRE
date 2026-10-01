@@ -4395,104 +4395,82 @@
 }
 
 
-/* DOMED GLASS — single animated edge bloom
-   One narrow illuminated rim segment moves through the four corners:
-   lower-right -> lower-left -> upper-left -> upper-right -> repeat.
-   All other rim areas are transparent. The center has no light layer. */
-
-@property --edge-angle {
-  syntax:"<angle>";
-  inherits:false;
-  initial-value:0deg;
-}
-
+/* DOMED GLASS — localized edge bloom
+   The illuminated rim now softly blooms inward from the same moving angle.
+   The bloom is strongest at the rim, dissolves rapidly into the glass, and
+   never forms a straight light band or reaches the opposite edge. */
 .sire-home-watch-row{
-  position:relative;
-  overflow:hidden;
-  border:1px solid transparent !important;
-  border-radius:19px 17px 20px 18px / 18px 20px 17px 19px !important;
+  --rim-bloom-angle: calc(var(--rim-phase) + 18deg);
+}
+
+.sire-home-watch-row::before{
   background:
-    linear-gradient(145deg,
-      rgba(10,28,74,.88),
-      rgba(6,17,49,.90) 40%,
-      rgba(4,11,35,.92) 68%,
-      rgba(12,15,52,.89)) padding-box !important;
-  box-shadow:
-    0 13px 30px rgba(0,0,0,.30),
-    0 0 22px rgba(42,113,255,.035) !important;
-  --edge-angle:0deg;
+    radial-gradient(
+      ellipse 30% 42% at 0% 50%,
+      rgba(121,210,255,.16) 0%,
+      rgba(87,166,255,.095) 22%,
+      rgba(91,113,255,.045) 42%,
+      transparent 68%
+    ),
+    radial-gradient(
+      ellipse 24% 34% at 100% 50%,
+      rgba(178,112,255,.11) 0%,
+      rgba(116,91,255,.055) 24%,
+      transparent 66%
+    );
+  opacity:.72 !important;
+  filter:blur(10px) saturate(125%);
+  transform:rotate(var(--rim-bloom-angle));
+  transform-origin:50% 50%;
+  animation:sire-domed-bloom-drift 11s ease-in-out infinite;
 }
 
-/* Remove the old internal light source completely. */
-.sire-home-watch-row::before,
-.sire-home-watch-main::after{
-  content:none !important;
-}
-
-/* One soft, narrow rim bloom. The rest of the perimeter is transparent. */
 .sire-home-watch-row::after{
-  content:"";
-  position:absolute;
-  inset:-1px;
-  z-index:5;
-  pointer-events:none;
-  border:5px solid transparent;
-  border-radius:inherit;
-  background:
-    linear-gradient(180deg,transparent,transparent) padding-box,
-    conic-gradient(
-      from calc(107deg + var(--edge-angle)),
-      transparent 0deg 12deg,
-      rgba(91,198,255,.08) 16deg,
-      rgba(114,218,255,.58) 22deg,
-      rgba(190,112,255,.92) 29deg,
-      rgba(113,202,255,.62) 37deg,
-      rgba(74,165,255,.16) 44deg,
-      transparent 52deg 360deg
-    ) border-box;
   box-shadow:
-    0 0 13px rgba(95,190,255,.14),
-    inset 0 0 8px rgba(125,190,255,.05);
-  filter:blur(1.8px) saturate(135%);
-  mix-blend-mode:screen;
-  animation:sire-single-edge-bloom 14s cubic-bezier(.45,.05,.2,1) infinite;
+    inset 0 1px 0 rgba(255,255,255,.045),
+    inset 0 -1px 0 rgba(50,115,225,.055),
+    0 0 12px rgba(69,152,255,.025) !important;
 }
 
-/* The typed angle interpolates continuously, so the light travels rather
-   than jumping/blinking. Opacity briefly falls near each corner transition. */
-@keyframes sire-single-edge-bloom{
-  0%{--edge-angle:0deg;opacity:.05}
-  7%{--edge-angle:10deg;opacity:.98}
-  16%{--edge-angle:30deg;opacity:.98}
-  23%{--edge-angle:55deg;opacity:.08}
-  25%{--edge-angle:90deg;opacity:.02}
-
-  32%{--edge-angle:100deg;opacity:.98}
-  41%{--edge-angle:120deg;opacity:.98}
-  48%{--edge-angle:145deg;opacity:.08}
-  50%{--edge-angle:180deg;opacity:.02}
-
-  57%{--edge-angle:190deg;opacity:.98}
-  66%{--edge-angle:210deg;opacity:.98}
-  73%{--edge-angle:235deg;opacity:.08}
-  75%{--edge-angle:270deg;opacity:.02}
-
-  82%{--edge-angle:280deg;opacity:.98}
-  91%{--edge-angle:300deg;opacity:.98}
-  98%{--edge-angle:325deg;opacity:.08}
-  100%{--edge-angle:360deg;opacity:.05}
-}
-
-@media(max-width:700px){
-  .sire-home-watch-row{
-    border-radius:18px 16px 19px 17px / 17px 19px 16px 18px !important;
+@keyframes sire-domed-bloom-drift{
+  0%,12%{
+    opacity:.10;
+    filter:blur(12px) saturate(105%);
+  }
+  24%{
+    opacity:.34;
+    filter:blur(11px) saturate(115%);
+  }
+  38%{
+    opacity:.76;
+    filter:blur(9px) saturate(130%);
+  }
+  50%{
+    opacity:.42;
+    filter:blur(11px) saturate(118%);
+  }
+  64%{
+    opacity:.08;
+    filter:blur(13px) saturate(100%);
+  }
+  78%{
+    opacity:.68;
+    filter:blur(9px) saturate(126%);
+  }
+  90%{
+    opacity:.24;
+    filter:blur(12px) saturate(110%);
+  }
+  100%{
+    opacity:.07;
+    filter:blur(13px) saturate(98%);
   }
 }
 
 @media(prefers-reduced-motion:reduce){
-  .sire-home-watch-row::after{
+  .sire-home-watch-row::before{
+    transform:none !important;
     animation:none !important;
-    opacity:.18;
   }
 }
 
