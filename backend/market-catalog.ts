@@ -27,6 +27,10 @@ export interface UnifiedInstrument {
   supportsMargin?: boolean;
   listedAt?: number;
   onboardDate?: number;
+  /** Exact Market-tab taxonomy used by the unified market catalogue. */
+  marketGroup?: string;
+  marketSubcategory?: string;
+  marketFilter?: string;
 }
 
 import { readFile } from 'node:fs/promises';
@@ -1533,33 +1537,79 @@ async function bitget(): Promise<UnifiedInstrument[]> {
   const out: UnifiedInstrument[] = [];
   const seen = new Set<string>();
   const categories = ['SPOT', 'MARGIN', 'USDT-FUTURES', 'COIN-FUTURES', 'USDC-FUTURES'] as const;
+  const fiatQuotes = new Set(['USD','EUR','GBP','JPY','AUD','CAD','CHF','HKD','SGD','TRY','BRL','PLN','MXN','ZAR','AED','NGN']);
+  const energy = new Set(['USOUSD','UKOUSD','NGAS','NATGAS','BRENT','WTI','XBRUSD','XTIUSD']);
+  const agriculture = new Set(['COTTON','COFFEE','COCOA','SUGAR','WHEAT','CORN','SOYBEAN','OJ','LUMBER']);
+  const indexNeedles = ['US30','US500','NAS100','NAS100','SPX','DJI','DAX','GER40','GER30','UK100','FTSE','JP225','JPN225','HK50','HKTECH','AUS200','ESP35','SG20','FRA40','EU50','STOXX','CHN50','CN50'];
 
-  const assetCategory = (raw: any): string => {
-    const type = String(raw?.symbolType || '').toLowerCase();
-    if (type === 'stock' || type === 'stocks') return 'Stocks';
-    if (type === 'metal' || type === 'precious_metal' || type === 'commodity' || type === 'commodities') return 'Commodities';
-    return 'Crypto';
+  const classifyCfd = (symbol: string) => {
+    const raw = symbol.toUpperCase().replace(/\\.(S|PRO)$/,'');
+    if (/^[A-Z]{6}$/.test(raw) && !indexNeedles.some(n => raw.includes(n))) return { group:'Forex', sub:'CFD' };
+    if (indexNeedles.some(n => raw.includes(n)) || /(^|\\D)(30|35|40|50|100|200|500|225)(\\D|$)/.test(raw)) return { group:'Index', sub:'CFD' };
+    if (raw.startsWith('XAU') || raw.startsWith('XAG') || raw.startsWith('XPT') || raw.startsWith('XPD')) return { group:'Commodities', sub:'CFD', commoditySub:'Metals' };
+    if (energy.has(raw) || raw.includes('OIL') || raw.includes('GAS')) return { group:'Commodities', sub:'CFD', commoditySub:'Energy' };
+    if (agriculture.has(raw)) return { group:'Commodities', sub:'CFD', commoditySub:'Agriculture' };
+    return { group:'Commodities', sub:'CFD', commoditySub:'ALL' };
   };
 
-  const add = (raw: any, requestedCategory: string) => {
+  const add = (raw: any, requestedCategory: string, override?: { group?: string; sub?: string; filter?: string }) => {
     const symbol = String(raw?.symbol || '').trim();
     const category = String(raw?.category || requestedCategory).toUpperCase();
-    if (!symbol || !categories.includes(category as any)) return;
+    if (!symbol || (category && !categories.includes(category as any) && !override?.group)) return;
+
     const type = String(raw?.type || raw?.symbolType || '').toLowerCase();
-    const marketType =
-      category === 'SPOT' ? 'Spot' :
-      category === 'MARGIN' ? 'Margin' :
-      type === 'perpetual' ? 'Perpetuals' :
-      'Futures';
-    const key = category + ':' + symbol;
+    const symbolType = String(raw?.symbolType || '').toLowerCase();
+    let group = override?.group || (
+      symbolType === 'stock' || symbolType === 'stocks' ? 'Stocks' :
+      symbolType === 'metal' || symbolType === 'precious_metal' || symbolType === 'commodity' || symbolType === 'commodities' ? 'Commodities' :
+      'Crypto'
+    );
+
+    let sub = override?.sub || '';
+    let filter = override?.filter || '';
+
+    if (group === 'Crypto') {
+      if (category === 'SPOT') {
+        const quote = String(raw?.quoteCoin || raw?.quoteAsset || raw?.quoteCcy || '').toUpperCase();
+        if (quote === 'USDT') filter = 'USDT';
+        else if (quote === 'USDC') filter = 'USDC';
+        else if (quote === 'BTCC') filter = 'BTCC';
+        else if (quote === 'ETH') filter = 'ETH';
+        else if (fiatQuotes.has(quote)) filter = 'FIAT';
+        else filter = 'ALTs';
+        sub = 'Spot';
+      } else if (category === 'MARGIN') {
+        const quote = String(raw?.quoteCoin || raw?.quoteAsset || raw?.quoteCcy || '').toUpperCase();
+        const base = String(raw?.baseCoin || raw?.baseAsset || raw?.baseCcy || '').toUpperCase();
+        filter = quote === 'USDT' || base === 'USDT' ? 'USDT' : quote === 'USDC' || base === 'USDC' ? 'USDC' : quote === 'BTC' || base === 'BTC' ? 'BTC' : '';
+        sub = 'Margin';
+      } else {
+        filter = category === 'USDT-FUTURES' ? 'USDT-M' : category === 'COIN-FUTURES' ? 'COIN-M' : 'USDC-M';
+        sub = 'Futures';
+      }
+    } else if (group === 'Stocks') {
+      sub = category === 'SPOT' ? 'spot' : type === 'perpetual' ? 'Perps' : 'Perps';
+      filter = sub;
+    } else if (group === 'Commodities') {
+      const upper = symbol.toUpperCase();
+      const name = String(raw?.fullName || raw?.displayName || '').toUpperCase();
+      const isMetal = symbolType === 'metal' || upper.startsWith('XAU') || upper.startsWith('XAG') || upper.startsWith('XPT') || upper.startsWith('XPD') || name.includes('GOLD') || name.includes('SILVER') || name.includes('PALLADIUM') || name.includes('PLATINUM');
+      const isEnergy = energy.has(upper) || name.includes('OIL') || name.includes('NATURAL GAS') || name.includes('GASOLINE');
+      const isAgriculture = agriculture.has(upper) || name.includes('COTTON') || name.includes('COFFEE') || name.includes('COCOA') || name.includes('SUGAR') || name.includes('WHEAT') || name.includes('SOY');
+      const commoditySub = isMetal ? 'Metals' : isEnergy ? 'Energy' : isAgriculture ? 'Agriculture' : 'ALL';
+      sub = category === 'SPOT' ? commoditySub : type === 'perpetual' ? 'Commodity perps' : commoditySub;
+      filter = sub;
+    }
+
+    const key = (override?.group || category) + ':' + symbol + ':' + (sub || filter);
     if (seen.has(key)) return;
 
-    const item = cryptoItem('BITGET', marketType, assetCategory(raw), {
+    const item = cryptoItem('BITGET', category === 'SPOT' ? 'Spot' : category === 'MARGIN' ? 'Margin' : type === 'perpetual' ? 'Perpetuals' : 'Futures', group, {
       ...raw,
       symbol,
       baseCoin: raw?.baseCoin || raw?.baseAsset,
       quoteCoin: raw?.quoteCoin || raw?.quoteAsset,
-      fullName: raw?.displayName || symbol,
+      fullName: raw?.displayName || raw?.fullName || raw?.name || symbol,
       status: raw?.status || 'online',
       contractType: raw?.type,
       settleCoin: raw?.settleCoin || raw?.settleCcy || raw?.quoteCoin,
@@ -1569,15 +1619,18 @@ async function bitget(): Promise<UnifiedInstrument[]> {
     });
     if (!item) return;
 
-    item.id = 'BITGET:' + category + ':' + symbol;
+    item.id = 'BITGET:' + (override?.group || category) + ':' + symbol + ':' + (sub || filter || 'ALL');
     item.providerLabel = 'Bitget';
-    item.marketType = marketType;
-    item.category = assetCategory(raw);
+    item.marketType = item.marketType;
+    item.category = group;
     item.instrumentType = category;
     item.contractType = String(raw?.type || '').trim() || item.contractType;
     item.settlement = String(raw?.settleCoin || raw?.settleCcy || '').trim() || item.settlement;
     item.expiry = String(raw?.deliveryTime || '').trim() || item.expiry;
     item.supportsMargin = category === 'MARGIN' || Boolean(raw?.maxLeverage || raw?.maxCrossedLeverage || raw?.maxIsolatedLeverage);
+    item.marketGroup = group;
+    item.marketSubcategory = sub || 'ALL';
+    item.marketFilter = filter || 'ALL';
     (item as any).bitgetCategory = category;
     (item as any).symbolType = raw?.symbolType;
     (item as any).deliveryPeriod = raw?.deliveryPeriod;
@@ -1588,10 +1641,7 @@ async function bitget(): Promise<UnifiedInstrument[]> {
     out.push(item);
   };
 
-  // Bitget's public UTA v3 catalogue covers every public trading product line.
-  // Query each category independently so one failed category never suppresses
-  // the others. We retain all returned instrument states instead of silently
-  // dropping non-online rows.
+  // CEX UTA catalogue: the official public instrument endpoint covers these five product lines.
   for (const category of categories) {
     try {
       const instrumentUrls = category === 'SPOT'
@@ -1614,12 +1664,10 @@ async function bitget(): Promise<UnifiedInstrument[]> {
     }
   }
 
-  // Independent v2 contract fallback. It is additive and deduplicated, so
-  // Render can still populate futures/perpetuals if v3 is temporarily blocked.
+  // Legacy futures fallback is additive and deduplicated.
   for (const productType of ['USDT-FUTURES', 'COIN-FUTURES', 'USDC-FUTURES']) {
     try {
       const response = await getJson('https://api.bitget.com/api/v2/mix/market/contracts?productType=' + productType, 15000);
-      if (String(response?.code || '00000') !== '00000') throw new Error(String(response?.msg || 'Bitget futures contract request failed'));
       const rows = Array.isArray(response?.data) ? response.data : [];
       for (const raw of rows) add({
         ...raw,
@@ -1633,9 +1681,125 @@ async function bitget(): Promise<UnifiedInstrument[]> {
     }
   }
 
-  // Attach Bitget's live ticker snapshot so Home/Markets can rank the
-  // exchange by price, 24h change and turnover. Spot also supplies the
-  // snapshot used by Margin rows.
+  // Reality public stock directory supplies the full U.S. stock token list and company names.
+  try {
+    const response = await getJson('https://api.bitget.com/api/v3/reality/market/stock-info', 20000);
+    const rows = Array.isArray(response?.data) ? response.data : [];
+    for (const raw of rows) add({
+      ...raw,
+      symbol: raw?.symbol,
+      baseCoin: raw?.symbol,
+      quoteCoin: 'USDT',
+      fullName: raw?.name || raw?.code || raw?.symbol,
+      symbolType: 'stock',
+      category: 'SPOT',
+      isReality: 'yes',
+    }, 'SPOT', { group:'Stocks', sub:'spot', filter:'spot' });
+    console.log('[SIRE BITGET] Reality stocks: ' + rows.length);
+  } catch (error) {
+    console.warn('[SIRE BITGET] Reality stock directory failed:', error);
+  }
+
+  // CFD is a separate Bitget market system. The ticker directory is attempted without
+  // inventing symbols; if Bitget requires authenticated CFD access, we log that fact and
+  // leave the other categories intact.
+  try {
+    const response = await getJson('https://api.bitget.com/api/v3/cfd/market/tickers', 20000);
+    const rows = Array.isArray(response?.data) ? response.data : [];
+    for (const raw of rows) {
+      const c = classifyCfd(String(raw?.symbol || ''));
+      add({
+        ...raw,
+        symbol: raw?.symbol,
+        baseCoin: raw?.symbol,
+        fullName: raw?.symbol,
+        category: 'CFD',
+        type: 'cfd',
+        status: 'online',
+      }, 'CFD', { group:c.group, sub:c.sub, filter:c.commoditySub || 'CFD' });
+      const item = out[out.length - 1];
+      if (item && item.symbol === String(raw?.symbol || '')) {
+        const bid = Number(raw?.bid1), ask = Number(raw?.ask1);
+        if (Number.isFinite(bid)) item.bid = bid;
+        if (Number.isFinite(ask)) item.ask = ask;
+        if (Number.isFinite(bid) && Number.isFinite(ask)) item.price = (bid + ask) / 2;
+        const ch = Number(raw?.bidOpenPriceChange ?? raw?.askOpenPriceChange);
+        if (Number.isFinite(ch)) (item as any).change24h = ch * 100;
+      }
+    }
+    console.log('[SIRE BITGET] CFD tickers: ' + rows.length);
+  } catch (error) {
+    console.warn('[SIRE BITGET] CFD ticker directory unavailable:', error);
+  }
+
+  // Bitget Wallet Onchain: Hot/Trending uses the documented hotpicks ranking.
+  // Latest is attempted as a ranking first, then falls back to the documented
+  // timestamped token directory so we still return real on-chain symbols.
+  const walletBases = ['https://web3.bgw.world', 'https://web3.bitget.com'];
+  const addWalletRows = (rows: any[], sub: string) => {
+    for (const raw of rows) {
+      const symbol = String(raw?.symbol || '').trim();
+      if (!symbol) continue;
+      const item = cryptoItem('BITGET', 'Onchain', 'Onchain', {
+        symbol,
+        baseCoin: symbol,
+        quoteCoin: 'USDT',
+        fullName: raw?.name || symbol,
+        status: 'online',
+      }, { last: raw?.price });
+      if (!item) continue;
+      const chain = String(raw?.chain || '').trim();
+      const contract = String(raw?.contract || '').trim();
+      item.id = 'BITGET:ONCHAIN:' + (chain || 'unknown') + ':' + (contract || symbol);
+      item.providerLabel = 'Bitget';
+      item.category = 'Onchain';
+      item.marketType = 'Onchain';
+      item.instrumentType = 'ONCHAIN';
+      item.marketGroup = 'Onchain';
+      item.marketSubcategory = sub;
+      item.marketFilter = sub;
+      item.logoUrl = String(raw?.icon || item.logoUrl);
+      (item as any).chain = chain;
+      (item as any).contract = contract;
+      (item as any).change24h = Number(raw?.change_24h);
+      (item as any).volume24h = Number(raw?.volume_24h);
+      (item as any).turnover24h = Number(raw?.turnover_24h);
+      (item as any).marketCap = Number(raw?.market_cap);
+      out.push(item);
+    }
+  };
+
+  for (const base of walletBases) {
+    let gotTrending = false;
+    try {
+      const response = await postJson(base + '/bgw-pro/market/v3/topRank/detail', { name:'hotpicks' }, 20000);
+      const rows = Array.isArray(response?.data?.list) ? response.data.list : [];
+      if (rows.length) { addWalletRows(rows, 'Trending'); gotTrending = true; console.log('[SIRE BITGET] Onchain Trending: ' + rows.length); break; }
+    } catch (error) { console.warn('[SIRE BITGET] Onchain Trending failed:', error); }
+    if (gotTrending) break;
+  }
+
+  for (const base of walletBases) {
+    let gotLatest = false;
+    try {
+      const response = await postJson(base + '/bgw-pro/market/v3/topRank/detail', { name:'latest' }, 20000);
+      const rows = Array.isArray(response?.data?.list) ? response.data.list : [];
+      if (rows.length) { addWalletRows(rows, 'Latest'); gotLatest = true; console.log('[SIRE BITGET] Onchain Latest ranking: ' + rows.length); break; }
+    } catch (error) { console.warn('[SIRE BITGET] Onchain Latest ranking failed:', error); }
+    if (gotLatest) break;
+  }
+
+  if (!out.some(i => i.marketGroup === 'Onchain' && i.marketSubcategory === 'Latest')) {
+    for (const base of walletBases) {
+      try {
+        const response = await postJson(base + '/bgw-pro/market/v3/historical-coins', { createTime:'', limit:100 }, 20000);
+        const rows = Array.isArray(response?.data?.tokenList) ? response.data.tokenList : [];
+        if (rows.length) { addWalletRows(rows, 'Latest'); console.log('[SIRE BITGET] Onchain Latest token directory: ' + rows.length); break; }
+      } catch (error) { console.warn('[SIRE BITGET] Onchain Latest directory failed:', error); }
+    }
+  }
+
+  // Attach CEX ticker snapshots to the UTA rows.
   const tickerCategories = ['SPOT', 'USDT-FUTURES', 'COIN-FUTURES', 'USDC-FUTURES'] as const;
   const tickerMaps = new Map<string, Map<string, any>>();
   await Promise.all(tickerCategories.map(async category => {
@@ -1682,15 +1846,21 @@ async function bitget(): Promise<UnifiedInstrument[]> {
     if (Number.isFinite(turnover)) {
       (item as any).volume24h = turnover;
       (item as any).quoteVolume = turnover;
+      (item as any).turnover24h = turnover;
     } else if (Number.isFinite(baseVolume)) {
       (item as any).volume24h = baseVolume;
     }
-    if (Number.isFinite(turnover)) (item as any).turnover24h = turnover;
   }
 
   const unique = out.filter((item, index, all) => all.findIndex(other => other.id === item.id) === index);
+  const taxonomyCounts = unique.reduce<Record<string, number>>((acc, item) => {
+    const key = String(item.marketGroup || item.category || 'Unknown') + '/' + String(item.marketSubcategory || 'ALL') + '/' + String(item.marketFilter || 'ALL');
+    acc[key] = (acc[key] || 0) + 1;
+    return acc;
+  }, {});
   console.log('[SIRE BITGET] COMPLETE', JSON.stringify({
     total: unique.length,
+    taxonomy: taxonomyCounts,
     spot: unique.filter(i => i.instrumentType === 'SPOT').length,
     margin: unique.filter(i => i.instrumentType === 'MARGIN').length,
     perpetuals: unique.filter(i => i.marketType === 'Perpetuals').length,
@@ -1698,7 +1868,6 @@ async function bitget(): Promise<UnifiedInstrument[]> {
   }));
   return unique;
 }
-
 async function mexc(): Promise<UnifiedInstrument[]> {
   const out: UnifiedInstrument[] = [];
   const seen = new Set<string>();
