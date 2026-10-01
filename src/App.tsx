@@ -118,6 +118,17 @@ const getBitgetInstType = (item: Instrument) => {
   return 'usdt-futures';
 };
 
+const getBitgetCardMarketLabel = (item: Instrument) => {
+  if (item.provider !== 'BITGET') {
+    return String(item.marketType || item.category).toLowerCase();
+  }
+  const rawType = String(item.marketType || item.instrumentType || '').trim().toLowerCase();
+  const type = rawType === 'perpetuals' || rawType === 'perpetual' ? 'perpetual' : rawType;
+  const group = String((item as any).marketGroup || item.category || '').trim().toLowerCase();
+  if (type && group) return type + '_' + group;
+  return type || group || 'market';
+};
+
 const getBitgetInstId = (item: Instrument) => {
   const base = String((item as any).base || '').trim().toUpperCase();
   const quote = String((item as any).quote || '').trim().toUpperCase();
@@ -1012,7 +1023,7 @@ export default function App() {
   const image = event.currentTarget;
   image.onerror = null;
   image.src = makeLogoFallback(item.providerLabel || item.provider);
-}} /></span><b>{String(item.providerLabel || item.provider).toUpperCase()}</b><small>{item.category === 'Crypto' && item.marketType !== 'Spot' ? item.marketType.toLowerCase() : item.category === 'Crypto' && item.marketType === 'Spot' ? 'spot crypto' : String(item.marketType || item.category).toLowerCase()}</small></span></button>)}</div><div style={{height: quoteWindow.bottom}} aria-hidden="true" /></div></aside>
+}} /></span><b>{String(item.providerLabel || item.provider).toUpperCase()}</b><small>{getBitgetCardMarketLabel(item)}</small></span></button>)}</div><div style={{height: quoteWindow.bottom}} aria-hidden="true" /></div></aside>
       <section className="native-chart-panel">
         <div className={`sire-chart-grid sire-chart-grid--${chartLayout}${chartLayout === 2 ? ` sire-chart-grid--${multiChartPosition}` : ''}`} onContextMenu={event => event.preventDefault()}>
           {chartItems.map((chartSymbol, index) => <div className={`sire-chart-cell${activeChartIndex === index ? ' sire-chart-cell--active' : ''}`} key={index} onPointerDown={() => setActiveChartIndex(index)}>{chartSymbol && <FinancialChart
@@ -1056,7 +1067,7 @@ export default function App() {
             </div>
             <div className="sire-instrument-search-list">
               {filtered.slice(0, 120).map(item => <button key={item.id} type="button" onClick={() => { if (instrumentSearchMode === 'multi') { setMultiChartInstrument(item.symbol); setSearch(''); setInstrumentSearchOpen(false); } else { selectInstrument(item); setInstrumentSearchOpen(false); } }}>
-                <span className="quote-asset-logo-wrap"><img className="quote-asset-logo" src={item.logoUrl || makeAssetLogoFallback(item)} alt="" onError={event => { const image=event.currentTarget; image.onerror=null; image.src=makeLogoFallback(item.displaySymbol || item.symbol); }} /></span><span className="quote-instrument-name"><b>{String(item.displaySymbol || item.symbol).toUpperCase()}</b><small>{String(item.name || item.displaySymbol || item.symbol).toUpperCase()}</small></span><span className="quote-broker"><span className="quote-exchange-logo-wrap"><img className="quote-exchange-logo" src={makeProviderLogoFallback(item)} alt="" onError={event => { const image = event.currentTarget; image.onerror = null; image.src = makeLogoFallback(item.providerLabel || item.provider); }} /></span><b>{String(item.providerLabel || item.provider).toUpperCase()}</b><small>{item.category === 'Crypto' && item.marketType !== 'Spot' ? item.marketType.toLowerCase() : item.category === 'Crypto' && item.marketType === 'Spot' ? 'spot crypto' : String(item.marketType || item.category).toLowerCase()}</small></span>
+                <span className="quote-asset-logo-wrap"><img className="quote-asset-logo" src={item.logoUrl || makeAssetLogoFallback(item)} alt="" onError={event => { const image=event.currentTarget; image.onerror=null; image.src=makeLogoFallback(item.displaySymbol || item.symbol); }} /></span><span className="quote-instrument-name"><b>{String(item.displaySymbol || item.symbol).toUpperCase()}</b><small>{String(item.name || item.displaySymbol || item.symbol).toUpperCase()}</small></span><span className="quote-broker"><span className="quote-exchange-logo-wrap"><img className="quote-exchange-logo" src={makeProviderLogoFallback(item)} alt="" onError={event => { const image = event.currentTarget; image.onerror = null; image.src = makeLogoFallback(item.providerLabel || item.provider); }} /></span><b>{String(item.providerLabel || item.provider).toUpperCase()}</b><small>{getBitgetCardMarketLabel(item)}</small></span>
               </button>)}
             </div>
           </div>
