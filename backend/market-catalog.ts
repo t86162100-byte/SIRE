@@ -322,6 +322,54 @@ async function coinbase(): Promise<UnifiedInstrument[]> {
   return out;
 }
 
+async function binanceTradFi(payload: any): Promise<UnifiedInstrument[]> {
+  const out: UnifiedInstrument[] = [];
+  const add = (symbol: string, name: string, marketType: string, subcategory: string, filters: string[], raw: any = {}) => {
+    if (!symbol) return;
+    out.push({
+      id: 'BINANCE:TradFi:' + marketType + ':' + symbol,
+      provider: 'BINANCE', providerLabel: 'Binance', marketType, category: 'TradFi',
+      symbol, displaySymbol: symbol, name, base: symbol, quote: 'USD',
+      exchangeOpen: 1, status: 'TRADING', logoUrl: providerLogo('binance'), providerLogoUrl: providerLogo('binance'),
+      instrumentType: marketType, listedAt: Number.isFinite(Number(raw?.listingTime)) ? Number(raw.listingTime) : undefined,
+      marketGroup: 'TradFi', marketSubcategory: subcategory,
+      marketFilter: filters[0] || 'ALL', marketFilters: Array.from(new Set(filters.map(v => subcategory + ':' + v))),
+    });
+  };
+  try {
+    const key = String(process.env.BINANCE_API_KEY || '').trim();
+    if (key) {
+      const response = await getJsonWithHeaders('https://api.binance.com/sapi/v1/equity/market/exchangeInfo', {'X-MBX-APIKEY': key}, 15000);
+      for (const raw of Array.isArray(response?.symbols) ? response.symbols : []) {
+        const symbol = String(raw?.symbol || '').trim();
+        if (!symbol) continue;
+        const name = symbol;
+        add(symbol, name, 'Spot', /ETF/i.test(name) ? 'Stocks' : 'Stocks', [/ETF/i.test(name) ? 'ETFs' : 'U.S. stock'], raw);
+      }
+    }
+  } catch (error) { console.warn('[SIRE BINANCE] Direct stocks failed:', error); }
+  const metadata = payload?.metadata && typeof payload.metadata === 'object' ? payload.metadata : {};
+  for (const [symbolKey, rawValue] of Object.entries(metadata)) {
+    const raw: any = rawValue || {};
+    const symbol = String(symbolKey || '').trim();
+    const name = String(raw?.fullName || symbol).trim();
+    const blob = (symbol + ' ' + name + ' ' + String(raw?.category || '') + ' ' + String(raw?.marketGroup || '') + ' ' + String(raw?.productType || '')).toLowerCase();
+    const explicitGroup = String(raw?.marketGroup || raw?.category || '').toLowerCase();
+    if (symbol && (/bstocks/i.test(name) || /bstocks/i.test(blob) || /stock/i.test(blob) || explicitGroup === 'tradfi')) {
+      const isEtf = /etf/i.test(blob);
+      const sub = String(raw?.marketSubcategory || raw?.instrumentType || '').toLowerCase();
+      if (sub.includes('future') || /perpetual|futures/.test(blob)) {
+        const filter = /commodity/.test(blob) ? 'Commodities' : /pre.?ipo/.test(blob) ? 'Pre-IPO' : /fx|forex|currency/.test(blob) ? 'FX' : isEtf ? 'ETFs' : 'Stocks';
+        add(symbol, name, 'Futures', 'Futures', [filter], raw);
+      } else {
+        add(symbol, name, 'Spot', 'Stocks', [isEtf ? 'ETFs' : 'U.S. stock'], raw);
+      }
+    }
+  }
+  console.log('[SIRE BINANCE] TradFi:', out.length);
+  return out;
+}
+
 async function binanceAlpha(): Promise<UnifiedInstrument[]> {
   const out: UnifiedInstrument[]=[];
   try {
@@ -384,6 +432,7 @@ async function binance(): Promise<UnifiedInstrument[]> {
         perpetuals: items.filter(item => item.marketType === 'Perpetuals').length,
       }));
       const seen = new Set<string>();
+      items.push(...await binanceTradFi(payload));
       items.push(...await binanceAlpha());
       return items.filter(item => {
         if (seen.has(item.id)) return false;
