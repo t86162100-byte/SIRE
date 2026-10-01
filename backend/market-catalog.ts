@@ -535,6 +535,18 @@ async function kucoin(): Promise<UnifiedInstrument[]> {
     if (seen.has(key)) return;
     seen.add(key);
     out.push(item);
+
+    // Parent "ALL" views must contain the complete child universe. Keep the
+    // specialized row as-is and add a distinct taxonomy alias for ALL; this
+    // prevents the UI from having to infer parent membership and guarantees
+    // every commodity/index/forex symbol is present in its ALL filter.
+    if (group === 'Commodities' || group === 'Index' || group === 'Forex') {
+      const allItem = { ...item };
+      allItem.id = item.id + ':ALL';
+      allItem.marketSubcategory = 'ALL';
+      allItem.marketFilter = 'ALL';
+      out.push(allItem);
+    }
   };
 
   // KuCoin's public Spot symbol master is the source of truth for the complete
@@ -1197,7 +1209,6 @@ async function bybit(): Promise<UnifiedInstrument[]> {
     if (symbolType === 'forex') return 'Forex';
     return fallback;
   };
-
   const fetchPaged = async (category: string, params: Record<string, string>, handler: (raw: any) => void, paginated = true) => {
     let cursor = '';
     for (let page = 0; page < 1000; page += 1) {
@@ -1588,7 +1599,7 @@ async function bitget(): Promise<UnifiedInstrument[]> {
         sub = 'Futures';
       }
     } else if (group === 'Stocks') {
-      sub = category === 'SPOT' ? 'spot' : type === 'perpetual' ? 'Perps' : 'Perps';
+      sub = category === 'SPOT' ? 'spot' : 'Perps';
       filter = sub;
     } else if (group === 'Commodities') {
       const upper = symbol.toUpperCase();
@@ -1694,7 +1705,7 @@ async function bitget(): Promise<UnifiedInstrument[]> {
       symbolType: 'stock',
       category: 'SPOT',
       isReality: 'yes',
-    }, 'SPOT', { group:'Stocks', sub:'spot', filter:'spot' });
+    }, 'SPOT', { group:'Stocks', sub:'U.S. stock', filter:'U.S. stock' });
     console.log('[SIRE BITGET] Reality stocks: ' + rows.length);
   } catch (error) {
     console.warn('[SIRE BITGET] Reality stock directory failed:', error);
@@ -2397,7 +2408,6 @@ async function blofin(): Promise<UnifiedInstrument[]> {
   } catch (error) {
     console.warn('[SIRE BLOFIN] Perpetuals failed:', error);
   }
-
   console.log('[SIRE BLOFIN] COMPLETE', JSON.stringify({
     total: out.length,
     spot: out.filter(x => x.marketType === 'Spot').length,
