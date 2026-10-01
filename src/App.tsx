@@ -195,7 +195,7 @@ export default function App() {
           const rows = Array.isArray(payload?.data) ? payload.data : [];
           for (const row of rows) {
             const symbol = String(row?.symbol || '').toUpperCase();
-            const price = Number(row?.lastPrice);
+            const price = Number(row?.lastPrice ?? row?.lastPr ?? row?.last);
             if (!symbol || !Number.isFinite(price)) continue;
             const open = Number(row?.openPrice24h);
             const pct = Number(row?.price24hPcnt);
@@ -366,7 +366,12 @@ export default function App() {
         const bp = priority.has(b.id) ? 0 : 1;
         return ap - bp || Number((b as any).volume24h || 0) - Number((a as any).volume24h || 0);
       });
-      connect(ranked.slice(0, 40));
+      // Bitget's ticker channel is subscribed per connection. The previous
+      // implementation silently dropped every symbol after the first 40 in each
+      // product family, which made lower-ranked Spot rows appear frozen.
+      for (let offset = 0; offset < ranked.length; offset += 40) {
+        connect(ranked.slice(offset, offset + 40));
+      }
     }
 
     return () => {
