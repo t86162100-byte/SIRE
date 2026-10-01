@@ -955,30 +955,33 @@ export default function HomeView({ instruments, onSelectInstrument, videoSrc = '
 
         <section className="sire-home-section sire-home-pulse">
           <div className="sire-home-section-head"><div><span>LIVE MARKET</span><h2>Market Pulse</h2></div><button type="button">See All <ChevronRight size={15} /></button></div>
-          <div className="sire-home-pulse-grid" aria-label="Live market pulse">
-            {pulseMarkets.map(item=>{
-              const raw=item as any;
-              const change=Number(raw.change24h??raw.changePercent24h??raw.priceChangePercent??raw.percentChange24h??raw.changePercent);
-              const tone: 'positive'|'negative'|'neutral'=Number.isFinite(change)?(change>0?'positive':change<0?'negative':'neutral'):'neutral';
-              const base=String(raw.base||item.displaySymbol||item.symbol).replace(/\/USDT$|\/USD$|USDT$|USD$/i,'').toUpperCase();
-              const exchange=String(item.providerLabel||item.provider||'Exchange').toUpperCase();
-              return <article key={item.id} className={`sire-home-market-card sire-home-pulse-card sire-home-pulse-card--${tone}`}>
-                <button type="button" className="sire-home-pulse-main" onClick={()=>onSelectInstrument?.(item)} aria-label={`Open ${base} on ${exchange}`}>
-                  <span className="sire-home-pulse-top">
-                    <span className="sire-home-pulse-identity">
-                      <span className="sire-home-pulse-logo"><img src={item.logoUrl||fallbackLogo(base)} alt="" decoding="async" onError={event=>{event.currentTarget.onerror=null;event.currentTarget.src=fallbackLogo(base)}}/></span>
-                      <span className="sire-home-pulse-copy"><b>{base}</b><small>{String(item.name||item.displaySymbol||item.symbol).replace(/_/g,' ')}</small></span>
+          <div className="sire-home-pulse-viewport" aria-label="Live market pulse">
+            <div className="sire-home-pulse-track">
+              {[...pulseMarkets, ...pulseMarkets].map((item, index) => {
+                const raw=item as any;
+                const change=Number(raw.change24h??raw.changePercent24h??raw.priceChangePercent??raw.percentChange24h??raw.changePercent);
+                const tone: 'positive'|'negative'|'neutral'=Number.isFinite(change)?(change>0?'positive':change<0?'negative':'neutral'):'neutral';
+                const base=String(raw.base||item.displaySymbol||item.symbol).replace(/\/USDT$|\/USD$|USDT$|USD$/i,'').toUpperCase();
+                const exchange=String(item.providerLabel||item.provider||'Exchange').toUpperCase();
+                return <article key={item.id + '-' + index} className={`sire-home-pulse-card sire-home-pulse-card--${tone}`}>
+                  <button type="button" className="sire-home-pulse-main" onClick={()=>onSelectInstrument?.(item)} aria-label={`Open ${base} on ${exchange}`}>
+                    <span className="sire-home-pulse-top">
+                      <span className="sire-home-pulse-identity">
+                        <span className="sire-home-pulse-logo"><img src={item.logoUrl||fallbackLogo(base)} alt="" decoding="async" onError={event=>{event.currentTarget.onerror=null;event.currentTarget.src=fallbackLogo(base)}}/></span>
+                        <span className="sire-home-pulse-copy"><b>{base}</b><small>{String(item.name||item.displaySymbol||item.symbol).replace(/_/g,' ')}</small></span>
+                      </span>
+                      <span className="sire-home-pulse-exchange"><img src={makeProviderLogoFallback(item)} alt="" decoding="async" onError={event=>{event.currentTarget.onerror=null;event.currentTarget.src=fallbackLogo(exchange)}}/><small>{exchange}</small></span>
                     </span>
-                    <span className="sire-home-pulse-exchange"><img src={makeProviderLogoFallback(item)} alt="" decoding="async" onError={event=>{event.currentTarget.onerror=null;event.currentTarget.src=fallbackLogo(exchange)}}/><small>{exchange}</small></span>
-                  </span>
-                  <span className="sire-home-pulse-bottom">
-                    <strong>{money(item.price)}</strong>
-                    <b className={tone}>{Number.isFinite(change)?`${change>=0?'+':''}${change.toFixed(2)}%`:'—'}</b>
-                  </span>
-                  <span className="sire-home-pulse-chart"><Sparkline values={pulseHistory.get(item.id)||[]} tone={tone}/></span>
-                </button>
-              </article>;
-            })}
+                    <span className="sire-home-pulse-value">
+                      <strong>{money(item.price)}</strong>
+                      <b className={tone}>{Number.isFinite(change)?`${change>=0?'+':''}${change.toFixed(2)}%`:'—'}</b>
+                    </span>
+                    <span className="sire-home-pulse-chart"><Sparkline values={pulseHistory.get(item.id)||[]} tone={tone}/></span>
+                    <span className="sire-home-pulse-edge" aria-hidden="true"/>
+                  </button>
+                </article>;
+              })}
+            </div>
           </div>
         </section>
 
