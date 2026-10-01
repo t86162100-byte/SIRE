@@ -408,21 +408,54 @@ async function binance(): Promise<UnifiedInstrument[]> {
       ...(Array.isArray(payload?.margin) ? payload.margin : []),
       ...(Array.isArray(payload?.derivatives) ? payload.derivatives : []),
     ];
+    // Enrich the snapshot's derivative rows with Binance's live exchangeInfo metadata.
+    // In particular, underlyingSubType is the documented Binance source for the
+    // Futures thematic taxonomy (DeFi, Metaverse, PoW, Layer-1, etc.). The
+    // snapshot remains the availability fallback when a hosted environment blocks
+    // Binance's derivative REST hosts.
+    const derivativeMeta = new Map<string, any>();
+    const loadDerivativeMeta = async (urls: string[]) => {
+      try {
+        const response = await getJsonAny(urls, 12000);
+        for (const raw of Array.isArray(response?.symbols) ? response.symbols : []) {
+          const symbol = String(raw?.symbol || '').trim().toUpperCase();
+          if (symbol) derivativeMeta.set(symbol, raw);
+        }
+      } catch (error) {
+        console.warn('[SIRE BINANCE] derivative taxonomy enrichment failed:', error);
+      }
+    };
+    await Promise.all([
+      loadDerivativeMeta([
+        'https://fapi.binance.com/fapi/v1/exchangeInfo',
+        'https://api-dev.pipai.org/fapi/v1/exchangeInfo',
+      ]),
+      loadDerivativeMeta([
+        'https://dapi.binance.com/dapi/v1/exchangeInfo',
+        'https://api-dev.pipai.org/dapi/v1/exchangeInfo',
+      ]),
+    ]);
+
     const items = rows.map((raw: any) => {
       const marketType = String(raw?.marketType || '');
-      const taxonomy = classifyBinanceCrypto(raw, marketType);
+      const symbol = String(raw?.symbol || raw?.displaySymbol || '').trim().toUpperCase();
+      const liveMeta = (marketType === 'Futures' || marketType === 'Perpetuals')
+        ? derivativeMeta.get(symbol)
+        : undefined;
+      const enriched = liveMeta ? { ...raw, ...liveMeta } : raw;
+      const taxonomy = classifyBinanceCrypto(enriched, marketType);
       return Object.assign(cryptoItem('BINANCE', marketType, 'Crypto', {
-        ...raw,
-        symbol: raw?.symbol || raw?.displaySymbol,
-        baseAsset: raw?.base || raw?.baseAsset,
-        quoteAsset: raw?.quote || raw?.quoteAsset,
-        fullName: raw?.name,
-        status: raw?.status || 'TRADING',
-        contractType: raw?.contractType,
-        settleCoin: raw?.settlement,
-        onboardDate: raw?.onboardDate,
-        listingTime: raw?.listedAt,
-        deliveryTime: raw?.expiry,
+        ...enriched,
+        symbol: enriched?.symbol || enriched?.displaySymbol,
+        baseAsset: enriched?.base || enriched?.baseAsset,
+        quoteAsset: enriched?.quote || enriched?.quoteAsset,
+        fullName: enriched?.name,
+        status: enriched?.status || 'TRADING',
+        contractType: enriched?.contractType,
+        settleCoin: enriched?.settlement || enriched?.settleCoin,
+        onboardDate: enriched?.onboardDate,
+        listingTime: enriched?.listedAt,
+        deliveryTime: enriched?.expiry,
       }), taxonomy);
     }).filter(Boolean) as UnifiedInstrument[];
     const derivatives = items.filter(item => item.marketType === 'Futures' || item.marketType === 'Perpetuals');
