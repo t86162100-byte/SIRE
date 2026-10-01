@@ -159,6 +159,9 @@ export default function App() {
   const binanceQuoteCacheRef = useRef<Record<string, any>>({});
   const binanceMetadataCacheRef = useRef<Record<string, any>>({});
   const [bitgetPriorityIds, setBitgetPriorityIds] = useState<string[]>([]);
+  // Bitget live quotes are kept outside the shared catalogue state. This prevents
+  // its high-frequency ticks from competing with Binance's live update path.
+  const [bitgetQuotes, setBitgetQuotes] = useState<Map<string, any>>(() => new Map());
 
   useEffect(() => {
     const onBitgetPrioritySymbols = (event: Event) => {
@@ -211,13 +214,11 @@ export default function App() {
         } catch {}
       }));
       if (cancelled || !updates.size) return;
-      setInstruments(current => current.map(item => {
-        if (item.provider !== 'BITGET') return item;
-        const type = getBitgetInstType(item).toLowerCase();
-        const symbol = getBitgetInstId(item).toUpperCase();
-        const update = updates.get(type + ':' + symbol);
-        return update ? { ...item, ...update } : item;
-      }));
+      setBitgetQuotes(current => {
+        const next = new Map(current);
+        updates.forEach((update, key) => next.set(key, update));
+        return next;
+      });
     };
     void refresh();
     const timer = window.setInterval(() => { void refresh(); }, 2000);
@@ -250,12 +251,11 @@ export default function App() {
       if (cancelled || !pending.size) return;
       const updates = new Map(pending);
       pending.clear();
-      setInstruments(current => current.map(item => {
-        if (item.provider !== 'BITGET') return item;
-        const key = getBitgetInstType(item).toLowerCase() + ':' + getBitgetInstId(item);
-        const update = updates.get(key);
-        return update ? { ...item, ...update } : item;
-      }));
+      setBitgetQuotes(current => {
+        const next = new Map(current);
+        updates.forEach((update, key) => next.set(key, update));
+        return next;
+      });
     };
 
     const queueUpdate = (key: string, update: any) => {
@@ -384,6 +384,15 @@ export default function App() {
 
 
 
+
+  const liveInstruments = useMemo(() => (
+    instruments.map(item => {
+      if (item.provider !== 'BITGET') return item;
+      const key = getBitgetInstType(item).toLowerCase() + ':' + getBitgetInstId(item);
+      const update = bitgetQuotes.get(key);
+      return update ? { ...item, ...update } : item;
+    })
+  ), [instruments, bitgetQuotes]);
 
   useEffect(() => {
     let cancelled = false;
@@ -878,7 +887,7 @@ export default function App() {
       .map((item, index) => ({ item, index, randomScore: score(item.id || (item.provider + ':' + item.symbol + ':' + index)) }))
       .sort((a, b) => a.randomScore - b.randomScore || a.index - b.index)
       .map(entry => entry.item);
-  }, [instruments]);
+  }, [liveInstruments]);
 
   const filtered = useMemo(() => {
     const q = deferredSearch.trim().toLowerCase();
@@ -896,7 +905,7 @@ export default function App() {
     });
   }, [randomizedInstruments, search, providerFilter, categoryFilter]);
 
-  const chartableInstruments = useMemo(() => instruments.filter(item => ['DERIV','FXCM','GLOBALCRYPTO','YFINANCE','SP','NASDAQTRADER','NYSEAMERICAN','CME','CBOT','NYMEX','COMEX','OANDA','TWELVEDATA'].includes(String(item.provider))), [instruments]);
+  const chartableInstruments = useMemo(() => liveInstruments.filter(item => ['DERIV','FXCM','GLOBALCRYPTO','YFINANCE','SP','NASDAQTRADER','NYSEAMERICAN','CME','CBOT','NYMEX','COMEX','OANDA','TWELVEDATA'].includes(String(item.provider))), [instruments]);
   const quoteWindow = useMemo(() => {
     const rowHeight = 88;
     const buffer = 18;
@@ -965,7 +974,7 @@ export default function App() {
     setMultiChartOpen(false);
   };
   if (homeOpen) {
-    return <HomeView instruments={instruments} onSelectInstrument={item => { const match = instruments.find(candidate => candidate.id === item.id); if (match) selectInstrument(match); }} />;
+    return <HomeView instruments={liveInstruments} onSelectInstrument={item => { const match = liveInstruments.find(candidate => candidate.id === item.id); if (match) selectInstrument(match); }} />;
   }
 
   return <main className={`native-terminal-shell${researchLabOpen ? ' sire-research-open' : ''}`}>
