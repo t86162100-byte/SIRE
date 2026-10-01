@@ -997,8 +997,7 @@
   background:transparent !important;
   box-shadow:none !important;
   overflow:visible;
-  transform:translateZ(0);}
-.sire-home-balance-actions button::before,
+  transform:translateZ(0);}.sire-home-balance-actions button::before,
 .sire-home-balance-actions button::after{
   display:none;
 }
@@ -1997,8 +1996,7 @@
 /* Market discovery: edge-to-edge rows and header-style scroll fade. */
 .sire-home-markets{position:relative}
 .sire-home-market-tabs{  position:sticky;top:0;z-index:18;min-height:58px;
-  margin-left:-14px;margin-right:-14px;margin-bottom:0;
-  padding:14px 14px 16px;display:flex;align-items:center;
+  margin-left:-14px;margin-right:-14px;margin-bottom:0;  padding:14px 14px 16px;display:flex;align-items:center;
   overflow-x:auto;overflow-y:hidden;scrollbar-width:none;
   background:linear-gradient(180deg,rgba(3,6,11,.80) 0%,rgba(3,6,11,.68) 28%,rgba(3,6,11,.44) 58%,rgba(3,6,11,.16) 82%,rgba(3,6,11,0) 100%);
 }
@@ -2997,8 +2995,7 @@
   }
   .sire-home-watch-row:hover{    background:linear-gradient(90deg,rgba(17,35,45,.82),rgba(11,18,29,.72));
   }
-}
-@media(max-width:700px){
+}@media(max-width:700px){
   .sire-home-gpu{opacity:.48}
   .sire-home-hero{box-shadow:0 18px 45px rgba(0,0,0,.34),0 0 38px rgba(74,85,255,.07),inset 0 1px rgba(255,255,255,.06)}
 }
@@ -3997,8 +3994,7 @@
     inset 0 1px rgba(255,255,255,.22);}
 
 /* Percentage is a second piece of polished glass attached to the frame,
-   not a flat red/green rectangle. */
-.sire-home-watch-row > .market-trade-button{
+   not a flat red/green rectangle. */.sire-home-watch-row > .market-trade-button{
   position:relative;
   z-index:10;
   height:38px;
@@ -4993,4 +4989,250 @@
     height:31px;
     margin-top:4px;
   }
+}
+
+/* MARKET PULSE // FUTURE MARQUEE
+   Two cards stay visible; the remaining cards travel continuously behind them. */
+.sire-home-pulse-viewport{
+  --pulse-gap:10px;
+  width:100%;
+  overflow:hidden;
+  position:relative;
+  padding:0;
+  margin:0;
+  -webkit-mask-image:linear-gradient(90deg,transparent 0,#000 2.5%,#000 97.5%,transparent 100%);
+  mask-image:linear-gradient(90deg,transparent 0,#000 2.5%,#000 97.5%,transparent 100%);
+}
+.sire-home-pulse-track{
+  display:flex;
+  width:max-content;
+  gap:var(--pulse-gap);
+  will-change:transform;
+  animation:sire-pulse-marquee 34s linear infinite;
+}
+.sire-home-pulse-card{
+  position:relative;
+  flex:0 0 calc((100vw - 38px - var(--pulse-gap)) / 2);
+  width:calc((100vw - 38px - var(--pulse-gap)) / 2);
+  min-width:0;
+  height:132px;
+  min-height:132px;
+  border:1px solid rgba(134,159,255,.18) !important;
+  border-radius:19px !important;
+  overflow:hidden;
+  background:
+    radial-gradient(90% 120% at 0% 0%,rgba(67,126,255,.18),transparent 54%),
+    radial-gradient(70% 100% at 100% 100%,rgba(143,72,255,.13),transparent 60%),
+    linear-gradient(145deg,rgba(10,25,61,.96),rgba(5,10,31,.98)) !important;
+  box-shadow:
+    inset 0 1px rgba(255,255,255,.10),
+    inset 0 -1px rgba(104,130,255,.12),
+    0 12px 28px rgba(0,0,0,.24),
+    0 0 28px rgba(69,91,255,.06);
+}
+.sire-home-pulse-card::before{
+  content:"";
+  position:absolute;
+  inset:0;
+  pointer-events:none;
+  background:
+    linear-gradient(120deg,transparent 12%,rgba(255,255,255,.045) 30%,transparent 48%),
+    radial-gradient(55% 70% at 92% 4%,rgba(172,93,255,.12),transparent 72%);
+  opacity:.8;
+}
+.sire-home-pulse-card::after{
+  content:"";
+  position:absolute;
+  left:12px;
+  right:12px;
+  top:7px;
+  height:1px;
+  background:linear-gradient(90deg,transparent,rgba(115,203,255,.42),rgba(177,106,255,.35),transparent);
+  opacity:.75;
+}
+.sire-home-pulse-main{
+  position:relative;
+  z-index:2;
+  display:block;
+  width:100%;
+  height:100%;
+  padding:9px 10px 8px !important;
+  border:0;
+  background:transparent;
+  color:#f5f3ff;
+  text-align:left;
+  overflow:hidden;
+}
+.sire-home-pulse-top{
+  position:relative;
+  z-index:4;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:7px;
+  min-width:0;
+}
+.sire-home-pulse-identity{
+  min-width:0;
+  display:flex;
+  align-items:center;
+  gap:7px;
+}
+.sire-home-pulse-logo{
+  width:30px;
+  height:30px;
+  flex:0 0 30px;
+  display:grid;
+  place-items:center;
+  padding:3px;
+  border-radius:10px;
+  background:linear-gradient(145deg,rgba(92,151,255,.20),rgba(145,83,255,.13));
+  border:1px solid rgba(166,204,255,.18);
+  box-shadow:inset 0 1px rgba(255,255,255,.12),0 5px 12px rgba(0,0,0,.24);
+}
+.sire-home-pulse-logo img{
+  width:100%;
+  height:100%;
+  border-radius:8px;
+  object-fit:cover;
+}
+.sire-home-pulse-copy{
+  min-width:0;
+  max-width:76px;
+}
+.sire-home-pulse-copy b,
+.sire-home-pulse-copy small{
+  display:block;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+.sire-home-pulse-copy b{
+  font-size:10px;
+  line-height:1.05;
+  font-weight:900;
+  letter-spacing:.02em;
+}
+.sire-home-pulse-copy small{
+  margin-top:3px;
+  color:#7188a0;
+  font-size:6.5px;
+  line-height:1;
+}
+.sire-home-pulse-exchange{
+  min-width:0;
+  max-width:65px;
+  display:flex;
+  align-items:center;
+  justify-content:flex-end;
+  gap:4px;
+}
+.sire-home-pulse-exchange img{
+  width:14px;
+  height:14px;
+  flex:0 0 14px;
+  border-radius:4px;
+  object-fit:cover;
+  box-shadow:0 0 0 1px rgba(166,204,255,.13);
+}
+.sire-home-pulse-exchange small{
+  color:#8b9db0;
+  font-size:6px;
+  font-weight:900;
+  letter-spacing:.04em;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+}
+.sire-home-pulse-value{
+  position:relative;
+  z-index:5;
+  display:flex;
+  align-items:baseline;
+  gap:6px;
+  margin-top:9px;
+}
+.sire-home-pulse-value strong{
+  font-size:13px;
+  line-height:1;
+  letter-spacing:-.035em;
+  text-shadow:0 2px 10px rgba(89,139,255,.18);
+}
+.sire-home-pulse-value b{
+  font-size:7px;
+  line-height:1;
+  font-weight:950;
+}
+.sire-home-pulse-value b.positive{color:#35e2b0}
+.sire-home-pulse-value b.negative{color:#ff6475}
+.sire-home-pulse-value b.neutral{color:#8d9bac}
+.sire-home-pulse-chart{
+  position:absolute;
+  z-index:3;
+  left:13%;
+  right:13%;
+  bottom:9px;
+  height:38px;
+  opacity:.9;
+  pointer-events:none;
+}
+.sire-home-pulse-chart::before{
+  content:"";
+  position:absolute;
+  left:0;
+  right:0;
+  top:50%;
+  height:1px;
+  background:linear-gradient(90deg,transparent,rgba(132,163,255,.10),transparent);
+}
+.sire-home-pulse-spark,
+.sire-home-pulse-spark svg{
+  width:100%;
+  height:100%;
+}
+.sire-home-pulse-spark svg{display:block;overflow:visible}
+.sire-home-pulse-spark-line{stroke-width:1.8}
+.sire-home-pulse-edge{
+  position:absolute;
+  z-index:6;
+  right:9px;
+  bottom:9px;
+  width:5px;
+  height:5px;
+  border-radius:50%;
+  background:#6edfff;
+  box-shadow:0 0 9px rgba(83,215,255,.8);
+  opacity:.75;
+}
+.sire-home-pulse-card--positive .sire-home-pulse-edge{
+  background:#35e2b0;
+  box-shadow:0 0 9px rgba(53,226,176,.7);
+}
+.sire-home-pulse-card--negative .sire-home-pulse-edge{
+  background:#ff6475;
+  box-shadow:0 0 9px rgba(255,100,117,.65);
+}
+@keyframes sire-pulse-marquee{
+  from{transform:translate3d(0,0,0)}
+  to{transform:translate3d(calc(-50% - (var(--pulse-gap) / 2)),0,0)}
+}
+@media(max-width:430px){
+  .sire-home-pulse-viewport{
+    --pulse-gap:8px;
+  }
+  .sire-home-pulse-track{animation-duration:38s}
+  .sire-home-pulse-card{
+    flex-basis:calc((100vw - 36px - var(--pulse-gap)) / 2);
+    width:calc((100vw - 36px - var(--pulse-gap)) / 2);
+    height:126px;
+    min-height:126px;
+  }
+  .sire-home-pulse-main{padding:8px 9px 7px !important}
+  .sire-home-pulse-logo{width:29px;height:29px;flex-basis:29px}
+  .sire-home-pulse-copy{max-width:64px}
+  .sire-home-pulse-value{margin-top:8px}
+  .sire-home-pulse-chart{left:12%;right:12%;bottom:8px;height:36px}
+}
+@media(prefers-reduced-motion:reduce){
+  .sire-home-pulse-track{animation:none}
 }
