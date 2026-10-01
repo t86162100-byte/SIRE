@@ -31,6 +31,7 @@ export interface UnifiedInstrument {
   marketGroup?: string;
   marketSubcategory?: string;
   marketFilter?: string;
+  marketFilters?: string[];
 }
 
 import { createHmac } from 'node:crypto';
@@ -146,37 +147,29 @@ function classifyBinanceCrypto(raw: any, marketType: string) {
   const quote = String(raw?.quote || raw?.quoteAsset || raw?.quoteCoin || raw?.quoteCcy || '').trim().toUpperCase();
   const base = String(raw?.base || raw?.baseAsset || raw?.baseCoin || raw?.baseCcy || '').trim().toUpperCase();
   const type = String(marketType || '').trim();
-  const isSpot = type === 'Spot';
-  const isMargin = type === 'Margin';
-  const isFuture = type === 'Futures' || type === 'Perpetuals';
+  const isSpot = type === 'Spot', isMargin = type === 'Margin', isFuture = type === 'Futures' || type === 'Perpetuals';
   let marketSubcategory = isSpot ? 'Spot' : isMargin ? 'Margin' : isFuture ? 'Futures' : type || 'Other';
-  let marketFilter = 'ALL';
-
+  let marketFilter = 'ALL'; const marketFilters: string[] = ['ALL'];
   if (isSpot) {
-    const fiatQuotes = new Set(['EUR','GBP','AUD','BRL','TRY','ZAR','NGN','RUB','UAH','PLN','ARS','MXN']);
-    if (quote === 'USDT') marketFilter = 'USDT';
-    else if (quote === 'USDC') marketFilter = 'USDC';
-    else if (quote === 'USD') marketFilter = 'USD';
-    else if (quote === 'BNB') marketFilter = 'BNB';
-    else if (quote === 'BTC') marketFilter = 'BTC';
-    else if (quote === 'BTCC') marketFilter = 'BTCC';
-    else if (quote === 'ETH') marketFilter = 'ETH';
-    else if (fiatQuotes.has(quote)) marketFilter = 'FIAT';
-    else marketFilter = 'ALTs';
+    const fiatQuotes = new Set(['EUR','GBP','AUD','BRL','TRY','ZAR','NGN','RUB','UAH','PLN','ARS','MXN','THB']);
+    if (quote === 'USDT') marketFilter='USDT'; else if (quote === 'USDC') marketFilter='USDC'; else if (quote === 'USD') marketFilter='USD';
+    else if (quote === 'BNB') marketFilter='BNB'; else if (quote === 'BTC') marketFilter='BTC'; else if (quote === 'BTCC') marketFilter='BTCC';
+    else if (quote === 'ETH') marketFilter='ETH'; else if (fiatQuotes.has(quote)) marketFilter='FIAT'; else marketFilter='ALTs';
+    marketFilters[0]=marketFilter;
   } else if (isMargin) {
-    const marginAssets = new Set(['ETH','XAU','BTC','XAG','SOL','XRP','DOGE']);
-    marketFilter = marginAssets.has(base) ? base : 'ALL';
+    const marginAssets=new Set(['ETH','XAU','BTC','XAG','SOL','XRP','DOGE']); marketFilter=marginAssets.has(base)?base:'ALL'; marketFilters[0]=marketFilter;
   } else if (isFuture) {
-    const settle = String(raw?.settlement || raw?.settleCoin || raw?.settleCcy || raw?.marginAsset || '').toUpperCase();
-    marketSubcategory = 'Futures';
-    const contractFamily = String(raw?.marketSubcategory || raw?.contractFamily || '').toUpperCase() === 'COIN-M'
-      ? 'COIN-M'
-      : 'USDT-M';
-    marketFilter = contractFamily + ':' + (settle === 'USDC' ? 'USDC' : 'All');
+    const settle=String(raw?.settlement||raw?.settleCoin||raw?.settleCcy||raw?.marginAsset||'').toUpperCase();
+    marketSubcategory='Futures';
+    const family=String(raw?.marketSubcategory||raw?.contractFamily||'').toUpperCase()==='COIN-M'?'COIN-M':'USDT-M';
+    const normalizeTheme=(value:string)=>{const v=String(value||'').trim().toUpperCase().replace(/[-_ ]/g,'');const map:Record<string,string>={DEFI:'DeFi',METAVERSE:'Metaverse',METAVERS:'Metaverse',PAYMENT:'Payment',POW:'PoW',STORAGE:'Storage',NFT:'NFT',TRADFI:'TradFi',INDEX:'Index',PREIPO:'Pre-IPO',CHINESE:'Chinese',ALPHA:'Alpha',AI:'AI',LAYER1:'Layer-1',RWA:'RWA',LAYER2:'Layer-2',GAMING:'Gaming',GAMEFI:'Gaming',MEME:'Meme',INFRASTRUCTURE:'Infrastructure',INFRA:'Infrastructure',CRYPTO:'Crypto'};return map[v]||'';};
+    const themes=(Array.isArray(raw?.underlyingSubType)?raw.underlyingSubType:[]).map(normalizeTheme).filter(Boolean);
+    const listedAt=Number(raw?.onboardDate??raw?.listedAt??0); if(raw?.newListing===true||(listedAt>0&&Date.now()-listedAt<=45*24*60*60*1000)) themes.push('New');
+    if(!themes.length) themes.push('Crypto'); if(family==='USDT-M'&&settle==='USDC') themes.push('USDC');
+    marketFilter=family+':All'; marketFilters.push(...Array.from(new Set(themes)).map(theme=>family+':'+theme)); marketFilters.push(marketFilter);
   }
-  return { marketGroup: 'Crypto', marketSubcategory, marketFilter };
+  return {marketGroup:'Crypto',marketSubcategory,marketFilter,marketFilters:Array.from(new Set(marketFilters))};
 }
-
 function cryptoItem(provider: MarketProvider, marketType: string, category: string, raw: any, price?: any): UnifiedInstrument | null {
   const symbol = String(raw?.symbol || raw?.instId || '').trim();
   if (!symbol) return null;
@@ -329,6 +322,25 @@ async function coinbase(): Promise<UnifiedInstrument[]> {
   return out;
 }
 
+async function binanceAlpha(): Promise<UnifiedInstrument[]> {
+  const out: UnifiedInstrument[]=[];
+  try {
+    const response=await getJson('https://www.binance.com/bapi/defi/v1/public/wallet-direct/buw/wallet/cex/alpha/all/token/list',15000);
+    const rows=Array.isArray(response?.data)?response.data:[];
+    for(const raw of rows){
+      const symbol=String(raw?.symbol||raw?.alphaId||'').trim(); if(!symbol||raw?.offline===true) continue;
+      const chain=String(raw?.chainName||'').trim(), name=String(raw?.name||symbol).trim(), tags:string[]=[];
+      if(chain) tags.push(chain);
+      if(raw?.stockState===true||/stock|etf|tokenized/i.test(name+' '+symbol)) tags.push('Tokenized Securities');
+      if(/robinhood/i.test(name+' '+symbol)||/^HOODB$/i.test(symbol)) tags.push('Robinhood');
+      if(Number(raw?.mulPoint)>0) tags.push('Point+');
+      out.push({id:'BINANCE:Alpha:'+String(raw?.tokenId||symbol),provider:'BINANCE',providerLabel:'Binance',marketType:'Alpha',category:'Alpha',symbol,displaySymbol:symbol,name,base:symbol,quote:'USDT',price:Number.isFinite(Number(raw?.price))?Number(raw.price):undefined,exchangeOpen:1,status:'TRADING',logoUrl:String(raw?.iconUrl||assetLogo(symbol)),providerLogoUrl:providerLogo('binance'),instrumentType:'Alpha',listedAt:Number.isFinite(Number(raw?.listingTime))?Number(raw.listingTime):undefined,onboardDate:Number.isFinite(Number(raw?.listingTime))?Number(raw.listingTime):undefined,marketGroup:'Alpha',marketSubcategory:'Alpha',marketFilter:tags[0]||'ALL',marketFilters:Array.from(new Set(tags.map(tag=>'Alpha:'+tag)))});
+    }
+    console.log('[SIRE BINANCE] Alpha:',rows.length);
+  } catch(error){console.warn('[SIRE BINANCE] Alpha failed:',error);}
+  return out;
+}
+
 // Binance catalogue refresh uses the generated official snapshot when available.
 async function binance(): Promise<UnifiedInstrument[]> {
   const out: UnifiedInstrument[] = [];
@@ -372,6 +384,7 @@ async function binance(): Promise<UnifiedInstrument[]> {
         perpetuals: items.filter(item => item.marketType === 'Perpetuals').length,
       }));
       const seen = new Set<string>();
+      items.push(...await binanceAlpha());
       return items.filter(item => {
         if (seen.has(item.id)) return false;
         seen.add(item.id);
