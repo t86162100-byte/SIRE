@@ -1075,12 +1075,12 @@ export default function App() {
               ))}
             </div>}
             {marketSubcategoryFilter === 'USDT-M' && <div className="sire-market-providers sire-market-subcategories">
-              {(['All','New','Crypto','DeFi','Metavers','Payment','PoW','Storage','NFT','TradFi','Index','Pre-IPO','USDC','Chinese','Alpha','AI','Layer-1','RWA','Layer-2','Gaming','Meme','infrastructure'] as const).map(filter => (
+              {(['All','New','Crypto','DeFi','Metaverse','Payment','PoW','Storage','NFT','TradFi','Index','Pre-IPO','USDC','Chinese','Alpha','AI','Layer-1','RWA','Layer-2','Gaming','Meme','Infrastructure'] as const).map(filter => (
                 <button key={filter} type="button" className={marketSubcategoryFilter === 'USDT-M:' + filter ? 'active' : ''} onClick={() => setMarketSubcategoryFilter('USDT-M:' + filter)}>{filter}</button>
               ))}
             </div>}
             {marketSubcategoryFilter === 'COIN-M' && <div className="sire-market-providers sire-market-subcategories">
-              {(['All','PoW','Storage','Layer-1','Layer-2','Meme','infrastructure','payment'] as const).map(filter => (
+              {(['All','PoW','Storage','Layer-1','Layer-2','Meme','infrastructure','Payment'] as const).map(filter => (
                 <button key={filter} type="button" className={marketSubcategoryFilter === 'COIN-M:' + filter ? 'active' : ''} onClick={() => setMarketSubcategoryFilter('COIN-M:' + filter)}>{filter}</button>
               ))}
             </div>}
