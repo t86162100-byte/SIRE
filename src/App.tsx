@@ -162,6 +162,8 @@ export default function App() {
   // Bitget live quotes are kept outside the shared catalogue state. This prevents
   // its high-frequency ticks from competing with Binance's live update path.
   const [bitgetQuotes, setBitgetQuotes] = useState<Map<string, any>>(() => new Map());
+  // Binance live quotes are isolated from the shared catalogue for the same reason: catalogue refreshes must never overwrite ticks.
+  const [binanceQuotes, setBinanceQuotes] = useState<Map<string, any>>(() => new Map());
 
   useEffect(() => {
     const onBitgetPrioritySymbols = (event: Event) => {
@@ -394,12 +396,18 @@ export default function App() {
 
   const liveInstruments = useMemo(() => (
     instruments.map(item => {
-      if (item.provider !== 'BITGET') return item;
-      const key = getBitgetInstType(item).toLowerCase() + ':' + getBitgetInstId(item);
-      const update = bitgetQuotes.get(key);
-      return update ? { ...item, ...update } : item;
+      if (item.provider === 'BITGET') {
+        const key = getBitgetInstType(item).toLowerCase() + ':' + getBitgetInstId(item);
+        const update = bitgetQuotes.get(key);
+        return update ? { ...item, ...update } : item;
+      }
+      if (item.provider === 'BINANCE') {
+        const update = binanceQuotes.get(item.id);
+        return update ? { ...item, ...update, priceChangePercent: update.change24h } : item;
+      }
+      return item;
     })
-  ), [instruments, bitgetQuotes]);
+  ), [instruments, bitgetQuotes, binanceQuotes]);
 
   useEffect(() => {
     let cancelled = false;
@@ -499,16 +507,11 @@ export default function App() {
             const batch = pendingQuotes;
             pendingQuotes = {};
             Object.assign(binanceQuoteCacheRef.current, batch);
-            startTransition(() => setInstruments(current => current.map(item => {
-              if (item.provider !== 'BINANCE') return item;
-              const quote = batch[item.id] || binanceQuoteCacheRef.current[item.id];
-              if (!quote) return item;
-              const supply = Number(item.circulatingSupply);
-              const marketCap = Number.isFinite(supply) && Number.isFinite(Number(quote.price))
-                ? supply * Number(quote.price)
-                : item.marketCap;
-              return { ...item, ...quote, priceChangePercent: quote.change24h, marketCap };
-            })));
+            setBinanceQuotes(current => {
+              const next = new Map(current);
+              Object.entries(batch).forEach(([id, quote]) => next.set(id, quote));
+              return next;
+            });
           }, 1000);
         };
         const initialQuotes = await fetchBinanceLiveQuotes();
