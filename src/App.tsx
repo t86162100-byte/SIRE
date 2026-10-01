@@ -517,6 +517,15 @@ export default function App() {
         const initialQuotes = await fetchBinanceLiveQuotes();
         applyQuotes(initialQuotes);
         closeBinanceStream = createBinanceCatalogueLiveFeed(applyQuotes);
+        // REST refresh is an isolated Binance fallback/verification path. It keeps Home live even if a browser WebSocket is blocked.
+        const binanceRestTimer = window.setInterval(() => {
+          void fetchBinanceLiveQuotes().then(quotes => applyQuotes(quotes));
+        }, 2000);
+        const previousCloseBinanceStream = closeBinanceStream;
+        closeBinanceStream = () => {
+          window.clearInterval(binanceRestTimer);
+          previousCloseBinanceStream?.();
+        };
         void fetchBinanceMarketMetadata().then(metadata => {
           if (cancelled) return;
           Object.assign(binanceMetadataCacheRef.current, metadata);
