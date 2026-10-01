@@ -1841,16 +1841,28 @@ async function bitget(): Promise<UnifiedInstrument[]> {
   }
 
   try {
-    let createTime = '';
+    // Bitget Wallet documents this endpoint as timestamp-based pagination and
+    // uses a page size of 10 in its current API contract. Start seven days back
+    // so "Latest" contains recently created tokens, then advance with lastTime.
+    const start = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+    const pad = (value: number) => String(value).padStart(2, '0');
+    let createTime =
+      start.getUTCFullYear() + '-' +
+      pad(start.getUTCMonth() + 1) + '-' +
+      pad(start.getUTCDate()) + ' ' +
+      pad(start.getUTCHours()) + ':' +
+      pad(start.getUTCMinutes()) + ':' +
+      pad(start.getUTCSeconds());
     let added = 0;
+    const limit = 10;
     for (let page = 0; page < 10; page++) {
-      const response = await postWalletJson('/bgw-pro/market/v3/historical-coins', { createTime, limit: 100 });
+      const response = await postWalletJson('/bgw-pro/market/v3/historical-coins', { createTime, limit });
       const rows = Array.isArray(response?.data?.tokenList) ? response.data.tokenList : [];
       if (!rows.length) break;
       addWalletRows(rows, 'Latest');
       added += rows.length;
       const next = String(response?.data?.lastTime || '').trim();
-      if (!next || next === createTime || rows.length < 100) break;
+      if (!next || next === createTime || rows.length < limit) break;
       createTime = next;
     }
     console.log('[SIRE BITGET] Onchain Latest: ' + added);
