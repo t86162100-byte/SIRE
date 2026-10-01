@@ -4400,6 +4400,12 @@
    lower-right -> lower-left -> upper-left -> upper-right -> repeat.
    All other rim areas are transparent. The center has no light layer. */
 
+@property --edge-angle {
+  syntax:"<angle>";
+  inherits:false;
+  initial-value:0deg;
+}
+
 .sire-home-watch-row{
   position:relative;
   overflow:hidden;
@@ -4414,6 +4420,7 @@
   box-shadow:
     0 13px 30px rgba(0,0,0,.30),
     0 0 22px rgba(42,113,255,.035) !important;
+  --edge-angle:0deg;
 }
 
 /* Remove the old internal light source completely. */
@@ -4434,7 +4441,7 @@
   background:
     linear-gradient(180deg,transparent,transparent) padding-box,
     conic-gradient(
-      from 107deg,
+      from calc(107deg + var(--edge-angle)),
       transparent 0deg 12deg,
       rgba(91,198,255,.08) 16deg,
       rgba(114,218,255,.58) 22deg,
@@ -4448,84 +4455,32 @@
     inset 0 0 8px rgba(125,190,255,.05);
   filter:blur(1.8px) saturate(135%);
   mix-blend-mode:screen;
-  transform-origin:50% 50%;
   animation:sire-single-edge-bloom 14s cubic-bezier(.45,.05,.2,1) infinite;
 }
 
-/* Smooth corner-to-corner travel. Each corner gets a bloom, fades away,
-   then the next corner takes over — no blinking or simultaneous edges. */
+/* The typed angle interpolates continuously, so the light travels rather
+   than jumping/blinking. Opacity briefly falls near each corner transition. */
 @keyframes sire-single-edge-bloom{
-  0%{
-    transform:rotate(0deg);
-    opacity:.05;
-  }
-  7%{
-    transform:rotate(10deg);
-    opacity:.98;
-  }
-  16%{
-    transform:rotate(30deg);
-    opacity:.98;
-  }
-  23%{
-    transform:rotate(55deg);
-    opacity:.08;
-  }
+  0%{--edge-angle:0deg;opacity:.05}
+  7%{--edge-angle:10deg;opacity:.98}
+  16%{--edge-angle:30deg;opacity:.98}
+  23%{--edge-angle:55deg;opacity:.08}
+  25%{--edge-angle:90deg;opacity:.02}
 
-  25%{
-    transform:rotate(90deg);
-    opacity:.02;
-  }
-  32%{
-    transform:rotate(100deg);
-    opacity:.98;
-  }
-  41%{
-    transform:rotate(120deg);
-    opacity:.98;
-  }
-  48%{
-    transform:rotate(145deg);
-    opacity:.08;
-  }
+  32%{--edge-angle:100deg;opacity:.98}
+  41%{--edge-angle:120deg;opacity:.98}
+  48%{--edge-angle:145deg;opacity:.08}
+  50%{--edge-angle:180deg;opacity:.02}
 
-  50%{
-    transform:rotate(180deg);
-    opacity:.02;
-  }
-  57%{
-    transform:rotate(190deg);
-    opacity:.98;
-  }
-  66%{
-    transform:rotate(210deg);
-    opacity:.98;
-  }
-  73%{
-    transform:rotate(235deg);
-    opacity:.08;
-  }
+  57%{--edge-angle:190deg;opacity:.98}
+  66%{--edge-angle:210deg;opacity:.98}
+  73%{--edge-angle:235deg;opacity:.08}
+  75%{--edge-angle:270deg;opacity:.02}
 
-  75%{
-    transform:rotate(270deg);
-    opacity:.02;
-  }
-  82%{
-    transform:rotate(280deg);
-    opacity:.98;
-  }
-  91%{
-    transform:rotate(300deg);
-    opacity:.98;
-  }
-  98%{
-    transform:rotate(325deg);
-    opacity:.08;
-  }
-  100%{
-    transform:rotate(360deg);
-    opacity:.05;
-  }
+  82%{--edge-angle:280deg;opacity:.98}
+  91%{--edge-angle:300deg;opacity:.98}
+  98%{--edge-angle:325deg;opacity:.08}
+  100%{--edge-angle:360deg;opacity:.05}
 }
 
 @media(max-width:700px){
@@ -4538,6 +4493,5 @@
   .sire-home-watch-row::after{
     animation:none !important;
     opacity:.18;
-    transform:rotate(0deg);
   }
 }
