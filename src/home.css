@@ -5066,7 +5066,7 @@
 .sire-home-pulse-top{
   position:relative;
   z-index:4;
-  transform:translateY(-42px);
+  transform:translateY(-39px);
   display:flex;
   align-items:center;
   justify-content:space-between;
@@ -5152,7 +5152,7 @@
   align-items:baseline;
   gap:6px;
   margin-top:3px;
-  transform:translateY(-42px);
+  transform:translateY(-39px);
 }
 .sire-home-pulse-value strong{
   font-size:13px;
@@ -5249,13 +5249,11 @@
   overscroll-behavior-y:auto !important;
   scroll-behavior:auto !important;
   scroll-snap-type:none !important;
-  will-change:scroll-position;
-  contain:none !important;
 }
 
 @media(max-width:700px){
   .sire-home-scroll{
-    overflow-y:scroll !important;
+    overflow-y:auto !important;
     overflow-x:hidden !important;
     touch-action:pan-y !important;
     overscroll-behavior-y:auto !important;
@@ -5263,16 +5261,4 @@
     -webkit-overflow-scrolling:touch !important;
   }
 
-  /* Let the browser skip painting/layout for sections that are well below
-     the finger's current viewport. Visible content keeps its existing design. */
-  .sire-home-scroll > *{
-    content-visibility:auto;
-    contain-intrinsic-size:auto 180px;
-  }
-
-  /* Keep the existing Market Pulse motion, but don't let its animation
-     participate in layout calculations while the page itself is scrolling. */
-  .sire-home-pulse-track{
-    will-change:transform;
-  }
 }
