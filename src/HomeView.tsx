@@ -153,7 +153,29 @@ export default function HomeView({ instruments, onSelectInstrument, videoSrc = '
             }
           } catch {}
         }));
-        if (!cancelled && next.size) setGateioQuotes(next);
+        if (!cancelled && next.size) {
+          setGateioQuotes(previous => {
+            if (previous.size === next.size) {
+              let changed = false;
+              for (const [key, value] of next) {
+                const oldValue = previous.get(key);
+                if (
+                  !oldValue ||
+                  oldValue.price !== value.price ||
+                  oldValue.change24h !== value.change24h ||
+                  oldValue.volume24h !== value.volume24h ||
+                  oldValue.bid !== value.bid ||
+                  oldValue.ask !== value.ask
+                ) {
+                  changed = true;
+                  break;
+                }
+              }
+              if (!changed) return previous;
+            }
+            return next;
+          });
+        }
       } finally {
         refreshing = false;
       }
