@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { getBinanceHotFromCatalogue } from './binanceMarketData';
 import './home.css';
+import SireVisualEngine from './SireVisualEngine';
 import {
   ArrowRight, Bell, BrainCircuit, ChevronRight, CircleUserRound, Eye, EyeOff, Flame,
   Grid2X2, LineChart, Search, Sparkles, TrendingUp, Wallet, ArrowDownToLine, ArrowUpFromLine, Repeat2,
@@ -705,6 +706,8 @@ export default function HomeView({ instruments, onSelectInstrument, videoSrc = '
           <button type="button" className="sire-home-icon" aria-label="Profile"><CircleUserRound size={21} /></button>
         </div>
       </header>
+
+      <SireVisualEngine className="sire-home-gpu" />
 
       <div className="sire-home-liquid" aria-hidden="true">
         <span className="sire-liquid-dark" />

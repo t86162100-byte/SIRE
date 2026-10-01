@@ -2929,3 +2929,83 @@
   .sire-home-market-lock,
   .sire-home-market-lock-status{transition:none}
 }
+
+
+/* SIRE high-fidelity GPU visual system */
+.sire-home-gpu{
+  position:fixed;
+  inset:0;
+  width:100%;
+  height:100%;
+  z-index:0;
+  pointer-events:none;
+  opacity:.72;
+  mix-blend-mode:screen;
+  filter:saturate(1.16) contrast(1.05);
+}
+.sire-home:after{
+  content:"";
+  position:absolute;
+  inset:0;
+  z-index:0;
+  pointer-events:none;
+  background:
+    radial-gradient(ellipse at 50% 8%,rgba(46,129,255,.12),transparent 32%),
+    radial-gradient(ellipse at 88% 42%,rgba(145,65,255,.10),transparent 34%),
+    linear-gradient(180deg,rgba(2,5,14,.08),rgba(2,4,11,.42));
+}
+.sire-home-header,.sire-home-scroll{z-index:2}
+.sire-home-header{
+  box-shadow:0 12px 40px rgba(0,0,0,.18),inset 0 -1px rgba(255,255,255,.035);
+}
+.sire-home-hero{
+  box-shadow:0 24px 80px rgba(0,0,0,.38),0 0 60px rgba(74,85,255,.08),inset 0 1px rgba(255,255,255,.08);
+  transform:translateZ(0);
+  isolation:isolate;
+}
+.sire-home-hero:after{
+  content:"";
+  position:absolute;
+  inset:0;
+  pointer-events:none;
+  background:
+    linear-gradient(110deg,rgba(255,255,255,.035),transparent 28%,transparent 68%,rgba(123,91,255,.06)),
+    radial-gradient(circle at 50% 110%,rgba(29,213,255,.08),transparent 35%);
+  mix-blend-mode:screen;
+}
+.sire-home-section,
+.sire-home-balance,
+.sire-home-events-media,
+.sire-home-intelligence,
+.sire-home-copy-card,
+.sire-home-ai-card{
+  transform:translateZ(0);
+}
+.sire-home-market-card,
+.sire-home-watch-row,
+.sire-home-actions-grid button,
+.sire-home-earn-grid button,
+.sire-home-new-grid button{
+  transition:transform .24s cubic-bezier(.2,.8,.2,1),border-color .24s ease,box-shadow .24s ease,background .24s ease;
+}
+@media (hover:hover){
+  .sire-home-market-card:hover,
+  .sire-home-actions-grid button:hover,
+  .sire-home-earn-grid button:hover,
+  .sire-home-new-grid button:hover{
+    transform:translateY(-3px);
+    border-color:rgba(105,194,255,.28);
+    box-shadow:0 14px 34px rgba(0,0,0,.28),0 0 24px rgba(74,108,255,.08);
+  }
+  .sire-home-watch-row:hover{
+    background:linear-gradient(90deg,rgba(17,35,45,.82),rgba(11,18,29,.72));
+  }
+}
+@media(max-width:700px){
+  .sire-home-gpu{opacity:.48}
+  .sire-home-hero{box-shadow:0 18px 45px rgba(0,0,0,.34),0 0 38px rgba(74,85,255,.07),inset 0 1px rgba(255,255,255,.06)}
+}
+@media(prefers-reduced-motion:reduce){
+  .sire-home-gpu{display:none}
+  .sire-home-market-card,.sire-home-watch-row,.sire-home-actions-grid button,.sire-home-earn-grid button,.sire-home-new-grid button{transition:none}
+}
