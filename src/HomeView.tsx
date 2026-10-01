@@ -955,10 +955,18 @@ export default function HomeView({ instruments, onSelectInstrument, videoSrc = '
               const exchange=String(item.providerLabel||item.provider||'Exchange').toUpperCase();
               return <article key={item.id} className={`sire-home-market-card sire-home-pulse-card sire-home-pulse-card--${tone}`}>
                 <button type="button" className="sire-home-pulse-main" onClick={()=>onSelectInstrument?.(item)} aria-label={`Open ${base} on ${exchange}`}>
-                  <span className="sire-home-pulse-identity"><span className="sire-home-pulse-logo"><img src={item.logoUrl||fallbackLogo(base)} alt="" decoding="async" onError={event=>{event.currentTarget.onerror=null;event.currentTarget.src=fallbackLogo(base)}}/></span><span className="sire-home-pulse-copy"><b>{base}</b><small>{String(item.name||item.displaySymbol||item.symbol).replace(/_/g,' ')}</small></span></span>
-                  <span className="sire-home-pulse-exchange"><img src={makeProviderLogoFallback(item)} alt="" decoding="async" onError={event=>{event.currentTarget.onerror=null;event.currentTarget.src=fallbackLogo(exchange)}}/><small>{exchange}</small></span>
-                  <Sparkline values={pulseHistory.get(item.id)||[]} tone={tone}/>
-                  <span className="sire-home-pulse-price"><strong>{money(item.price)}</strong><b className={tone}>{Number.isFinite(change)?`${change>=0?'+':''}${change.toFixed(2)}%`:'—'}</b></span>
+                  <span className="sire-home-pulse-top">
+                    <span className="sire-home-pulse-identity">
+                      <span className="sire-home-pulse-logo"><img src={item.logoUrl||fallbackLogo(base)} alt="" decoding="async" onError={event=>{event.currentTarget.onerror=null;event.currentTarget.src=fallbackLogo(base)}}/></span>
+                      <span className="sire-home-pulse-copy"><b>{base}</b><small>{String(item.name||item.displaySymbol||item.symbol).replace(/_/g,' ')}</small></span>
+                    </span>
+                    <span className="sire-home-pulse-exchange"><img src={makeProviderLogoFallback(item)} alt="" decoding="async" onError={event=>{event.currentTarget.onerror=null;event.currentTarget.src=fallbackLogo(exchange)}}/><small>{exchange}</small></span>
+                  </span>
+                  <span className="sire-home-pulse-chart"><Sparkline values={pulseHistory.get(item.id)||[]} tone={tone}/></span>
+                  <span className="sire-home-pulse-bottom">
+                    <strong>{money(item.price)}</strong>
+                    <b className={tone}>{Number.isFinite(change)?`${change>=0?'+':''}${change.toFixed(2)}%`:'—'}</b>
+                  </span>
                 </button>
               </article>;
             })}
