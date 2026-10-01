@@ -4395,169 +4395,103 @@
 }
 
 
-/* -------------------------------------------------------------------------
-   DOMED FRAME REFINEMENT // no inner pill, transparent inactive rim
-   The row itself is the optical object; the information sits directly in
-   the dark glass volume. Only illuminated rim segments become visible.
-   ------------------------------------------------------------------------- */
+/* DOMED GLASS — single animated edge bloom
+   One narrow illuminated rim segment moves through the four corners:
+   lower-right -> lower-left -> upper-left -> upper-right -> repeat.
+   All other rim areas are transparent. The center has no light layer. */
+
+@property --edge-angle {
+  syntax:"<angle>";
+  inherits:false;
+  initial-value:0deg;
+}
 
 .sire-home-watch-row{
+  position:relative;
+  overflow:hidden;
+  border:1px solid transparent !important;
+  border-radius:19px 17px 20px 18px / 18px 20px 17px 19px !important;
   background:
     linear-gradient(145deg,
-      rgba(10,28,74,.88) 0%,
+      rgba(10,28,74,.88),
       rgba(6,17,49,.90) 40%,
       rgba(4,11,35,.92) 68%,
-      rgba(12,15,52,.89) 100%) padding-box,
-    conic-gradient(
-      from var(--rim-phase) at 50% 50%,
-      transparent 0deg 34deg,
-      rgba(94,190,255,.42) 45deg,
-      rgba(179,104,255,.70) 57deg,
-      transparent 72deg 126deg,
-      rgba(76,170,255,.08) 138deg,
-      transparent 151deg 202deg,
-      rgba(103,88,255,.52) 214deg,
-      rgba(199,118,255,.68) 226deg,
-      transparent 242deg 292deg,
-      rgba(82,207,255,.10) 306deg,
-      rgba(103,218,255,.58) 320deg,
-      transparent 336deg 360deg) border-box !important;
+      rgba(12,15,52,.89)) padding-box !important;
   box-shadow:
     0 13px 30px rgba(0,0,0,.30),
-    0 0 22px rgba(42,113,255,.055),
-    inset 0 1px 0 rgba(246,250,255,.08),
-    inset 0 -13px 25px rgba(19,44,121,.11) !important;
+    0 0 22px rgba(42,113,255,.035) !important;
+  --edge-angle:0deg;
 }
 
-.sire-home-watch-row::before{
-  background:
-    radial-gradient(ellipse 34% 100% at 7% 7%,rgba(72,173,255,.17),transparent 70%),
-    radial-gradient(ellipse 30% 100% at 93% 93%,rgba(93,117,255,.15),transparent 72%),
-    radial-gradient(ellipse 38% 90% at 78% 4%,rgba(153,73,255,.07),transparent 74%),
-    radial-gradient(ellipse 34% 88% at 18% 96%,rgba(31,148,255,.05),transparent 74%) !important;
-  opacity:.78 !important;
-}
-
-.sire-home-watch-row::after{
-  background:
-    conic-gradient(
-      from calc(var(--rim-phase) + 18deg),
-      transparent 0deg 42deg,
-      rgba(114,216,255,.55) 52deg,
-      rgba(188,111,255,.78) 62deg,
-      transparent 76deg 128deg,
-      rgba(93,185,255,.07) 140deg,
-      transparent 151deg 205deg,
-      rgba(104,93,255,.56) 217deg,
-      rgba(215,126,255,.72) 228deg,
-      transparent 244deg 294deg,
-      rgba(117,221,255,.12) 306deg,
-      rgba(117,221,255,.62) 320deg,
-      transparent 336deg 360deg) !important;
-  box-shadow:
-    inset 0 1px 0 rgba(255,255,255,.06),
-    inset 0 -1px 0 rgba(50,115,225,.08) !important;
-  opacity:.88 !important;
-  animation:sire-domed-rim-shimmer 11s ease-in-out infinite !important;
-}
-
-.sire-home-watch-main{
-  background:transparent !important;
-  box-shadow:none !important;
-  border-radius:0 !important;
-}
-
+/* Remove the old internal light source completely. */
+.sire-home-watch-row::before,
 .sire-home-watch-main::after{
-  opacity:.24 !important;
-  filter:blur(13px) !important;
+  content:none !important;
 }
 
-@keyframes sire-domed-rim-shimmer{
-  0%,12%{opacity:.22;filter:brightness(.72) saturate(.88)}
-  24%{opacity:.52;filter:brightness(.95) saturate(1)}
-  38%{opacity:1;filter:brightness(1.24) saturate(1.18)}
-  50%{opacity:.58;filter:brightness(.96) saturate(1.04)}
-  64%{opacity:.20;filter:brightness(.72) saturate(.90)}
-  78%{opacity:.92;filter:brightness(1.18) saturate(1.14)}
-  90%{opacity:.42;filter:brightness(.88) saturate(.98)}
-  100%{opacity:.18;filter:brightness(.70) saturate(.86)}
-}
-
-/* DOMED GLASS — localized edge bloom
-   The illuminated rim now softly blooms inward from the same moving angle.
-   The bloom is strongest at the rim, dissolves rapidly into the glass, and
-   never forms a straight light band or reaches the opposite edge. */
-.sire-home-watch-row{
-  --rim-bloom-angle: calc(var(--rim-phase) + 18deg);
-}
-
-.sire-home-watch-row::before{
-  background:
-    radial-gradient(
-      ellipse 30% 42% at 0% 50%,
-      rgba(121,210,255,.16) 0%,
-      rgba(87,166,255,.095) 22%,
-      rgba(91,113,255,.045) 42%,
-      transparent 68%
-    ),
-    radial-gradient(
-      ellipse 24% 34% at 100% 50%,
-      rgba(178,112,255,.11) 0%,
-      rgba(116,91,255,.055) 24%,
-      transparent 66%
-    );
-  opacity:.72 !important;
-  filter:blur(10px) saturate(125%);
-  transform:rotate(var(--rim-bloom-angle));
-  transform-origin:50% 50%;
-  animation:sire-domed-bloom-drift 11s ease-in-out infinite;
-}
-
+/* One soft, narrow rim bloom. The rest of the perimeter is transparent. */
 .sire-home-watch-row::after{
+  content:"";
+  position:absolute;
+  inset:-1px;
+  z-index:5;
+  pointer-events:none;
+  border:5px solid transparent;
+  border-radius:inherit;
+  background:
+    linear-gradient(180deg,transparent,transparent) padding-box,
+    conic-gradient(
+      from calc(107deg + var(--edge-angle)),
+      transparent 0deg 12deg,
+      rgba(91,198,255,.08) 16deg,
+      rgba(114,218,255,.58) 22deg,
+      rgba(190,112,255,.92) 29deg,
+      rgba(113,202,255,.62) 37deg,
+      rgba(74,165,255,.16) 44deg,
+      transparent 52deg 360deg
+    ) border-box;
   box-shadow:
-    inset 0 1px 0 rgba(255,255,255,.045),
-    inset 0 -1px 0 rgba(50,115,225,.055),
-    0 0 12px rgba(69,152,255,.025) !important;
+    0 0 13px rgba(95,190,255,.14),
+    inset 0 0 8px rgba(125,190,255,.05);
+  filter:blur(1.8px) saturate(135%);
+  mix-blend-mode:screen;
+  animation:sire-single-edge-bloom 14s cubic-bezier(.45,.05,.2,1) infinite;
 }
 
-@keyframes sire-domed-bloom-drift{
-  0%,12%{
-    opacity:.10;
-    filter:blur(12px) saturate(105%);
-  }
-  24%{
-    opacity:.34;
-    filter:blur(11px) saturate(115%);
-  }
-  38%{
-    opacity:.76;
-    filter:blur(9px) saturate(130%);
-  }
-  50%{
-    opacity:.42;
-    filter:blur(11px) saturate(118%);
-  }
-  64%{
-    opacity:.08;
-    filter:blur(13px) saturate(100%);
-  }
-  78%{
-    opacity:.68;
-    filter:blur(9px) saturate(126%);
-  }
-  90%{
-    opacity:.24;
-    filter:blur(12px) saturate(110%);
-  }
-  100%{
-    opacity:.07;
-    filter:blur(13px) saturate(98%);
+/* The typed angle interpolates continuously, so the light travels rather
+   than jumping/blinking. Opacity briefly falls near each corner transition. */
+@keyframes sire-single-edge-bloom{
+  0%{--edge-angle:0deg;opacity:.05}
+  7%{--edge-angle:10deg;opacity:.98}
+  16%{--edge-angle:30deg;opacity:.98}
+  23%{--edge-angle:55deg;opacity:.08}
+  25%{--edge-angle:90deg;opacity:.02}
+
+  32%{--edge-angle:100deg;opacity:.98}
+  41%{--edge-angle:120deg;opacity:.98}
+  48%{--edge-angle:145deg;opacity:.08}
+  50%{--edge-angle:180deg;opacity:.02}
+
+  57%{--edge-angle:190deg;opacity:.98}
+  66%{--edge-angle:210deg;opacity:.98}
+  73%{--edge-angle:235deg;opacity:.08}
+  75%{--edge-angle:270deg;opacity:.02}
+
+  82%{--edge-angle:280deg;opacity:.98}
+  91%{--edge-angle:300deg;opacity:.98}
+  98%{--edge-angle:325deg;opacity:.08}
+  100%{--edge-angle:360deg;opacity:.05}
+}
+
+@media(max-width:700px){
+  .sire-home-watch-row{
+    border-radius:18px 16px 19px 17px / 17px 19px 16px 18px !important;
   }
 }
 
 @media(prefers-reduced-motion:reduce){
-  .sire-home-watch-row::before{
-    transform:none !important;
+  .sire-home-watch-row::after{
     animation:none !important;
+    opacity:.18;
   }
 }
