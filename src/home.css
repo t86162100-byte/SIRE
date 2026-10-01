@@ -5056,7 +5056,7 @@
   display:block;
   width:100%;
   height:100%;
-  padding:9px 10px 8px !important;
+  padding:3px 10px 8px !important;
   border:0;
   background:transparent;
   color:#f5f3ff;
@@ -5150,7 +5150,7 @@
   display:flex;
   align-items:baseline;
   gap:6px;
-  margin-top:9px;
+  margin-top:3px;
 }
 .sire-home-pulse-value strong{
   font-size:13px;
@@ -5227,7 +5227,7 @@
     height:126px;
     min-height:126px;
   }
-  .sire-home-pulse-main{padding:8px 9px 7px !important}
+  .sire-home-pulse-main{padding:3px 9px 7px !important}
   .sire-home-pulse-logo{width:29px;height:29px;flex-basis:29px}
   .sire-home-pulse-copy{max-width:64px}
   .sire-home-pulse-value{margin-top:8px}
