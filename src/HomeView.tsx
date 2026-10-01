@@ -87,6 +87,7 @@ export default function HomeView({ instruments, onSelectInstrument, videoSrc = '
   const [activeEvent, setActiveEvent] = useState(0);
   const [activeMarketFilter, setActiveMarketFilter] = useState('Hot');
   const [activeMarketSubfilter, setActiveMarketSubfilter] = useState('Spot');
+  const [gateioQuotes, setGateioQuotes] = useState<Map<string, any>>(() => new Map());
   const [favoriteIds, setFavoriteIds] = useState<string[]>(() => { try { const saved = window.localStorage.getItem('sire.home.marketFavorites'); return saved ? JSON.parse(saved) : []; } catch { return []; } });
   const [binanceNewFeed, setBinanceNewFeed] = useState<Array<{ symbol: string; marketType: string; listedAt: number }>>([]);
   const binanceUniverse = useMemo(
@@ -104,6 +105,63 @@ export default function HomeView({ instruments, onSelectInstrument, videoSrc = '
     () => instruments.filter(item => item.provider === 'GATEIO'),
     [instruments],
   );
+
+  // Gate.io owns its own quote state. It never writes to the shared catalogue
+  // and never participates in Binance/Bitget quote updates.
+  useEffect(() => {
+    if (!gateioUniverse.length) return;
+    let cancelled = false;
+    const refreshGateioQuotes = async () => {
+      const markets = ['spot', 'usdt', 'usd1', 'btc'];
+      const next = new Map<string, any>();
+      await Promise.all(markets.map(async market => {
+        try {
+          const response = await fetch('/api/sire/gateio/tickers?market=' + encodeURIComponent(market), { cache: 'no-store' });
+          if (!response.ok) return;
+          const payload = await response.json();
+          const rows = Array.isArray(payload?.data) ? payload.data : [];
+          for (const row of rows) {
+            const symbol = String(row?.currency_pair ?? row?.contract ?? '').trim().toUpperCase();
+            const price = Number(row?.last);
+            if (!symbol || !Number.isFinite(price)) continue;
+            const change = Number(row?.change_percentage);
+            const volume = Number(row?.quote_volume ?? row?.volume_24h_quote ?? row?.volume_24h_usd ?? row?.volume_24h);
+            const key = market + ':' + symbol;
+            next.set(key, {
+              price,
+              bid: Number.isFinite(Number(row?.highest_bid ?? row?.highest_bid_price)) ? Number(row?.highest_bid ?? row?.highest_bid_price) : undefined,
+              ask: Number.isFinite(Number(row?.lowest_ask ?? row?.lowest_ask_price)) ? Number(row?.lowest_ask ?? row?.lowest_ask_price) : undefined,
+              change24h: Number.isFinite(change) ? change : undefined,
+              priceChangePercent: Number.isFinite(change) ? change : undefined,
+              volume24h: Number.isFinite(volume) ? volume : undefined,
+            });
+          }
+        } catch {}
+      }));
+      if (cancelled || !next.size) return;
+      setGateioQuotes(next);
+    };
+    void refreshGateioQuotes();
+    const timer = window.setInterval(() => { void refreshGateioQuotes(); }, 1000);
+    return () => { cancelled = true; window.clearInterval(timer); };
+  }, [gateioUniverse]);
+
+  const gateioLiveUniverse = useMemo(() => (
+    gateioUniverse.map(item => {
+      const settlement = String((item as any).settlement || '').toLowerCase();
+      const marketType = String(item.marketType || '').toLowerCase();
+      const market = marketType === 'spot'
+        ? 'spot'
+        : settlement === 'btc'
+          ? 'btc'
+          : settlement === 'usd1'
+            ? 'usd1'
+            : 'usdt';
+      const key = market + ':' + String(item.symbol || '').toUpperCase();
+      const update = gateioQuotes.get(key);
+      return update ? { ...item, ...update } : item;
+    })
+  ), [gateioUniverse, gateioQuotes]);
   const globalMarketCaps = useMemo(() => {
     const map = new Map<string, number>();
     for (const item of instruments) {
@@ -387,15 +445,15 @@ export default function HomeView({ instruments, onSelectInstrument, videoSrc = '
   }, [bitgetFutures]);
 
   const gateioSpot = useMemo(
-    () => gateioUniverse.filter(isSpot),
-    [gateioUniverse],
+    () => gateioLiveUniverse.filter(isSpot),
+    [gateioLiveUniverse],
   );
 
   const gateioFutures = useMemo(
-    () => gateioUniverse
+    () => gateioLiveUniverse
       .filter(isFutures)
       .sort((a, b) => Number((b as any).volume24h || 0) - Number((a as any).volume24h || 0)),
-    [gateioUniverse],
+    [gateioLiveUniverse],
   );
 
   const gateioFuturesFamily = (item: HomeInstrument) => {
@@ -451,7 +509,7 @@ export default function HomeView({ instruments, onSelectInstrument, videoSrc = '
 
     switch (activeMarketFilter) {
       case 'Favorite':
-        return gateioUniverse.filter(item => favoriteIds.includes(item.id));
+        return gateioLiveUniverse.filter(item => favoriteIds.includes(item.id));
       case 'Hot':
         return activeMarketSubfilter === 'Futures' ? gateioHotFutures : gateioHotSpot;
       case 'Spot':
@@ -459,7 +517,7 @@ export default function HomeView({ instruments, onSelectInstrument, videoSrc = '
       case 'Futures':
         return filterGateioFuturesSubcategory([...gateioFutures]);
       case 'New':
-        return [...gateioUniverse]
+        return [...gateioLiveUniverse]
           .filter(item => isSpot(item) || isFutures(item))
           .filter(item => Number.isFinite(listedAt(item)))
           .sort((a, b) => listedAt(b) - listedAt(a))
@@ -491,7 +549,7 @@ export default function HomeView({ instruments, onSelectInstrument, videoSrc = '
       default:
         return gateioSpot;
     }
-  }, [activeMarketFilter, activeMarketSubfilter, gateioUniverse, gateioSpot, gateioFutures, gateioHotSpot, gateioHotFutures, favoriteIds, globalMarketCaps]);
+  }, [activeMarketFilter, activeMarketSubfilter, gateioLiveUniverse, gateioSpot, gateioFutures, gateioHotSpot, gateioHotFutures, favoriteIds, globalMarketCaps]);
 
   const bitgetMarketRows = useMemo(() => {
     const change = (item: HomeInstrument) => Number((item as any).change24h ?? (item as any).priceChangePercent);
