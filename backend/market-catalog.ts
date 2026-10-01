@@ -147,28 +147,101 @@ function classifyBinanceCrypto(raw: any, marketType: string) {
   const quote = String(raw?.quote || raw?.quoteAsset || raw?.quoteCoin || raw?.quoteCcy || '').trim().toUpperCase();
   const base = String(raw?.base || raw?.baseAsset || raw?.baseCoin || raw?.baseCcy || '').trim().toUpperCase();
   const type = String(marketType || '').trim();
-  const isSpot = type === 'Spot', isMargin = type === 'Margin', isFuture = type === 'Futures' || type === 'Perpetuals';
+  const isSpot = type === 'Spot';
+  const isMargin = type === 'Margin';
+  const isFuture = type === 'Futures' || type === 'Perpetuals';
+
   let marketSubcategory = isSpot ? 'Spot' : isMargin ? 'Margin' : isFuture ? 'Futures' : type || 'Other';
-  let marketFilter = 'ALL'; const marketFilters: string[] = ['ALL'];
+  let marketFilter = 'ALL';
+  const marketFilters: string[] = [];
+
   if (isSpot) {
-    const fiatQuotes = new Set(['EUR','GBP','AUD','BRL','TRY','ZAR','NGN','RUB','UAH','PLN','ARS','MXN','THB']);
-    if (quote === 'USDT') marketFilter='USDT'; else if (quote === 'USDC') marketFilter='USDC'; else if (quote === 'USD') marketFilter='USD';
-    else if (quote === 'BNB') marketFilter='BNB'; else if (quote === 'BTC') marketFilter='BTC'; else if (quote === 'BTCC') marketFilter='BTCC';
-    else if (quote === 'ETH') marketFilter='ETH'; else if (fiatQuotes.has(quote)) marketFilter='FIAT'; else marketFilter='ALTs';
-    marketFilters[0]=marketFilter;
+    const fiatQuotes = new Set([
+      'EUR','GBP','AUD','BRL','TRY','ZAR','NGN','RUB','UAH','PLN','ARS','MXN','THB','BIDR','IDRT'
+    ]);
+    if (quote === 'USDT') marketFilter = 'USDT';
+    else if (quote === 'USDC') marketFilter = 'USDC';
+    else if (quote === 'USD') marketFilter = 'USD';
+    else if (quote === 'BNB') marketFilter = 'BNB';
+    else if (quote === 'BTC') marketFilter = 'BTC';
+    else if (quote === 'BTCC') marketFilter = 'BTCC';
+    else if (quote === 'ETH') marketFilter = 'ETH';
+    else if (fiatQuotes.has(quote)) marketFilter = 'FIAT';
+    else marketFilter = 'ALTs';
+    marketFilters.push('Spot:' + marketFilter);
   } else if (isMargin) {
-    const marginAssets=new Set(['ETH','XAU','BTC','XAG','SOL','XRP','DOGE']); marketFilter=marginAssets.has(base)?base:'ALL'; marketFilters[0]=marketFilter;
+    const marginAssets = new Set(['ETH','XAU','BTC','XAG','SOL','XRP','DOGE']);
+    marketFilter = marginAssets.has(base) ? base : 'ALL';
+    if (marketFilter !== 'ALL') marketFilters.push('Margin:' + marketFilter);
   } else if (isFuture) {
-    const settle=String(raw?.settlement||raw?.settleCoin||raw?.settleCcy||raw?.marginAsset||'').toUpperCase();
-    marketSubcategory='Futures';
-    const family=String(raw?.marketSubcategory||raw?.contractFamily||'').toUpperCase()==='COIN-M'?'COIN-M':'USDT-M';
-    const normalizeTheme=(value:string)=>{const v=String(value||'').trim().toUpperCase().replace(/[-_ ]/g,'');const map:Record<string,string>={DEFI:'DeFi',METAVERSE:'Metaverse',METAVERS:'Metaverse',PAYMENT:'Payment',POW:'PoW',STORAGE:'Storage',NFT:'NFT',TRADFI:'TradFi',INDEX:'Index',PREIPO:'Pre-IPO',CHINESE:'Chinese',ALPHA:'Alpha',AI:'AI',LAYER1:'Layer-1',RWA:'RWA',LAYER2:'Layer-2',GAMING:'Gaming',GAMEFI:'Gaming',MEME:'Meme',INFRASTRUCTURE:'Infrastructure',INFRA:'Infrastructure',CRYPTO:'Crypto'};return map[v]||'';};
-    const themes=(Array.isArray(raw?.underlyingSubType)?raw.underlyingSubType:[]).map(normalizeTheme).filter(Boolean);
-    const listedAt=Number(raw?.onboardDate??raw?.listedAt??0); if(raw?.newListing===true||(listedAt>0&&Date.now()-listedAt<=45*24*60*60*1000)) themes.push('New');
-    if(!themes.length) themes.push('Crypto'); if(family==='USDT-M'&&settle==='USDC') themes.push('USDC');
-    marketFilter=family+':All'; marketFilters.push(...Array.from(new Set(themes)).map(theme=>family+':'+theme)); marketFilters.push(marketFilter);
+    const settle = String(
+      raw?.settlement || raw?.settleCoin || raw?.settleCcy || raw?.marginAsset || raw?.settleAsset || ''
+    ).trim().toUpperCase();
+
+    marketSubcategory = 'Futures';
+    const family = String(raw?.contractFamily || raw?.marketSubcategory || '').trim().toUpperCase() === 'COIN-M'
+      ? 'COIN-M'
+      : 'USDT-M';
+
+    // Binance documents underlyingSubType on Futures exchangeInfo. Preserve
+    // every returned subtype because one contract can belong to multiple themes.
+    const normalizeTheme = (value: unknown) => {
+      const v = String(value || '').trim().toUpperCase().replace(/[-_ ]/g, '');
+      const map: Record<string, string> = {
+        CRYPTO: 'Crypto',
+        DEFI: 'DeFi',
+        METAVERSE: 'Metaverse',
+        METAVERS: 'Metaverse',
+        PAYMENT: 'Payment',
+        POW: 'PoW',
+        STORAGE: 'Storage',
+        NFT: 'NFT',
+        TRADFI: 'TradFi',
+        INDEX: 'Index',
+        PREIPO: 'Pre-IPO',
+        CHINESE: 'Chinese',
+        ALPHA: 'Alpha',
+        AI: 'AI',
+        LAYER1: 'Layer-1',
+        LAYER2: 'Layer-2',
+        RWA: 'RWA',
+        GAMING: 'Gaming',
+        GAMEFI: 'Gaming',
+        MEME: 'Meme',
+        INFRASTRUCTURE: 'Infrastructure',
+        INFRA: 'Infrastructure',
+      };
+      return map[v] || '';
+    };
+
+    const rawThemes = Array.isArray(raw?.underlyingSubType)
+      ? raw.underlyingSubType
+      : raw?.underlyingSubType ? [raw.underlyingSubType] : [];
+
+    const themes = rawThemes.map(normalizeTheme).filter(Boolean) as string[];
+    const onboardDate = Number(raw?.onboardDate ?? raw?.listingTime ?? raw?.listedAt ?? 0);
+    // "New" is a live derived filter: contracts onboarded within the last
+    // 30 days are included. No synthetic rows are created.
+    if (Number.isFinite(onboardDate) && onboardDate > 0 && Date.now() - onboardDate <= 30 * 24 * 60 * 60 * 1000) {
+      themes.push('New');
+    }
+
+    // A USDT-M contract settled in USDC belongs to the explicit USDC child
+    // filter. Keep it in addition to any Binance-provided thematic subtypes.
+    if (family === 'USDT-M' && settle === 'USDC') themes.push('USDC');
+
+    const uniqueThemes = Array.from(new Set(themes));
+    marketFilter = family + ':All';
+    marketFilters.push(marketFilter);
+    for (const theme of uniqueThemes) marketFilters.push(family + ':' + theme);
   }
-  return {marketGroup:'Crypto',marketSubcategory,marketFilter,marketFilters:Array.from(new Set(marketFilters))};
+
+  return {
+    marketGroup: 'Crypto',
+    marketSubcategory,
+    marketFilter,
+    marketFilters: Array.from(new Set(marketFilters)),
+  };
 }
 function cryptoItem(provider: MarketProvider, marketType: string, category: string, raw: any, price?: any): UnifiedInstrument | null {
   const symbol = String(raw?.symbol || raw?.instId || '').trim();
@@ -460,12 +533,20 @@ async function binance(): Promise<UnifiedInstrument[]> {
     }).filter(Boolean) as UnifiedInstrument[];
     const derivatives = items.filter(item => item.marketType === 'Futures' || item.marketType === 'Perpetuals');
     if (derivatives.length > 0) {
+      const taxonomyCounts = items.reduce<Record<string, number>>((acc, item) => {
+        for (const filter of item.marketFilters || []) {
+          const key = item.marketGroup + '/' + item.marketSubcategory + '/' + filter;
+          acc[key] = (acc[key] || 0) + 1;
+        }
+        return acc;
+      }, {});
       console.log('[SIRE BINANCE] static official catalogue:', JSON.stringify({
         total: items.length,
         spot: items.filter(item => item.marketType === 'Spot').length,
         margin: items.filter(item => item.marketType === 'Margin').length,
         futures: items.filter(item => item.marketType === 'Futures').length,
         perpetuals: items.filter(item => item.marketType === 'Perpetuals').length,
+        taxonomy: taxonomyCounts,
       }));
       const seen = new Set<string>();
       items.push(...await binanceTradFi(payload));
