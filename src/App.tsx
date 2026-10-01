@@ -179,7 +179,7 @@ export default function App() {
       .map(item => item.id + ':' + getBitgetInstType(item) + ':' + getBitgetInstId(item))
       .sort()
       .join('|') + '||priority:' + bitgetPriorityIds.join('|')
-  ), [instruments, bitgetPriorityIds]);
+  ), [instruments]);
 
   useEffect(() => {
     if (!instruments.some(item => item.provider === 'BITGET')) return;
@@ -270,8 +270,10 @@ export default function App() {
 
       socket.onopen = () => {
         reconnectAttempt = 0;
-        // Bitget recommends fewer than 50 channel subscriptions per connection.
-        const args = items.slice(0, 40).map(item => ({
+        // Bitget allows up to 1000 channel subscriptions per connection.
+        // We deliberately subscribe to the complete product-family list rather
+        // than silently limiting live coverage to the first 40 symbols.
+        const args = items.slice(0, 1000).map(item => ({
           instType: getBitgetInstType(item),
           topic: 'ticker',
           symbol: getBitgetInstId(item),
@@ -366,11 +368,11 @@ export default function App() {
         const bp = priority.has(b.id) ? 0 : 1;
         return ap - bp || Number((b as any).volume24h || 0) - Number((a as any).volume24h || 0);
       });
-      // Bitget's ticker channel is subscribed per connection. The previous
-      // implementation silently dropped every symbol after the first 40 in each
-      // product family, which made lower-ranked Spot rows appear frozen.
-      for (let offset = 0; offset < ranked.length; offset += 40) {
-        connect(ranked.slice(offset, offset + 40));
+      // Subscribe to the complete product family. Bitget's hard limit is
+      // 1000 channel subscriptions per connection, so only very large
+      // families are split into 1000-symbol connections. Nothing is dropped.
+      for (let offset = 0; offset < ranked.length; offset += 1000) {
+        connect(ranked.slice(offset, offset + 1000));
       }
     }
 
