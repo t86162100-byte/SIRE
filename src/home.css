@@ -5238,3 +5238,41 @@
 @media(prefers-reduced-motion:reduce){
   .sire-home-pulse-track{animation:none}
 }
+
+
+/* FINAL MOBILE SCROLL PERFORMANCE
+   Keep the native vertical gesture in control: no custom scroll physics,
+   no smooth-scroll interpolation, and no layout work for far-off sections. */
+.sire-home-scroll{
+  -webkit-overflow-scrolling:touch !important;
+  touch-action:pan-y !important;
+  overscroll-behavior-y:auto !important;
+  scroll-behavior:auto !important;
+  scroll-snap-type:none !important;
+  will-change:scroll-position;
+  contain:none !important;
+}
+
+@media(max-width:700px){
+  .sire-home-scroll{
+    overflow-y:scroll !important;
+    overflow-x:hidden !important;
+    touch-action:pan-y !important;
+    overscroll-behavior-y:auto !important;
+    scroll-behavior:auto !important;
+    -webkit-overflow-scrolling:touch !important;
+  }
+
+  /* Let the browser skip painting/layout for sections that are well below
+     the finger's current viewport. Visible content keeps its existing design. */
+  .sire-home-scroll > *{
+    content-visibility:auto;
+    contain-intrinsic-size:auto 180px;
+  }
+
+  /* Keep the existing Market Pulse motion, but don't let its animation
+     participate in layout calculations while the page itself is scrolling. */
+  .sire-home-pulse-track{
+    will-change:transform;
+  }
+}
