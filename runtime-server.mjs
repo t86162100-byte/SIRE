@@ -979,6 +979,31 @@ const server = http.createServer(async (req,res) => {
         return res.writeHead(502,{ 'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8' }).end(JSON.stringify({ok:false,error:String(error?.message || error),items:[]}));
       }
     }
+    if (req.method === 'GET' && pathname === '/api/sire/gateio/tickers') {
+      const url = new URL(req.url || '/', 'http://sire.local');
+      const market = String(url.searchParams.get('market') || 'spot').toLowerCase();
+      const endpoints: Record<string,string> = {
+        spot: 'https://api.gateio.ws/api/v4/spot/tickers',
+        usdt: 'https://api.gateio.ws/api/v4/futures/usdt/tickers',
+        usd1: 'https://api.gateio.ws/api/v4/futures/usd1/tickers',
+        btc: 'https://api.gateio.ws/api/v4/futures/btc/tickers',
+      };
+      const endpoint = endpoints[market];
+      if (!endpoint) {
+        return res.writeHead(400,{ 'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8' }).end(JSON.stringify({ok:false,error:'Unsupported Gate.io market'}));
+      }
+      try {
+        const response = await fetch(endpoint, { headers: { Accept: 'application/json' }, cache: 'no-store' });
+        const data = await response.json();
+        if (!response.ok || !Array.isArray(data)) throw new Error('HTTP ' + response.status);
+        console.log('[SIRE GATEIO LIVE] ' + market + ': ' + data.length);
+        return res.writeHead(200,{ 'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8' }).end(JSON.stringify({ok:true,market,data}));
+      } catch (cause) {
+        const message = cause instanceof Error ? cause.message : String(cause);
+        console.warn('[SIRE GATEIO LIVE] failed', JSON.stringify({market,error:message}));
+        return res.writeHead(502,{ 'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8' }).end(JSON.stringify({ok:false,market,error:message,data:[]}));
+      }
+    }
     if (req.method === 'GET' && pathname === '/api/sire/bitget/tickers') {
       const url = new URL(req.url || '/', 'http://sire.local');
       const category = String(url.searchParams.get('category') || 'SPOT').toUpperCase();
