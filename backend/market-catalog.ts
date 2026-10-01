@@ -171,7 +171,7 @@ function classifyBinanceCrypto(raw: any, marketType: string) {
     marketSubcategory = 'Futures';
     const contractFamily = String(raw?.marketSubcategory || raw?.contractFamily || '').toUpperCase() === 'COIN-M'
       ? 'COIN-M'
-      : (settle === 'USDC' ? 'USDT-M' : 'USDT-M');
+      : 'USDT-M';
     marketFilter = contractFamily + ':' + (settle === 'USDC' ? 'USDC' : 'All');
   }
   return { marketGroup: 'Crypto', marketSubcategory, marketFilter };
@@ -432,16 +432,18 @@ async function binance(): Promise<UnifiedInstrument[]> {
   await loadSymbols('USD-M', [
     'https://fapi.binance.com/fapi/v1/exchangeInfo',
     'https://api-dev.pipai.org/fapi/v1/exchangeInfo',
-  ], raw =>
-    String(raw?.contractType || '').toUpperCase() === 'PERPETUAL' ? 'Perpetuals' : 'Futures'
-  );
+  ], raw => {
+    raw.contractFamily = 'USDT-M';
+    return String(raw?.contractType || '').toUpperCase() === 'PERPETUAL' ? 'Perpetuals' : 'Futures';
+  });
 
   await loadSymbols('COIN-M', [
     'https://dapi.binance.com/dapi/v1/exchangeInfo',
     'https://api-dev.pipai.org/dapi/v1/exchangeInfo',
-  ], raw =>
-    String(raw?.contractType || '').toUpperCase() === 'PERPETUAL' ? 'Perpetuals' : 'Futures'
-  );
+  ], raw => {
+    raw.contractFamily = 'COIN-M';
+    return String(raw?.contractType || '').toUpperCase() === 'PERPETUAL' ? 'Perpetuals' : 'Futures';
+  });
 
   try {
     const response = await getJsonAny(['https://eapi.binance.com/eapi/v1/exchangeInfo'], 12000);
