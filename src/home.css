@@ -4531,3 +4531,196 @@
   padding-top:62px !important;
   overflow-y:auto !important;
 }
+
+
+/* LIVE MARKET PULSE — compact glass cards with real rolling price sparklines */
+.sire-home-pulse-grid{
+  display:grid;
+  grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:8px;
+}
+.sire-home-pulse-card{
+  min-width:0;
+  min-height:118px;
+  height:118px;
+  padding:0 !important;
+  border-radius:16px !important;
+  overflow:hidden;
+}
+.sire-home-pulse-main{
+  position:relative;
+  width:100%;
+  height:100%;
+  min-width:0;
+  padding:11px 10px 9px;
+  display:grid;
+  grid-template-columns:minmax(0,1fr) auto;
+  grid-template-rows:auto 1fr auto;
+  column-gap:8px;
+  border:0;
+  background:transparent;
+  color:#f5f2ff;
+  text-align:left;
+  overflow:hidden;
+}
+.sire-home-pulse-main:focus-visible{
+  outline:1px solid rgba(164,210,255,.65);
+  outline-offset:-2px;
+}
+.sire-home-pulse-identity{
+  min-width:0;
+  display:flex;
+  align-items:center;
+  gap:7px;
+  position:relative;
+  z-index:3;
+}
+.sire-home-pulse-logo{
+  flex:0 0 31px;
+  width:31px;
+  height:31px;
+  display:grid;
+  place-items:center;
+  border-radius:10px;
+  padding:3px;
+  background:linear-gradient(145deg,rgba(70,126,220,.22),rgba(125,74,220,.16));
+  border:1px solid rgba(154,196,255,.20);
+  box-shadow:inset 0 1px rgba(255,255,255,.12),0 5px 14px rgba(0,0,0,.24);
+}
+.sire-home-pulse-logo img{
+  width:100%;
+  height:100%;
+  border-radius:8px;
+  object-fit:cover;
+}
+.sire-home-pulse-copy{
+  min-width:0;
+}
+.sire-home-pulse-copy b,
+.sire-home-pulse-copy small{
+  display:block;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+.sire-home-pulse-copy b{
+  font-size:10px;
+  line-height:1.1;
+  letter-spacing:.02em;
+}
+.sire-home-pulse-copy small{
+  margin-top:3px;
+  color:#71899e;
+  font-size:7px;
+}
+.sire-home-pulse-exchange{
+  min-width:0;
+  max-width:66px;
+  display:flex;
+  align-items:center;
+  justify-content:flex-end;
+  gap:4px;
+  position:relative;
+  z-index:3;
+}
+.sire-home-pulse-exchange img{
+  width:14px;
+  height:14px;
+  border-radius:4px;
+  object-fit:cover;
+  opacity:.9;
+  box-shadow:0 0 0 1px rgba(180,200,255,.12);
+}
+.sire-home-pulse-exchange small{
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+  color:#8499ac;
+  font-size:6px;
+  font-weight:800;
+  letter-spacing:.05em;
+}
+.sire-home-pulse-chart{
+  position:absolute;
+  left:10px;
+  right:10px;
+  bottom:7px;
+  height:42px;
+  opacity:.92;
+  pointer-events:none;
+}
+.sire-home-pulse-spark{
+  position:absolute;
+  inset:0;
+}
+.sire-home-pulse-spark svg{
+  width:100%;
+  height:100%;
+  display:block;
+  overflow:visible;
+}
+.sire-home-pulse-spark-line{
+  stroke-width:1.8;
+  stroke-linecap:round;
+  stroke-linejoin:round;
+  vector-effect:non-scaling-stroke;
+  fill:none;
+}
+.sire-home-pulse-spark-fill{
+  opacity:.055;
+}
+.sire-home-pulse-spark--positive .sire-home-pulse-spark-line{stroke:#32dfad;filter:drop-shadow(0 0 4px rgba(50,223,173,.28))}
+.sire-home-pulse-spark--positive .sire-home-pulse-spark-fill{fill:#32dfad}
+.sire-home-pulse-spark--negative .sire-home-pulse-spark-line{stroke:#ff6170;filter:drop-shadow(0 0 4px rgba(255,97,112,.25))}
+.sire-home-pulse-spark--negative .sire-home-pulse-spark-fill{fill:#ff6170}
+.sire-home-pulse-spark--neutral .sire-home-pulse-spark-line{stroke:#8b9bab}
+.sire-home-pulse-spark--neutral .sire-home-pulse-spark-fill{fill:#8b9bab}
+.sire-home-pulse-price{
+  position:relative;
+  z-index:4;
+  align-self:end;
+  justify-self:end;
+  min-width:0;
+  display:flex;
+  flex-direction:column;
+  align-items:flex-end;
+  gap:3px;
+}
+.sire-home-pulse-price strong{
+  font-size:11px;
+  line-height:1;
+  letter-spacing:-.02em;
+  text-shadow:0 2px 10px rgba(64,150,255,.15);
+}
+.sire-home-pulse-price b{
+  font-size:7px;
+  font-weight:900;
+  line-height:1;
+}
+.sire-home-pulse-price b.positive{color:#32dfad}
+.sire-home-pulse-price b.negative{color:#ff6170}
+.sire-home-pulse-price b.neutral{color:#8b9bab}
+.sire-home-pulse-card--positive{
+  border-color:rgba(73,211,174,.18) !important;
+}
+.sire-home-pulse-card--negative{
+  border-color:rgba(255,97,112,.17) !important;
+}
+.sire-home-pulse-card--positive:before{
+  background:
+    radial-gradient(ellipse 40% 90% at 12% 100%,rgba(50,223,173,.10),transparent 70%),
+    radial-gradient(ellipse 45% 100% at 90% 5%,rgba(117,91,255,.10),transparent 72%);
+}
+.sire-home-pulse-card--negative:before{
+  background:
+    radial-gradient(ellipse 40% 90% at 12% 100%,rgba(255,97,112,.09),transparent 70%),
+    radial-gradient(ellipse 45% 100% at 90% 5%,rgba(117,91,255,.10),transparent 72%);
+}
+@media(max-width:430px){
+  .sire-home-pulse-grid{grid-template-columns:1fr}
+  .sire-home-pulse-card{height:104px;min-height:104px}
+  .sire-home-pulse-chart{height:37px}
+}
+@media(prefers-reduced-motion:reduce){
+  .sire-home-pulse-card:before{animation:none !important}
+}
