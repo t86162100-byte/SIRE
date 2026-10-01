@@ -3009,3 +3009,553 @@
   .sire-home-gpu{display:none}
   .sire-home-market-card,.sire-home-watch-row,.sire-home-actions-grid button,.sire-home-earn-grid button,.sire-home-new-grid button{transition:none}
 }
+
+
+/* -------------------------------------------------------------------------
+   SIRE // LIQUID GLASS SURFACE SYSTEM
+   Fixed surface opacity. The "alive" motion comes from animated light fields,
+   reflections and internal highlights — never by changing the card alpha.
+   Palette follows the deep-indigo / electric-blue / violet sky of the hero.
+   ------------------------------------------------------------------------- */
+
+.sire-home{
+  --sky-ink:#03061a;
+  --sky-blue:#155eff;
+  --sky-cyan:#31d9ff;
+  --sky-violet:#7642ff;
+  --sky-purple:#b24cff;
+  --glass-base:rgba(4,10,32,.88);
+  --glass-base-soft:rgba(5,12,38,.82);
+  --glass-line:rgba(105,160,255,.34);
+  --glass-line-hot:rgba(153,95,255,.55);
+  --glass-text:#f2f6ff;
+  --glass-muted:#7f94b7;
+  --glass-green:#22e6b2;
+  --glass-red:#ff5d79;
+  background:
+    radial-gradient(ellipse at 50% -20%,rgba(72,48,190,.22),transparent 50%),
+    radial-gradient(ellipse at 110% 45%,rgba(21,94,255,.12),transparent 42%),
+    radial-gradient(ellipse at -10% 70%,rgba(145,58,255,.09),transparent 38%),
+    var(--sky-ink);
+}
+
+.sire-home:before{
+  background:
+    radial-gradient(circle at 50% 18%,rgba(48,98,255,.10),transparent 32%),
+    radial-gradient(circle at 82% 14%,rgba(177,74,255,.10),transparent 29%),
+    linear-gradient(125deg,rgba(15,48,140,.035),transparent 30%,rgba(113,46,208,.03) 74%,transparent);
+}
+
+.sire-home-header{
+  background:linear-gradient(180deg,rgba(2,7,24,.92),rgba(4,9,28,.78));
+  border-bottom-color:rgba(81,136,241,.15);
+  box-shadow:
+    0 18px 50px rgba(0,0,0,.28),
+    inset 0 1px rgba(255,255,255,.035),
+    inset 0 -1px rgba(58,132,255,.08);
+}
+
+.sire-home-scroll{
+  scroll-behavior:smooth;
+}
+
+.sire-home-section-head span,
+.sire-home-section-head h2{
+  text-shadow:0 0 24px rgba(43,136,255,.10);
+}
+
+.sire-home-section-head span{
+  color:#6284b4;
+}
+
+.sire-home-section-head h2{
+  color:#f1f5ff;
+}
+
+.sire-home-section-head button{
+  color:#7eb7ff;
+}
+
+.sire-home-market-filter-shell{
+  position:relative;
+  padding:5px;
+  border:1px solid rgba(94,136,230,.16);
+  border-radius:18px;
+  background:linear-gradient(180deg,rgba(3,9,29,.68),rgba(4,10,30,.58));
+  box-shadow:
+    inset 0 1px rgba(255,255,255,.035),
+    0 12px 34px rgba(0,0,0,.18);
+  overflow:hidden;
+}
+
+.sire-home-market-filter-shell:before{
+  content:"";
+  position:absolute;
+  inset:-40% -12%;
+  pointer-events:none;
+  background:
+    radial-gradient(ellipse at 18% 30%,rgba(39,121,255,.15),transparent 28%),
+    radial-gradient(ellipse at 80% 72%,rgba(167,70,255,.12),transparent 30%);
+  filter:blur(26px);
+  animation:sire-liquid-ambient 13s ease-in-out infinite alternate;
+}
+
+.sire-home-market-filter-shell > *{
+  position:relative;
+  z-index:1;
+}
+
+.sire-home-market-tabs{
+  margin-bottom:6px;
+  padding:2px;
+  gap:5px;
+}
+
+.sire-home-market-tabs button{
+  position:relative;
+  min-height:34px;
+  border:1px solid transparent;
+  border-radius:11px;
+  padding:0 12px;
+  color:#7890b6;
+  background:rgba(4,10,31,.42);
+  box-shadow:inset 0 1px rgba(255,255,255,.018);
+  overflow:hidden;
+}
+
+.sire-home-market-tabs button:before{
+  content:"";
+  position:absolute;
+  inset:-70%;
+  background:
+    radial-gradient(circle at 24% 50%,rgba(32,103,255,.16),transparent 28%),
+    radial-gradient(circle at 78% 50%,rgba(171,73,255,.13),transparent 26%);
+  filter:blur(10px);
+  animation:sire-pill-flow 8s ease-in-out infinite alternate;
+  pointer-events:none;
+}
+
+.sire-home-market-tabs button.active{
+  color:#f4f7ff;
+  border-color:rgba(84,147,255,.44);
+  background:linear-gradient(135deg,rgba(20,64,150,.52),rgba(54,27,120,.50));
+  box-shadow:
+    inset 0 1px rgba(255,255,255,.09),
+    inset 0 -1px rgba(67,115,240,.10),
+    0 0 24px rgba(47,113,255,.10);
+}
+
+.sire-home-market-tabs button.active:after{
+  content:"";
+  position:absolute;
+  left:14%;
+  right:14%;
+  bottom:2px;
+  height:1px;
+  background:linear-gradient(90deg,transparent,#65c9ff,#ad65ff,transparent);
+  filter:blur(.25px);
+  box-shadow:0 0 10px rgba(73,175,255,.52);
+}
+
+.sire-home-market-subtabs{
+  border-top-color:rgba(80,125,215,.10);
+  padding:7px 2px 1px;
+}
+
+.sire-home-market-subtabs-track button{
+  min-height:29px;
+  color:#7489ac;
+  border:1px solid transparent;
+  background:rgba(5,12,34,.36);
+  border-radius:10px;
+}
+
+.sire-home-market-subtabs-track button.active{
+  color:#eaf1ff;
+  border-color:rgba(90,148,255,.30);
+  background:linear-gradient(135deg,rgba(24,75,164,.34),rgba(80,39,151,.30));
+  box-shadow:inset 0 1px rgba(255,255,255,.055),0 0 16px rgba(75,112,255,.07);
+}
+
+.sire-home-watchlist{
+  position:relative;
+  border:1px solid rgba(100,155,245,.22);
+  border-radius:17px;
+  background:rgba(3,9,28,.70);
+  box-shadow:
+    0 20px 50px rgba(0,0,0,.28),
+    inset 0 1px rgba(255,255,255,.05),
+    inset 0 -1px rgba(42,95,209,.11);
+  overflow:hidden;
+  isolation:isolate;
+}
+
+.sire-home-watchlist:before{
+  content:"";
+  position:absolute;
+  inset:-70% -18%;
+  z-index:-1;
+  pointer-events:none;
+  background:
+    radial-gradient(ellipse at 10% 20%,rgba(16,113,255,.17),transparent 22%),
+    radial-gradient(ellipse at 88% 28%,rgba(173,71,255,.14),transparent 22%),
+    radial-gradient(ellipse at 46% 100%,rgba(21,199,255,.09),transparent 25%);
+  filter:blur(28px);
+  animation:sire-card-lava 17s cubic-bezier(.55,.05,.45,.95) infinite alternate;
+}
+
+.sire-home-watch-row{
+  position:relative;
+  isolation:isolate;
+  height:62px;
+  min-height:62px;
+  border-bottom-color:rgba(92,132,205,.11);
+  background:linear-gradient(90deg,rgba(5,13,39,.92),rgba(4,10,31,.90));
+  box-shadow:inset 0 1px rgba(255,255,255,.018);
+  overflow:hidden;
+  transform:translateZ(0);
+}
+
+.sire-home-watch-row:before{
+  content:"";
+  position:absolute;
+  inset:-85% -25%;
+  z-index:-1;
+  pointer-events:none;
+  background:
+    radial-gradient(ellipse at 26% 34%,rgba(28,116,255,.18),transparent 17%),
+    radial-gradient(ellipse at 74% 65%,rgba(168,61,255,.16),transparent 18%);
+  filter:blur(20px);
+  transform:translate3d(-10%,0,0) rotate(-8deg);
+  animation:sire-row-lava 10.5s ease-in-out infinite alternate;
+}
+
+.sire-home-watch-row:after{
+  content:"";
+  position:absolute;
+  top:-55%;
+  left:-28%;
+  width:52%;
+  height:210%;
+  z-index:0;
+  pointer-events:none;
+  background:linear-gradient(100deg,transparent 20%,rgba(98,185,255,.055) 45%,rgba(181,96,255,.05) 56%,transparent 74%);
+  transform:rotate(8deg) translateX(-35%);
+  animation:sire-glass-sweep 9s cubic-bezier(.4,0,.2,1) infinite;
+}
+
+.sire-home-watch-main,
+.sire-home-watch-row > .market-trade-button{
+  position:relative;
+  z-index:1;
+}
+
+.sire-home-watch-row:hover{
+  background:linear-gradient(90deg,rgba(7,17,48,.96),rgba(5,12,36,.94));
+  box-shadow:
+    inset 0 1px rgba(112,187,255,.055),
+    inset 0 -1px rgba(135,74,255,.035),
+    0 5px 22px rgba(18,80,176,.08);
+}
+
+.sire-home-watch-row > .market-trade-button{
+  border-radius:10px;
+  border:1px solid rgba(82,150,255,.18);
+  background:rgba(9,28,60,.50);
+  box-shadow:inset 0 1px rgba(255,255,255,.04),0 0 14px rgba(57,129,255,.05);
+}
+
+.sire-home-market-card{
+  position:relative;
+  isolation:isolate;
+  flex-basis:156px;
+  min-height:112px;
+  border:1px solid rgba(90,149,255,.24);
+  border-radius:17px;
+  background:
+    linear-gradient(145deg,rgba(9,22,55,.92),rgba(4,10,31,.92));
+  box-shadow:
+    0 16px 36px rgba(0,0,0,.30),
+    0 0 0 1px rgba(83,63,188,.07),
+    inset 0 1px rgba(255,255,255,.055),
+    inset 0 -14px 28px rgba(29,59,154,.06);
+  overflow:hidden;
+  backdrop-filter:blur(16px) saturate(145%);
+  -webkit-backdrop-filter:blur(16px) saturate(145%);
+  transform:translateZ(0);
+}
+
+.sire-home-market-card:before{
+  content:"";
+  position:absolute;
+  inset:-75% -35%;
+  z-index:-1;
+  pointer-events:none;
+  background:
+    radial-gradient(ellipse at 19% 40%,rgba(23,118,255,.24),transparent 21%),
+    radial-gradient(ellipse at 72% 24%,rgba(177,69,255,.22),transparent 23%),
+    radial-gradient(ellipse at 82% 82%,rgba(26,203,255,.12),transparent 20%),
+    radial-gradient(ellipse at 35% 82%,rgba(82,58,255,.10),transparent 24%);
+  filter:blur(22px);
+  animation:sire-market-lava 11.5s cubic-bezier(.55,.05,.45,.95) infinite alternate;
+}
+
+.sire-home-market-card:after{
+  content:"";
+  position:absolute;
+  top:-80%;
+  left:-42%;
+  width:42%;
+  height:260%;
+  z-index:2;
+  pointer-events:none;
+  background:
+    linear-gradient(105deg,transparent 22%,rgba(125,203,255,.04) 41%,rgba(231,173,255,.12) 48%,rgba(98,177,255,.05) 54%,transparent 72%);
+  transform:rotate(13deg);
+  filter:blur(1px);
+  animation:sire-card-reflection 8.5s cubic-bezier(.42,0,.18,1) infinite;
+}
+
+.sire-home-market-card:nth-child(2):before{animation-delay:-4.1s}
+.sire-home-market-card:nth-child(3):before{animation-delay:-7.4s}
+.sire-home-market-card:nth-child(4):before{animation-delay:-2.8s}
+.sire-home-market-card:nth-child(5):before{animation-delay:-9.2s}
+.sire-home-market-card:nth-child(2):after{animation-delay:-2.6s}
+.sire-home-market-card:nth-child(3):after{animation-delay:-5.1s}
+.sire-home-market-card:nth-child(4):after{animation-delay:-7.0s}
+.sire-home-market-card:nth-child(5):after{animation-delay:-1.4s}
+
+.sire-home-market-card>strong{
+  color:#f6f8ff;
+  text-shadow:0 2px 18px rgba(76,143,255,.12);
+}
+
+.sire-home-market-card>span{
+  text-shadow:0 0 12px currentColor;
+}
+
+.sire-home-intelligence,
+.sire-home-copy-card,
+.sire-home-ai-card,
+.sire-home-actions-grid button,
+.sire-home-earn-grid button,
+.sire-home-new-grid button{
+  position:relative;
+  isolation:isolate;
+  background:linear-gradient(145deg,rgba(8,19,50,.88),rgba(4,10,30,.88));
+  border-color:rgba(96,145,237,.20);
+  box-shadow:
+    0 16px 40px rgba(0,0,0,.26),
+    inset 0 1px rgba(255,255,255,.045),
+    inset 0 -16px 32px rgba(39,72,167,.065);
+  overflow:hidden;
+  backdrop-filter:blur(14px) saturate(140%);
+  -webkit-backdrop-filter:blur(14px) saturate(140%);
+}
+
+.sire-home-intelligence:before,
+.sire-home-copy-card:before,
+.sire-home-ai-card:before,
+.sire-home-actions-grid button:before,
+.sire-home-earn-grid button:before,
+.sire-home-new-grid button:before{
+  content:"";
+  position:absolute;
+  inset:-80% -35%;
+  z-index:-1;
+  pointer-events:none;
+  background:
+    radial-gradient(ellipse at 18% 40%,rgba(23,116,255,.16),transparent 21%),
+    radial-gradient(ellipse at 73% 30%,rgba(174,71,255,.14),transparent 22%),
+    radial-gradient(ellipse at 78% 82%,rgba(30,209,255,.08),transparent 19%);
+  filter:blur(23px);
+  animation:sire-surface-flow 13s ease-in-out infinite alternate;
+}
+
+.sire-home-copy-card{
+  box-shadow:
+    0 20px 52px rgba(0,0,0,.30),
+    inset 0 1px rgba(255,255,255,.05),
+    inset 0 -20px 36px rgba(42,50,163,.10);
+}
+
+.sire-home-copy-orbit{
+  filter:drop-shadow(0 0 18px rgba(88,137,255,.16));
+}
+
+.sire-home-copy-orbit div:nth-child(3){
+  background:radial-gradient(circle,rgba(135,89,255,.98),rgba(46,89,214,.18) 42%,transparent 68%);
+  box-shadow:0 0 42px rgba(56,149,255,.28),0 0 24px rgba(184,75,255,.20);
+}
+
+.sire-home-ai-cta,
+.sire-home-intel-top button{
+  border-color:rgba(79,155,255,.40);
+  background:linear-gradient(135deg,rgba(17,79,168,.25),rgba(91,42,165,.24));
+  color:#dceaff;
+  box-shadow:inset 0 1px rgba(255,255,255,.055),0 0 18px rgba(53,119,255,.07);
+}
+
+.sire-home-balance{
+  position:relative;
+  isolation:isolate;
+  background:linear-gradient(145deg,rgba(6,14,40,.84),rgba(4,9,28,.84)) !important;
+  border:1px solid rgba(95,145,236,.18);
+  border-radius:18px;
+  box-shadow:
+    0 18px 46px rgba(0,0,0,.24),
+    inset 0 1px rgba(255,255,255,.045),
+    inset 0 -20px 36px rgba(36,72,161,.07);
+  overflow:hidden;
+  backdrop-filter:blur(16px) saturate(140%);
+  -webkit-backdrop-filter:blur(16px) saturate(140%);
+}
+
+.sire-home-balance:before{
+  content:"";
+  position:absolute;
+  inset:-85% -28%;
+  z-index:-1;
+  background:
+    radial-gradient(ellipse at 16% 40%,rgba(27,107,255,.14),transparent 22%),
+    radial-gradient(ellipse at 76% 32%,rgba(180,72,255,.12),transparent 23%),
+    radial-gradient(ellipse at 72% 88%,rgba(28,202,255,.08),transparent 19%);
+  filter:blur(25px);
+  pointer-events:none;
+  animation:sire-balance-flow 15s ease-in-out infinite alternate;
+}
+
+.sire-home-events-media{
+  position:relative;
+  border:1px solid rgba(94,139,233,.18);
+  border-radius:17px;
+  background:linear-gradient(145deg,rgba(5,12,35,.80),rgba(3,9,28,.80));
+  box-shadow:0 18px 44px rgba(0,0,0,.22),inset 0 1px rgba(255,255,255,.045);
+  backdrop-filter:blur(14px) saturate(135%);
+  -webkit-backdrop-filter:blur(14px) saturate(135%);
+  overflow:hidden;
+}
+
+.sire-home-events-media:before{
+  content:"";
+  position:absolute;
+  inset:-90% -30%;
+  background:
+    radial-gradient(ellipse at 18% 45%,rgba(22,108,255,.13),transparent 23%),
+    radial-gradient(ellipse at 78% 34%,rgba(171,66,255,.12),transparent 23%);
+  filter:blur(25px);
+  animation:sire-events-flow 14s ease-in-out infinite alternate;
+  pointer-events:none;
+}
+
+.market-asset-logo{
+  filter:drop-shadow(0 3px 10px rgba(14,62,148,.22));
+}
+
+.market-token-logo{
+  box-shadow:
+    0 0 0 1px rgba(102,160,255,.13),
+    0 5px 18px rgba(0,0,0,.28);
+}
+
+.market-exchange-logo{
+  box-shadow:0 3px 12px rgba(0,0,0,.34);
+  border-color:rgba(106,157,242,.18) !important;
+  background:rgba(3,9,25,.78) !important;
+  backdrop-filter:blur(8px);
+}
+
+@keyframes sire-market-lava{
+  0%{transform:translate3d(-8%,-4%,0) rotate(-4deg) scale(1)}
+  34%{transform:translate3d(9%,4%,0) rotate(2deg) scale(1.07)}
+  68%{transform:translate3d(-3%,9%,0) rotate(-3deg) scale(1.02)}
+  100%{transform:translate3d(10%,-7%,0) rotate(4deg) scale(1.09)}
+}
+
+@keyframes sire-card-lava{
+  0%{transform:translate3d(-6%,-8%,0) rotate(-2deg) scale(1)}
+  50%{transform:translate3d(8%,4%,0) rotate(3deg) scale(1.10)}
+  100%{transform:translate3d(-4%,10%,0) rotate(-4deg) scale(1.04)}
+}
+
+@keyframes sire-row-lava{
+  0%{transform:translate3d(-11%,3%,0) rotate(-7deg) scale(1)}
+  50%{transform:translate3d(10%,-2%,0) rotate(3deg) scale(1.08)}
+  100%{transform:translate3d(1%,9%,0) rotate(-2deg) scale(1.03)}
+}
+
+@keyframes sire-card-reflection{
+  0%,12%{transform:rotate(13deg) translateX(-20vw)}
+  48%,58%{transform:rotate(13deg) translateX(20vw)}
+  100%{transform:rotate(13deg) translateX(46vw)}
+}
+
+@keyframes sire-glass-sweep{
+  0%,18%{transform:rotate(8deg) translateX(-24vw)}
+  62%,72%{transform:rotate(8deg) translateX(22vw)}
+  100%{transform:rotate(8deg) translateX(42vw)}
+}
+
+@keyframes sire-surface-flow{
+  0%{transform:translate3d(-8%,-3%,0) scale(1)}
+  50%{transform:translate3d(10%,6%,0) scale(1.08)}
+  100%{transform:translate3d(-3%,10%,0) scale(1.03)}
+}
+
+@keyframes sire-balance-flow{
+  0%{transform:translate3d(-7%,-2%,0) scale(1)}
+  45%{transform:translate3d(9%,6%,0) scale(1.07)}
+  100%{transform:translate3d(-2%,-8%,0) scale(1.04)}
+}
+
+@keyframes sire-events-flow{
+  0%{transform:translate3d(-6%,0,0) scale(1)}
+  50%{transform:translate3d(8%,8%,0) scale(1.09)}
+  100%{transform:translate3d(-5%,-6%,0) scale(1.04)}
+}
+
+@keyframes sire-liquid-ambient{
+  0%{transform:translate3d(-4%,-3%,0) scale(1)}
+  100%{transform:translate3d(5%,6%,0) scale(1.08)}
+}
+
+@keyframes sire-pill-flow{
+  0%{transform:translate3d(-5%,0,0) scale(1)}
+  100%{transform:translate3d(7%,0,0) scale(1.05)}
+}
+
+@media(max-width:700px){
+  .sire-home-market-card{
+    flex-basis:151px;
+    min-height:108px;
+    border-radius:16px;
+  }
+  .sire-home-watch-row{
+    height:59px;
+    min-height:59px;
+  }
+  .sire-home-market-filter-shell,
+  .sire-home-watchlist{
+    border-radius:15px;
+  }
+}
+
+@media(prefers-reduced-motion:reduce){
+  .sire-home-market-filter-shell:before,
+  .sire-home-market-tabs button:before,
+  .sire-home-watchlist:before,
+  .sire-home-watch-row:before,
+  .sire-home-watch-row:after,
+  .sire-home-market-card:before,
+  .sire-home-market-card:after,
+  .sire-home-intelligence:before,
+  .sire-home-copy-card:before,
+  .sire-home-ai-card:before,
+  .sire-home-actions-grid button:before,
+  .sire-home-earn-grid button:before,
+  .sire-home-new-grid button:before,
+  .sire-home-balance:before,
+  .sire-home-events-media:before{
+    animation:none !important;
+  }
+}
