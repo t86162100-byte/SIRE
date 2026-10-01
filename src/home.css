@@ -4724,3 +4724,174 @@
 @media(prefers-reduced-motion:reduce){
   .sire-home-pulse-card:before{animation:none !important}
 }
+
+
+/* Compact Market Pulse: dense, clean ticker cards inspired by exchange watchlists */
+.sire-home-pulse-grid{
+  display:grid;
+  grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:10px;
+}
+.sire-home-pulse-card{
+  min-width:0;
+  height:124px;
+  min-height:124px;
+  border-radius:17px !important;
+  overflow:hidden;
+}
+.sire-home-pulse-main{
+  position:relative;
+  width:100%;
+  height:100%;
+  padding:13px 13px 11px;
+  display:block;
+  border:0;
+  background:transparent;
+  color:#f4f3fb;
+  text-align:left;
+  overflow:hidden;
+}
+.sire-home-pulse-top{
+  position:relative;
+  z-index:4;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:7px;
+  min-width:0;
+}
+.sire-home-pulse-identity{
+  min-width:0;
+  display:flex;
+  align-items:center;
+  gap:8px;
+}
+.sire-home-pulse-logo{
+  width:32px;
+  height:32px;
+  flex:0 0 32px;
+  display:grid;
+  place-items:center;
+  padding:3px;
+  border-radius:10px;
+  background:rgba(62,88,145,.23);
+  border:1px solid rgba(155,190,255,.20);
+  box-shadow:inset 0 1px rgba(255,255,255,.10);
+}
+.sire-home-pulse-logo img{
+  width:100%;
+  height:100%;
+  object-fit:cover;
+  border-radius:8px;
+}
+.sire-home-pulse-copy{min-width:0}
+.sire-home-pulse-copy b{
+  display:block;
+  font-size:11px;
+  line-height:1.1;
+  font-weight:800;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+}
+.sire-home-pulse-copy small{
+  display:block;
+  margin-top:3px;
+  color:#71839a;
+  font-size:7px;
+  line-height:1;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+}
+.sire-home-pulse-exchange{
+  display:flex;
+  align-items:center;
+  gap:4px;
+  min-width:0;
+  max-width:72px;
+  padding:4px 0;
+}
+.sire-home-pulse-exchange img{
+  width:15px;
+  height:15px;
+  flex:0 0 15px;
+  border-radius:4px;
+  object-fit:cover;
+}
+.sire-home-pulse-exchange small{
+  color:#8798aa;
+  font-size:6.5px;
+  font-weight:800;
+  letter-spacing:.04em;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+}
+.sire-home-pulse-chart{
+  position:absolute;
+  z-index:1;
+  left:10px;
+  right:10px;
+  top:49px;
+  height:48px;
+  opacity:.90;
+  pointer-events:none;
+}
+.sire-home-pulse-spark{position:absolute;inset:0}
+.sire-home-pulse-spark svg{
+  width:100%;
+  height:100%;
+  display:block;
+  overflow:visible;
+}
+.sire-home-pulse-spark-line{
+  stroke-width:1.7;
+  stroke-linecap:round;
+  stroke-linejoin:round;
+  vector-effect:non-scaling-stroke;
+}
+.sire-home-pulse-spark-fill{opacity:.035}
+.sire-home-pulse-spark--positive .sire-home-pulse-spark-line{stroke:#32dfad;filter:drop-shadow(0 0 3px rgba(50,223,173,.22))}
+.sire-home-pulse-spark--positive .sire-home-pulse-spark-fill{fill:#32dfad}
+.sire-home-pulse-spark--negative .sire-home-pulse-spark-line{stroke:#ff6170;filter:drop-shadow(0 0 3px rgba(255,97,112,.20))}
+.sire-home-pulse-spark--negative .sire-home-pulse-spark-fill{fill:#ff6170}
+.sire-home-pulse-spark--neutral .sire-home-pulse-spark-line{stroke:#8795a5}
+.sire-home-pulse-spark--neutral .sire-home-pulse-spark-fill{fill:#8795a5}
+.sire-home-pulse-bottom{
+  position:absolute;
+  z-index:5;
+  left:13px;
+  right:13px;
+  bottom:11px;
+  display:flex;
+  align-items:baseline;
+  gap:6px;
+  min-width:0;
+}
+.sire-home-pulse-bottom strong{
+  font-size:12px;
+  line-height:1;
+  letter-spacing:-.02em;
+  text-shadow:0 2px 8px rgba(0,0,0,.25);
+}
+.sire-home-pulse-bottom b{
+  font-size:7px;
+  line-height:1;
+  font-weight:900;
+}
+.sire-home-pulse-bottom b.positive{color:#32dfad}
+.sire-home-pulse-bottom b.negative{color:#ff6170}
+.sire-home-pulse-bottom b.neutral{color:#8998a8}
+.sire-home-pulse-card--positive{border-color:rgba(65,213,174,.13) !important}
+.sire-home-pulse-card--negative{border-color:rgba(255,97,112,.13) !important}
+@media(max-width:430px){
+  .sire-home-pulse-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+  .sire-home-pulse-card{height:116px;min-height:116px}
+  .sire-home-pulse-main{padding:11px 10px 10px}
+  .sire-home-pulse-logo{width:29px;height:29px;flex-basis:29px}
+  .sire-home-pulse-copy b{font-size:10px}
+  .sire-home-pulse-chart{top:46px;height:43px;left:8px;right:8px}
+  .sire-home-pulse-bottom{left:10px;right:10px;bottom:10px}
+  .sire-home-pulse-bottom strong{font-size:11px}
+}
