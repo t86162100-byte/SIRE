@@ -153,6 +153,7 @@ export default function App() {
   const [search, setSearch] = useState('');
   const [providerFilter, setProviderFilter] = useState<'ALL' | MarketProvider>('ALL');
   const [categoryFilter, setCategoryFilter] = useState<string>('ALL');
+  const [marketSubcategoryFilter, setMarketSubcategoryFilter] = useState<string>('ALL');
   const [quoteScrollTop, setQuoteScrollTop] = useState(0);
   const deferredSearch = useDeferredValue(search);
   const [instrumentSearchOpen, setInstrumentSearchOpen] = useState(false);
@@ -924,6 +925,7 @@ export default function App() {
     return randomizedInstruments.filter(item => {
       const providerMatch = providerFilter === 'ALL' || item.provider === providerFilter;
       const marketType = String(item.marketType || '').trim().toLowerCase();
+      const subcategoryMatch = categoryFilter !== 'Onchain' || marketSubcategoryFilter === 'ALL' || String((item as any).marketSubcategory || '') === marketSubcategoryFilter;
       const categoryMatch = categoryFilter === 'ALL'
         || item.category === categoryFilter
         || (categoryFilter === 'Options' && marketType.includes('option'))
@@ -931,9 +933,9 @@ export default function App() {
         || (categoryFilter === 'Perpetuals' && marketType === 'perpetuals')
         || (categoryFilter === 'Crypto' && item.category === 'Crypto' && !marketType.includes('future') && !marketType.includes('option') && !marketType.includes('perpetual') && !marketType.includes('swap'));
       const searchMatch = !q || `${item.name} ${item.symbol} ${item.providerLabel} ${item.marketType} ${item.category}`.toLowerCase().includes(q);
-      return providerMatch && categoryMatch && searchMatch;
+      return providerMatch && categoryMatch && subcategoryMatch && searchMatch;
     });
-  }, [randomizedInstruments, search, providerFilter, categoryFilter]);
+  }, [randomizedInstruments, search, providerFilter, categoryFilter, marketSubcategoryFilter]);
 
   const chartableInstruments = useMemo(() => liveInstruments.filter(item => ['DERIV','FXCM','GLOBALCRYPTO','YFINANCE','SP','NASDAQTRADER','NYSEAMERICAN','CME','CBOT','NYMEX','COMEX','OANDA','TWELVEDATA'].includes(String(item.provider))), [instruments]);
   const quoteWindow = useMemo(() => {
@@ -1016,9 +1018,14 @@ export default function App() {
             <button key={provider} type="button" className={providerFilter === provider ? 'active' : ''} onClick={() => setProviderFilter(provider)}>{provider === 'ALL' ? 'All' : provider[0] + provider.slice(1).toLowerCase()}</button>
           ))}
         </div><div className="sire-market-providers sire-market-categories">
-          {(['ALL','Forex','Stocks','Funds','Commodities','Indices','Bonds','Options','Futures','Perpetuals','Crypto','Prediction Markets','Synthetic Indices','Baskets'] as const).map(category => (
-            <button key={category} type="button" className={categoryFilter === category ? 'active' : ''} onClick={() => setCategoryFilter(category)}>{category}</button>
+          {(['ALL','Forex','Stocks','Funds','Commodities','Indices','Bonds','Options','Futures','Perpetuals','Crypto','Onchain','Prediction Markets','Synthetic Indices','Baskets'] as const).map(category => (
+            <button key={category} type="button" className={categoryFilter === category ? 'active' : ''} onClick={() => { setCategoryFilter(category); setMarketSubcategoryFilter('ALL'); }}>{category}</button>
           ))}
+          {categoryFilter === 'Onchain' && <div className="sire-market-providers sire-market-subcategories">
+            {(['ALL','Trending','Latest'] as const).map(subcategory => (
+              <button key={subcategory} type="button" className={marketSubcategoryFilter === subcategory ? 'active' : ''} onClick={() => setMarketSubcategoryFilter(subcategory)}>{subcategory}</button>
+            ))}
+          </div>}
         </div>{derivError && <div className="sire-deriv-error">{derivError}</div>}<div className="native-symbol-list symbol-list" onScroll={event => setQuoteScrollTop(event.currentTarget.scrollTop)}><div style={{height: quoteWindow.top}} aria-hidden="true" /><div className="sire-quote-window">{quoteWindow.items.map(item => <button key={item.id} className={`symbol-row ${selected?.id === item.id ? 'active' : ''}`} data-provider={item.provider} onClick={() => selectInstrument(item)}><span className="quote-asset-logo-wrap"><img className="quote-asset-logo" src={item.logoUrl || makeAssetLogoFallback(item)} alt="" decoding="async" onError={event => { const image = event.currentTarget; image.onerror = null; image.src = makeLogoFallback(item.displaySymbol || item.symbol); }} /></span><span className="quote-instrument-name"><b>{String(item.displaySymbol || item.symbol).toUpperCase()}</b><small>{String(item.name || item.displaySymbol || item.symbol).toUpperCase()}</small></span><span className="quote-broker"><span className="quote-exchange-logo-wrap"><img className="quote-exchange-logo" src={makeProviderLogoFallback(item)} alt="" decoding="async" onError={event => {
   const image = event.currentTarget;
   image.onerror = null;
