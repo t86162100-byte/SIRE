@@ -5066,7 +5066,7 @@
 .sire-home-pulse-top{
   position:relative;
   z-index:4;
-  transform:translateY(-39px);
+  transform:translateY(-35px);
   display:flex;
   align-items:center;
   justify-content:space-between;
@@ -5152,7 +5152,7 @@
   align-items:baseline;
   gap:6px;
   margin-top:3px;
-  transform:translateY(-39px);
+  transform:translateY(-35px);
 }
 .sire-home-pulse-value strong{
   font-size:13px;
