@@ -441,7 +441,10 @@ async function gateio(): Promise<UnifiedInstrument[]> {
   try {
     const rows = await getJson('https://api.gateio.ws/api/v4/spot/currency_pairs', 15000);
     for (const raw of Array.isArray(rows) ? rows : []) {
-      add(raw, 'Spot', String(raw?.id || ''), raw?.base, raw?.quote);
+      add(raw, 'Spot', String(raw?.id || ''), raw?.base, raw?.quote, {
+        listedAt: Number(raw?.buy_start || raw?.sell_start) * 1000 || undefined,
+        onboardDate: Number(raw?.buy_start || raw?.sell_start) * 1000 || undefined,
+      });
     }
     console.log('[SIRE GATEIO] Spot: ' + out.filter(x => x.marketType === 'Spot').length);
   } catch (e) { console.warn('[SIRE GATEIO] Spot failed:', e); }
@@ -454,6 +457,8 @@ async function gateio(): Promise<UnifiedInstrument[]> {
         const underlying = String(raw?.underlying || name).split('_')[0];
         add(raw, 'Perpetuals', name, underlying, settle.toUpperCase(), {
           contractType: 'perpetual',
+          listedAt: Number(raw?.create_time || raw?.launch_time || raw?.launch_timestamp) * 1000 || undefined,
+          onboardDate: Number(raw?.create_time || raw?.launch_time || raw?.launch_timestamp) * 1000 || undefined,
           settlement: settle.toUpperCase(),
           expiry: raw?.expire_time || raw?.expiry_time || undefined,
         });
