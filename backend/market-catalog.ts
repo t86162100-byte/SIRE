@@ -418,6 +418,7 @@ async function binanceTradFi(payload: any): Promise<UnifiedInstrument[]> {
       // catalogue metadata below. These are read-only market-data requests.
       const hosts = [
         'https://api.binance.com',
+        'https://api-gcp.binance.com',
         'https://api1.binance.com',
         'https://api2.binance.com',
         'https://api3.binance.com',
