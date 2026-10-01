@@ -971,11 +971,11 @@ export default function HomeView({ instruments, onSelectInstrument, videoSrc = '
                     </span>
                     <span className="sire-home-pulse-exchange"><img src={makeProviderLogoFallback(item)} alt="" decoding="async" onError={event=>{event.currentTarget.onerror=null;event.currentTarget.src=fallbackLogo(exchange)}}/><small>{exchange}</small></span>
                   </span>
-                  <span className="sire-home-pulse-chart"><Sparkline values={pulseHistory.get(item.id)||[]} tone={tone}/></span>
                   <span className="sire-home-pulse-bottom">
                     <strong>{money(item.price)}</strong>
                     <b className={tone}>{Number.isFinite(change)?`${change>=0?'+':''}${change.toFixed(2)}%`:'—'}</b>
-                  </span>
+                  
+                  <span className="sire-home-pulse-chart"><Sparkline values={pulseHistory.get(item.id)||[]} tone={tone}/></span>
                 </button>
               </article>;
             })}
