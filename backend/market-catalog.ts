@@ -1719,6 +1719,8 @@ async function bitget(): Promise<UnifiedInstrument[]> {
       }, 'CFD', { group:c.group, sub:c.sub, filter:c.commoditySub || 'CFD' });
       const item = out[out.length - 1];
       if (item && item.symbol === String(raw?.symbol || '')) {
+        item.marketType = 'CFD';
+        item.instrumentType = 'CFD';
         const bid = Number(raw?.bid1), ask = Number(raw?.ask1);
         if (Number.isFinite(bid)) item.bid = bid;
         if (Number.isFinite(ask)) item.ask = ask;
