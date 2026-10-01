@@ -97,6 +97,13 @@ export default function HomeView({ instruments, onSelectInstrument, videoSrc = '
     () => instruments.filter(item => item.provider === 'BITGET'),
     [instruments],
   );
+  // Gate.io is kept as its own Home-market universe. Its catalogue is loaded
+  // independently by the Market provider endpoint; Home only consumes the
+  // completed Gate.io rows and never writes into Binance/Bitget quote state.
+  const gateioUniverse = useMemo(
+    () => instruments.filter(item => item.provider === 'GATEIO'),
+    [instruments],
+  );
   const globalMarketCaps = useMemo(() => {
     const map = new Map<string, number>();
     for (const item of instruments) {
@@ -379,6 +386,113 @@ export default function HomeView({ instruments, onSelectInstrument, videoSrc = '
       .sort((a, b) => Number((b as any).volume24h || 0) - Number((a as any).volume24h || 0));
   }, [bitgetFutures]);
 
+  const gateioSpot = useMemo(
+    () => gateioUniverse.filter(isSpot),
+    [gateioUniverse],
+  );
+
+  const gateioFutures = useMemo(
+    () => gateioUniverse
+      .filter(isFutures)
+      .sort((a, b) => Number((b as any).volume24h || 0) - Number((a as any).volume24h || 0)),
+    [gateioUniverse],
+  );
+
+  const gateioFuturesFamily = (item: HomeInstrument) => {
+    const settlement = String((item as any).settlement || '').toUpperCase();
+    const quote = quoteAsset(item);
+    if (settlement === 'BTC' || settlement === 'ETH' || quote === 'BTC' || quote === 'ETH') return 'COIN-M';
+    if (settlement === 'USDC' || quote === 'USDC') return 'USDC-M';
+    if (settlement === 'USDT' || quote === 'USDT') return 'USDT-M';
+    return 'USD-M';
+  };
+
+  const filterGateioSpotSubcategory = (rows: HomeInstrument[]) => {
+    if (activeMarketSubfilter === 'All') return rows;
+    return rows.filter(item => {
+      const quote = quoteAsset(item);
+      if (activeMarketSubfilter === 'USDT') return quote === 'USDT';
+      if (activeMarketSubfilter === 'USDC') return quote === 'USDC';
+      return quote !== 'USDT' && quote !== 'USDC';
+    });
+  };
+
+  const filterGateioFuturesSubcategory = (rows: HomeInstrument[]) => {
+    if (['USD-M', 'USDT-M', 'COIN-M', 'USDC-M'].includes(activeMarketSubfilter)) {
+      return rows.filter(item => gateioFuturesFamily(item) === activeMarketSubfilter);
+    }
+    return rows;
+  };
+
+  const gateioHotSpot = useMemo(
+    () => [...gateioSpot]
+      .filter(item => Number.isFinite(Number((item as any).volume24h)))
+      .sort((a, b) => Number((b as any).volume24h || 0) - Number((a as any).volume24h || 0)),
+    [gateioSpot],
+  );
+
+  const gateioHotFutures = useMemo(
+    () => [...gateioFutures]
+      .filter(item => Number.isFinite(Number((item as any).volume24h)))
+      .sort((a, b) => Number((b as any).volume24h || 0) - Number((a as any).volume24h || 0)),
+    [gateioFutures],
+  );
+
+  const gateioMarketRows = useMemo(() => {
+    const change = (item: HomeInstrument) => Number((item as any).change24h ?? (item as any).priceChangePercent);
+    const volume = (item: HomeInstrument) => Number((item as any).volume24h);
+    const listedAt = (item: HomeInstrument) => Number(item.listedAt ?? item.onboardDate);
+    const marketCap = (item: HomeInstrument) => {
+      const own = Number((item as any).marketCap);
+      if (Number.isFinite(own) && own > 0) return own;
+      const base = String((item as any).base || item.symbol || '').replace(/[^A-Z0-9]/gi, '').toUpperCase();
+      return globalMarketCaps.get(base) ?? NaN;
+    };
+
+    switch (activeMarketFilter) {
+      case 'Favorite':
+        return gateioUniverse.filter(item => favoriteIds.includes(item.id));
+      case 'Hot':
+        return activeMarketSubfilter === 'Futures' ? gateioHotFutures : gateioHotSpot;
+      case 'Spot':
+        return filterGateioSpotSubcategory([...gateioSpot].sort((a, b) => volume(b) - volume(a)));
+      case 'Futures':
+        return filterGateioFuturesSubcategory([...gateioFutures]);
+      case 'New':
+        return [...gateioUniverse]
+          .filter(item => isSpot(item) || isFutures(item))
+          .filter(item => Number.isFinite(listedAt(item)))
+          .sort((a, b) => listedAt(b) - listedAt(a))
+          .filter(item => activeMarketSubfilter === 'Futures' ? isFutures(item) : isSpot(item));
+      case 'Gainers':
+        return [...gateioUniverse]
+          .filter(item => Number.isFinite(change(item)))
+          .sort((a, b) => change(b) - change(a))
+          .filter(item => activeMarketSubfilter === 'Futures' ? isFutures(item) : isSpot(item));
+      case 'Losers':
+        return [...gateioUniverse]
+          .filter(item => Number.isFinite(change(item)))
+          .sort((a, b) => change(a) - change(b))
+          .filter(item => activeMarketSubfilter === 'Futures' ? isFutures(item) : isSpot(item));
+      case 'Vol':
+        return [...gateioUniverse]
+          .filter(item => Number.isFinite(volume(item)))
+          .sort((a, b) => volume(b) - volume(a))
+          .filter(item => activeMarketSubfilter === 'Futures' ? isFutures(item) : isSpot(item));
+      case 'Market Cap':
+        return [...gateioUniverse]
+          .map(item => {
+            const cap = marketCap(item);
+            return Number.isFinite(cap) ? { ...item, marketCap: cap } : item;
+          })
+          .filter(item => Number.isFinite(marketCap(item)))
+          .sort((a, b) => marketCap(b) - marketCap(a))
+          .filter(item => activeMarketSubfilter === 'Futures' ? isFutures(item) : isSpot(item));
+      default:
+        return gateioSpot;
+    }
+  }, [activeMarketFilter, activeMarketSubfilter, gateioUniverse, gateioSpot, gateioFutures, gateioHotSpot, gateioHotFutures, favoriteIds, globalMarketCaps]);
+
   const bitgetMarketRows = useMemo(() => {
     const change = (item: HomeInstrument) => Number((item as any).change24h ?? (item as any).priceChangePercent);
     const volume = (item: HomeInstrument) => Number((item as any).volume24h);
@@ -472,24 +586,31 @@ export default function HomeView({ instruments, onSelectInstrument, videoSrc = '
   }, [instruments]);
 
   const marketRows = useMemo(() => {
-    const combined = [...binanceMarketRows, ...bitgetMarketRows];
+    const combined = [...binanceMarketRows, ...bitgetMarketRows, ...gateioMarketRows];
     const seen = new Set<string>();
     const mixed = combined.filter(item => {
       if (seen.has(item.id)) return false;
       seen.add(item.id);
       return true;
     });
-    const bins = mixed.filter(item => item.provider === 'BINANCE');
-    const bits = mixed.filter(item => item.provider === 'BITGET');
-    const others = mixed.filter(item => item.provider !== 'BINANCE' && item.provider !== 'BITGET');
+    const groups = ['BINANCE', 'BITGET', 'GATEIO'].map(provider =>
+      mixed.filter(item => item.provider === provider)
+    );
+    const others = mixed.filter(item => !['BINANCE', 'BITGET', 'GATEIO'].includes(String(item.provider)));
     const out: HomeInstrument[] = [];
-    let bi = 0, gi = 0;
-    while (bi < bins.length || gi < bits.length) {
-      if (bi < bins.length) out.push(bins[bi++]);
-      if (gi < bits.length) out.push(bits[gi++]);
+    const indexes = [0, 0, 0];
+    let added = true;
+    while (added) {
+      added = false;
+      for (let i = 0; i < groups.length; i += 1) {
+        if (indexes[i] < groups[i].length) {
+          out.push(groups[i][indexes[i]++]);
+          added = true;
+        }
+      }
     }
     return out.concat(others);
-  }, [binanceMarketRows, bitgetMarketRows]);
+  }, [binanceMarketRows, bitgetMarketRows, gateioMarketRows]);
 
   useEffect(() => {
     const ids = marketRows.slice(0, 7)
