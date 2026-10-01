@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { getBinanceHotFromCatalogue } from './binanceMarketData';
 import './home.css';
 import SireVisualEngine from './SireVisualEngine';
@@ -69,17 +69,25 @@ const makeProviderLogoFallback = (item: HomeInstrument) => {
   return 'https://www.google.com/s2/favicons?domain=' + encodeURIComponent(domain) + '&sz=128';
 };
 
-const demoMarkets = [
-  { symbol: 'BTC/USDT', price: '$83,572.21', change: '-1.54%', down: true, provider: 'BINANCE' },
-  { symbol: 'ETH/USDT', price: '$2,686.32', change: '-0.46%', down: true, provider: 'BYBIT' },
-  { symbol: 'SOL/USDT', price: '$142.38', change: '+2.17%', down: false, provider: 'MEXC' },
-  { symbol: 'XRP/USDT', price: '$2.45', change: '+0.83%', down: false, provider: 'DERIV' },
-];
-
 function money(value?: number) {
   if (!Number.isFinite(value)) return '—';
   return '$' + Number(value).toLocaleString(undefined, { maximumFractionDigits: 6 });
+}function Sparkline({ values, tone }: { values: number[]; tone: 'positive' | 'negative' | 'neutral' }) {
+  const width=132, height=42, pad=3;
+  const finite=values.filter(Number.isFinite);
+  if(!finite.length) return <div className={`sire-home-pulse-spark sire-home-pulse-spark--${tone}`} aria-hidden="true" />;
+  const min=Math.min(...finite), max=Math.max(...finite), span=max-min || Math.max(Math.abs(max)*0.0001,1);
+  const points=finite.map((value,index)=>{
+    const x=finite.length===1 ? width/2 : pad+(index/(finite.length-1))*(width-pad*2);
+    const y=height-pad-((value-min)/span)*(height-pad*2);
+    return [x,y] as const;
+  });
+  const line=points.map(([x,y])=>`${x.toFixed(1)},${y.toFixed(1)}`).join(' ');
+  const area=`M ${points[0][0].toFixed(1)} ${height-pad} L ${line.replace(/,/g,' ')} L ${points[points.length-1][0].toFixed(1)} ${height-pad} Z`;
+  return <div className={`sire-home-pulse-spark sire-home-pulse-spark--${tone}`} aria-hidden="true"><svg viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none"><path className="sire-home-pulse-spark-fill" d={area}/><polyline className="sire-home-pulse-spark-line" points={line} fill="none"/></svg></div>;
 }
+
+
 
 export default function HomeView({ instruments, onSelectInstrument, videoSrc = '/sire-home-hero.mp4' }: Props) {
   const [searchOpen, setSearchOpen] = useState(false);
@@ -694,6 +702,43 @@ export default function HomeView({ instruments, onSelectInstrument, videoSrc = '
     return instruments.filter(item => `${item.displaySymbol || item.symbol} ${item.name || ''} ${item.providerLabel || item.provider || ''}`.toLowerCase().includes(q)).slice(0, 12);
   }, [instruments, liveMarkets, query]);
 
+  const pulseMarkets=useMemo(()=>{
+    const combined=[...binanceUniverse,...bitgetUniverse,...gateioLiveUniverse], seen=new Set<string>();
+    return combined.filter(item=>{
+      if(seen.has(item.id)) return false;
+      seen.add(item.id);
+      return String(item.category||'').toLowerCase().includes('crypto') && Number.isFinite(Number(item.price));
+    }).sort((a,b)=>Number(b.volume24h||0)-Number(a.volume24h||0)).slice(0,4);
+  },[binanceUniverse,bitgetUniverse,gateioLiveUniverse]);
+
+  const pulseHistoryRef=useRef<Map<string,number[]>>(new Map());
+  const [pulseHistory,setPulseHistory]=useState<Map<string,number[]>>(()=>new Map());
+
+  useEffect(()=>{
+    const next=new Map(pulseHistoryRef.current);
+    pulseMarkets.forEach(item=>{
+      const price=Number(item.price);
+      if(!Number.isFinite(price)) return;
+      next.set(item.id,[...(next.get(item.id)||[]),price].slice(-32));
+    });
+    pulseHistoryRef.current=next;
+    setPulseHistory(new Map(next));
+  },[pulseMarkets]);
+
+  useEffect(()=>{
+    const timer=window.setInterval(()=>{
+      const next=new Map(pulseHistoryRef.current);
+      pulseMarkets.forEach(item=>{
+        const price=Number(item.price);
+        if(!Number.isFinite(price)) return;
+        next.set(item.id,[...(next.get(item.id)||[]),price].slice(-32));
+      });
+      pulseHistoryRef.current=next;
+      setPulseHistory(new Map(next));
+    },1000);
+    return()=>window.clearInterval(timer);
+  },[pulseMarkets]);
+
   return (
     <main className="sire-home">
       <header className="sire-home-header">
@@ -901,15 +946,22 @@ export default function HomeView({ instruments, onSelectInstrument, videoSrc = '
 
         <section className="sire-home-section sire-home-pulse">
           <div className="sire-home-section-head"><div><span>LIVE MARKET</span><h2>Market Pulse</h2></div><button type="button">See All <ChevronRight size={15} /></button></div>
-          <div className="sire-home-market-row">
-            {demoMarkets.map(market => (
-              <article key={market.symbol} className="sire-home-market-card">
-                <div className="sire-home-market-top"><b>{market.symbol}</b><small>{market.provider}</small></div>
-                <strong>{market.price}</strong>
-                <span className={market.down ? 'down' : 'up'}>{market.change}</span>
-                <div className={market.down ? 'sire-home-spark down' : 'sire-home-spark'}><i /><i /><i /><i /><i /></div>
-              </article>
-            ))}
+          <div className="sire-home-pulse-grid" aria-label="Live market pulse">
+            {pulseMarkets.map(item=>{
+              const raw=item as any;
+              const change=Number(raw.change24h??raw.changePercent24h??raw.priceChangePercent??raw.percentChange24h??raw.changePercent);
+              const tone: 'positive'|'negative'|'neutral'=Number.isFinite(change)?(change>0?'positive':change<0?'negative':'neutral'):'neutral';
+              const base=String(raw.base||item.displaySymbol||item.symbol).replace(/\/USDT$|\/USD$|USDT$|USD$/i,'').toUpperCase();
+              const exchange=String(item.providerLabel||item.provider||'Exchange').toUpperCase();
+              return <article key={item.id} className={`sire-home-market-card sire-home-pulse-card sire-home-pulse-card--${tone}`}>
+                <button type="button" className="sire-home-pulse-main" onClick={()=>onSelectInstrument?.(item)} aria-label={`Open ${base} on ${exchange}`}>
+                  <span className="sire-home-pulse-identity"><span className="sire-home-pulse-logo"><img src={item.logoUrl||fallbackLogo(base)} alt="" decoding="async" onError={event=>{event.currentTarget.onerror=null;event.currentTarget.src=fallbackLogo(base)}}/></span><span className="sire-home-pulse-copy"><b>{base}</b><small>{String(item.name||item.displaySymbol||item.symbol).replace(/_/g,' ')}</small></span></span>
+                  <span className="sire-home-pulse-exchange"><img src={makeProviderLogoFallback(item)} alt="" decoding="async" onError={event=>{event.currentTarget.onerror=null;event.currentTarget.src=fallbackLogo(exchange)}}/><small>{exchange}</small></span>
+                  <Sparkline values={pulseHistory.get(item.id)||[]} tone={tone}/>
+                  <span className="sire-home-pulse-price"><strong>{money(item.price)}</strong><b className={tone}>{Number.isFinite(change)?`${change>=0?'+':''}${change.toFixed(2)}%`:'—'}</b></span>
+                </button>
+              </article>;
+            })}
           </div>
         </section>
 
