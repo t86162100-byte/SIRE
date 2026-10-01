@@ -1120,6 +1120,56 @@ const server = http.createServer(async (req,res) => {
       return;
     }
     if (req.method === 'POST' && pathname === '/api/sire/agent/gpt') { const parsed = body ? JSON.parse(body) : {}; if (!String(parsed.query || '').trim()) return res.writeHead(400,{ 'Access-Control-Allow-Origin':'*','Content-Type':'application/json; charset=utf-8' }).end(JSON.stringify({ error:'query is required' })); try { const response = await handleDirectGptRequest(parsed); return res.writeHead(200,{ 'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8' }).end(JSON.stringify(response)); } catch (cause) { const message = cause instanceof Error ? cause.message : String(cause); console.error('[DIRECT GPT]', message); return res.writeHead(502,{ 'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8' }).end(JSON.stringify({ error:`Direct GPT test failed: ${message}` })); } }
+    if (req.method === 'GET' && pathname === '/api/sire/market-history') {
+      const url = new URL(req.url || '/', `http://sire.local`);
+      const provider = String(url.searchParams.get('provider') || '').toUpperCase();
+      const symbol = String(url.searchParams.get('symbol') || '').trim();
+      const marketType = String(url.searchParams.get('marketType') || 'Spot').trim();
+      if (!provider || !symbol) return res.writeHead(400,{ 'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8' }).end(JSON.stringify({ ok:false,error:'provider and symbol are required' }));
+      const jsonFetch = async (target) => {
+        const response = await fetch(target,{headers:{Accept:'application/json','User-Agent':'SIRE-MarketPulse/1.0'},signal:AbortSignal.timeout(12000)});
+        const raw=await response.text();
+        let payload={}; try{payload=raw?JSON.parse(raw):{}}catch{}
+        if(!response.ok) throw new Error('HTTP '+response.status);
+        return payload;
+      };
+      try {
+        let points=[];
+        if(provider==='BINANCE'){
+          const mt=marketType.toLowerCase();
+          const base = (mt==='spot'||mt==='margin') ? 'https://api.binance.com/api/v3/klines'
+            : (mt==='options' ? 'https://eapi.binance.com/eapi/v1/klines'
+            : (symbol.includes('_') || mt==='futures' ? 'https://dapi.binance.com/dapi/v1/klines' : 'https://fapi.binance.com/fapi/v1/klines'));
+          const query=new URLSearchParams({symbol,interval:'1h',limit:'24'});
+          const rows=await jsonFetch(base+'?'+query.toString());
+          points=(Array.isArray(rows)?rows:[]).map(row=>({time:Number(row?.[0])/1000,price:Number(row?.[4])})).filter(row=>Number.isFinite(row.time)&&Number.isFinite(row.price));
+        } else if(provider==='BITGET'){
+          const mt=marketType.toLowerCase();
+          if(mt==='spot'){
+            const rows=await jsonFetch('https://api.bitget.com/api/v2/spot/market/candles?symbol='+encodeURIComponent(symbol)+'&granularity=1H&limit=24');
+            points=(Array.isArray(rows?.data)?rows.data:[]).map(row=>({time:Number(row?.[0])/1000,price:Number(row?.[4])})).filter(row=>Number.isFinite(row.time)&&Number.isFinite(row.price));
+          } else {
+            const productType=String(marketType).toLowerCase().includes('coin')?'COIN-FUTURES':'USDT-FUTURES';
+            const rows=await jsonFetch('https://api.bitget.com/api/v2/mix/market/candles?productType='+encodeURIComponent(productType)+'&symbol='+encodeURIComponent(symbol)+'&granularity=1H&limit=24');
+            points=(Array.isArray(rows?.data)?rows.data:[]).map(row=>({time:Number(row?.[0])/1000,price:Number(row?.[4])})).filter(row=>Number.isFinite(row.time)&&Number.isFinite(row.price));
+          }
+        } else if(provider==='GATEIO'){
+          const isFutures=marketType.toLowerCase()!=='spot';
+          const normalized=symbol.replace(/-/g,'_');
+          const target=isFutures
+            ? 'https://api.gateio.ws/api/v4/futures/usdt/candlesticks?contract='+encodeURIComponent(normalized)+'&interval=1h&limit=24'
+            : 'https://api.gateio.ws/api/v4/spot/candlesticks?currency_pair='+encodeURIComponent(normalized)+'&interval=1h&limit=24';
+          const rows=await jsonFetch(target);
+          points=(Array.isArray(rows)?rows:[]).map(row=>({time:Number(row?.[0]),price:Number(row?.[2]??row?.[5])})).filter(row=>Number.isFinite(row.time)&&Number.isFinite(row.price));
+        }
+        points.sort((a,b)=>a.time-b.time);
+        return res.writeHead(200,{ 'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8' }).end(JSON.stringify({ok:true,provider,symbol,marketType,interval:'1h',points}));
+      } catch(error) {
+        const message=error instanceof Error?error.message:String(error);
+        console.warn('[MARKET PULSE HISTORY]',provider,symbol,marketType,message);
+        return res.writeHead(502,{ 'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8' }).end(JSON.stringify({ok:false,error:message,provider,symbol,marketType,points:[]}));
+      }
+    }
     const response=await handler(toEvent(req,body)); const statusCode=Number.isInteger(response?.statusCode)?response.statusCode:200; const rawBody=response?.body!==undefined?response.body:response; const isString=typeof rawBody==='string'; res.writeHead(statusCode,{ 'Access-Control-Allow-Origin':'*','Cache-Control':'no-store',...(isString?{}:{'Content-Type':'application/json; charset=utf-8'}),...(response?.headers||{}) }); res.end(isString?rawBody:JSON.stringify(rawBody??{}));
   } catch(cause) { const message=cause instanceof Error?cause.message:String(cause); console.error('[HTTP ERROR]',req.method,req.url,message); if (!res.headersSent) res.writeHead(500,{'Content-Type':'application/json','Access-Control-Allow-Origin':'*'}); res.end(JSON.stringify({error:message})); } });
 });
