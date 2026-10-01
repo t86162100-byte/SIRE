@@ -997,8 +997,7 @@
   background:transparent !important;
   box-shadow:none !important;
   overflow:visible;
-  transform:translateZ(0);
-}
+  transform:translateZ(0);}
 .sire-home-balance-actions button::before,
 .sire-home-balance-actions button::after{
   display:none;
@@ -1997,8 +1996,7 @@
 
 /* Market discovery: edge-to-edge rows and header-style scroll fade. */
 .sire-home-markets{position:relative}
-.sire-home-market-tabs{
-  position:sticky;top:0;z-index:18;min-height:58px;
+.sire-home-market-tabs{  position:sticky;top:0;z-index:18;min-height:58px;
   margin-left:-14px;margin-right:-14px;margin-bottom:0;
   padding:14px 14px 16px;display:flex;align-items:center;
   overflow-x:auto;overflow-y:hidden;scrollbar-width:none;
@@ -2997,8 +2995,7 @@
     border-color:rgba(105,194,255,.28);
     box-shadow:0 14px 34px rgba(0,0,0,.28),0 0 24px rgba(74,108,255,.08);
   }
-  .sire-home-watch-row:hover{
-    background:linear-gradient(90deg,rgba(17,35,45,.82),rgba(11,18,29,.72));
+  .sire-home-watch-row:hover{    background:linear-gradient(90deg,rgba(17,35,45,.82),rgba(11,18,29,.72));
   }
 }
 @media(max-width:700px){
@@ -3997,8 +3994,7 @@
     0 0 0 1px rgba(131,192,255,.20),
     0 0 13px rgba(67,139,255,.12),
     0 4px 12px rgba(0,0,0,.34),
-    inset 0 1px rgba(255,255,255,.22);
-}
+    inset 0 1px rgba(255,255,255,.22);}
 
 /* Percentage is a second piece of polished glass attached to the frame,
    not a flat red/green rectangle. */
@@ -4902,7 +4898,7 @@
   min-height:128px;
 }
 .sire-home-pulse-main{
-  padding:12px 12px 10px;
+  padding:7px 12px 10px;
 }
 .sire-home-pulse-top{
   justify-content:flex-start;
@@ -4951,7 +4947,7 @@
   right:auto;
   bottom:auto;
   z-index:4;
-  margin-top:10px;
+  margin-top:6px;
   display:flex;
   align-items:baseline;
   justify-content:flex-start;
@@ -4972,7 +4968,7 @@
   z-index:2;
   width:68%;
   height:36px;
-  margin:6px auto 0;
+  margin:5px auto 0;
   opacity:.88;
 }
 .sire-home-pulse-spark svg{
@@ -4984,17 +4980,17 @@
     min-height:118px;
   }
   .sire-home-pulse-main{
-    padding:10px 9px 9px;
+    padding:7px 9px 9px;
   }
   .sire-home-pulse-copy{
     max-width:56px;
   }
   .sire-home-pulse-bottom{
-    margin-top:8px;
+    margin-top:6px;
   }
   .sire-home-pulse-chart{
     width:66%;
     height:31px;
-    margin-top:5px;
+    margin-top:4px;
   }
 }
