@@ -4238,3 +4238,158 @@
     min-width:76px !important;
   }
 }
+
+
+/* -------------------------------------------------------------------------
+   INSTRUMENT CARD // DOMED LOGO-BOX GLASS RIM
+   Match the compact .market-asset-logo object: rounded optical volume,
+   beveled/slanted-looking perimeter, broad corner illumination and no
+   thin traveling light streak. The information remains visually inside.
+   ------------------------------------------------------------------------- */
+
+.sire-home-watch-row{
+  --rim-phase: 0deg;
+  border:1px solid transparent !important;
+  border-radius:19px 17px 20px 18px / 18px 20px 17px 19px !important;
+  background:
+    linear-gradient(145deg,
+      rgba(10,28,74,.94) 0%,
+      rgba(6,17,49,.96) 38%,
+      rgba(4,11,35,.97) 66%,
+      rgba(12,15,52,.95) 100%) padding-box,
+    conic-gradient(
+      from var(--rim-phase) at 50% 50%,
+      rgba(92,171,255,.12) 0deg,
+      rgba(92,171,255,.12) 48deg,
+      rgba(176,103,255,.42) 88deg,
+      rgba(95,184,255,.08) 122deg,
+      rgba(65,125,255,.06) 168deg,
+      rgba(86,208,255,.10) 202deg,
+      rgba(103,86,255,.40) 236deg,
+      rgba(198,118,255,.14) 270deg,
+      rgba(92,171,255,.06) 305deg,
+      rgba(99,214,255,.46) 330deg,
+      rgba(92,171,255,.12) 360deg) border-box !important;
+  box-shadow:
+    0 13px 30px rgba(0,0,0,.30),
+    0 0 0 1px rgba(69,87,190,.07),
+    0 0 26px rgba(42,113,255,.07),
+    inset 0 1px 0 rgba(246,250,255,.14),
+    inset 2px 0 0 rgba(90,177,255,.10),
+    inset -2px 0 0 rgba(177,91,255,.11),
+    inset 0 -13px 25px rgba(19,44,121,.15) !important;
+  animation:sire-domed-rim-phase 11s ease-in-out infinite;
+}
+
+.sire-home-watch-row::before{
+  inset:1px !important;
+  border-radius:inherit !important;
+  background:
+    radial-gradient(ellipse 38% 105% at 8% 8%,rgba(72,173,255,.22),transparent 68%),
+    radial-gradient(ellipse 34% 105% at 92% 92%,rgba(93,117,255,.20),transparent 70%),
+    radial-gradient(ellipse 45% 90% at 78% 4%,rgba(153,73,255,.10),transparent 72%),
+    radial-gradient(ellipse 40% 88% at 18% 96%,rgba(31,148,255,.07),transparent 72%);
+  filter:blur(8px) saturate(130%);
+  opacity:.92;
+  animation:sire-domed-volume 8.5s ease-in-out infinite alternate;
+}
+
+.sire-home-watch-row::after{
+  inset:0 !important;
+  border-radius:inherit !important;
+  border:1px solid transparent !important;
+  background:
+    linear-gradient(180deg,rgba(255,255,255,.025),rgba(255,255,255,0)) padding-box,
+    conic-gradient(
+      from calc(var(--rim-phase) + 18deg),
+      rgba(255,255,255,.04) 0deg,
+      rgba(109,208,255,.28) 36deg,
+      rgba(255,255,255,.025) 72deg,
+      rgba(181,104,255,.34) 112deg,
+      rgba(255,255,255,.025) 154deg,
+      rgba(93,185,255,.07) 196deg,
+      rgba(255,255,255,.025) 224deg,
+      rgba(103,93,255,.32) 256deg,
+      rgba(255,255,255,.035) 292deg,
+      rgba(117,221,255,.30) 326deg,
+      rgba(255,255,255,.04) 360deg) border-box;
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.10),
+    inset 0 -1px 0 rgba(50,115,225,.13),
+    0 0 16px rgba(69,152,255,.045);
+  opacity:.92;
+  mix-blend-mode:screen;
+  animation:sire-domed-rim-shimmer 11s ease-in-out infinite;
+}
+
+.sire-home-watch-main{
+  border-radius:14px 12px 15px 13px / 13px 15px 12px 14px !important;
+  background:
+    radial-gradient(90% 130% at 5% 12%,rgba(49,122,255,.10),transparent 58%),
+    radial-gradient(80% 120% at 96% 88%,rgba(116,69,238,.09),transparent 60%),
+    linear-gradient(180deg,rgba(20,47,108,.15),rgba(3,10,32,.10)) !important;
+  box-shadow:
+    inset 0 1px rgba(255,255,255,.045),
+    inset 1px 0 rgba(106,184,255,.035),
+    inset -1px 0 rgba(173,93,255,.035),
+    inset 0 -1px rgba(43,98,190,.07) !important;
+}
+
+.sire-home-watch-main::after{
+  top:-35% !important;
+  left:-18% !important;
+  width:36% !important;
+  height:170% !important;
+  background:
+    radial-gradient(ellipse at 50% 50%,
+      rgba(191,232,255,.055) 0%,
+      rgba(114,185,255,.025) 35%,
+      transparent 68%) !important;
+  filter:blur(10px) !important;
+  mix-blend-mode:screen !important;
+  transform:none !important;
+  opacity:.65 !important;
+  animation:sire-domed-inner-reflection 9s ease-in-out infinite alternate !important;
+}
+
+@keyframes sire-domed-rim-phase{
+  0%,100%{--rim-phase:0deg}
+  24%{--rim-phase:42deg}
+  50%{--rim-phase:92deg}
+  76%{--rim-phase:138deg}
+}
+
+@keyframes sire-domed-rim-shimmer{
+  0%,18%{opacity:.66;filter:brightness(.86) saturate(1.05)}
+  38%{opacity:1;filter:brightness(1.22) saturate(1.18)}
+  56%{opacity:.74;filter:brightness(.94) saturate(1.08)}
+  76%{opacity:1;filter:brightness(1.16) saturate(1.16)}
+  100%{opacity:.68;filter:brightness(.88) saturate(1.04)}
+}
+
+@keyframes sire-domed-volume{
+  0%{transform:translate3d(-1%,0,0) scale(1)}
+  50%{transform:translate3d(1.5%,-.8%,0) scale(1.025)}
+  100%{transform:translate3d(-.5%,1%,0) scale(1.015)}
+}
+
+@keyframes sire-domed-inner-reflection{
+  0%{transform:translate3d(-8%,0,0) scale(.96)}
+  50%{transform:translate3d(14%,1%,0) scale(1.06)}
+  100%{transform:translate3d(4%,-1%,0) scale(1)}
+}
+
+@media(max-width:700px){
+  .sire-home-watch-row{
+    border-radius:18px 16px 19px 17px / 17px 19px 16px 18px !important;
+  }
+}
+
+@media(prefers-reduced-motion:reduce){
+  .sire-home-watch-row,
+  .sire-home-watch-row::before,
+  .sire-home-watch-row::after,
+  .sire-home-watch-main::after{
+    animation:none !important;
+  }
+}
