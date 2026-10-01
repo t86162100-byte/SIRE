@@ -412,12 +412,57 @@ async function binanceTradFi(payload: any): Promise<UnifiedInstrument[]> {
   try {
     const key = String(process.env.BINANCE_API_KEY || '').trim();
     if (key) {
-      const response = await getJsonWithHeaders('https://api.binance.com/sapi/v1/equity/market/exchangeInfo', {'X-MBX-APIKEY': key}, 15000);
+      // Binance's Stocks API is documented on api.binance.com, but hosted
+      // environments can receive HTTP 451 due to regional eligibility.
+      // Try Binance's documented API aliases before falling back to the
+      // catalogue metadata below. These are read-only market-data requests.
+      const hosts = [
+        'https://api.binance.com',
+        'https://api1.binance.com',
+        'https://api2.binance.com',
+        'https://api3.binance.com',
+        'https://api4.binance.com',
+      ];
+      let response: any = null;
+      let lastError: unknown;
+      for (const host of hosts) {
+        try {
+          response = await getJsonWithHeaders(host + '/sapi/v1/equity/market/exchangeInfo', {'X-MBX-APIKEY': key}, 10000);
+          console.log('[SIRE BINANCE] Direct stocks source:', host);
+          break;
+        } catch (error) {
+          lastError = error;
+          console.warn('[SIRE BINANCE] Direct stocks host failed:', host, error);
+        }
+      }
+      if (!response) throw lastError || new Error('All Binance Stocks API hosts failed');
+
       for (const raw of Array.isArray(response?.symbols) ? response.symbols : []) {
-        const symbol = String(raw?.symbol || '').trim();
+        const symbol = String(raw?.symbol || '').trim().toUpperCase();
         if (!symbol) continue;
-        const name = symbol;
-        add(symbol, name, 'Spot', /ETF/i.test(name) ? 'Stocks' : 'Stocks', [/ETF/i.test(name) ? 'ETFs' : 'U.S. stock'], raw);
+        add(symbol, symbol, 'Spot', 'Stocks', ['U.S. stock'], raw);
+      }
+
+      // The exchangeInfo endpoint identifies ETFs through the returned
+      // instrument metadata when available. Also load tokenized assets so
+      // Binance's bStocks appear under TradFi/Spot without inventing symbols.
+      try {
+        for (const host of hosts) {
+          try {
+            const tokenized = await getJsonWithHeaders(host + '/sapi/v1/equity/market/tokenized-assets', {'X-MBX-APIKEY': key}, 10000);
+            for (const raw of Array.isArray(tokenized) ? tokenized : []) {
+              const symbol = String(raw?.assetCode || '').trim().toUpperCase();
+              if (!symbol) continue;
+              const name = String(raw?.assetName || symbol).trim();
+              add(symbol, name, 'Spot', 'Stocks', ['U.S. stock'], raw);
+            }
+            break;
+          } catch (error) {
+            console.warn('[SIRE BINANCE] Tokenized assets host failed:', host, error);
+          }
+        }
+      } catch (error) {
+        console.warn('[SIRE BINANCE] Tokenized assets failed:', error);
       }
     }
   } catch (error) { console.warn('[SIRE BINANCE] Direct stocks failed:', error); }
