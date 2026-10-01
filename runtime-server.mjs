@@ -982,7 +982,7 @@ const server = http.createServer(async (req,res) => {
     if (req.method === 'GET' && pathname === '/api/sire/gateio/tickers') {
       const url = new URL(req.url || '/', 'http://sire.local');
       const market = String(url.searchParams.get('market') || 'spot').toLowerCase();
-      const endpoints: Record<string,string> = {
+      const endpoints = {
         spot: 'https://api.gateio.ws/api/v4/spot/tickers',
         usdt: 'https://api.gateio.ws/api/v4/futures/usdt/tickers',
         usd1: 'https://api.gateio.ws/api/v4/futures/usd1/tickers',
