@@ -925,7 +925,13 @@ export default function App() {
     return randomizedInstruments.filter(item => {
       const providerMatch = providerFilter === 'ALL' || item.provider === providerFilter;
       const marketType = String(item.marketType || '').trim().toLowerCase();
-      const subcategoryMatch = categoryFilter !== 'Onchain' || marketSubcategoryFilter === 'ALL' || String((item as any).marketSubcategory || '') === marketSubcategoryFilter;
+      const isBinance = providerFilter === 'BINANCE' && item.provider === 'BINANCE';
+      const selectedTaxonomy = String(marketSubcategoryFilter || 'ALL');
+      const itemSubcategory = String((item as any).marketSubcategory || '');
+      const itemFilter = String((item as any).marketFilter || 'ALL');
+      const subcategoryMatch = !isBinance
+        ? (categoryFilter !== 'Onchain' || selectedTaxonomy === 'ALL' || itemSubcategory === selectedTaxonomy)
+        : (selectedTaxonomy === 'ALL' || selectedTaxonomy === itemSubcategory || selectedTaxonomy === itemSubcategory + ':' + itemFilter);
       const categoryMatch = categoryFilter === 'ALL'
         || item.category === categoryFilter
         || (categoryFilter === 'Options' && marketType.includes('option'))
@@ -1018,9 +1024,44 @@ export default function App() {
             <button key={provider} type="button" className={providerFilter === provider ? 'active' : ''} onClick={() => setProviderFilter(provider)}>{provider === 'ALL' ? 'All' : provider[0] + provider.slice(1).toLowerCase()}</button>
           ))}
         </div><div className="sire-market-providers sire-market-categories">
-          {(['ALL','Forex','Stocks','Funds','Commodities','Indices','Bonds','Options','Futures','Perpetuals','Crypto','Onchain','Prediction Markets','Synthetic Indices','Baskets'] as const).map(category => (
+          {(providerFilter === 'BINANCE'
+            ? (['ALL','Crypto','TradFi','Alpha'] as const)
+            : (['ALL','Forex','Stocks','Funds','Commodities','Indices','Bonds','Options','Futures','Perpetuals','Crypto','Onchain','Prediction Markets','Synthetic Indices','Baskets'] as const)
+          ).map(category => (
             <button key={category} type="button" className={categoryFilter === category ? 'active' : ''} onClick={() => { setCategoryFilter(category); setMarketSubcategoryFilter('ALL'); }}>{category}</button>
           ))}
+          {providerFilter === 'BINANCE' && categoryFilter === 'Crypto' && <div className="sire-market-providers sire-market-subcategories">
+            {(['ALL','Spot','Futures','Margin'] as const).map(subcategory => (
+              <button key={subcategory} type="button" className={marketSubcategoryFilter === subcategory ? 'active' : ''} onClick={() => setMarketSubcategoryFilter(subcategory)}>{subcategory}</button>
+            ))}
+            {marketSubcategoryFilter === 'Spot' && <div className="sire-market-providers sire-market-subcategories">
+              {(['ALL','USDT','USDC','USD','BNB','BTC','FIAT','BTCC','ETH','ALTs'] as const).map(filter => {
+                const value = filter === 'ALL' ? 'Spot' : 'Spot:' + filter;
+                return <button key={filter} type="button" className={marketSubcategoryFilter === value ? 'active' : ''} onClick={() => setMarketSubcategoryFilter(value)}>{filter}</button>;
+              })}
+            </div>}
+            {marketSubcategoryFilter === 'Futures' && <div className="sire-market-providers sire-market-subcategories">
+              {(['USDT-M','COIN-M'] as const).map(market => (
+                <button key={market} type="button" className={marketSubcategoryFilter === market ? 'active' : ''} onClick={() => setMarketSubcategoryFilter(market)}>{market}</button>
+              ))}
+            </div>}
+            {marketSubcategoryFilter === 'USDT-M' && <div className="sire-market-providers sire-market-subcategories">
+              {(['All','New','Crypto','DeFi','Metavers','Payment','PoW','Storage','NFT','TradFi','Index','Pre-IPO','USDC','Chinese','Alpha','AI','Layer-1','RWA','Layer-2','Gaming','Meme','infrastructure'] as const).map(filter => (
+                <button key={filter} type="button" className={marketSubcategoryFilter === 'USDT-M:' + filter ? 'active' : ''} onClick={() => setMarketSubcategoryFilter('USDT-M:' + filter)}>{filter}</button>
+              ))}
+            </div>}
+            {marketSubcategoryFilter === 'COIN-M' && <div className="sire-market-providers sire-market-subcategories">
+              {(['All','PoW','Storage','Layer-1','Layer-2','Meme','infrastructure','payment'] as const).map(filter => (
+                <button key={filter} type="button" className={marketSubcategoryFilter === 'COIN-M:' + filter ? 'active' : ''} onClick={() => setMarketSubcategoryFilter('COIN-M:' + filter)}>{filter}</button>
+              ))}
+            </div>}
+            {marketSubcategoryFilter === 'Margin' && <div className="sire-market-providers sire-market-subcategories">
+              {(['ALL','ETH','XAU','BTC','XAG','SOL','XRP','DOGE'] as const).map(filter => {
+                const value = filter === 'ALL' ? 'Margin' : 'Margin:' + filter;
+                return <button key={filter} type="button" className={marketSubcategoryFilter === value ? 'active' : ''} onClick={() => setMarketSubcategoryFilter(value)}>{filter}</button>;
+              })}
+            </div>}
+          </div>}
           {categoryFilter === 'Onchain' && <div className="sire-market-providers sire-market-subcategories">
             {(['ALL','Trending','Latest'] as const).map(subcategory => (
               <button key={subcategory} type="button" className={marketSubcategoryFilter === subcategory ? 'active' : ''} onClick={() => setMarketSubcategoryFilter(subcategory)}>{subcategory}</button>
