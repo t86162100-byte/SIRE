@@ -168,10 +168,11 @@ function classifyBinanceCrypto(raw: any, marketType: string) {
     marketFilter = marginAssets.has(base) ? base : 'ALL';
   } else if (isFuture) {
     const settle = String(raw?.settlement || raw?.settleCoin || raw?.settleCcy || raw?.marginAsset || '').toUpperCase();
-    marketSubcategory = settle === 'USDC' ? 'USDT-M' : (type === 'Perpetuals' || type === 'Futures' ? (String(raw?.marketSubcategory || '').toUpperCase() === 'COIN-M' ? 'COIN-M' : 'USDT-M') : 'Futures');
-    if (marketSubcategory === 'COIN-M') marketFilter = 'All';
-    else if (settle === 'USDC') marketFilter = 'USDC';
-    else marketFilter = 'All';
+    marketSubcategory = 'Futures';
+    const contractFamily = String(raw?.marketSubcategory || raw?.contractFamily || '').toUpperCase() === 'COIN-M'
+      ? 'COIN-M'
+      : (settle === 'USDC' ? 'USDT-M' : 'USDT-M');
+    marketFilter = contractFamily + ':' + (settle === 'USDC' ? 'USDC' : 'All');
   }
   return { marketGroup: 'Crypto', marketSubcategory, marketFilter };
 }
