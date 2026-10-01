@@ -931,7 +931,11 @@ export default function App() {
       const itemFilter = String((item as any).marketFilter || 'ALL');
       const subcategoryMatch = !isBinance
         ? (categoryFilter !== 'Onchain' || selectedTaxonomy === 'ALL' || itemSubcategory === selectedTaxonomy)
-        : (selectedTaxonomy === 'ALL' || selectedTaxonomy === itemSubcategory || selectedTaxonomy === itemSubcategory + ':' + itemFilter);
+        : (selectedTaxonomy === 'ALL'
+          || selectedTaxonomy === itemSubcategory
+          || (itemSubcategory === 'Spot' && selectedTaxonomy === 'Spot:' + itemFilter)
+          || (itemSubcategory === 'Margin' && selectedTaxonomy === 'Margin:' + itemFilter)
+          || (itemSubcategory === 'Futures' && (selectedTaxonomy === itemFilter || selectedTaxonomy === itemFilter.split(':')[0] || selectedTaxonomy === 'Futures:' + itemFilter)));
       const categoryMatch = categoryFilter === 'ALL'
         || item.category === categoryFilter
         || (categoryFilter === 'Options' && marketType.includes('option'))
