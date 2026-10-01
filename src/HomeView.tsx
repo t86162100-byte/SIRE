@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { getBinanceHotFromCatalogue } from './binanceMarketData';
 import './home.css';
 import SireVisualEngine from './SireVisualEngine';
@@ -711,33 +711,42 @@ export default function HomeView({ instruments, onSelectInstrument, videoSrc = '
     }).sort((a,b)=>Number(b.volume24h||0)-Number(a.volume24h||0)).slice(0,4);
   },[binanceUniverse,bitgetUniverse,gateioLiveUniverse]);
 
-  const pulseHistoryRef=useRef<Map<string,number[]>>(new Map());
-  const [pulseHistory,setPulseHistory]=useState<Map<string,number[]>>(()=>new Map());
+  const [pulseHistory, setPulseHistory] = useState<Map<string, number[]>>(() => new Map());
 
-  useEffect(()=>{
-    const next=new Map(pulseHistoryRef.current);
-    pulseMarkets.forEach(item=>{
-      const price=Number(item.price);
-      if(!Number.isFinite(price)) return;
-      next.set(item.id,[...(next.get(item.id)||[]),price].slice(-32));
-    });
-    pulseHistoryRef.current=next;
-    setPulseHistory(new Map(next));
-  },[pulseMarkets]);
+  useEffect(() => {
+    let cancelled = false;
+    const loadPulseHistory = async () => {
+      const entries = await Promise.all(pulseMarkets.map(async item => {
+        try {
+          const response = await fetch(
+            '/api/sire/market-history?provider=' + encodeURIComponent(String(item.provider || '')) +
+            '&symbol=' + encodeURIComponent(String(item.symbol || '')) +
+            '&marketType=' + encodeURIComponent(String(item.marketType || 'Spot')),
+            { cache: 'no-store' }
+          );
+          if (!response.ok) return [item.id, []] as const;
+          const payload = await response.json();
+          const points = Array.isArray(payload?.points)
+            ? payload.points.map((point: any) => Number(point?.price)).filter((value: number) => Number.isFinite(value))
+            : [];
+          return [item.id, points.slice(-24)] as const;
+        } catch {
+          return [item.id, []] as const;
+        }
+      }));
+      if (cancelled) return;
+      setPulseHistory(new Map(entries));
+    };
+    if (pulseMarkets.length) void loadPulseHistory();
+    const timer = window.setInterval(() => {
+      if (pulseMarkets.length) void loadPulseHistory();
+    }, 5 * 60 * 1000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [pulseMarkets]);
 
-  useEffect(()=>{
-    const timer=window.setInterval(()=>{
-      const next=new Map(pulseHistoryRef.current);
-      pulseMarkets.forEach(item=>{
-        const price=Number(item.price);
-        if(!Number.isFinite(price)) return;
-        next.set(item.id,[...(next.get(item.id)||[]),price].slice(-32));
-      });
-      pulseHistoryRef.current=next;
-      setPulseHistory(new Map(next));
-    },1000);
-    return()=>window.clearInterval(timer);
-  },[pulseMarkets]);
 
   return (
     <main className="sire-home">
