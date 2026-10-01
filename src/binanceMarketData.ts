@@ -140,7 +140,10 @@ export function createBinanceCatalogueLiveFeed(onQuotes: (quotes: Record<string,
             // statistics with undefined values.
             const isMarkPrice = String(row?.e || '').toLowerCase() === 'markpriceupdate' || row?.p !== undefined;
             const priceValue = isMarkPrice ? Number(row?.p) : Number(row?.c);
-            const changeValue = Number.isFinite(Number(row?.P))
+            // Binance mark-price payloads also contain P, but P is the estimated
+            // settlement price, NOT the 24h percentage change. Only mini-ticker
+            // payloads may supply P as the 24h percentage field.
+            const changeValue = !isMarkPrice && Number.isFinite(Number(row?.P))
               ? Number(row.P)
               : (!isMarkPrice && Number.isFinite(Number(row?.c)) && Number.isFinite(Number(row?.o)) && Number(row.o) !== 0
                 ? ((Number(row.c) - Number(row.o)) / Number(row.o)) * 100
