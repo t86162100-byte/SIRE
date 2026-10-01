@@ -243,6 +243,15 @@ jobs:
                   entry["newListing"] = True
               if row.get("an") or row.get("fullName") or row.get("name"):
                   entry["fullName"] = row.get("an") or row.get("fullName") or row.get("name")
+              for source_key, target_key in [
+                  ("marketGroup","marketGroup"),("marketSubcategory","marketSubcategory"),("marketFilter","marketFilter"),
+                  ("category","category"),("productType","productType"),("instrumentType","instrumentType"),
+                  ("underlyingType","underlyingType"),("underlyingSubType","underlyingSubType"),
+                  ("sector","sector"),("theme","theme"),("quoteAsset","quoteAsset"),
+                  ("listingType","listingType"),("newListing","newListing")
+              ]:
+                  if row.get(source_key) is not None:
+                      entry[target_key] = row.get(source_key)
 
           def normalize(rows, market_type, prefix="BINANCE"):
               out = []
@@ -272,6 +281,9 @@ jobs:
                       "expiry": r.get("deliveryDate") or r.get("expiryDate"),
                       "contractType": r.get("contractType"),
                       "settlement": r.get("marginAsset") or r.get("settleAsset") or r.get("settleCoin"),
+                      "underlyingType": r.get("underlyingType"),
+                      "underlyingSubType": r.get("underlyingSubType"),
+                      "newListing": r.get("newListing"),
                   })
               return out
 
