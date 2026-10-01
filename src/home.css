@@ -4120,3 +4120,121 @@
     animation:none !important;
   }
 }
+
+
+/* FINAL LAYOUT CORRECTION — preserve the original two-part instrument row:
+   [ glass information surface ................. ] [ % glass pill ] */
+.sire-home-watch-row{
+  display:grid !important;
+  grid-template-columns:minmax(0,1fr) auto !important;
+  align-items:stretch !important;
+  gap:7px !important;
+  height:68px !important;
+  min-height:68px !important;
+  padding:4px 7px !important;
+}
+
+.sire-home-watch-main{
+  display:grid !important;
+  grid-template-columns:46px minmax(0,1fr) auto auto !important;
+  align-items:center !important;
+  gap:7px !important;
+  width:100% !important;
+  min-width:0 !important;
+  height:100% !important;
+  padding:0 8px !important;
+  margin:0 !important;
+  border:0 !important;
+  outline:0 !important;
+  text-align:left !important;
+  cursor:pointer !important;
+}
+
+.sire-home-watch-main .market-asset-logo{
+  grid-column:1 !important;
+  grid-row:1 !important;
+  justify-self:start !important;
+}
+
+.sire-home-watch-main .market-asset-name{
+  grid-column:2 !important;
+  grid-row:1 !important;
+  min-width:0 !important;
+  overflow:hidden !important;
+}
+
+.sire-home-watch-main .market-asset-name b,
+.sire-home-watch-main .market-asset-name small{
+  display:block !important;
+  overflow:hidden !important;
+  text-overflow:ellipsis !important;
+  white-space:nowrap !important;
+}
+
+.sire-home-watch-main .market-asset-price{
+  grid-column:3 !important;
+  grid-row:1 !important;
+  justify-self:end !important;
+  white-space:nowrap !important;
+}
+
+.sire-home-watch-main .market-asset-volume{
+  grid-column:4 !important;
+  grid-row:1 !important;
+  justify-self:end !important;
+  min-width:50px !important;
+  white-space:nowrap !important;
+}
+
+.sire-home-watch-row > .market-trade-button{
+  grid-column:2 !important;
+  grid-row:1 !important;
+  align-self:center !important;
+  justify-self:end !important;
+  width:76px !important;
+  min-width:76px !important;
+  height:38px !important;
+  margin:0 !important;
+  z-index:12 !important;
+}
+
+.sire-home-watch-main > *{
+  position:relative;
+  z-index:9;
+  transform:translateZ(12px);
+}
+
+.sire-home-watch-main:after{
+  z-index:7 !important;
+}
+
+@media(max-width:700px){
+  .sire-home-watch-row{
+    grid-template-columns:minmax(0,1fr) 76px !important;
+    height:67px !important;
+    min-height:67px !important;
+    gap:5px !important;
+    padding:4px 5px !important;
+  }
+
+  .sire-home-watch-main{
+    grid-template-columns:42px minmax(0,1fr) auto !important;
+    gap:5px !important;
+    padding:0 6px !important;
+  }
+
+  .sire-home-watch-main .market-asset-volume{
+    display:none !important;
+  }
+
+  .sire-home-watch-main .market-asset-price{
+    grid-column:3 !important;
+    font-size:10px !important;
+  }
+
+  .sire-home-watch-row > .market-trade-button{
+    grid-column:2 !important;
+    width:76px !important;
+    min-width:76px !important;
+  }
+}
