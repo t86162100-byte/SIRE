@@ -111,37 +111,43 @@ export default function HomeView({ instruments, onSelectInstrument, videoSrc = '
   useEffect(() => {
     if (!gateioUniverse.length) return;
     let cancelled = false;
+    let refreshing = false;
     const refreshGateioQuotes = async () => {
-      const markets = ['spot', 'usdt', 'usd1', 'btc'];
-      const next = new Map<string, any>();
-      await Promise.all(markets.map(async market => {
-        try {
-          const response = await fetch('/api/sire/gateio/tickers?market=' + encodeURIComponent(market), { cache: 'no-store' });
-          if (!response.ok) return;
-          const payload = await response.json();
-          const rows = Array.isArray(payload?.data) ? payload.data : [];
-          for (const row of rows) {
-            const symbol = String(row?.currency_pair ?? row?.contract ?? '').trim().toUpperCase();
-            const price = Number(row?.last);
-            if (!symbol || !Number.isFinite(price)) continue;
-            const change = Number(row?.change_percentage);
-            const volume = Number(row?.quote_volume ?? row?.volume_24h_quote ?? row?.volume_24h_usd ?? row?.volume_24h);
-            const normalizedSymbol = symbol.replace(/[^A-Z0-9]/g, '');
-            const quote = {
-              price,
-              bid: Number.isFinite(Number(row?.highest_bid ?? row?.highest_bid_price)) ? Number(row?.highest_bid ?? row?.highest_bid_price) : undefined,
-              ask: Number.isFinite(Number(row?.lowest_ask ?? row?.lowest_ask_price)) ? Number(row?.lowest_ask ?? row?.lowest_ask_price) : undefined,
-              change24h: Number.isFinite(change) ? change : undefined,
-              priceChangePercent: Number.isFinite(change) ? change : undefined,
-              volume24h: Number.isFinite(volume) ? volume : undefined,
-            };
-            next.set(market + ':' + symbol, quote);
-            next.set(market + ':' + normalizedSymbol, quote);
-          }
-        } catch {}
-      }));
-      if (cancelled || !next.size) return;
-      setGateioQuotes(next);
+      if (refreshing || cancelled) return;
+      refreshing = true;
+      try {
+        const markets = ['spot', 'usdt', 'usd1', 'btc'];
+        const next = new Map<string, any>();
+        await Promise.all(markets.map(async market => {
+          try {
+            const response = await fetch('/api/sire/gateio/tickers?market=' + encodeURIComponent(market) + '&_=' + Date.now(), { cache: 'no-store' });
+            if (!response.ok) return;
+            const payload = await response.json();
+            const rows = Array.isArray(payload?.data) ? payload.data : [];
+            for (const row of rows) {
+              const symbol = String(row?.currency_pair ?? row?.contract ?? '').trim().toUpperCase();
+              const price = Number(row?.last);
+              if (!symbol || !Number.isFinite(price)) continue;
+              const change = Number(row?.change_percentage);
+              const volume = Number(row?.quote_volume ?? row?.volume_24h_quote ?? row?.volume_24h_usd ?? row?.volume_24h);
+              const normalizedSymbol = symbol.replace(/[^A-Z0-9]/g, '');
+              const quote = {
+                price,
+                bid: Number.isFinite(Number(row?.highest_bid ?? row?.highest_bid_price)) ? Number(row?.highest_bid ?? row?.highest_bid_price) : undefined,
+                ask: Number.isFinite(Number(row?.lowest_ask ?? row?.lowest_ask_price)) ? Number(row?.lowest_ask ?? row?.lowest_ask_price) : undefined,
+                change24h: Number.isFinite(change) ? change : undefined,
+                priceChangePercent: Number.isFinite(change) ? change : undefined,
+                volume24h: Number.isFinite(volume) ? volume : undefined,
+              };
+              next.set(market + ':' + symbol, quote);
+              next.set(market + ':' + normalizedSymbol, quote);
+            }
+          } catch {}
+        }));
+        if (!cancelled && next.size) setGateioQuotes(next);
+      } finally {
+        refreshing = false;
+      }
     };
     void refreshGateioQuotes();
     const timer = window.setInterval(() => { void refreshGateioQuotes(); }, 1000);
@@ -532,7 +538,7 @@ export default function HomeView({ instruments, onSelectInstrument, videoSrc = '
           .sort((a, b) => change(b) - change(a))
           .filter(item => activeMarketSubfilter === 'Futures' ? isFutures(item) : isSpot(item));
       case 'Losers':
-        return [...gateioUniverse]
+        return [...gateioLiveUniverse]
           .filter(item => Number.isFinite(change(item)))
           .sort((a, b) => change(a) - change(b))
           .filter(item => activeMarketSubfilter === 'Futures' ? isFutures(item) : isSpot(item));
