@@ -377,7 +377,10 @@ async function binanceAlpha(): Promise<UnifiedInstrument[]> {
     const rows=Array.isArray(response?.data)?response.data:[];
     for(const raw of rows){
       const symbol=String(raw?.symbol||raw?.alphaId||'').trim(); if(!symbol||raw?.offline===true) continue;
-      const chain=String(raw?.chainName||'').trim(), name=String(raw?.name||symbol).trim(), tags:string[]=[];
+      const rawChain=String(raw?.chainName||'').trim();
+      const chainMap:Record<string,string>={'BNB Smart Chain':'BSC','BNB Chain':'BSC','BNB':'BSC','Ethereum':'Ethereum','Solana':'Solana','Base':'Base','Arbitrum':'Arbitrum','Sonic':'Sonic','Sui':'Sui','TRON':'TRON'};
+      const chain=chainMap[rawChain]||rawChain;
+      const name=String(raw?.name||symbol).trim(), tags:string[]=[];
       if(chain) tags.push(chain);
       if(raw?.stockState===true||/stock|etf|tokenized/i.test(name+' '+symbol)) tags.push('Tokenized Securities');
       if(/robinhood/i.test(name+' '+symbol)||/^HOODB$/i.test(symbol)) tags.push('Robinhood');
