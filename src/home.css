@@ -4393,3 +4393,647 @@
     animation:none !important;
   }
 }
+
+
+/* -------------------------------------------------------------------------
+   INSTRUMENT CARD // CAST-GLASS INFORMATION FRAME
+   The row is the glass object. Content is optically "cast" into its center,
+   while the asset logo remains a separate raised glass element. Opacity is
+   fixed; only illumination/reflection moves across the material.
+   ------------------------------------------------------------------------- */
+
+.sire-home-watchlist{
+  border:0;
+  border-radius:18px;
+  overflow:visible;
+  background:transparent;
+  box-shadow:none;
+}
+
+.sire-home-watch-row{
+  position:relative;
+  isolation:isolate;
+  margin:7px 0;
+  width:100%;
+  height:68px;
+  min-height:68px;
+  padding:4px 7px 4px 7px;
+  grid-template-columns:58px minmax(0,1fr) auto 74px 82px;
+  gap:7px;
+  border:1px solid rgba(104,172,255,.24);
+  border-radius:18px;
+  background:
+    linear-gradient(135deg,
+      rgba(12,30,78,.90) 0%,
+      rgba(7,18,52,.92) 34%,
+      rgba(4,12,38,.94) 62%,
+      rgba(12,15,53,.92) 100%);
+  box-shadow:
+    0 12px 28px rgba(0,0,0,.28),
+    0 0 0 1px rgba(69,87,190,.07),
+    0 0 22px rgba(36,103,255,.055),
+    inset 0 1px 0 rgba(246,250,255,.13),
+    inset 1px 0 0 rgba(113,195,255,.09),
+    inset -1px 0 0 rgba(178,89,255,.10),
+    inset 0 -14px 25px rgba(19,44,121,.13);
+  overflow:hidden;
+  backdrop-filter:blur(15px) saturate(150%);
+  -webkit-backdrop-filter:blur(15px) saturate(150%);
+  transform:translateZ(0);
+  transition:
+    transform .28s cubic-bezier(.2,.8,.2,1),
+    border-color .28s ease,
+    box-shadow .28s ease;
+}
+
+/* deep internal optical volume */
+.sire-home-watch-row:before{
+  content:"";
+  position:absolute;
+  inset:1px;
+  z-index:0;
+  border-radius:16px;
+  pointer-events:none;
+  background:
+    radial-gradient(ellipse 42% 100% at 9% 50%,rgba(42,147,255,.18),transparent 70%),
+    radial-gradient(ellipse 45% 100% at 72% 0%,rgba(153,70,255,.16),transparent 68%),
+    radial-gradient(ellipse 35% 90% at 93% 90%,rgba(39,211,255,.10),transparent 70%);
+  filter:blur(9px) saturate(125%);
+  animation:sire-instrument-inner-light 10.5s ease-in-out infinite alternate;
+}
+
+/* thick polished glass rim */
+.sire-home-watch-row:after{
+  content:"";
+  position:absolute;
+  inset:0;
+  z-index:5;
+  border-radius:18px;
+  pointer-events:none;
+  border:1px solid rgba(139,198,255,.08);
+  background:
+    linear-gradient(116deg,
+      rgba(255,255,255,.10) 0%,
+      rgba(255,255,255,0) 9%,
+      rgba(255,255,255,0) 66%,
+      rgba(193,114,255,.045) 82%,
+      rgba(255,255,255,.08) 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.08),
+    inset 0 -1px 0 rgba(53,113,216,.12);
+}
+
+/* Actual moving light caught by the glass surface. */
+.sire-home-watch-main:after{
+  content:"";
+  position:absolute;
+  top:-75%;
+  left:-30%;
+  width:22%;
+  height:250%;
+  z-index:8;
+  pointer-events:none;
+  background:
+    linear-gradient(105deg,
+      transparent 22%,
+      rgba(100,191,255,.025) 40%,
+      rgba(228,242,255,.15) 49%,
+      rgba(187,126,255,.075) 55%,
+      rgba(83,184,255,.02) 63%,
+      transparent 76%);
+  filter:blur(1.2px);
+  mix-blend-mode:screen;
+  transform:rotate(10deg) translate3d(-12vw,0,0);
+  animation:sire-instrument-glass-reflection 8.8s cubic-bezier(.38,.02,.2,1) infinite;
+}
+
+/* A subtle internal “glass plane” makes the information feel embedded rather
+   than printed on top of the surface. */
+.sire-home-watch-main{
+  position:relative;
+  z-index:2;
+  height:100%;
+  min-width:0;
+  border:0;
+  border-radius:14px;
+  background:
+    linear-gradient(180deg,rgba(22,48,108,.16),rgba(3,10,32,.10));
+  color:#f4f7ff;
+  overflow:hidden;
+  box-shadow:
+    inset 0 1px rgba(255,255,255,.045),
+    inset 0 -1px rgba(43,98,190,.06);
+}
+
+.sire-home-watch-main > *{
+  position:relative;
+  z-index:9;
+  transform:translateZ(12px);
+}
+
+.sire-home-watch-main .market-asset-name b{
+  color:#f7f9ff;
+  text-shadow:
+    0 1px 10px rgba(64,143,255,.16),
+    0 0 1px rgba(255,255,255,.72);
+  letter-spacing:.01em;
+}
+
+.sire-home-watch-main .market-asset-name small{
+  color:rgba(175,199,232,.67);
+  text-shadow:0 0 8px rgba(74,151,255,.10);
+}
+
+.sire-home-watch-main .market-asset-price strong{
+  color:#f5f8ff;
+  text-shadow:
+    0 2px 13px rgba(64,150,255,.16),
+    0 0 1px rgba(255,255,255,.76);
+}
+
+.sire-home-watch-main .market-asset-volume small{
+  color:rgba(126,157,200,.62);
+}
+
+.sire-home-watch-main .market-asset-volume b{
+  color:#cfddf5;
+  text-shadow:0 0 9px rgba(79,153,255,.10);
+}
+
+/* Raised exchange/token glass objects remain visually above the information. */
+.sire-home-watch-row .market-asset-logo{
+  position:relative;
+  z-index:12;
+  transform:translateZ(22px);
+  filter:
+    drop-shadow(0 4px 10px rgba(0,0,0,.34))
+    drop-shadow(0 0 10px rgba(50,143,255,.16));
+}
+
+.sire-home-watch-row .market-token-logo{
+  box-shadow:
+    0 0 0 1px rgba(138,198,255,.20),
+    0 0 0 3px rgba(17,41,91,.42),
+    0 0 16px rgba(56,137,255,.15),
+    0 7px 16px rgba(0,0,0,.36),
+    inset 0 1px 0 rgba(255,255,255,.25);
+}
+
+.sire-home-watch-row .market-exchange-logo{
+  box-shadow:
+    0 0 0 1px rgba(131,192,255,.20),
+    0 0 13px rgba(67,139,255,.12),
+    0 4px 12px rgba(0,0,0,.34),
+    inset 0 1px rgba(255,255,255,.22);
+}
+
+/* Percentage is a second piece of polished glass attached to the frame,
+   not a flat red/green rectangle. */
+.sire-home-watch-row > .market-trade-button{
+  position:relative;
+  z-index:10;
+  height:38px;
+  min-width:72px;
+  border-radius:13px;
+  border:1px solid rgba(122,205,255,.22);
+  background:
+    linear-gradient(145deg,rgba(20,81,117,.55),rgba(8,43,73,.58));
+  color:#dffbff;
+  box-shadow:
+    inset 0 1px rgba(255,255,255,.13),
+    inset 0 -7px 13px rgba(0,20,70,.12),
+    0 6px 15px rgba(0,0,0,.22);
+  overflow:hidden;
+}
+
+.sire-home-watch-row > .market-trade-button:before{
+  content:"";
+  position:absolute;
+  inset:-80% -25%;
+  background:
+    radial-gradient(ellipse at 20% 35%,rgba(63,229,196,.30),transparent 30%),
+    radial-gradient(ellipse at 80% 70%,rgba(32,142,255,.18),transparent 32%);
+  filter:blur(10px);
+  animation:sire-trade-glass-flow 7s ease-in-out infinite alternate;
+  pointer-events:none;
+}
+
+.sire-home-watch-row > .market-trade-button.negative{
+  border-color:rgba(255,111,143,.26);
+  background:linear-gradient(145deg,rgba(120,32,73,.52),rgba(55,17,59,.58));
+  color:#ffe8f0;
+}
+
+.sire-home-watch-row > .market-trade-button.negative:before{
+  background:
+    radial-gradient(ellipse at 20% 35%,rgba(255,83,127,.26),transparent 30%),
+    radial-gradient(ellipse at 80% 70%,rgba(125,66,255,.16),transparent 32%);
+}
+
+.sire-home-watch-row > .market-trade-button.positive{
+  border-color:rgba(80,224,190,.27);
+  background:linear-gradient(145deg,rgba(15,111,103,.52),rgba(7,55,70,.58));
+  color:#dfffee;
+}
+
+.sire-home-watch-row > .market-trade-button:hover{
+  border-color:rgba(145,217,255,.48);
+  box-shadow:
+    inset 0 1px rgba(255,255,255,.17),
+    0 0 20px rgba(47,143,255,.10),
+    0 8px 18px rgba(0,0,0,.25);
+}
+
+.sire-home-watch-row:hover{
+  transform:translateY(-1px) scale(1.002);
+  border-color:rgba(116,191,255,.40);
+  box-shadow:
+    0 15px 32px rgba(0,0,0,.34),
+    0 0 30px rgba(45,111,255,.08),
+    inset 0 1px rgba(250,252,255,.15),
+    inset -1px 0 rgba(184,92,255,.12);
+}
+
+.sire-home-watch-row:nth-child(2) :is(.sire-home-watch-main,.market-trade-button){animation-delay:-1.8s}
+.sire-home-watch-row:nth-child(3) :is(.sire-home-watch-main,.market-trade-button){animation-delay:-3.6s}
+.sire-home-watch-row:nth-child(4) :is(.sire-home-watch-main,.market-trade-button){animation-delay:-5.4s}
+.sire-home-watch-row:nth-child(5) :is(.sire-home-watch-main,.market-trade-button){animation-delay:-7.2s}
+.sire-home-watch-row:nth-child(6) :is(.sire-home-watch-main,.market-trade-button){animation-delay:-2.7s}
+.sire-home-watch-row:nth-child(7) :is(.sire-home-watch-main,.market-trade-button){animation-delay:-6.3s}
+
+@keyframes sire-instrument-inner-light{
+  0%{transform:translate3d(-7%,-3%,0) scale(1)}
+  28%{transform:translate3d(5%,4%,0) scale(1.06)}
+  54%{transform:translate3d(10%,-4%,0) scale(1.09)}
+  78%{transform:translate3d(-2%,8%,0) scale(1.04)}
+  100%{transform:translate3d(8%,2%,0) scale(1.08)}
+}
+
+@keyframes sire-instrument-glass-reflection{
+  0%,14%{transform:rotate(10deg) translate3d(-20vw,-3%,0)}
+  46%,58%{transform:rotate(10deg) translate3d(28vw,3%,0)}
+  100%{transform:rotate(10deg) translate3d(48vw,-2%,0)}
+}
+
+@keyframes sire-trade-glass-flow{
+  0%{transform:translate3d(-8%,-5%,0) scale(1)}
+  50%{transform:translate3d(8%,7%,0) scale(1.08)}
+  100%{transform:translate3d(-2%,0,0) scale(1.03)}
+}
+
+@media(max-width:700px){
+  .sire-home-watch-row{
+    height:67px;
+    min-height:67px;
+    margin:6px 0;
+    padding:4px 5px;
+    grid-template-columns:54px minmax(0,1fr) auto 66px 76px;
+    gap:5px;
+    border-radius:17px;
+  }
+  .sire-home-watch-main{border-radius:13px}
+  .sire-home-watch-row > .market-trade-button{
+    min-width:66px;
+    height:36px;
+    border-radius:12px;
+    font-size:8px;
+  }
+}
+
+@media(prefers-reduced-motion:reduce){
+  .sire-home-watch-row:before,
+  .sire-home-watch-main:after,
+  .sire-home-watch-row > .market-trade-button:before{
+    animation:none !important;
+  }
+}
+
+
+/* FINAL LAYOUT CORRECTION — preserve the original two-part instrument row:
+   [ glass information surface ................. ] [ % glass pill ] */
+.sire-home-watch-row{
+  display:grid !important;
+  grid-template-columns:minmax(0,1fr) auto !important;
+  align-items:stretch !important;
+  gap:7px !important;
+  height:68px !important;
+  min-height:68px !important;
+  padding:4px 7px !important;
+}
+
+.sire-home-watch-main{
+  display:grid !important;
+  grid-template-columns:46px minmax(0,1fr) auto auto !important;
+  align-items:center !important;
+  gap:7px !important;
+  width:100% !important;
+  min-width:0 !important;
+  height:100% !important;
+  padding:0 8px !important;
+  margin:0 !important;
+  border:0 !important;
+  outline:0 !important;
+  text-align:left !important;
+  cursor:pointer !important;
+}
+
+.sire-home-watch-main .market-asset-logo{
+  grid-column:1 !important;
+  grid-row:1 !important;
+  justify-self:start !important;
+}
+
+.sire-home-watch-main .market-asset-name{
+  grid-column:2 !important;
+  grid-row:1 !important;
+  min-width:0 !important;
+  overflow:hidden !important;
+}
+
+.sire-home-watch-main .market-asset-name b,
+.sire-home-watch-main .market-asset-name small{
+  display:block !important;
+  overflow:hidden !important;
+  text-overflow:ellipsis !important;
+  white-space:nowrap !important;
+}
+
+.sire-home-watch-main .market-asset-price{
+  grid-column:3 !important;
+  grid-row:1 !important;
+  justify-self:end !important;
+  white-space:nowrap !important;
+}
+
+.sire-home-watch-main .market-asset-volume{
+  grid-column:4 !important;
+  grid-row:1 !important;
+  justify-self:end !important;
+  min-width:50px !important;
+  white-space:nowrap !important;
+}
+
+.sire-home-watch-row > .market-trade-button{
+  grid-column:2 !important;
+  grid-row:1 !important;
+  align-self:center !important;
+  justify-self:end !important;
+  width:76px !important;
+  min-width:76px !important;
+  height:38px !important;
+  margin:0 !important;
+  z-index:12 !important;
+}
+
+.sire-home-watch-main > *{
+  position:relative;
+  z-index:9;
+  transform:translateZ(12px);
+}
+
+.sire-home-watch-main:after{
+  z-index:7 !important;
+}
+
+@media(max-width:700px){
+  .sire-home-watch-row{
+    grid-template-columns:minmax(0,1fr) 76px !important;
+    height:67px !important;
+    min-height:67px !important;
+    gap:5px !important;
+    padding:4px 5px !important;
+  }
+
+  .sire-home-watch-main{
+    grid-template-columns:42px minmax(0,1fr) auto !important;
+    gap:5px !important;
+    padding:0 6px !important;
+  }
+
+  .sire-home-watch-main .market-asset-volume{
+    display:none !important;
+  }
+
+  .sire-home-watch-main .market-asset-price{
+    grid-column:3 !important;
+    font-size:10px !important;
+  }
+
+  .sire-home-watch-row > .market-trade-button{
+    grid-column:2 !important;
+    width:76px !important;
+    min-width:76px !important;
+  }
+}
+
+
+/* -------------------------------------------------------------------------
+   INSTRUMENT CARD // DOMED LOGO-BOX GLASS RIM
+   Match the compact .market-asset-logo object: rounded optical volume,
+   beveled/slanted-looking perimeter, broad corner illumination and no
+   thin traveling light streak. The information remains visually inside.
+   ------------------------------------------------------------------------- */
+
+.sire-home-watch-row{
+  --rim-phase: 0deg;
+  border:1px solid transparent !important;
+  border-radius:19px 17px 20px 18px / 18px 20px 17px 19px !important;
+  background:
+    linear-gradient(145deg,
+      rgba(10,28,74,.94) 0%,
+      rgba(6,17,49,.96) 38%,
+      rgba(4,11,35,.97) 66%,
+      rgba(12,15,52,.95) 100%) padding-box,
+    conic-gradient(
+      from var(--rim-phase) at 50% 50%,
+      rgba(92,171,255,.12) 0deg,
+      rgba(92,171,255,.12) 48deg,
+      rgba(176,103,255,.42) 88deg,
+      rgba(95,184,255,.08) 122deg,
+      rgba(65,125,255,.06) 168deg,
+      rgba(86,208,255,.10) 202deg,
+      rgba(103,86,255,.40) 236deg,
+      rgba(198,118,255,.14) 270deg,
+      rgba(92,171,255,.06) 305deg,
+      rgba(99,214,255,.46) 330deg,
+      rgba(92,171,255,.12) 360deg) border-box !important;
+  box-shadow:
+    0 13px 30px rgba(0,0,0,.30),
+    0 0 0 1px rgba(69,87,190,.07),
+    0 0 26px rgba(42,113,255,.07),
+    inset 0 1px 0 rgba(246,250,255,.14),
+    inset 2px 0 0 rgba(90,177,255,.10),
+    inset -2px 0 0 rgba(177,91,255,.11),
+    inset 0 -13px 25px rgba(19,44,121,.15) !important;
+  animation:sire-domed-rim-phase 11s ease-in-out infinite;
+}
+
+.sire-home-watch-row::before{
+  inset:1px !important;
+  border-radius:inherit !important;
+  background:
+    radial-gradient(ellipse 38% 105% at 8% 8%,rgba(72,173,255,.22),transparent 68%),
+    radial-gradient(ellipse 34% 105% at 92% 92%,rgba(93,117,255,.20),transparent 70%),
+    radial-gradient(ellipse 45% 90% at 78% 4%,rgba(153,73,255,.10),transparent 72%),
+    radial-gradient(ellipse 40% 88% at 18% 96%,rgba(31,148,255,.07),transparent 72%);
+  filter:blur(8px) saturate(130%);
+  opacity:.92;
+  animation:sire-domed-volume 8.5s ease-in-out infinite alternate;
+}
+
+.sire-home-watch-row::after{
+  inset:0 !important;
+  border-radius:inherit !important;
+  border:1px solid transparent !important;
+  background:
+    linear-gradient(180deg,rgba(255,255,255,.025),rgba(255,255,255,0)) padding-box,
+    conic-gradient(
+      from calc(var(--rim-phase) + 18deg),
+      rgba(255,255,255,.04) 0deg,
+      rgba(109,208,255,.28) 36deg,
+      rgba(255,255,255,.025) 72deg,
+      rgba(181,104,255,.34) 112deg,
+      rgba(255,255,255,.025) 154deg,
+      rgba(93,185,255,.07) 196deg,
+      rgba(255,255,255,.025) 224deg,
+      rgba(103,93,255,.32) 256deg,
+      rgba(255,255,255,.035) 292deg,
+      rgba(117,221,255,.30) 326deg,
+      rgba(255,255,255,.04) 360deg) border-box;
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.10),
+    inset 0 -1px 0 rgba(50,115,225,.13),
+    0 0 16px rgba(69,152,255,.045);
+  opacity:.92;
+  mix-blend-mode:screen;
+  animation:sire-domed-rim-shimmer 11s ease-in-out infinite;
+}
+
+.sire-home-watch-main{
+  border-radius:14px 12px 15px 13px / 13px 15px 12px 14px !important;
+  background:
+    radial-gradient(90% 130% at 5% 12%,rgba(49,122,255,.10),transparent 58%),
+    radial-gradient(80% 120% at 96% 88%,rgba(116,69,238,.09),transparent 60%),
+    linear-gradient(180deg,rgba(20,47,108,.15),rgba(3,10,32,.10)) !important;
+  box-shadow:
+    inset 0 1px rgba(255,255,255,.045),
+    inset 1px 0 rgba(106,184,255,.035),
+    inset -1px 0 rgba(173,93,255,.035),
+    inset 0 -1px rgba(43,98,190,.07) !important;
+}
+
+.sire-home-watch-main::after{
+  top:-35% !important;
+  left:-18% !important;
+  width:36% !important;
+  height:170% !important;
+  background:
+    radial-gradient(ellipse at 50% 50%,
+      rgba(191,232,255,.055) 0%,
+      rgba(114,185,255,.025) 35%,
+      transparent 68%) !important;
+  filter:blur(10px) !important;
+  mix-blend-mode:screen !important;
+  transform:none !important;
+  opacity:.65 !important;
+  animation:sire-domed-inner-reflection 9s ease-in-out infinite alternate !important;
+}
+
+@keyframes sire-domed-rim-phase{
+  0%,100%{--rim-phase:0deg}
+  24%{--rim-phase:42deg}
+  50%{--rim-phase:92deg}
+  76%{--rim-phase:138deg}
+}
+
+@keyframes sire-domed-rim-shimmer{
+  0%,18%{opacity:.66;filter:brightness(.86) saturate(1.05)}
+  38%{opacity:1;filter:brightness(1.22) saturate(1.18)}
+  56%{opacity:.74;filter:brightness(.94) saturate(1.08)}
+  76%{opacity:1;filter:brightness(1.16) saturate(1.16)}
+  100%{opacity:.68;filter:brightness(.88) saturate(1.04)}
+}
+
+@keyframes sire-domed-volume{
+  0%{transform:translate3d(-1%,0,0) scale(1)}
+  50%{transform:translate3d(1.5%,-.8%,0) scale(1.025)}
+  100%{transform:translate3d(-.5%,1%,0) scale(1.015)}
+}
+
+@keyframes sire-domed-inner-reflection{
+  0%{transform:translate3d(-8%,0,0) scale(.96)}
+  50%{transform:translate3d(14%,1%,0) scale(1.06)}
+  100%{transform:translate3d(4%,-1%,0) scale(1)}
+}
+
+@media(max-width:700px){
+  .sire-home-watch-row{
+    border-radius:18px 16px 19px 17px / 17px 19px 16px 18px !important;
+  }
+}
+
+@media(prefers-reduced-motion:reduce){
+  .sire-home-watch-row,
+  .sire-home-watch-row::before,
+  .sire-home-watch-row::after,
+  .sire-home-watch-main::after{
+    animation:none !important;
+  }
+}
+
+/* FINAL HEADER SCROLL-THROUGH / SOFT CONTENT FADE */
+.sire-home-header{
+  position:absolute !important;
+  top:0 !important;
+  left:0 !important;
+  right:0 !important;
+  height:62px !important;
+  z-index:10 !important;
+  border:0 !important;
+  border-bottom:0 !important;
+  background:
+    linear-gradient(
+      180deg,
+      rgba(4,7,15,.78) 0%,
+      rgba(5,8,18,.62) 30%,
+      rgba(5,8,18,.40) 56%,
+      rgba(5,8,18,.16) 80%,
+      transparent 100%
+    ) !important;
+  box-shadow:none !important;
+  backdrop-filter:none !important;
+  -webkit-backdrop-filter:none !important;
+  overflow:visible !important;
+}
+
+.sire-home-header::after{
+  content:"";
+  position:absolute;
+  left:-10%;
+  right:-10%;
+  top:0;
+  height:154px;
+  pointer-events:none;
+  z-index:0;
+  background:
+    linear-gradient(
+      180deg,
+      rgba(4,7,15,.30) 0%,
+      rgba(5,8,18,.22) 28%,
+      rgba(5,8,18,.10) 58%,
+      transparent 100%
+    );
+}
+
+.sire-home-header > *{
+  position:relative;
+  z-index:2;
+}
+
+.sire-home-scroll{
+  position:relative !important;
+  z-index:2 !important;
+  height:100dvh !important;
+  padding-top:62px !important;
+  overflow-y:auto !important;
+}
