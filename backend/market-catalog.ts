@@ -33,6 +33,7 @@ export interface UnifiedInstrument {
   marketFilter?: string;
 }
 
+import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
@@ -1767,74 +1768,7 @@ async function bitget(): Promise<UnifiedInstrument[]> {
     console.warn('[SIRE BITGET] CFD ticker directory unavailable:', error);
   }
 
-  // Bitget Wallet Onchain: Hot/Trending uses the documented hotpicks ranking.
-  // Latest is attempted as a ranking first, then falls back to the documented
-  // timestamped token directory so we still return real on-chain symbols.
-  const walletBases = ['https://web3.bgw.world', 'https://web3.bitget.com'];
-  const addWalletRows = (rows: any[], sub: string) => {
-    for (const raw of rows) {
-      const symbol = String(raw?.symbol || '').trim();
-      if (!symbol) continue;
-      const item = cryptoItem('BITGET', 'Onchain', 'Onchain', {
-        symbol,
-        baseCoin: symbol,
-        quoteCoin: 'USDT',
-        fullName: raw?.name || symbol,
-        status: 'online',
-      }, { last: raw?.price });
-      if (!item) continue;
-      const chain = String(raw?.chain || '').trim();
-      const contract = String(raw?.contract || '').trim();
-      item.id = 'BITGET:ONCHAIN:' + (chain || 'unknown') + ':' + (contract || symbol);
-      item.providerLabel = 'Bitget';
-      item.category = 'Onchain';
-      item.marketType = 'Onchain';
-      item.instrumentType = 'ONCHAIN';
-      item.marketGroup = 'Onchain';
-      item.marketSubcategory = sub;
-      item.marketFilter = sub;
-      item.logoUrl = String(raw?.icon || item.logoUrl);
-      (item as any).chain = chain;
-      (item as any).contract = contract;
-      (item as any).change24h = Number(raw?.change_24h);
-      (item as any).volume24h = Number(raw?.volume_24h);
-      (item as any).turnover24h = Number(raw?.turnover_24h);
-      (item as any).marketCap = Number(raw?.market_cap);
-      out.push(item);
-    }
-  };
-
-  for (const base of walletBases) {
-    let gotTrending = false;
-    try {
-      const response = await postJson(base + '/bgw-pro/market/v3/topRank/detail', { name:'hotpicks' }, 20000);
-      const rows = Array.isArray(response?.data?.list) ? response.data.list : [];
-      if (rows.length) { addWalletRows(rows, 'Trending'); gotTrending = true; console.log('[SIRE BITGET] Onchain Trending: ' + rows.length); break; }
-    } catch (error) { console.warn('[SIRE BITGET] Onchain Trending failed:', error); }
-    if (gotTrending) break;
-  }
-
-  for (const base of walletBases) {
-    let gotLatest = false;
-    try {
-      const response = await postJson(base + '/bgw-pro/market/v3/topRank/detail', { name:'latest' }, 20000);
-      const rows = Array.isArray(response?.data?.list) ? response.data.list : [];
-      if (rows.length) { addWalletRows(rows, 'Latest'); gotLatest = true; console.log('[SIRE BITGET] Onchain Latest ranking: ' + rows.length); break; }
-    } catch (error) { console.warn('[SIRE BITGET] Onchain Latest ranking failed:', error); }
-    if (gotLatest) break;
-  }
-
-  if (!out.some(i => i.marketGroup === 'Onchain' && i.marketSubcategory === 'Latest')) {
-    for (const base of walletBases) {
-      try {
-        const response = await postJson(base + '/bgw-pro/market/v3/historical-coins', { createTime:'', limit:100 }, 20000);
-        const rows = Array.isArray(response?.data?.tokenList) ? response.data.tokenList : [];
-        if (rows.length) { addWalletRows(rows, 'Latest'); console.log('[SIRE BITGET] Onchain Latest token directory: ' + rows.length); break; }
-      } catch (error) { console.warn('[SIRE BITGET] Onchain Latest directory failed:', error); }
-    }
-  }
-
-  // Attach CEX ticker snapshots to the UTA rows.
+  // Bitget Wallet Onchain uses the current Agent API gateway. The older\n  // web3.bgw.world/web3.bitget.com hosts are documentation/web pages, so posting\n  // the market path there returns HTML and cannot populate this catalogue.\n  // The current gateway uses BKHmacAuth with the public toc_agent token.\n  const walletApiBase = 'https://copenapi.bgwapi.io';\n  const walletApiToken = String(process.env.BGW_WALLET_TOKEN || 'toc_agent').trim() || 'toc_agent';\n  const postWalletJson = async (path: string, body: any, timeoutMs = 20000) => {\n    const bodyStr = JSON.stringify(body);\n    const ts = String(Date.now());\n    const sign = '0x' + createHash('sha256').update('POST' + path + bodyStr + ts).digest('hex');\n    const response = await fetch(walletApiBase + path, {\n      method: 'POST',\n      headers: {\n        Accept: 'application/json',\n        'Content-Type': 'application/json',\n        channel: 'toc_agent',\n        brand: 'toc_agent',\n        clientversion: '10.0.0',\n        language: 'en',\n        token: walletApiToken,\n        'X-SIGN': sign,\n        'X-TIMESTAMP': ts,\n      },\n      signal: AbortSignal.timeout(timeoutMs),\n      body: bodyStr,\n    });\n    if (!response.ok) throw new Error('HTTP ' + response.status + ': ' + (await response.text()).slice(0, 200));\n    return await response.json();\n  };\n  const addWalletRows = (rows: any[], sub: string) => {\n    for (const raw of rows) {\n      const symbol = String(raw?.symbol || '').trim();\n      if (!symbol) continue;\n      const item = cryptoItem('BITGET', 'Onchain', 'Onchain', {\n        symbol, baseCoin: symbol, quoteCoin: 'USDT', fullName: raw?.name || symbol, status: 'online'\n      }, { last: raw?.price });\n      if (!item) continue;\n      const chain = String(raw?.chain || '').trim();\n      const contract = String(raw?.contract || '').trim();\n      item.id = 'BITGET:ONCHAIN:' + (chain || 'unknown') + ':' + (contract || symbol);\n      item.providerLabel = 'Bitget';\n      item.category = 'Onchain';\n      item.marketType = 'Onchain';\n      item.instrumentType = 'ONCHAIN';\n      item.marketGroup = 'Onchain';\n      item.marketSubcategory = sub;\n      item.marketFilter = sub;\n      item.logoUrl = String(raw?.icon || item.logoUrl);\n      (item as any).chain = chain;\n      (item as any).contract = contract;\n      (item as any).change24h = Number(raw?.change_24h);\n      (item as any).volume24h = Number(raw?.volume_24h);\n      (item as any).turnover24h = Number(raw?.turnover_24h);\n      (item as any).marketCap = Number(raw?.market_cap);\n      out.push(item);\n    }\n  };\n\n  try {\n    const response = await postWalletJson('/market/v3/topRank/detail', { name: 'Hotpicks' });\n    const rows = Array.isArray(response?.data?.list) ? response.data.list : [];\n    if (rows.length) { addWalletRows(rows, 'Trending'); console.log('[SIRE BITGET] Onchain Trending: ' + rows.length); }\n    else console.warn('[SIRE BITGET] Onchain Trending returned no rows:', JSON.stringify(response).slice(0, 500));\n  } catch (error) {\n    console.warn('[SIRE BITGET] Onchain Trending failed:', error);\n  }\n\n  // Latest is the documented timestamped token directory. Paginate from the\n  // newest page until we have a useful batch; this is real Bitget Wallet data.\n  try {\n    let createTime = '';\n    let added = 0;\n    for (let page = 0; page < 10; page++) {\n      const response = await postWalletJson('/market/v3/historical-coins', { createTime, limit: 100 });\n      const rows = Array.isArray(response?.data?.tokenList) ? response.data.tokenList : [];\n      if (!rows.length) break;\n      addWalletRows(rows, 'Latest');\n      added += rows.length;\n      const next = String(response?.data?.lastTime || '').trim();\n      if (!next || next === createTime || rows.length < 100) break;\n      createTime = next;\n    }\n    console.log('[SIRE BITGET] Onchain Latest: ' + added);\n  } catch (error) {\n    console.warn('[SIRE BITGET] Onchain Latest failed:', error);\n  }\n\n  // Attach CEX ticker snapshots to the UTA rows.
   const tickerCategories = ['SPOT', 'USDT-FUTURES', 'COIN-FUTURES', 'USDC-FUTURES'] as const;
   const tickerMaps = new Map<string, Map<string, any>>();
   await Promise.all(tickerCategories.map(async category => {
