@@ -748,6 +748,25 @@ async function bingx(): Promise<UnifiedInstrument[]> {
     item.expiry = raw?.deliveryDate || raw?.expiryTime || raw?.deliveryTime || raw?.expireTime || undefined;
     seen.add(key);
     out.push(item);
+
+    // Parent ALL views are explicit taxonomy members so the UI can render the
+    // complete child universe without guessing which specialized filter owns a row.
+    const allEligible =
+      (group === 'Crypto' && category === 'SPOT') ||
+      group === 'Commodities' ||
+      group === 'Index' ||
+      group === 'Forex';
+    if (allEligible && (sub || filter) !== 'ALL') {
+      const allKey = (override?.group || category) + ':' + symbol + ':ALL';
+      if (!seen.has(allKey)) {
+        const allItem = { ...item };
+        allItem.id = 'BITGET:' + group + ':' + symbol + ':ALL';
+        allItem.marketSubcategory = 'ALL';
+        allItem.marketFilter = 'ALL';
+        seen.add(allKey);
+        out.push(allItem);
+      }
+    }
   };
 
   // BingX Spot symbol master: this is the authoritative public Spot catalogue.
@@ -1599,7 +1618,10 @@ async function bitget(): Promise<UnifiedInstrument[]> {
         sub = 'Futures';
       }
     } else if (group === 'Stocks') {
-      sub = category === 'SPOT' ? 'spot' : 'Perps';
+      // Bitget's Reality stock tokens are the U.S. stock subcategory;
+      // ordinary spot stock instruments remain under the generic "spot" row.
+      const isRealityStock = String(raw?.isReality || '').toLowerCase() === 'yes';
+      sub = category === 'SPOT' ? (isRealityStock ? 'U.S. stock' : 'spot') : 'Perps';
       filter = sub;
     } else if (group === 'Commodities') {
       const upper = symbol.toUpperCase();
@@ -1727,7 +1749,7 @@ async function bitget(): Promise<UnifiedInstrument[]> {
         category: 'CFD',
         type: 'cfd',
         status: 'online',
-      }, 'CFD', { group:c.group, sub:c.sub, filter:c.commoditySub || 'CFD' });
+      }, 'CFD', { group:c.group, sub:c.sub, filter:'CFD' });
       const item = out[out.length - 1];
       if (item && item.symbol === String(raw?.symbol || '')) {
         item.marketType = 'CFD';
