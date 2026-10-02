@@ -699,24 +699,85 @@ async function binance(): Promise<UnifiedInstrument[]> {
 async function gateio(): Promise<UnifiedInstrument[]> {
   const out: UnifiedInstrument[] = [];
   const seen = new Set<string>();
-  const add = (raw: any, marketType: string, symbol: string, base?: string, quote?: string, extra: any = {}) => {
+
+  const setTaxonomy = (
+    item: UnifiedInstrument | null,
+    group: string,
+    subcategory: string,
+    filters: string[] = [],
+  ) => {
+    if (!item) return;
+    const clean = filters.map(value => String(value || '').trim()).filter(Boolean);
+    item.marketGroup = group;
+    item.marketSubcategory = subcategory;
+    item.marketFilter = clean[0] || 'ALL';
+    item.marketFilters = Array.from(new Set(clean.map(value => subcategory + ':' + value)));
+  };
+
+  const add = (
+    raw: any,
+    marketType: string,
+    symbol: string,
+    base?: string,
+    quote?: string,
+    extra: any = {},
+    taxonomy?: { group: string; subcategory: string; filters?: string[] },
+  ) => {
     const normalized = { ...raw, symbol, baseAsset: base, quoteAsset: quote, status: raw?.trade_status || raw?.status || 'online', ...extra };
-    const item = cryptoItem('GATEIO', marketType, 'Crypto', normalized);
+    const item = cryptoItem('GATEIO', marketType, taxonomy?.group || 'Crypto', normalized);
     if (!item || seen.has(item.id)) return;
+    if (taxonomy) setTaxonomy(item, taxonomy.group, taxonomy.subcategory, taxonomy.filters || []);
     seen.add(item.id);
     out.push(item);
   };
 
+  const quoteFilter = (quote: string) => {
+    const q = String(quote || '').trim().toUpperCase();
+    if (q === 'USDT') return 'USDT';
+    if (q === 'USDC') return 'USDC';
+    if (q === 'USD') return 'USD';
+    if (q === 'BTC') return 'BTC';
+    if (q === 'ETH') return 'ETH';
+    if (q === 'GT') return 'GT';
+    if (/EUR|GBP|AUD|BRL|TRY|ZAR|NGN|RUB|UAH|PLN|ARS|MXN|THB|HKD|KRW|JPY/.test(q)) return 'FIAT';
+    return 'ALTs';
+  };
+
+  const pushSpotPair = (raw: any) => {
+    const symbol = String(raw?.id || '').trim();
+    if (!symbol) return;
+    const quote = String(raw?.quote || '').trim().toUpperCase();
+    add(raw, 'Spot', symbol, raw?.base, quote, {
+      listedAt: Number(raw?.buy_start || raw?.sell_start) * 1000 || undefined,
+      onboardDate: Number(raw?.buy_start || raw?.sell_start) * 1000 || undefined,
+    }, { group: 'Crypto', subcategory: 'Spot', filters: [quoteFilter(quote)] });
+  };
+
   try {
     const rows = await getJson('https://api.gateio.ws/api/v4/spot/currency_pairs', 15000);
-    for (const raw of Array.isArray(rows) ? rows : []) {
-      add(raw, 'Spot', String(raw?.id || ''), raw?.base, raw?.quote, {
-        listedAt: Number(raw?.buy_start || raw?.sell_start) * 1000 || undefined,
-        onboardDate: Number(raw?.buy_start || raw?.sell_start) * 1000 || undefined,
-      });
-    }
+    for (const raw of Array.isArray(rows) ? rows : []) pushSpotPair(raw);
     console.log('[SIRE GATEIO] Spot: ' + out.filter(x => x.marketType === 'Spot').length);
   } catch (e) { console.warn('[SIRE GATEIO] Spot failed:', e); }
+
+  // Gate margin is a separate market capability over currency pairs. Pull the
+  // supported margin pairs so they appear under a real Margin taxonomy without
+  // fabricating instruments.
+  try {
+    const rows = await getJson('https://api.gateio.ws/api/v4/margin/uni/currency_pairs', 15000);
+    for (const raw of Array.isArray(rows) ? rows : []) {
+      const pair = String(raw?.currency_pair || raw?.id || '').trim();
+      if (!pair) continue;
+      const parts = pair.split('_');
+      const base = parts[0];
+      const quote = parts[1] || '';
+      add(raw, 'Margin', pair, base, quote, {
+        baseAsset: base,
+        quoteAsset: quote,
+        supportsMargin: true,
+      }, { group: 'Crypto', subcategory: 'Margin', filters: [quoteFilter(quote)] });
+    }
+    console.log('[SIRE GATEIO] Margin: ' + out.filter(x => x.marketType === 'Margin').length);
+  } catch (e) { console.warn('[SIRE GATEIO] Margin failed:', e); }
 
   for (const settle of ['usdt', 'usd1', 'btc']) {
     try {
@@ -724,13 +785,18 @@ async function gateio(): Promise<UnifiedInstrument[]> {
       for (const raw of Array.isArray(rows) ? rows : []) {
         const name = String(raw?.name || '');
         const underlying = String(raw?.underlying || name).split('_')[0];
-        add(raw, 'Perpetuals', name, underlying, settle.toUpperCase(), {
+        const settlement = String(settle).toUpperCase();
+        const themes = [
+          settlement,
+          String(raw?.in_delisting ? 'Delisting' : '').trim(),
+        ].filter(Boolean);
+        add(raw, 'Perpetuals', name, underlying, settlement, {
           contractType: 'perpetual',
           listedAt: Number(raw?.create_time || raw?.launch_time || raw?.launch_timestamp) * 1000 || undefined,
           onboardDate: Number(raw?.create_time || raw?.launch_time || raw?.launch_timestamp) * 1000 || undefined,
-          settlement: settle.toUpperCase(),
+          settlement,
           expiry: raw?.expire_time || raw?.expiry_time || undefined,
-        });
+        }, { group: 'Crypto', subcategory: 'Perpetuals', filters: themes.length ? themes : ['ALL'] });
       }
     } catch (e) { console.warn('[SIRE GATEIO] Perpetual/' + settle + ' failed:', e); }
   }
@@ -745,36 +811,134 @@ async function gateio(): Promise<UnifiedInstrument[]> {
           contractType: 'delivery',
           settlement: settle.toUpperCase(),
           expiry: raw?.expire_time || raw?.expiry_time || undefined,
-        });
+          listedAt: Number(raw?.create_time || raw?.launch_time || raw?.launch_timestamp) * 1000 || undefined,
+          onboardDate: Number(raw?.create_time || raw?.launch_time || raw?.launch_timestamp) * 1000 || undefined,
+        }, { group: 'Crypto', subcategory: 'Futures', filters: ['Delivery', settle.toUpperCase()] });
       }
     } catch (e) { console.warn('[SIRE GATEIO] Delivery/' + settle + ' failed:', e); }
   }
 
   try {
     const underlyings = await getJson('https://api.gateio.ws/api/v4/options/underlyings', 15000);
-    for (const u of Array.isArray(underlyings) ? underlyings : []) {
-      const underlying = String(u?.name || '');
+    const optionUnderlyings = Array.isArray(underlyings) ? underlyings : [];
+    for (const u of optionUnderlyings) {
+      const underlying = String(u?.name || '').trim();
       if (!underlying) continue;
       try {
         const rows = await getJson('https://api.gateio.ws/api/v4/options/contracts?underlying=' + encodeURIComponent(underlying), 15000);
         for (const raw of Array.isArray(rows) ? rows : []) {
           const parts = underlying.split('_');
+          const optionTypeRaw = String(raw?.put_call || raw?.option_type || '').toUpperCase();
+          const optionFilter = optionTypeRaw === 'C' || optionTypeRaw === 'CALL'
+            ? 'Calls'
+            : optionTypeRaw === 'P' || optionTypeRaw === 'PUT'
+              ? 'Puts'
+              : 'ALL';
           add(raw, 'Options', String(raw?.name || ''), parts[0], parts[1] || 'USDT', {
             expiry: raw?.expiration_time || raw?.expire_time || undefined,
             strike: raw?.strike_price,
             optionType: raw?.put_call || raw?.option_type || undefined,
-          });
+          }, { group: 'Crypto', subcategory: 'Options', filters: [optionFilter] });
         }
       } catch (e) { console.warn('[SIRE GATEIO] Options underlying failed:', underlying, e); }
     }
+    console.log('[SIRE GATEIO] Options: ' + out.filter(x => x.marketType === 'Options').length);
   } catch (e) { console.warn('[SIRE GATEIO] Options failed:', e); }
+
+  // Gate Stocks API is public and exposes exchange plus explicit STOCK/ETF
+  // typing. Use pagination for the detailed endpoint so the entire universe
+  // is retained and the nested Stocks filters are driven by real metadata.
+  try {
+    const response = await getJson('https://api.gateio.ws/api/v4/stock/symbols', 15000);
+    const rows = Array.isArray(response)
+      ? response
+      : Array.isArray(response?.data?.list)
+        ? response.data.list
+        : [];
+    for (const raw of rows) {
+      const symbol = String(raw?.symbol || '').trim().toUpperCase();
+      if (!symbol) continue;
+      const assetType = String(raw?.asset_type || '').trim().toUpperCase();
+      const category = String(raw?.category || '').trim().toUpperCase();
+      const exchange = String(raw?.exchange || '').trim().toLowerCase();
+      const stockFilter = assetType === 'ETF' || category === 'ETF'
+        ? 'ETFs'
+        : category === 'PFD'
+          ? 'Preferred'
+          : category === 'ADRC' || category === 'ADR'
+            ? 'ADR'
+            : category === 'ETV'
+              ? 'ETV'
+              : category === 'ETS'
+                ? 'ETS'
+                : category === 'ETN'
+                  ? 'ETN'
+                  : category === 'FUND'
+                    ? 'Funds'
+                    : 'U.S. stock';
+      add(raw, 'Spot', symbol, symbol, String(raw?.quote_currency || 'USD'), {
+        fullName: raw?.symbol_desc || symbol,
+        logoUrl: raw?.icon_link || providerLogo('GATEIO'),
+        status: raw?.trade_status || 'open',
+      }, { group: 'TradFi', subcategory: 'Stocks', filters: [stockFilter, exchange ? exchange.toUpperCase() : 'ALL'] });
+    }
+    console.log('[SIRE GATEIO] Stocks: ' + rows.length);
+  } catch (e) { console.warn('[SIRE GATEIO] Stocks failed:', e); }
+
+  // Gate TradFi CFD categories and symbols provide the exchange's actual
+  // Forex/commodities/indices/stock CFD hierarchy where available.
+  try {
+    const catResponse = await getJson('https://api.gateio.ws/api/v4/tradfi/symbols/categories', 15000);
+    const catRows = Array.isArray(catResponse)
+      ? catResponse
+      : Array.isArray(catResponse?.data?.list)
+        ? catResponse.data.list
+        : [];
+    const categoryNames = new Map<string, string>();
+    for (const raw of catRows) {
+      const id = String(raw?.category_id ?? '').trim();
+      const name = String(raw?.category_name || '').trim();
+      if (id && name) categoryNames.set(id, name);
+    }
+
+    const response = await getJson('https://api.gateio.ws/api/v4/tradfi/symbols', 15000);
+    const rows = Array.isArray(response)
+      ? response
+      : Array.isArray(response?.data?.list)
+        ? response.data.list
+        : [];
+    const normalizeTradfi = (name: string) => {
+      const n = name.toLowerCase();
+      if (n.includes('forex') || n.includes('外汇') || n.includes('currency')) return 'Forex';
+      if (n.includes('commodity') || n.includes('大宗')) return 'Commodities';
+      if (n.includes('metal') || n.includes('金属')) return 'Metals';
+      if (n.includes('index') || n.includes('指数')) return 'Indices';
+      if (n.includes('stock')) return 'Stocks';
+      return name || 'Other';
+    };
+    for (const raw of rows) {
+      const symbol = String(raw?.symbol || '').trim().toUpperCase();
+      if (!symbol) continue;
+      const categoryName = categoryNames.get(String(raw?.category_id ?? '').trim()) || String(raw?.category || '').trim();
+      const filter = normalizeTradfi(categoryName);
+      add(raw, 'TradFi', symbol, symbol, 'USD', {
+        fullName: raw?.symbol_desc || symbol,
+        logoUrl: raw?.icon_link || providerLogo('GATEIO'),
+        status: raw?.status || 'open',
+      }, { group: 'TradFi', subcategory: 'CFD', filters: [filter] });
+    }
+    console.log('[SIRE GATEIO] TradFi CFD: ' + rows.length);
+  } catch (e) { console.warn('[SIRE GATEIO] TradFi failed:', e); }
 
   console.log('[SIRE GATEIO] COMPLETE', JSON.stringify({
     total: out.length,
-    spot: out.filter(x => x.marketType === 'Spot').length,
+    spot: out.filter(x => x.marketType === 'Spot' && x.marketGroup === 'Crypto').length,
+    margin: out.filter(x => x.marketType === 'Margin').length,
     perpetuals: out.filter(x => x.marketType === 'Perpetuals').length,
     futures: out.filter(x => x.marketType === 'Futures').length,
     options: out.filter(x => x.marketType === 'Options').length,
+    stocks: out.filter(x => x.marketSubcategory === 'Stocks').length,
+    tradfi: out.filter(x => x.marketGroup === 'TradFi').length,
   }));
   return out;
 }
