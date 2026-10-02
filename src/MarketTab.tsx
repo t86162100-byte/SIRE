@@ -149,7 +149,7 @@ const exchangeDisplayNames: Record<string, string> = {
   XT: 'XT.COM', DEEPCOIN: 'Deepcoin', TOOBIT: 'Toobit', WEEX: 'WEEX', BITUNIX: 'Bitunix', BLOFIN: 'BloFin',
   COINCATCH: 'CoinCatch', ZOOMEX: 'Zoomex', BTCC: 'BTCC', DIGIFINEX: 'DigiFinex', COINSTORE: 'Coinstore',
   PROBIT: 'ProBit', POLONIEX: 'Poloniex', COINDCX: 'CoinDCX', BITHUMB: 'Bithumb', UPBIT: 'Upbit', PIONEX: 'Pionex',
-  CRYPTOCOM: 'Crypto.com', BITVAVO: 'Bitvavo', BITSO: 'Bitso', BITKUB: 'Bitkub', POLONIEX: 'Poloniex',
+  CRYPTOCOM: 'Crypto.com', BITVAVO: 'Bitvavo', BITSO: 'Bitso', BITKUB: 'Bitkub',
   WOOX: 'WOO X', HYPERLIQUID: 'Hyperliquid', OANDA: 'OANDA',
 };
 
