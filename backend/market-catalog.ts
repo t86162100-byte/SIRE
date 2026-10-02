@@ -3799,7 +3799,19 @@ export async function getUnifiedMarketCatalogue(fetchDeriv: () => Promise<any[]>
       ['CME', cme()],
       // Crypto market discovery is owned exclusively by the CCXT global universe.
       ['OANDA', oanda()],
+      // Onchain venues remain part of the same shared instrument universe.
+      ['UNISWAP', uniswap()],
+      ['CURVE', curve()],
       ['PANCAKESWAP', pancakeswap()],
+      ['SUSHISWAP', sushi()],
+      ['RAYDIUM', raydium()],
+      ['JUPITER', jupiter()],
+      ['ORCA', orca()],
+      ['AERODROME', aerodrome()],
+      ['TRADERJOE', traderJoe()],
+      ['ONEINCH', oneInch()],
+      ['COWSWAP', cowSwap()],
+      ['BALANCER', balancer()],
     ];
     const results = await Promise.allSettled(
       providers.map(([provider, promise]) =>
