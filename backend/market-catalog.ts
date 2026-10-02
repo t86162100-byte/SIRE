@@ -3691,7 +3691,6 @@ export async function getStandaloneMarketProviderCatalogue(
     case 'WEEX': return weex();
     case 'BITUNIX': return bitunix();
     case 'BLOFIN': return blofin();
-    case 'BITMART': return bitmart();
     case 'BLANK': return blank();
     case 'PHEMEX': return phemex();
     case 'LBANK': return lbank();
@@ -3769,7 +3768,6 @@ export async function getUnifiedMarketCatalogue(fetchDeriv: () => Promise<any[]>
       ['BITUNIX', bitunix()],
       ['BLOFIN', blofin()],
       ['LBANK', lbank()],
-      [ bitmart()],
       ['PHEMEX', phemex()],
       ['COINCATCH', coincatch()],
       ['ZOOMEX', zoomex()],
