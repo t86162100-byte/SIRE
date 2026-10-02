@@ -3,6 +3,7 @@ import { createLinkGroup, type LinkGroup } from 'openalgo-charts';
 import { Search } from 'lucide-react';
 import ResearchLab from './ResearchLab';
 import HomeView from './HomeView';
+import MarketTab from './MarketTab';
 import FinancialChart from './FinancialChart';
 import { fetchDerivInstruments, type DerivInstrument } from './derivMarketData';
 import { fetchBinanceBrowserCatalogue, fetchBinanceLiveQuotes, fetchBinanceMarketMetadata, createBinanceCatalogueLiveFeed } from './binanceMarketData';
@@ -160,6 +161,7 @@ export default function App() {
   const [instrumentSearchMode, setInstrumentSearchMode] = useState<'main' | 'multi'>('main');
   const [researchLabOpen, setResearchLabOpen] = useState(false);
   const [homeOpen, setHomeOpen] = useState(false);
+  const [marketOpen, setMarketOpen] = useState(false);
   const [chartLayout, setChartLayout] = useState<1 | 2>(1);
   const [activeChartIndex, setActiveChartIndex] = useState(0);
   const [linked, setLinked] = useState(false);
@@ -867,6 +869,17 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    const openMarket = () => { setMarketOpen(true); setHomeOpen(false); };
+    const closeMarket = () => setMarketOpen(false);
+    window.addEventListener('sire:open-market', openMarket);
+    window.addEventListener('sire:close-market', closeMarket);
+    return () => {
+      window.removeEventListener('sire:open-market', openMarket);
+      window.removeEventListener('sire:close-market', closeMarket);
+    };
+  }, []);
+
+  useEffect(() => {
     const openMultiChart = () => setMultiChartOpen(true);
     window.addEventListener('sire:open-multichart', openMultiChart);
     return () => window.removeEventListener('sire:open-multichart', openMultiChart);
@@ -1028,6 +1041,16 @@ export default function App() {
   };
   if (homeOpen) {
     return <HomeView instruments={liveInstruments} onSelectInstrument={item => { const match = liveInstruments.find(candidate => candidate.id === item.id); if (match) selectInstrument(match); }} />;
+  }
+
+  if (marketOpen) {
+    return <main className="sire-market-root"><MarketTab instruments={liveInstruments} onSelectInstrument={item => {
+      const match = liveInstruments.find(candidate => candidate.id === item.id);
+      if (match) {
+        selectInstrument(match);
+        window.dispatchEvent(new CustomEvent('sire:tab-changed', { detail: { tab: 'trade' } }));
+      }
+    }} /></main>;
   }
 
   return <main className={`native-terminal-shell${researchLabOpen ? ' sire-research-open' : ''}`}>
