@@ -355,66 +355,112 @@
   border-top:1px solid #181818;
   border-bottom:1px solid #181818;
 }
-.sire-market-viewbar{
+.sire-market-viewbar,
+.sire-market-majorbar,
+.sire-market-typebar{
   width:100%;
-  overflow:hidden;
+  min-width:0;
 }
+.sire-market-viewbar{
+  overflow-x:auto;
+  overflow-y:hidden;
+  scrollbar-width:none;
+}
+.sire-market-viewbar::-webkit-scrollbar,
+.sire-market-major-scroll::-webkit-scrollbar,
+.sire-market-type-scroll::-webkit-scrollbar{display:none}
 .sire-market-view-chips{
+  width:max-content;
+  min-width:100%;
+  display:flex;
+  flex-wrap:nowrap;
+  align-items:center;
   gap:4px;
   padding:0 0 2px;
 }
 .sire-market-view-chips button{
+  flex:0 0 auto;
   height:28px;
   padding:0 10px;
   border-radius:5px;
+  white-space:nowrap;
 }
-.sire-market-filterbar{
-  min-height:30px;
-  margin-top:7px;
+.sire-market-majorbar{
+  margin-top:6px;
+  overflow-x:auto;
+  overflow-y:hidden;
+  scrollbar-width:none;
+}
+.sire-market-major-scroll{
+  width:max-content;
+  min-width:100%;
   display:flex;
   align-items:center;
-  gap:7px;
+  gap:3px;
+}
+.sire-market-major-scroll button{
+  flex:0 0 auto;
+  height:30px;
+  padding:0 11px;
+  border:0;
+  border-radius:5px;
+  background:transparent;
+  color:#777;
+  font-size:10px;
+  font-weight:700;
+  cursor:pointer;
+  white-space:nowrap;
+}
+.sire-market-major-scroll button:hover{color:#ddd;background:#0b0b0b}
+.sire-market-major-scroll button.active{
+  background:#fff;
+  color:#000;
+}
+.sire-market-typebar{
+  margin-top:5px;
+  display:flex;
+  align-items:center;
+  gap:6px;
   min-width:0;
 }
-.sire-market-context{
-  height:28px;
-  display:inline-flex;
+.sire-market-type-scroll{
+  flex:1 1 auto;
+  min-width:0;
+  display:flex;
   align-items:center;
-  gap:7px;
-  padding:0 9px;
-  border:1px solid #1f1f1f;
+  gap:4px;
+  overflow-x:auto;
+  overflow-y:hidden;
+  scrollbar-width:none;
+}
+.sire-market-type-scroll button{
+  flex:0 0 auto;
+  height:28px;
+  padding:0 10px;
+  border:1px solid #202020;
   border-radius:5px;
   background:#070707;
   color:#777;
-  cursor:pointer;
-}
-.sire-market-context span{
-  color:#444;
-  font-size:7px;
-  font-weight:800;
-  letter-spacing:.12em;
-}
-.sire-market-context b{
-  color:#ddd;
-  font-size:10px;
-  font-weight:700;
-}
-.sire-market-filter-separator{color:#383838;font-size:11px}
-.sire-market-active-filter{
-  max-width:220px;
-  overflow:hidden;
-  text-overflow:ellipsis;
-  white-space:nowrap;
-  color:#777;
   font-size:9px;
+  font-weight:700;
+  cursor:pointer;
+  white-space:nowrap;
+}
+.sire-market-type-scroll button:hover{color:#ddd;border-color:#333}
+.sire-market-type-scroll button.active{
+  background:#fff;
+  color:#000;
+  border-color:#fff;
 }
 .sire-market-more-filter{
+  flex:0 0 auto;
   margin-left:auto;
   height:28px;
   display:inline-flex;
   align-items:center;
+  justify-content:center;
   gap:6px;
-  padding:0 10px;
+  padding:0 9px;
   border:1px solid #292929;
   border-radius:5px;
   background:#fff;
@@ -660,11 +706,13 @@
   .sire-market-filter-button{width:38px;padding:0;justify-content:center}
   .sire-market-filter-button span{display:none}
   .sire-market-rail{padding:6px 0 7px}
-  .sire-market-filterbar{gap:5px}
-  .sire-market-context{padding:0 7px}
-  .sire-market-context span{display:none}
-  .sire-market-active-filter{max-width:100px}
-  .sire-market-more-filter{padding:0 8px}
+  .sire-market-view-chips{min-width:max-content}
+  .sire-market-major-scroll{min-width:max-content}
+  .sire-market-major-scroll button{height:29px;padding:0 10px}
+  .sire-market-typebar{margin-top:4px}
+  .sire-market-type-scroll{min-width:0}
+  .sire-market-type-scroll button{height:27px;padding:0 9px}
+  .sire-market-more-filter{width:34px;padding:0}
   .sire-market-more-filter span{display:none}
   .sire-market-list{height:calc(100% - 295px);min-height:180px}
   .sire-market-list-head{display:none}
