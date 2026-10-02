@@ -1,5 +1,5 @@
 import { useDeferredValue, useEffect, useMemo, useState } from 'react';
-import { Search, SlidersHorizontal, Star, X } from 'lucide-react';
+import { Search, SlidersHorizontal, X } from 'lucide-react';
 
 type MarketInstrument = {
   id: string;
@@ -141,6 +141,30 @@ const getChange = (item: MarketInstrument) => {
   return Number.isFinite(n) ? n : undefined;
 };
 
+const getExchangeName = (item: MarketInstrument) =>
+  String(item.providerLabel || item.provider || item.exchange || 'Unknown');
+
+const getExchangeLogo = (item: MarketInstrument) => {
+  const explicit = String(
+    (item as any).exchangeLogoUrl ||
+    (item as any).providerLogoUrl ||
+    (item as any).exchangeLogo ||
+    (item as any).providerLogo ||
+    ''
+  ).trim();
+  if (explicit) return explicit;
+
+  const name = getExchangeName(item).toLowerCase();
+  if (name.includes('binance')) return 'https://assets.coingecko.com/markets/images/52/small/binance.jpg';
+  if (name.includes('bitget')) return 'https://assets.coingecko.com/markets/images/540/small/bitget.png';
+  if (name.includes('gate')) return 'https://assets.coingecko.com/markets/images/60/small/gate-io.jpg';
+  if (name.includes('deriv')) return '/deriv-logo.svg';
+  return '';
+};
+
+const getExchangeInitials = (name: string) =>
+  name.split(/\\s+/).filter(Boolean).slice(0, 2).map(part => part[0]).join('').toUpperCase() || '?';
+
 export default function MarketTab({ instruments, onSelectInstrument }: Props) {
   const [marketClass, setMarketClass] = useState<ClassName>('Crypto');
   const [branch, setBranch] = useState('Spot');
@@ -245,11 +269,6 @@ export default function MarketTab({ instruments, onSelectInstrument }: Props) {
       </div>
     </div>
 
-    <div className="sire-market-results-head">
-      <div><strong>{view === 'All' ? branch : view}</strong><span>{filtered.length.toLocaleString()} instruments</span></div>
-      <span>{marketClass}{branch !== 'All' ? ' · ' + branch : ''}{leaf !== 'All' ? ' · ' + leaf : ''}</span>
-    </div>
-
     <div className="sire-market-list">
       <div className="sire-market-list-head"><span>ASSET</span><span>MARKET</span><span>EXCHANGE</span><span>PRICE</span><span>24H</span><span>VOLUME</span></div>
       {filtered.length === 0 ? <div className="sire-market-empty"><strong>No instruments in this view</strong><span>Try another market class, instrument, or filter.</span></div> :
@@ -257,12 +276,23 @@ export default function MarketTab({ instruments, onSelectInstrument }: Props) {
           const change = getChange(item);
           return <div key={item.id} className="sire-market-row" role="button" tabIndex={0} onClick={() => onSelectInstrument(item)} onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onSelectInstrument(item); } }}>
             <span className="sire-market-asset">
-              <button type="button" className="sire-market-star" aria-label={favorites.has(item.id) ? 'Remove favorite' : 'Add favorite'} onClick={e => { e.stopPropagation(); toggleFavorite(item.id); }}>{favorites.has(item.id) ? <Star size={14} fill="currentColor"/> : <Star size={14}/>}</button>
               <span className="sire-market-logo"><img src={item.logoUrl || '/sire-logo.svg'} alt="" onError={e => { e.currentTarget.onerror = null; e.currentTarget.src = '/sire-logo.svg'; }}/></span>
-              <span><b>{String(item.displaySymbol || item.symbol).toUpperCase()}</b><small>{String(item.name || item.symbol).toUpperCase()}</small></span>
+              <span className="sire-market-asset-copy">
+                <b>{String(item.displaySymbol || item.symbol).toUpperCase()}</b>
+                <small>{String(item.name || item.symbol).toUpperCase()}</small>
+                <span className="sire-market-mobile-exchange">
+                  {getExchangeLogo(item) ? <img src={getExchangeLogo(item)} alt="" onError={e => { e.currentTarget.style.display = 'none'; }} /> : <i>{getExchangeInitials(getExchangeName(item))}</i>}
+                  <em>{getExchangeName(item)}</em>
+                </span>
+              </span>
             </span>
             <span className="sire-market-type">{normalizeType(item)}</span>
-            <span className="sire-market-exchange">{String(item.providerLabel || item.provider || item.exchange || '—')}</span>
+            <span className="sire-market-exchange">
+              <span className="sire-market-exchange-inner">
+                {getExchangeLogo(item) ? <img src={getExchangeLogo(item)} alt="" onError={e => { e.currentTarget.style.display = 'none'; }} /> : <i>{getExchangeInitials(getExchangeName(item))}</i>}
+                <b>{getExchangeName(item)}</b>
+              </span>
+            </span>
             <span className="sire-market-price">{formatPrice(item.price)}</span>
             <span className={change === undefined ? 'sire-market-change neutral' : change >= 0 ? 'sire-market-change positive' : 'sire-market-change negative'}>{change === undefined ? '—' : (change >= 0 ? '+' : '') + change.toFixed(2) + '%'}</span>
             <span className="sire-market-volume">{formatCompact(item.volume24h)}</span>
