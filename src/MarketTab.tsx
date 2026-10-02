@@ -253,7 +253,7 @@ export default function MarketTab({ instruments, onSelectInstrument }: Props) {
     <div className="sire-market-rail">
       <div className="sire-market-viewbar">
         <div className="sire-market-chips sire-market-view-chips">
-          {(['All','Favorites','Hot','New','Gainers','Losers','Volume','Market Cap'] as ViewName[]).map(item => <button key={item} className={view === item ? 'active' : ''} onClick={() => chooseView(item)}>{item === 'Favorites' && <Star size={13}/>} {item}</button>)}
+          {(['All','Favorites','Hot','New','Gainers','Losers','Volume','Market Cap'] as ViewName[]).map(item => <button key={item} className={view === item ? 'active' : ''} onClick={() => chooseView(item)}>{item}</button>)}
         </div>
       </div>
 
