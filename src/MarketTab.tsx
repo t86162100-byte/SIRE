@@ -275,7 +275,7 @@ export default function MarketTab({ instruments, onSelectInstrument }: Props) {
       {filtered.length === 0 ? <div className="sire-market-empty"><strong>No instruments in this view</strong><span>Try another market class, instrument, or filter.</span></div> :
         filtered.slice(0, 500).map(item => {
           const change = getChange(item);
-          return <button key={item.id} className="sire-market-row" onClick={() => onSelectInstrument(item)}>
+          return <div key={item.id} className="sire-market-row" role="button" tabIndex={0} onClick={() => onSelectInstrument(item)} onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onSelectInstrument(item); } }}>
             <span className="sire-market-asset">
               <button type="button" className="sire-market-star" aria-label={favorites.has(item.id) ? 'Remove favorite' : 'Add favorite'} onClick={e => { e.stopPropagation(); toggleFavorite(item.id); }}>{favorites.has(item.id) ? <Star size={14} fill="currentColor"/> : <Star size={14}/>}</button>
               <span className="sire-market-logo"><img src={item.logoUrl || '/sire-logo.svg'} alt="" onError={e => { e.currentTarget.onerror = null; e.currentTarget.src = '/sire-logo.svg'; }}/></span>
@@ -286,7 +286,7 @@ export default function MarketTab({ instruments, onSelectInstrument }: Props) {
             <span className="sire-market-price">{formatPrice(item.price)}</span>
             <span className={change === undefined ? 'sire-market-change neutral' : change >= 0 ? 'sire-market-change positive' : 'sire-market-change negative'}>{change === undefined ? '—' : (change >= 0 ? '+' : '') + change.toFixed(2) + '%'}</span>
             <span className="sire-market-volume">{formatCompact(item.volume24h)}</span>
-          </button>;
+          </div>;
         })}
     </div>
 
