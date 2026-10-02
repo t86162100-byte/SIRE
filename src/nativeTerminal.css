@@ -351,70 +351,78 @@
 .sire-market-rail{
   width:min(1180px,100%);
   margin:0 auto;
-  padding:15px 0 12px;
+  padding:7px 0 8px;
   border-top:1px solid #181818;
   border-bottom:1px solid #181818;
 }
-.sire-market-row-label{
-  margin:0 0 8px;
-  color:#555;
-  font-size:8px;
-  font-weight:800;
-  letter-spacing:.17em;
+.sire-market-viewbar{
+  width:100%;
+  overflow:hidden;
 }
-.sire-market-chips{
+.sire-market-view-chips{
+  gap:4px;
+  padding:0 0 2px;
+}
+.sire-market-view-chips button{
+  height:28px;
+  padding:0 10px;
+  border-radius:5px;
+}
+.sire-market-filterbar{
+  min-height:30px;
+  margin-top:7px;
   display:flex;
-  gap:6px;
-  overflow-x:auto;
-  scrollbar-width:none;
-  padding:1px 0 5px;
+  align-items:center;
+  gap:7px;
+  min-width:0;
 }
-.sire-market-chips::-webkit-scrollbar{display:none}
-.sire-market-chips button{
-  flex:0 0 auto;
-  height:30px;
-  padding:0 12px;
-  border:1px solid #202020;
+.sire-market-context{
+  height:28px;
+  display:inline-flex;
+  align-items:center;
+  gap:7px;
+  padding:0 9px;
+  border:1px solid #1f1f1f;
   border-radius:5px;
   background:#070707;
-  color:#898989;
-  font:700 10px/1 Arial,sans-serif;
+  color:#777;
   cursor:pointer;
-  white-space:nowrap;
 }
-.sire-market-chips button:hover{color:#fff;border-color:#404040}
-.sire-market-chips button.active{
-  border-color:#fff;
+.sire-market-context span{
+  color:#444;
+  font-size:7px;
+  font-weight:800;
+  letter-spacing:.12em;
+}
+.sire-market-context b{
+  color:#ddd;
+  font-size:10px;
+  font-weight:700;
+}
+.sire-market-filter-separator{color:#383838;font-size:11px}
+.sire-market-active-filter{
+  max-width:220px;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+  color:#777;
+  font-size:9px;
+}
+.sire-market-more-filter{
+  margin-left:auto;
+  height:28px;
+  display:inline-flex;
+  align-items:center;
+  gap:6px;
+  padding:0 10px;
+  border:1px solid #292929;
+  border-radius:5px;
   background:#fff;
   color:#000;
+  font-size:9px;
+  font-weight:800;
+  cursor:pointer;
 }
-.sire-market-class-chips button{
-  height:34px;
-  padding:0 16px;
-  border-radius:6px;
-  font-size:11px;
-}
-.sire-market-secondary{
-  margin-top:8px;
-  padding:8px 0 2px 12px;
-  border-left:1px solid #292929;
-}
-.sire-market-group-chips button{
-  height:27px;
-  background:#0b0b0b;
-}
-.sire-market-leaf-chips button{
-  height:28px;
-  color:#707070;
-  border-color:#191919;
-}
-.sire-market-view-divider{
-  height:1px;
-  background:#181818;
-  margin:11px 0 12px;
-}
-.sire-market-view-chips button{height:27px}
-.sire-market-view-chips svg{vertical-align:-2px}
 .sire-market-results-head{
   width:min(1180px,100%);
   margin:0 auto;
@@ -651,8 +659,14 @@
   .sire-market-search{width:auto;flex:1}
   .sire-market-filter-button{width:38px;padding:0;justify-content:center}
   .sire-market-filter-button span{display:none}
-  .sire-market-rail{padding-top:12px}
-  .sire-market-list{height:calc(100% - 350px);min-height:180px}
+  .sire-market-rail{padding:6px 0 7px}
+  .sire-market-filterbar{gap:5px}
+  .sire-market-context{padding:0 7px}
+  .sire-market-context span{display:none}
+  .sire-market-active-filter{max-width:100px}
+  .sire-market-more-filter{padding:0 8px}
+  .sire-market-more-filter span{display:none}
+  .sire-market-list{height:calc(100% - 295px);min-height:180px}
   .sire-market-list-head{display:none}
   .sire-market-row{
     grid-template-columns:minmax(0,1fr) auto;
