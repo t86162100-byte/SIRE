@@ -3806,7 +3806,7 @@ export async function getUnifiedMarketCatalogue(fetchDeriv: () => Promise<any[]>
     ];
     const results = await Promise.allSettled(
       providers.map(([provider, promise]) =>
-        withProviderTimeout(provider, promise, provider === 'DERIV' ? 10000 : provider === 'CME' || provider === 'NYSEAMERICAN' || provider === 'GEMINI' || provider === 'CRYPTOCOM' || provider === 'BITFINEX' || provider === 'BITSTAMP' ? 120000 : 20000)
+        withProviderTimeout(provider, promise, provider === 'DERIV' ? 20000 : ['BINANCE','BYBIT','OKX','BITGET','GATEIO','KUCOIN','MEXC','COINBASE','KRAKEN'].includes(provider) ? 60000 : provider === 'CME' || provider === 'NYSEAMERICAN' || provider === 'GEMINI' || provider === 'CRYPTOCOM' || provider === 'BITFINEX' || provider === 'BITSTAMP' ? 120000 : 30000)
       )
     );
     results.forEach((result, index) => {
