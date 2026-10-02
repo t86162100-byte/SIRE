@@ -120,6 +120,19 @@ const api: LoadingApi = {
 (window as Window & { SIRELoading?: LoadingApi }).SIRELoading = api;
 
 function install() {
+  window.addEventListener('sire:tab-changed', event => {
+    const tab = (event as CustomEvent).detail?.tab;
+    if (tab === 'market' || tab === 'home' || tab === 'discover' || tab === 'portfolio') {
+      manualLoading = false;
+      manualMessage = '';
+      wasLoading = false;
+      finishing = false;
+      if (finishTimer !== undefined) { window.clearTimeout(finishTimer); finishTimer = undefined; }
+      if (minimumLoadTimer !== undefined) { window.clearTimeout(minimumLoadTimer); minimumLoadTimer = undefined; }
+      const current = document.getElementById(OVERLAY_ID);
+      current?.classList.remove('is-visible', 'is-complete', SHOW_CLASS);
+    }
+  });
   installStyles();
   ensureOverlay();
   scheduleSync();
