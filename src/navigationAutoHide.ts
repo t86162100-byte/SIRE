@@ -120,9 +120,8 @@ function hideIfInactive() {
 function isSwipeSurface(target: EventTarget | null) {
   const el = target as HTMLElement | null;
   if (!el) return false;
-  const quoteCard = el.closest('.sire-tab-quote .symbol-list .symbol-row');
   if (el.closest(`#${NAV_ID},#sire-glass-action-bar,input,textarea,select`)) return false;
-  if (el.closest('button') && !quoteCard) return false;
+  if (el.closest('button')) return false;
   return true;
 }
 
