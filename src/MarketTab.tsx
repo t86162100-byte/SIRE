@@ -163,7 +163,7 @@ const getExchangeLogo = (item: MarketInstrument) => {
 };
 
 const getExchangeInitials = (name: string) =>
-  name.split(/\\s+/).filter(Boolean).slice(0, 2).map(part => part[0]).join('').toUpperCase() || '?';
+  name.split(/\s+/).filter(Boolean).slice(0, 2).map(part => part[0]).join('').toUpperCase() || '?';
 
 export default function MarketTab({ instruments, onSelectInstrument }: Props) {
   const [marketClass, setMarketClass] = useState<ClassName>('Crypto');
