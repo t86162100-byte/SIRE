@@ -293,42 +293,16 @@
   min-height:100dvh;
   box-sizing:border-box;
   overflow:hidden;
-  padding:24px 24px 104px;
+  padding:12px 24px 104px;
   background:#000;
 }
-.sire-market-head{
+.sire-market-topbar{
   width:min(1180px,100%);
   margin:0 auto;
   display:flex;
-  align-items:flex-end;
-  justify-content:space-between;
-  gap:24px;
-  padding:4px 0 22px;
-}
-.sire-market-kicker{
-  color:#777;
-  font-size:10px;
-  font-weight:800;
-  letter-spacing:.24em;
-  margin-bottom:6px;
-}
-.sire-market-head h1{
-  margin:0;
-  font-size:30px;
-  line-height:1;
-  font-weight:800;
-  letter-spacing:-.055em;
-}
-.sire-market-head p{
-  margin:8px 0 0;
-  color:#6e6e6e;
-  font-size:11px;
-}
-.sire-market-head-actions{
-  display:flex;
   align-items:center;
   gap:8px;
-  min-width:0;
+  padding:0 0 12px;
 }
 .sire-market-search{
   width:min(340px,32vw);
@@ -464,7 +438,7 @@
 .sire-market-results-head span{white-space:nowrap}
 .sire-market-list{
   width:min(1180px,100%);
-  height:calc(100% - 305px);
+  height:calc(100% - 250px);
   min-height:180px;
   margin:0 auto;
   overflow:auto;
@@ -672,15 +646,13 @@
 }
 .sire-market-drawer-footer button.primary{background:#fff;color:#000;border-color:#fff}
 @media(max-width:760px){
-  .sire-market-screen{padding:15px 13px 96px}
-  .sire-market-head{align-items:flex-start;flex-direction:column;gap:13px;padding-bottom:16px}
-  .sire-market-head h1{font-size:27px}
-  .sire-market-head-actions{width:100%}
+  .sire-market-screen{padding:10px 13px 96px}
+  .sire-market-topbar{padding-bottom:9px}
   .sire-market-search{width:auto;flex:1}
   .sire-market-filter-button{width:38px;padding:0;justify-content:center}
   .sire-market-filter-button span{display:none}
   .sire-market-rail{padding-top:12px}
-  .sire-market-list{height:calc(100% - 405px);min-height:180px}
+  .sire-market-list{height:calc(100% - 350px);min-height:180px}
   .sire-market-list-head{display:none}
   .sire-market-row{
     grid-template-columns:minmax(0,1fr) auto;
