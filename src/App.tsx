@@ -3,6 +3,7 @@ import { createLinkGroup, type LinkGroup } from 'openalgo-charts';
 import { Search } from 'lucide-react';
 import ResearchLab from './ResearchLab';
 import FinancialChart from './FinancialChart';
+import MarketTab from './MarketTab';
 import { normalizeDerivInstrument, sortDerivInstruments, type DerivInstrument } from './derivMarketData';
 import { SireErrorScreen } from './SireErrorBoundary';
 import './nativeTerminal.css';
@@ -28,6 +29,7 @@ export default function App() {
   const [multiChartInstrument, setMultiChartInstrument] = useState('');
   const [multiChartPosition, setMultiChartPosition] = useState<'up' | 'down' | 'left' | 'right'>('right');
   const [chartSymbols, setChartSymbols] = useState<string[]>([]);
+  const [activeWorkspace, setActiveWorkspace] = useState<'chart' | 'market'>('chart');
   const linkGroupRef = useRef<LinkGroup | null>(null);
 
 
@@ -246,7 +248,12 @@ export default function App() {
     setSelected(instruments.find(item => item.symbol === chartSymbols[1]) || selected);
     setMultiChartOpen(false);
   };
-  return <main className={`native-terminal-shell${researchLabOpen ? ' sire-research-open' : ''}`}>
+  return <main className={'native-terminal-shell' + (researchLabOpen ? ' sire-research-open' : '')}>
+    <nav className="sire-workspace-tabs" aria-label="SIRE workspace">
+      <button type="button" className={activeWorkspace === 'chart' ? 'active' : ''} onClick={() => setActiveWorkspace('chart')}>Chart</button>
+      <button type="button" className={activeWorkspace === 'market' ? 'active' : ''} onClick={() => setActiveWorkspace('market')}>Market</button>
+    </nav>
+    {activeWorkspace === 'market' ? <MarketTab instruments={instruments} onSelectInstrument={item => { setSelected(item); setChartSymbols(current => current.length ? [item.symbol, ...current.slice(1)] : [item.symbol]); setActiveWorkspace('chart'); }} /> : <>
     <div className="native-terminal-body">
       <aside className="native-symbol-sidebar"><div className="sidebar-search"><Search size={15} /><input value={search} onChange={event => setSearch(event.target.value)} placeholder="Search" /></div><div className="sidebar-meta"><span>{derivLoading ? "LOADING DERIV" : derivError ? "DERIV ERROR" : "INSTRUMENTS"}</span><b>{instruments.length}</b></div>{derivError && <div className="sire-deriv-error">{derivError}</div>}<div className="native-symbol-list">{filtered.map(item => <button key={item.symbol} className={selected?.symbol === item.symbol ? 'active' : ''} onClick={() => selectInstrument(item)}><span><b>{item.name}</b><small>{item.symbol}</small></span><i>{item.exchangeOpen === 0 ? 'OFF' : 'LIVE'}</i></button>)}</div></aside>
       <section className="native-chart-panel">
@@ -298,6 +305,6 @@ export default function App() {
           </div>
         </div>}      </section>
     </div>
-    {researchLabOpen && <ResearchLab symbol={chartSymbols[activeChartIndex] || selected?.symbol || ''} instruments={instruments.map(item => ({ symbol: item.symbol, name: item.name }))} onClose={() => setResearchLabOpen(false)} onSelectInstrument={symbol => { const item = instruments.find(candidate => candidate.symbol === symbol); if (item) selectInstrument(item); }} />}
+    </>}\n    {researchLabOpen && <ResearchLab symbol={chartSymbols[activeChartIndex] || selected?.symbol || ''} instruments={instruments.map(item => ({ symbol: item.symbol, name: item.name }))} onClose={() => setResearchLabOpen(false)} onSelectInstrument={symbol => { const item = instruments.find(candidate => candidate.symbol === symbol); if (item) selectInstrument(item); }} />}
   </main>;
 }
