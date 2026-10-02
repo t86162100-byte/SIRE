@@ -224,7 +224,6 @@ export default function MarketTab({ instruments, onSelectInstrument }: Props) {
   return <section className="sire-market-screen">
     <div className="sire-market-topbar">
       <label className="sire-market-search"><Search size={17}/><input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search markets" /><kbd>/</kbd></label>
-      <button type="button" className="sire-market-filter-button" onClick={() => setFiltersOpen(true)}><SlidersHorizontal size={17}/><span>Filters</span></button>
     </div>
 
     <div className="sire-market-rail">
