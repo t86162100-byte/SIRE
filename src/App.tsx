@@ -445,7 +445,17 @@ export default function App() {
             throw new Error(provider + ': ' + (payload?.error || 'provider catalogue unavailable'));
           }
           console.info('[SIRE MARKET PROVIDER] loaded', { provider, count: payload.instruments.length });
-          return payload.instruments as Instrument[];
+          const providerItems = payload.instruments as Instrument[];
+          // Publish each provider as soon as it returns instead of waiting for the
+          // slowest exchange in the global Promise.allSettled batch.
+          if (!cancelled && providerItems.length) {
+            setInstruments(current => {
+              const existing = new Set(current.map(item => item.id));
+              const additions = providerItems.filter(item => item?.id && !existing.has(item.id));
+              return additions.length ? current.concat(additions) : current;
+            });
+          }
+          return providerItems;
         } catch (error) {
           const message = error instanceof DOMException && error.name === 'AbortError'
             ? provider + ': provider catalogue timed out after 15s'
