@@ -686,7 +686,8 @@ export default function HomeView({ instruments, onSelectInstrument, videoSrc = '
 
   const marketRows = useMemo(() => {
     const q = marketSearch.trim().toLowerCase();
-    const combined = instruments
+    const source = [...instruments.filter(item => item.provider !== 'GATEIO'), ...gateioLiveUniverse];
+    const combined = source
       .filter(item => matchesSireMarketFilter(item, marketFilter))
       .filter(item => !q || `${item.displaySymbol || item.symbol} ${item.name || ''} ${item.providerLabel || item.provider || ''} ${item.marketType || ''}`.toLowerCase().includes(q))
       .filter(item => Number.isFinite(Number(item.price)) || item.price === undefined);
@@ -704,7 +705,7 @@ export default function HomeView({ instruments, onSelectInstrument, videoSrc = '
       }
     }
     return out.concat(others);
-  }, [instruments, marketFilter, marketSearch]);
+  }, [instruments, gateioLiveUniverse, marketFilter, marketSearch]);
   
   useEffect(() => {
     const ids = marketRows.slice(0, 7)
