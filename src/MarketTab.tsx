@@ -239,14 +239,6 @@ export default function MarketTab({ instruments, onSelectInstrument }: Props) {
             <button key={item} type="button" className={marketClass === item ? 'active' : ''} onClick={() => setClass(item)}>{item}</button>
           ))}
         </div>
-      </div>
-
-      <div className="sire-market-typebar">
-        <div className="sire-market-type-scroll">
-          {branchOptions.map(item => (
-            <button key={item} type="button" className={branch === item ? 'active' : ''} onClick={() => setBranchSafe(item)}>{item}</button>
-          ))}
-        </div>
         <button type="button" className="sire-market-more-filter" aria-label="Open market filters" onClick={() => setFiltersOpen(true)}>
           <SlidersHorizontal size={14}/><span>Filters</span>
         </button>
