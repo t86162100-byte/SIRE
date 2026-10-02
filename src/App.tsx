@@ -197,8 +197,7 @@ export default function App() {
       .join('|') + '||priority:' + bitgetPriorityIds.join('|')
   ), [instruments]);
 
-  useEffect(() => {
-    if (!instruments.some(item => item.provider === 'BITGET')) return;
+  useEffect(() => {    if (!instruments.some(item => item.provider === 'BITGET')) return;
     let cancelled = false;
     const refresh = async () => {
       const categories = ['SPOT', 'USDT-FUTURES', 'COIN-FUTURES', 'USDC-FUTURES'];
@@ -397,8 +396,7 @@ export default function App() {
       if (flushTimer !== null) window.clearTimeout(flushTimer);
       reconnectTimers.forEach(timer => window.clearTimeout(timer));
       pingTimers.forEach(timer => window.clearInterval(timer));
-      sockets.forEach(socket => socket.close());
-      pending.clear();
+      sockets.forEach(socket => socket.close());      pending.clear();
     };
   }, [bitgetSubscriptionSignature]);
 
@@ -430,43 +428,66 @@ export default function App() {
     let closeBinanceStream: (() => void) | null = null;
 
     const startup = async (): Promise<Instrument[]> => {
-      // The Market tab uses the same shared unified catalogue that powered the
-      // former Market workspace: every implemented exchange contributes to one
-      // instrument universe. Do not load exchanges as mutually exclusive views.
-      const controller = new AbortController();
-      const timer = window.setTimeout(() => controller.abort(), 180000);
-      try {
-        const response = await fetch('/api/sire/markets/catalog', {
-          cache: 'no-store',
-          headers: { 'Cache-Control': 'no-cache' },
-          signal: controller.signal,
-        });
-        const payload = await response.json().catch(() => null);
-        if (!response.ok || !payload?.ok || !Array.isArray(payload?.instruments)) {
-          throw new Error(payload?.error || 'Unified market catalogue unavailable.');
+      // Keep the recreated Market tab on the same per-provider data path that
+      // powered the old Market tab. This preserves each provider's full native
+      // catalogue/taxonomy instead of passing everything through the unified
+      // startup aggregator, which can drop slow providers before their catalogue
+      // reaches the UI.
+      const providers: MarketProvider[] = [
+        'BINGX','BITRUE','ASCENDEX','WHITEBIT','COINW','DERIV','BINANCE',
+        'COINBASE','KRAKEN','BYBIT','OKX','BITGET','GATEIO','KUCOIN','MEXC',
+        'CRYPTOCOM','BITFINEX','GEMINI','BITSTAMP','COINEX','HTX','BITTREX',
+        'BITMART','PHEMEX','BLANK','XT','DEEPCOIN','TOOBIT','WEEX','BITUNIX',
+        'BLOFIN','COINCATCH','ZOOMEX','BTCC','DIGIFINEX','COINSTORE','PROBIT',
+        'POLONIEX','COINDCX','POLYMARKET','KALSHI','OPINION','UNISWAP','CURVE',
+        'PANCAKESWAP','SUSHISWAP','RAYDIUM','JUPITER','ORCA','AERODROME',
+        'TRADERJOE','ONEINCH','COWSWAP','BALANCER',
+      ];
+      const fetchProvider = async (provider: MarketProvider) => {
+        const controller = new AbortController();
+        const timer = window.setTimeout(() => controller.abort(), 60000);
+        try {
+          const response = await fetch('/api/sire/markets/provider/' + encodeURIComponent(provider), {
+            cache: 'no-store',
+            headers: { 'Cache-Control': 'no-cache' },
+            signal: controller.signal,
+          });
+          const payload = await response.json().catch(() => null);
+          if (!response.ok || !payload?.ok || !Array.isArray(payload?.instruments)) {
+            throw new Error(payload?.error || ('Provider ' + provider + ' unavailable.'));
+          }
+          return payload.instruments as Instrument[];
+        } finally {
+          window.clearTimeout(timer);
         }
-        const catalogue = payload.instruments as Instrument[];
-        const seen = new Set<string>();
-        const unique = catalogue.filter(item => {
-          if (!item?.id || seen.has(item.id)) return false;
+      };
+
+      const settled = await Promise.allSettled(providers.map(fetchProvider));
+      const all: Instrument[] = [];
+      const seen = new Set<string>();
+      settled.forEach((result, index) => {
+        const provider = providers[index];
+        if (result.status === 'rejected') {
+          console.warn('[SIRE MARKET STARTUP] provider failed:', provider, result.reason);
+          return;
+        }
+        for (const item of result.value) {
+          if (!item?.id || seen.has(item.id)) continue;
           seen.add(item.id);
-          return true;
+          all.push(item);
+        }
+        console.info('[SIRE MARKET STARTUP] provider loaded', {
+          provider,
+          count: result.value.length,
         });
-        if (!unique.length) throw new Error('Unified market catalogue returned no instruments.');
-        console.info('[SIRE MARKET STARTUP] unified catalogue published', {
-          total: unique.length,
-          providers: payload.providers || [...new Set(unique.map(item => item.provider))],
-        });
-        if (!cancelled) setInstruments(unique);
-        return unique;
-      } catch (error) {
-        const message = error instanceof DOMException && error.name === 'AbortError'
-          ? 'Unified market catalogue timed out after 180s'
-          : (error instanceof Error ? error.message : String(error));
-        throw new Error(message);
-      } finally {
-        window.clearTimeout(timer);
-      }
+      });
+      if (!all.length) throw new Error('Market providers returned no instruments.');
+      console.info('[SIRE MARKET STARTUP] per-provider catalogue published', {
+        total: all.length,
+        providers: Array.from(new Set(all.map(item => item.provider))),
+      });
+      if (!cancelled) setInstruments(all);
+      return all;
     };
 
     // Binance live data starts immediately, but quotes are cached so a catalogue
@@ -597,8 +618,7 @@ export default function App() {
           body: JSON.stringify({ source: 'browser-start', total: 0, counts: {}, failures: {}, reportedAt: Date.now() }),
           keepalive: true,
         });
-        const browserItems = await fetchBinanceBrowserCatalogue();
-        // Render can receive HTTP 451 from Binance's derivatives REST endpoints.
+        const browserItems = await fetchBinanceBrowserCatalogue();        // Render can receive HTTP 451 from Binance's derivatives REST endpoints.
         // The live miniTicker streams still expose every actively trading contract,
         // so materialize those real symbols into the catalogue when exchangeInfo is blocked.
         const liveFallbackItems: any[] = [];
@@ -797,7 +817,6 @@ export default function App() {
       if (closeBinanceStream) closeBinanceStream();
     };
   }, []);
-
   useEffect(() => {
     if (!instruments.length) return;
     setChartSymbols(current => Array.from(
@@ -997,8 +1016,7 @@ export default function App() {
     setMultiChartOpen(false);
   };
   const makeSecondMainChart = () => {
-    if (!chartSymbols[1]) return;
-    setChartSymbols(current => [current[1], current[0] || current[1]]);
+    if (!chartSymbols[1]) return;    setChartSymbols(current => [current[1], current[0] || current[1]]);
     setActiveChartIndex(0);
     setSelected(chartableInstruments.find(item => item.symbol === chartSymbols[1]) || selected);
     setMultiChartOpen(false);
