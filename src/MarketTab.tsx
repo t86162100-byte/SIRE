@@ -232,12 +232,24 @@ export default function MarketTab({ instruments, onSelectInstrument }: Props) {
           {(['All','Favorites','Hot','New','Gainers','Losers','Volume','Market Cap'] as ViewName[]).map(item => <button key={item} className={view === item ? 'active' : ''} onClick={() => chooseView(item)}>{item === 'Favorites' && <Star size={13}/>} {item}</button>)}
         </div>
       </div>
-      <div className="sire-market-filterbar">
-        <button type="button" className="sire-market-context" onClick={() => setFiltersOpen(true)}><span>MARKET</span><b>{marketClass}</b></button>
-        <span className="sire-market-filter-separator">/</span>
-        <button type="button" className="sire-market-context" onClick={() => setFiltersOpen(true)}><span>TYPE</span><b>{branch}</b></button>
-        {(leaf !== 'All' || (marketClass === 'Crypto' && group !== 'Quote')) && <span className="sire-market-active-filter">{group}{leaf !== 'All' ? ': ' + leaf : ''}</span>}
-        <button type="button" className="sire-market-more-filter" onClick={() => setFiltersOpen(true)}><SlidersHorizontal size={14}/><span>Filters</span></button>
+
+      <div className="sire-market-majorbar">
+        <div className="sire-market-major-scroll">
+          {(['Crypto','TradFi','Onchain','Prediction','Other'] as ClassName[]).map(item => (
+            <button key={item} type="button" className={marketClass === item ? 'active' : ''} onClick={() => setClass(item)}>{item}</button>
+          ))}
+        </div>
+      </div>
+
+      <div className="sire-market-typebar">
+        <div className="sire-market-type-scroll">
+          {branchOptions.map(item => (
+            <button key={item} type="button" className={branch === item ? 'active' : ''} onClick={() => setBranchSafe(item)}>{item}</button>
+          ))}
+        </div>
+        <button type="button" className="sire-market-more-filter" aria-label="Open market filters" onClick={() => setFiltersOpen(true)}>
+          <SlidersHorizontal size={14}/><span>Filters</span>
+        </button>
       </div>
     </div>
 
