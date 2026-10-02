@@ -1048,7 +1048,7 @@ export default function App() {
       const match = liveInstruments.find(candidate => candidate.id === item.id);
       if (match) {
         selectInstrument(match);
-        window.dispatchEvent(new CustomEvent('sire:tab-changed', { detail: { tab: 'trade' } }));
+        window.dispatchEvent(new CustomEvent('sire:navigate', { detail: { tab: 'trade' } }));
       }
     }} /></main>;
   }
