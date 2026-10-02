@@ -197,7 +197,8 @@ export default function App() {
       .join('|') + '||priority:' + bitgetPriorityIds.join('|')
   ), [instruments]);
 
-  useEffect(() => {    if (!instruments.some(item => item.provider === 'BITGET')) return;    let cancelled = false;
+  useEffect(() => {    if (!instruments.some(item => item.provider === 'BITGET')) return;
+    let cancelled = false;
     const refresh = async () => {
       const categories = ['SPOT', 'USDT-FUTURES', 'COIN-FUTURES', 'USDC-FUTURES'];
       const updates = new Map<string, any>();
@@ -246,8 +247,7 @@ export default function App() {
     const sockets: WebSocket[] = [];
     const reconnectTimers: number[] = [];
     const pingTimers: number[] = [];
-    let flushTimer: number | null = null;
-    const pending = new Map<string, any>();
+    let flushTimer: number | null = null;    const pending = new Map<string, any>();
     let reconnectAttempt = 0;
 
     const currentItems = () => {
@@ -396,7 +396,8 @@ export default function App() {
       reconnectTimers.forEach(timer => window.clearTimeout(timer));
       pingTimers.forEach(timer => window.clearInterval(timer));
       sockets.forEach(socket => socket.close());      pending.clear();
-    };  }, [bitgetSubscriptionSignature]);
+    };
+  }, [bitgetSubscriptionSignature]);
 
 
 
@@ -431,7 +432,7 @@ export default function App() {
       // catalogue/taxonomy instead of passing everything through the unified
       // startup aggregator, which can drop slow providers before their catalogue
       // reaches the UI.
-      const providers = [
+      const providers: MarketProvider[] = [
         'BINGX','BITRUE','ASCENDEX','WHITEBIT','COINW','DERIV','BINANCE',
         'COINBASE','KRAKEN','BYBIT','OKX','BITGET','GATEIO','KUCOIN','MEXC',
         'CRYPTOCOM','BITFINEX','GEMINI','BITSTAMP','COINEX','HTX','BITTREX',
@@ -440,8 +441,8 @@ export default function App() {
         'POLONIEX','COINDCX','POLYMARKET','KALSHI','OPINION','UNISWAP','CURVE',
         'PANCAKESWAP','SUSHISWAP','RAYDIUM','JUPITER','ORCA','AERODROME',
         'TRADERJOE','ONEINCH','COWSWAP','BALANCER',
-      ] as const;
-      const fetchProvider = async (provider: string) => {
+      ];
+      const fetchProvider = async (provider: MarketProvider) => {
         const controller = new AbortController();
         const timer = window.setTimeout(() => controller.abort(), 60000);
         try {
@@ -495,8 +496,7 @@ export default function App() {
         let pendingQuotes: Record<string, any> = {};
         let flushTimer: number | null = null;
         const applyQuotes = (quotes: Record<string, any>) => {
-          if (cancelled) return;
-          Object.assign(pendingQuotes, quotes);
+          if (cancelled) return;          Object.assign(pendingQuotes, quotes);
           if (flushTimer !== null) return;
           flushTimer = window.setTimeout(() => {
             flushTimer = null;
@@ -595,7 +595,8 @@ export default function App() {
                     ...(['Spot', 'Margin'].includes(String(item.marketType)) && meta?.newListing === true ? { newListing: true } : {}),
                   };
                 });
-                console.info('[SIRE BINANCE HOSTED CATALOGUE] publishing', {                  generatedAt: hosted?.generatedAt,
+                console.info('[SIRE BINANCE HOSTED CATALOGUE] publishing', {
+                  generatedAt: hosted?.generatedAt,
                   spot: hostedItems.filter((x:any) => x.marketType === 'Spot').length,
                   margin: hostedItems.filter((x:any) => x.marketType === 'Margin').length,
                   derivatives: hostedItems.filter((x:any) => x.marketType === 'Futures' || x.marketType === 'Perpetuals').length,
@@ -744,8 +745,7 @@ export default function App() {
           ...raw,
           provider: 'GLOBALCRYPTO',
           exchange: raw.exchange,
-          providerLabel: raw.exchangeName || raw.exchange,
-          marketType: raw.type || 'Crypto',
+          providerLabel: raw.exchangeName || raw.exchange,          marketType: raw.type || 'Crypto',
           category: 'Crypto',
           displaySymbol: raw.symbol,
           name: raw.symbol,
@@ -794,7 +794,8 @@ export default function App() {
     }).catch(error => {
       if (cancelled || error?.message === 'SIRE startup cancelled.') return;
       console.error('[DERIV MARKET DATA] active symbol discovery failed', error);
-      setDerivLoading(false);      setDerivError(error instanceof Error ? error.message : 'Deriv market catalogue failed to load.');
+      setDerivLoading(false);
+      setDerivError(error instanceof Error ? error.message : 'Deriv market catalogue failed to load.');
       setInstruments(current => {
         const preserved = current;
         console.info('[SIRE MARKET STARTUP] preserving already-loaded standalone provider catalogues after startup failure', {
@@ -1208,3 +1209,15 @@ export default function App() {
             <div className="sire-instrument-search-input">
               <Search size={16} />
               <input autoFocus value={search} onChange={event => setSearch(event.target.value)} placeholder="Search instruments" />
+            </div>
+            <div className="sire-instrument-search-list">
+              {filtered.slice(0, 120).map(item => <button key={item.id} type="button" onClick={() => { if (instrumentSearchMode === 'multi') { setMultiChartInstrument(item.symbol); setSearch(''); setInstrumentSearchOpen(false); } else { selectInstrument(item); setInstrumentSearchOpen(false); } }}>
+                <span className="quote-asset-logo-wrap"><img className="quote-asset-logo" src={item.logoUrl || makeAssetLogoFallback(item)} alt="" onError={event => { const image=event.currentTarget; image.onerror=null; image.src=makeLogoFallback(item.displaySymbol || item.symbol); }} /></span><span className="quote-instrument-name"><b>{String(item.displaySymbol || item.symbol).toUpperCase()}</b><small>{String(item.name || item.displaySymbol || item.symbol).toUpperCase()}</small></span><span className="quote-broker"><span className="quote-exchange-logo-wrap"><img className="quote-exchange-logo" src={makeProviderLogoFallback(item)} alt="" onError={event => { const image = event.currentTarget; image.onerror = null; image.src = makeLogoFallback(item.providerLabel || item.provider); }} /></span><b>{String(item.providerLabel || item.provider).toUpperCase()}</b><small>{getBitgetCardMarketLabel(item)}</small></span>
+              </button>)}
+            </div>
+          </div>
+        </div>}      </section>
+    </div>
+    {researchLabOpen && <ResearchLab symbol={chartSymbols[activeChartIndex] || selected?.symbol || ''} instruments={instruments.map(item => ({ symbol: item.symbol, name: item.name }))} onClose={() => setResearchLabOpen(false)} onSelectInstrument={symbol => { const item = instruments.find(candidate => candidate.symbol === symbol); if (item) selectInstrument(item); }} />}
+  </main>;
+}
