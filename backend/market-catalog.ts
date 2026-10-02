@@ -711,7 +711,7 @@ async function gateio(): Promise<UnifiedInstrument[]> {
     item.marketGroup = group;
     item.marketSubcategory = subcategory;
     item.marketFilter = clean[0] || 'ALL';
-    item.marketFilters = Array.from(new Set(clean.map(value => subcategory + ':' + value)));
+    item.marketFilters = Array.from(new Set(clean.map(value => value.includes(':') ? value : subcategory + ':' + value)));
   };
 
   const add = (
@@ -796,7 +796,12 @@ async function gateio(): Promise<UnifiedInstrument[]> {
           onboardDate: Number(raw?.create_time || raw?.launch_time || raw?.launch_timestamp) * 1000 || undefined,
           settlement,
           expiry: raw?.expire_time || raw?.expiry_time || undefined,
-        }, { group: 'Crypto', subcategory: 'Perpetuals', filters: themes.length ? themes : ['ALL'] });
+        }, { group: 'Crypto', subcategory: 'Perpetuals', filters: [
+          'Futures:Perpetuals',
+          settlement,
+          'Perpetuals:' + settlement,
+          String(raw?.in_delisting ? 'Delisting' : '').trim(),
+        ].filter(Boolean) });
       }
     } catch (e) { console.warn('[SIRE GATEIO] Perpetual/' + settle + ' failed:', e); }
   }
