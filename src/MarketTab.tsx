@@ -51,146 +51,220 @@ const taxonomy: Node[] = [
   { label: 'Other', children: ['Tokenized Assets','Synthetic','Baskets','Structured Products','Leveraged Tokens','Index Products','Exchange-Specific'].map(label => ({ label })) },
 ];
 
-const dynamicViews = ['Favorites', 'Hot', 'New', 'Gainers', 'Losers', 'Volume', 'Market Cap'];
+const marketViews = ['All', 'Favorites', 'Hot', 'New', 'Gainers', 'Losers', 'Volume', 'Market Cap'];
 
-function node(labels: string[], root: Node[]): Node | undefined {
-  let current = root;
-  let found: Node | undefined;
+const findNode = (labels: string[]) => {
+  let level = taxonomy;
+  let current: Node | undefined;
   for (const label of labels) {
-    found = current.find(item => item.label === label);
-    if (!found) return undefined;
-    current = found.children || [];
+    current = level.find(item => item.label === label);
+    if (!current) return undefined;
+    level = current.children || [];
   }
-  return found;
-}
+  return current;
+};
 
-function categoryMatches(item: DerivInstrument, path: string[]) {
-  const category = String(item.category || '').toLowerCase();
-  const last = path[path.length - 1]?.toLowerCase() || '';
-  if (path[0] === 'TradFi') {
-    if (last === 'stocks') return category === 'stocks';
-    if (last === 'forex' || last === 'fx') return category === 'forex';
-    if (last === 'commodities' || ['energy','metals','agriculture'].includes(last)) return category === 'commodities';
-    if (last === 'indices' || ['u.s.','europe','asia','global'].includes(last)) return category === 'indices';
-  }
-  if (path[0] === 'Crypto') return category === 'crypto';
-  if (path[0] === 'Other' && last === 'synthetic') return category === 'synthetic';
-  return false;
-}
+const firstChild = (label: string) => taxonomy.find(item => item.label === label)?.children?.[0]?.label || 'All';
 
 export default function MarketTab({ instruments, onSelectInstrument }: MarketTabProps) {
   const [marketClass, setMarketClass] = useState('Crypto');
   const [instrumentType, setInstrumentType] = useState('Spot');
-  const [path, setPath] = useState<string[]>(['Crypto','Spot','All']);
+  const [path, setPath] = useState<string[]>(['Crypto', 'Spot', 'All']);
   const [view, setView] = useState('All');
   const [search, setSearch] = useState('');
   const [filterOpen, setFilterOpen] = useState(false);
 
-  const classNode = node([marketClass], taxonomy);
+  const classNode = findNode([marketClass]);
   const typeNodes = classNode?.children || [];
-  const selectedTypeNode = typeNodes.find(item => item.label === instrumentType) || typeNodes[0];
-  const branch = selectedTypeNode?.children || [];
-  const pathNode = node(path, taxonomy);
-  const nextNodes = pathNode?.children || [];
+  const activeType = typeNodes.find(item => item.label === instrumentType) || typeNodes[0];
+  const branchNodes = activeType?.children || [];
+  const selectedNode = findNode(path);
+  const childNodes = selectedNode?.children || [];
 
   const rows = useMemo(() => {
     const q = search.trim().toLowerCase();
+    const cryptoCategories = ['crypto'];
+    const tradFiCategories = ['stocks', 'forex', 'commodities', 'indices'];
     return instruments
       .filter(item => !q || `${item.name} ${item.symbol}`.toLowerCase().includes(q))
-      .filter(item => marketClass === 'Crypto' ? item.category === 'crypto' : marketClass === 'TradFi' ? ['stocks','forex','commodities','indices'].includes(item.category) : true)
-      .slice(0, 150);
+      .filter(item => marketClass === 'Crypto'
+        ? cryptoCategories.includes(String(item.category).toLowerCase())
+        : marketClass === 'TradFi'
+          ? tradFiCategories.includes(String(item.category).toLowerCase())
+          : true)
+      .slice(0, 250);
   }, [instruments, marketClass, search]);
 
-  const chooseClass = (label: string) => {
-    const firstType = taxonomy.find(item => item.label === label)?.children?.[0]?.label || 'All';
+  const selectClass = (label: string) => {
+    const type = firstChild(label);
     setMarketClass(label);
-    setInstrumentType(firstType);
-    setPath(firstType === 'All' ? [label] : [label, firstType, 'All']);
+    setInstrumentType(type);
+    setPath([label, type, 'All']);
     setView('All');
   };
 
-  const chooseType = (label: string) => {
+  const selectType = (label: string) => {
     setInstrumentType(label);
     setPath([marketClass, label, 'All']);
     setView('All');
   };
 
-  const chooseBranch = (label: string) => {
-    const next = [...path.slice(0, 2), label];
+  const selectBranch = (label: string) => {
+    const next = [marketClass, instrumentType, label];
     setPath(next);
   };
 
-  const chooseNested = (label: string) => setPath([...path, label]);
+  const selectChild = (label: string) => {
+    setPath([...path.slice(0, -1), label]);
+  };
 
   const reset = () => {
     setMarketClass('Crypto');
     setInstrumentType('Spot');
-    setPath(['Crypto','Spot','All']);
+    setPath(['Crypto', 'Spot', 'All']);
     setView('All');
     setSearch('');
+    setFilterOpen(false);
   };
 
-  return <section className="sire-market-tab">
-    <header className="sire-market-head">
-      <div>
-        <div className="sire-market-kicker">SIRE</div>
-        <h1>Market</h1>
-        <p>One market view across every supported venue.</p>
-      </div>
-      <div className="sire-market-head-actions">
-        <button type="button" className="sire-market-icon-btn" aria-label="Filters" onClick={() => setFilterOpen(value => !value)}><SlidersHorizontal size={17} /></button>
-      </div>
-    </header>
+  const breadcrumb = path.join(' / ');
 
-    <div className="sire-market-search">
-      <Search size={16} />
-      <input value={search} onChange={event => setSearch(event.target.value)} placeholder="Search markets, symbols or instruments" />
-      {search && <button type="button" onClick={() => setSearch('')} aria-label="Clear search"><X size={14} /></button>}
-    </div>
-
-    <div className="sire-market-scroll">
-      <div className="sire-market-row-label">MARKET</div>
-      <div className="sire-market-chips">
-        {taxonomy.map(item => <button key={item.label} type="button" className={marketClass === item.label ? 'active' : ''} onClick={() => chooseClass(item.label)}>{item.label}</button>)}
-      </div>
-
-      <div className="sire-market-row-label">INSTRUMENT</div>
-      <div className="sire-market-chips">
-        {typeNodes.map(item => <button key={item.label} type="button" className={instrumentType === item.label ? 'active' : ''} onClick={() => chooseType(item.label)}>{item.label}</button>)}
-      </div>
-
-      {branch.length > 0 && <div className="sire-market-filter-panel">
-        <div className="sire-market-filter-head"><span>FILTER</span><span className="sire-market-breadcrumb">{path.join('  /  ')}</span></div>
-        <div className="sire-market-chips sire-market-chips--dense">
-          {branch.map(item => <button key={item.label} type="button" className={path[path.length - 1] === item.label ? 'active' : ''} onClick={() => chooseBranch(item.label)}>{item.label}{item.children?.length ? <ChevronRight size={12} /> : null}</button>)}
-        </div>
-        {nextNodes.length > 0 && <div className="sire-market-nested">
-          <div className="sire-market-nested-title">{path[path.length - 1]}</div>
-          <div className="sire-market-chips sire-market-chips--dense">
-            {nextNodes.map(item => <button key={item.label} type="button" className={path[path.length - 1] === item.label ? 'active' : ''} onClick={() => chooseNested(item.label)}>{item.label}</button>)}
+  return (
+    <section className="sire-market-v2">
+      <div className="sire-market-v2-top">
+        <div className="sire-market-v2-brand">
+          <span className="sire-market-v2-eyebrow">SIRE</span>
+          <div>
+            <h1>Market</h1>
+            <p>Discover and compare instruments across the SIRE market universe.</p>
           </div>
-        </div>}
-      </div>}
-
-      <div className="sire-market-row-label">MARKET VIEWS</div>
-      <div className="sire-market-chips sire-market-chips--views">
-        {dynamicViews.map(item => <button key={item} type="button" className={view === item ? 'active' : ''} onClick={() => setView(item)}>{item === 'Favorites' && <Star size={12} fill="currentColor" />}{item}</button>)}
+        </div>
+        <div className="sire-market-v2-actions">
+          <span className="sire-market-v2-count">{instruments.length.toLocaleString()} instruments</span>
+          <button type="button" className="sire-market-v2-icon" onClick={() => setFilterOpen(value => !value)} aria-label="Open filters" aria-expanded={filterOpen}>
+            <SlidersHorizontal size={16} />
+          </button>
+        </div>
       </div>
 
-      <div className="sire-market-list-head"><span>INSTRUMENT</span><span>PRICE</span><span>24H</span></div>
-      <div className="sire-market-list">
-        {rows.length ? rows.map(item => <button key={item.symbol} type="button" className="sire-market-item" onClick={() => onSelectInstrument(item)}>
-          <span className="sire-market-symbol"><span className="sire-market-logo">{item.symbol.slice(0,1)}</span><span><b>{item.name}</b><small>{item.symbol}</small></span></span>
-          <span className="sire-market-price">—</span>
-          <span className="sire-market-change sire-market-change--neutral">—</span>
-        </button>) : <div className="sire-market-empty"><strong>No connected live instruments in this filter.</strong><span>The filter remains available for providers that support this market type.</span></div>}
+      <div className="sire-market-v2-command">
+        <Search size={16} />
+        <input value={search} onChange={event => setSearch(event.target.value)} placeholder="Search markets, symbols or instruments" />
+        {search && <button type="button" onClick={() => setSearch('')} aria-label="Clear search"><X size={14} /></button>}
+        <kbd>/</kbd>
       </div>
-    </div>
 
-    {filterOpen && <div className="sire-market-filter-drawer">
-      <div className="sire-market-drawer-head"><div><strong>Filter path</strong><small>{path.join(' / ')}</small></div><button type="button" onClick={() => setFilterOpen(false)} aria-label="Close filter panel"><X size={17} /></button></div>
-      <button type="button" className="sire-market-reset" onClick={reset}>Reset to Crypto / Spot / All</button>
-      <div className="sire-market-drawer-note">Structural filters describe the instrument. Market Views are dynamic and do not change the underlying taxonomy.</div>
-    </div>}
-  </section>;
+      <div className="sire-market-v2-body">
+        <div className="sire-market-v2-classbar">
+          {taxonomy.map(item => (
+            <button key={item.label} type="button" className={marketClass === item.label ? 'active' : ''} onClick={() => selectClass(item.label)}>
+              {item.label}
+            </button>
+          ))}
+        </div>
+
+        <div className="sire-market-v2-typebar">
+          <span className="sire-market-v2-label">INSTRUMENT</span>
+          <div>
+            {typeNodes.map(item => (
+              <button key={item.label} type="button" className={instrumentType === item.label ? 'active' : ''} onClick={() => selectType(item.label)}>
+                {item.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="sire-market-v2-filterbox">
+          <div className="sire-market-v2-filterhead">
+            <div>
+              <span className="sire-market-v2-label">FILTERS</span>
+              <strong>{breadcrumb}</strong>
+            </div>
+            <button type="button" onClick={reset}>Reset</button>
+          </div>
+          <div className="sire-market-v2-filterrow">
+            {branchNodes.map(item => (
+              <button key={item.label} type="button" className={path[2] === item.label ? 'active' : ''} onClick={() => selectBranch(item.label)}>
+                {item.label}
+                {item.children?.length ? <ChevronRight size={13} /> : null}
+              </button>
+            ))}
+          </div>
+          {childNodes.length > 0 && (
+            <div className="sire-market-v2-subfilter">
+              <span>{path[path.length - 1]}</span>
+              <div>
+                {childNodes.map(item => (
+                  <button key={item.label} type="button" className={path[path.length - 1] === item.label ? 'active' : ''} onClick={() => selectChild(item.label)}>
+                    {item.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div className="sire-market-v2-viewbar">
+          <div>
+            <span className="sire-market-v2-label">MARKET VIEWS</span>
+            {marketViews.map(item => (
+              <button key={item} type="button" className={view === item ? 'active' : ''} onClick={() => setView(item)}>
+                {item === 'Favorites' ? <Star size={12} fill="currentColor" /> : null}
+                {item}
+              </button>
+            ))}
+          </div>
+          <button type="button" className="sire-market-v2-filter-toggle" onClick={() => setFilterOpen(value => !value)}>
+            Filters <ChevronDown size={13} className={filterOpen ? 'rotated' : ''} />
+          </button>
+        </div>
+
+        <div className="sire-market-v2-table">
+          <div className="sire-market-v2-tablehead">
+            <span>MARKET</span>
+            <span>PRICE</span>
+            <span>24H</span>
+          </div>
+          <div className="sire-market-v2-tablebody">
+            {rows.length > 0 ? rows.map(item => (
+              <button key={item.symbol} type="button" className="sire-market-v2-row" onClick={() => onSelectInstrument(item)}>
+                <span className="sire-market-v2-marketcell">
+                  <span className="sire-market-v2-logo">{item.symbol.slice(0, 1).toUpperCase()}</span>
+                  <span>
+                    <b>{item.name}</b>
+                    <small>{item.symbol}</small>
+                  </span>
+                </span>
+                <span className="sire-market-v2-price">—</span>
+                <span className="sire-market-v2-change">—</span>
+              </button>
+            )) : (
+              <div className="sire-market-v2-empty">
+                <strong>No connected instruments match this view.</strong>
+                <span>The filter is available in the SIRE taxonomy; live values appear when a supported provider supplies them.</span>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {filterOpen && (
+        <aside className="sire-market-v2-drawer">
+          <div className="sire-market-v2-drawerhead">
+            <div><span className="sire-market-v2-label">MARKET FILTER</span><strong>{breadcrumb}</strong></div>
+            <button type="button" onClick={() => setFilterOpen(false)} aria-label="Close filters"><X size={16} /></button>
+          </div>
+          <div className="sire-market-v2-drawersection">
+            <span>Market class</span>
+            <div>{taxonomy.map(item => <button key={item.label} type="button" className={marketClass === item.label ? 'active' : ''} onClick={() => selectClass(item.label)}>{item.label}</button>)}</div>
+          </div>
+          <div className="sire-market-v2-drawersection">
+            <span>Instrument</span>
+            <div>{typeNodes.map(item => <button key={item.label} type="button" className={instrumentType === item.label ? 'active' : ''} onClick={() => selectType(item.label)}>{item.label}</button>)}</div>
+          </div>
+          <button type="button" className="sire-market-v2-reset" onClick={reset}>Reset all filters</button>
+        </aside>
+      )}
+    </section>
+  );
 }
