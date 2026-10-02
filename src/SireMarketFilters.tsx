@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
 import { ChevronRight, RotateCcw, Search } from 'lucide-react';
+import './sireMarketFilters.css';
 
 export type SireMarketFilter = { universe: 'All' | 'Crypto' | 'TradFi' | 'Onchain' | 'Prediction' | 'Other'; instrument: string; branch: string; detail: string };
 type Props = { value: SireMarketFilter; onChange: (next: SireMarketFilter) => void; search: string; onSearchChange: (value: string) => void; count: number };
