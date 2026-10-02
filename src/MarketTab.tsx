@@ -142,29 +142,29 @@ const getChange = (item: MarketInstrument) => {
 };
 
 const exchangeDisplayNames: Record<string, string> = {
-  BINANCE: 'Binance',
-  BITGET: 'Bitget',
-  OKX: 'OKX',
-  BYBIT: 'Bybit',
-  GATEIO: 'Gate.io',
-  KRAKEN: 'Kraken',
-  COINBASE: 'Coinbase',
-  KUCOIN: 'KuCoin',
-  MEXC: 'MEXC',
-  HTX: 'HTX',
-  BITFINEX: 'Bitfinex',
-  GEMINI: 'Gemini',
-  BITSTAMP: 'Bitstamp',
-  COINEX: 'CoinEx',
-  LBANK: 'LBank',
-  PHEMEX: 'Phemex',
-  DERIV: 'Deriv',
+  BINANCE: 'Binance', BITGET: 'Bitget', OKX: 'OKX', BYBIT: 'Bybit', GATE: 'Gate.io', GATEIO: 'Gate.io',
+  KRAKEN: 'Kraken', COINBASE: 'Coinbase', KUCOIN: 'KuCoin', MEXC: 'MEXC', HTX: 'HTX', BITFINEX: 'Bitfinex',
+  GEMINI: 'Gemini', BITSTAMP: 'Bitstamp', COINEX: 'CoinEx', LBANK: 'LBank', PHEMEX: 'Phemex', DERIV: 'Deriv',
+  BINGX: 'BingX', BITRUE: 'Bitrue', ASCENDEX: 'AscendEX', WHITEBIT: 'WhiteBIT', COINW: 'CoinW', BITMART: 'BitMart',
+  XT: 'XT.COM', DEEPCOIN: 'Deepcoin', TOOBIT: 'Toobit', WEEX: 'WEEX', BITUNIX: 'Bitunix', BLOFIN: 'BloFin',
+  COINCATCH: 'CoinCatch', ZOOMEX: 'Zoomex', BTCC: 'BTCC', DIGIFINEX: 'DigiFinex', COINSTORE: 'Coinstore',
+  PROBIT: 'ProBit', POLONIEX: 'Poloniex', COINDCX: 'CoinDCX', BITHUMB: 'Bithumb', UPBIT: 'Upbit', PIONEX: 'Pionex',
+  CRYPTOCOM: 'Crypto.com', BITVAVO: 'Bitvavo', BITSO: 'Bitso', BITKUB: 'Bitkub', POLONIEX: 'Poloniex',
+  WOOX: 'WOO X', HYPERLIQUID: 'Hyperliquid', OANDA: 'OANDA',
 };
 
 const getExchangeName = (item: MarketInstrument) => {
-  const raw = String(item.providerLabel || item.provider || item.exchange || '').trim();
+  const provider = String(item.provider || '').trim().toUpperCase();
+  const rawExchange = String(item.exchange || '').trim();
+  const rawLabel = String(item.providerLabel || '').trim();
+  const raw = (provider === 'GLOBALCRYPTO' && rawExchange ? rawExchange : (rawExchange || rawLabel || provider)).trim();
   if (!raw) return 'Unknown';
-  return exchangeDisplayNames[raw.toUpperCase()] || raw;
+  const key = raw.toUpperCase().replace(/[^A-Z0-9]/g, '');
+  if (exchangeDisplayNames[key]) return exchangeDisplayNames[key];
+  const compact = raw.toLowerCase().replace(/[^a-z0-9]/g, '');
+  const known = Object.keys(exchangeDisplayNames).find(name => name.toLowerCase().replace(/[^a-z0-9]/g, '') === compact);
+  if (known) return exchangeDisplayNames[known];
+  return raw;
 };
 
 const getExchangeLogo = (item: MarketInstrument) => {
@@ -193,6 +193,7 @@ export default function MarketTab({ instruments, onSelectInstrument }: Props) {
   const [branch, setBranch] = useState('Spot');
   const [group, setGroup] = useState('Quote');
   const [leaf, setLeaf] = useState('All');
+  const [exchangeFilter, setExchangeFilter] = useState('All');
   const [view, setView] = useState<ViewName>('All');
   const [search, setSearch] = useState('');
   const [favorites, setFavorites] = useState<Set<string>>(() => new Set());
@@ -239,6 +240,15 @@ export default function MarketTab({ instruments, onSelectInstrument }: Props) {
     setView('All');
   };
 
+  const exchangeOptions = useMemo(() => {
+    const values = new Map<string, string>();
+    for (const item of instruments) {
+      const name = getExchangeName(item);
+      if (name !== 'Unknown') values.set(name.toUpperCase(), name);
+    }
+    return ['All', ...Array.from(values.values()).sort((a, b) => a.localeCompare(b))];
+  }, [instruments]);
+
   const setBranchSafe = (next: string) => {
     setBranch(next);
     setGroup(marketClass === 'Crypto' ? (next === 'Futures' ? 'Perpetual' : next === 'Options' ? 'Contract' : 'Quote') : '');
@@ -251,6 +261,7 @@ export default function MarketTab({ instruments, onSelectInstrument }: Props) {
       const cls = normalizeClass(item);
       const type = normalizeType(item);
       if (marketClass !== cls) return false;
+      if (exchangeFilter !== 'All' && getExchangeName(item) !== exchangeFilter) return false;
       if (branch !== 'All' && type !== branch) return false;
       if (leaf !== 'All' && !matchesLeaf(item, leaf, type)) return false;
       if (q && !textOf(item).includes(q)) return false;
@@ -264,7 +275,7 @@ export default function MarketTab({ instruments, onSelectInstrument }: Props) {
     if (view === 'Market Cap') rows = [...rows].sort((a,b) => Number(b.marketCap || 0) - Number(a.marketCap || 0));
     if (view === 'Hot') rows = [...rows].sort((a,b) => Number(b.volume24h || 0) - Number(a.volume24h || 0));
     return rows;
-  }, [instruments, marketClass, branch, leaf, view, deferredSearch, favorites]);
+  }, [instruments, marketClass, branch, leaf, exchangeFilter, view, deferredSearch, favorites]);
 
   const chooseView = (next: ViewName) => setView(next);
 
@@ -327,10 +338,11 @@ export default function MarketTab({ instruments, onSelectInstrument }: Props) {
       <aside className="sire-market-drawer" onClick={e => e.stopPropagation()}>
         <div className="sire-market-drawer-head"><div><small>FILTERS</small><strong>Market</strong></div><button type="button" onClick={() => setFiltersOpen(false)}><X size={18}/></button></div>
         <div className="sire-market-drawer-section"><span>Market class</span>{(['Crypto','TradFi','Onchain','Prediction','Other'] as ClassName[]).map(item => <button key={item} className={marketClass === item ? 'active' : ''} onClick={() => setClass(item)}>{item}</button>)}</div>
+        <div className="sire-market-drawer-section"><span>Exchange</span>{exchangeOptions.map(item => <button key={item} className={exchangeFilter === item ? 'active' : ''} onClick={() => setExchangeFilter(item)}>{item}</button>)}</div>
         <div className="sire-market-drawer-section"><span>Instrument</span>{branchOptions.map(item => <button key={item} className={branch === item ? 'active' : ''} onClick={() => setBranchSafe(item)}>{item}</button>)}</div>
         {groups.length > 0 && <div className="sire-market-drawer-section"><span>{group === 'Contract' ? 'Contract' : 'Category'}</span>{groups.map(item => <button key={item} className={group === item ? 'active' : ''} onClick={() => { setGroup(item); setLeaf('All'); }}>{item}</button>)}</div>}
         <div className="sire-market-drawer-section"><span>{groups.length > 0 ? group : 'Category'}</span>{leafOptions.map(item => <button key={item} className={leaf === item ? 'active' : ''} onClick={() => setLeaf(item)}>{item}</button>)}</div>
-        <div className="sire-market-drawer-footer"><button type="button" onClick={() => { setMarketClass('Crypto'); setBranch('Spot'); setGroup('Quote'); setLeaf('All'); setView('All'); }}>Reset</button><button type="button" className="primary" onClick={() => setFiltersOpen(false)}>Done</button></div>
+        <div className="sire-market-drawer-footer"><button type="button" onClick={() => { setMarketClass('Crypto'); setBranch('Spot'); setGroup('Quote'); setLeaf('All'); setExchangeFilter('All'); setView('All'); }}>Reset</button><button type="button" className="primary" onClick={() => setFiltersOpen(false)}>Done</button></div>
       </aside>
     </div>}
   </section>;
