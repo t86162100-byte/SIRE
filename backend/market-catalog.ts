@@ -3784,19 +3784,12 @@ export async function getUnifiedMarketCatalogue(fetchDeriv: () => Promise<any[]>
       ['POLYMARKET', polymarket()],
       ['KALSHI', kalshi()],
       ['OPINION', opinion()],
-      ['FXCM', fxcm()],
       // Nasdaq Trader supplies the public instrument master for Nasdaq-listed,
       // other U.S.-listed, bonds, NOM options, mutual funds and additional
       // Nasdaq-published derivatives directories.
-      ['YFINANCE', yfinance()],
-      ['SP', sp()],
-      ['NASDAQTRADER', nasdaqTrader()],
       // NYSE American (formerly NYSE Amex) is a separate exchange universe.
-      ['NYSEAMERICAN', nyseAmerican()],
       // CME Group's official public product catalogue.
-      ['CME', cme()],
       // Crypto market discovery is owned exclusively by the CCXT global universe.
-      ['OANDA', oanda()],
       // Onchain venues remain part of the same shared instrument universe.
       ['UNISWAP', uniswap()],
       ['CURVE', curve()],
