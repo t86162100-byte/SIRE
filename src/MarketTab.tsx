@@ -222,17 +222,10 @@ export default function MarketTab({ instruments, onSelectInstrument }: Props) {
   const chooseView = (next: ViewName) => setView(next);
 
   return <section className="sire-market-screen">
-    <header className="sire-market-head">
-      <div>
-        <div className="sire-market-kicker">SIRE</div>
-        <h1>MARKET</h1>
-        <p>Global markets · live instruments</p>
-      </div>
-      <div className="sire-market-head-actions">
-        <label className="sire-market-search"><Search size={17}/><input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search markets" /><kbd>/</kbd></label>
-        <button type="button" className="sire-market-filter-button" onClick={() => setFiltersOpen(true)}><SlidersHorizontal size={17}/><span>Filters</span></button>
-      </div>
-    </header>
+    <div className="sire-market-topbar">
+      <label className="sire-market-search"><Search size={17}/><input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search markets" /><kbd>/</kbd></label>
+      <button type="button" className="sire-market-filter-button" onClick={() => setFiltersOpen(true)}><SlidersHorizontal size={17}/><span>Filters</span></button>
+    </div>
 
     <div className="sire-market-rail">
       <div className="sire-market-row-label">MARKET CLASS</div>
