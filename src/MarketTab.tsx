@@ -141,8 +141,31 @@ const getChange = (item: MarketInstrument) => {
   return Number.isFinite(n) ? n : undefined;
 };
 
-const getExchangeName = (item: MarketInstrument) =>
-  String(item.providerLabel || item.provider || item.exchange || 'Unknown');
+const exchangeDisplayNames: Record<string, string> = {
+  BINANCE: 'Binance',
+  BITGET: 'Bitget',
+  OKX: 'OKX',
+  BYBIT: 'Bybit',
+  GATEIO: 'Gate.io',
+  KRAKEN: 'Kraken',
+  COINBASE: 'Coinbase',
+  KUCOIN: 'KuCoin',
+  MEXC: 'MEXC',
+  HTX: 'HTX',
+  BITFINEX: 'Bitfinex',
+  GEMINI: 'Gemini',
+  BITSTAMP: 'Bitstamp',
+  COINEX: 'CoinEx',
+  LBANK: 'LBank',
+  PHEMEX: 'Phemex',
+  DERIV: 'Deriv',
+};
+
+const getExchangeName = (item: MarketInstrument) => {
+  const raw = String(item.providerLabel || item.provider || item.exchange || '').trim();
+  if (!raw) return 'Unknown';
+  return exchangeDisplayNames[raw.toUpperCase()] || raw;
+};
 
 const getExchangeLogo = (item: MarketInstrument) => {
   const explicit = String(
