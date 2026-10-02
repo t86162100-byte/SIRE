@@ -8,6 +8,8 @@ import { fetchDerivInstruments, type DerivInstrument } from './derivMarketData';
 import { fetchBinanceBrowserCatalogue, fetchBinanceLiveQuotes, fetchBinanceMarketMetadata, createBinanceCatalogueLiveFeed } from './binanceMarketData';
 import { SireErrorScreen } from './SireErrorBoundary';
 import './nativeTerminal.css';
+import SireMarketFilters, { matchesSireMarketFilter, type SireMarketFilter } from './SireMarketFilters';
+import './sireMarketFilters.css';
 
 type MarketProvider = 'BINGX' | 'DERIV' | 'FXCM' | 'HYPERLIQUID' | 'GLOBALCRYPTO' | 'BINANCE' | 'BITGET' | 'BYBIT' | 'OKX' | 'KRAKEN' | 'COINBASE' | 'GATEIO' | 'KUCOIN' | 'GEMINI' | 'BITSO' | 'BITFINEX' | 'BITVAVO' | 'COINEX' | 'LBANK' | 'WOOX' | 'CRYPTOCOM' | 'HTX' | 'BITKUB' | 'UPBIT' | 'PIONEX' | 'POLONIEX' | 'BITHUMB' | 'MEXC' | 'PHEMEX' | 'WHITEBIT' | 'TWELVEDATA' | 'NASDAQTRADER' | 'NSE' | 'BITSTAMP' | 'OANDA' | 'TRADINGVIEW' | 'FOREXCOM' | 'INTERACTIVEBROKERS' | 'TRADESTATION' | 'WEBULL' | 'MOOMOO' | 'NINJATRADER' | 'TRADOVATE' | 'AMPFUTURES' | 'TASTYTRADE' | 'TASTYFX' | 'CRYPTOCOMEXCHANGE' | 'COINBASEADVANCED' | 'ALPACA' | 'TRADIERBROKERAGE' | 'TRADEZERO' | 'COBRATRADING' | 'CLEARSTREET' | 'INVESTRADE' | 'PUBLIC' | 'PLUS500US' | 'OPTIMUSFUTURES' | 'EDGECLEAR' | 'IRONBEAM' | 'STONEX' | 'DORMANTRADING' | 'TRADIERFUTURES' | 'BITTREX' | 'BITMART' | 'BLANK' | 'XT' | 'DEEPCOIN' | 'TOOBIT' | 'WEEX' | 'BITUNIX' | 'BLOFIN' | 'COINCATCH' | 'ZOOMEX' | 'BTCC' | 'DIGIFINEX' | 'COINSTORE' | 'PROBIT' | 'POLONIEX' | 'COINDCX' | 'POLYMARKET' | 'KALSHI' | 'OPINION' | 'UNISWAP' | 'CURVE' | 'PANCAKESWAP' | 'SUSHISWAP' | 'RAYDIUM' | 'JUPITER' | 'ORCA' | 'AERODROME' | 'TRADERJOE' | 'ONEINCH' | 'COWSWAP' | 'BALANCER';
 type Instrument = DerivInstrument & {
@@ -140,8 +142,7 @@ export default function App() {
   const [derivLoading, setDerivLoading] = useState(true);
   const [derivError, setDerivError] = useState('');
   const [search, setSearch] = useState('');
-  const [providerFilter, setProviderFilter] = useState<'ALL' | MarketProvider>('ALL');
-  const [categoryFilter, setCategoryFilter] = useState<string>('ALL');
+  const [marketFilter, setMarketFilter] = useState<SireMarketFilter>({ universe: 'All', instrument: '', branch: '', detail: '' });
   const [quoteScrollTop, setQuoteScrollTop] = useState(0);
   const deferredSearch = useDeferredValue(search);
   const [instrumentSearchOpen, setInstrumentSearchOpen] = useState(false);
@@ -911,18 +912,11 @@ export default function App() {
   const filtered = useMemo(() => {
     const q = deferredSearch.trim().toLowerCase();
     return randomizedInstruments.filter(item => {
-      const providerMatch = providerFilter === 'ALL' || item.provider === providerFilter;
-      const marketType = String(item.marketType || '').trim().toLowerCase();
-      const categoryMatch = categoryFilter === 'ALL'
-        || item.category === categoryFilter
-        || (categoryFilter === 'Options' && marketType.includes('option'))
-        || (categoryFilter === 'Futures' && marketType === 'futures')
-        || (categoryFilter === 'Perpetuals' && marketType === 'perpetuals')
-        || (categoryFilter === 'Crypto' && item.category === 'Crypto' && !marketType.includes('future') && !marketType.includes('option') && !marketType.includes('perpetual') && !marketType.includes('swap'));
+      const taxonomyMatch = matchesSireMarketFilter(item, marketFilter);
       const searchMatch = !q || `${item.name} ${item.symbol} ${item.providerLabel} ${item.marketType} ${item.category}`.toLowerCase().includes(q);
-      return providerMatch && categoryMatch && searchMatch;
+      return taxonomyMatch && searchMatch;
     });
-  }, [randomizedInstruments, search, providerFilter, categoryFilter]);
+  }, [randomizedInstruments, deferredSearch, marketFilter]);
 
   const chartableInstruments = useMemo(() => liveInstruments.filter(item => ['DERIV','FXCM','GLOBALCRYPTO','YFINANCE','SP','NASDAQTRADER','NYSEAMERICAN','CME','CBOT','NYMEX','COMEX','OANDA','TWELVEDATA'].includes(String(item.provider))), [instruments]);
   const quoteWindow = useMemo(() => {
@@ -946,7 +940,6 @@ export default function App() {
   const openInstrumentPicker = (mode: 'main' | 'multi') => {
     setInstrumentSearchMode(mode);
     setSearch('');
-    setProviderFilter('ALL');
     setInstrumentSearchOpen(true);
   };
 
@@ -999,16 +992,14 @@ export default function App() {
   return <main className={`native-terminal-shell${researchLabOpen ? ' sire-research-open' : ''}`}>
 
     <div className="native-terminal-body">
-      <aside className="native-symbol-sidebar symbol-sidebar"><div className="sidebar-search"><Search size={15} /><input value={search} onChange={event => setSearch(event.target.value)} placeholder="Search" /></div><div className="sidebar-meta"><span>{derivLoading ? "LOADING MARKETS" : derivError ? "MARKET ERROR" : "ALL MARKETS"}</span><b>{instruments.length}</b></div>
-        <div className="sire-market-providers">
-          {(['ALL','BINGX','BITRUE','ASCENDEX','WHITEBIT','COINW','DERIV','BINANCE','COINBASE','KRAKEN','BYBIT','OKX','BITGET','GATEIO','KUCOIN','MEXC','CRYPTOCOM','BITFINEX','GEMINI','BITSTAMP','COINEX','HTX','BITTREX','BITMART','PHEMEX','LBANK','XT','DEEPCOIN','TOOBIT','WEEX','BITUNIX','BLOFIN','COINCATCH','ZOOMEX','BTCC','DIGIFINEX','COINSTORE','PROBIT','POLONIEX','COINDCX','POLYMARKET','KALSHI','OPINION','FXCM','TWELVEDATA','NASDAQTRADER','XETR','XFRA','EUREX','ASX','TWSE','PSX','IDX','HKEX','BSE','TSE','NSE','BITSTAMP','OANDA','FOREXCOM','INTERACTIVEBROKERS','TRADESTATION','WEBULL','MOOMOO','NINJATRADER','TRADOVATE','AMPFUTURES','TASTYTRADE','TASTYFX','ALPACA','TRADIERBROKERAGE','TRADEZERO','COBRATRADING','CLEARSTREET','INVESTRADE','PUBLIC','PLUS500US','OPTIMUSFUTURES','EDGECLEAR','IRONBEAM','STONEX','DORMANTRADING','TRADIERFUTURES','TRADINGVIEW','UNISWAP','CURVE','PANCAKESWAP','SUSHISWAP','RAYDIUM','JUPITER','ORCA','AERODROME','TRADERJOE','ONEINCH','COWSWAP','BALANCER'] as const).map(provider => (
-            <button key={provider} type="button" className={providerFilter === provider ? 'active' : ''} onClick={() => setProviderFilter(provider)}>{provider === 'ALL' ? 'All' : provider[0] + provider.slice(1).toLowerCase()}</button>
-          ))}
-        </div><div className="sire-market-providers sire-market-categories">
-          {(['ALL','Forex','Stocks','Funds','Commodities','Indices','Bonds','Options','Futures','Perpetuals','Crypto','Prediction Markets','Synthetic Indices','Baskets'] as const).map(category => (
-            <button key={category} type="button" className={categoryFilter === category ? 'active' : ''} onClick={() => setCategoryFilter(category)}>{category}</button>
-          ))}
-        </div>{derivError && <div className="sire-deriv-error">{derivError}</div>}<div className="native-symbol-list symbol-list" onScroll={event => setQuoteScrollTop(event.currentTarget.scrollTop)}><div style={{height: quoteWindow.top}} aria-hidden="true" /><div className="sire-quote-window">{quoteWindow.items.map(item => <button key={item.id} className={`symbol-row ${selected?.id === item.id ? 'active' : ''}`} data-provider={item.provider} onClick={() => selectInstrument(item)}><span className="quote-asset-logo-wrap"><img className="quote-asset-logo" src={item.logoUrl || makeAssetLogoFallback(item)} alt="" decoding="async" onError={event => { const image = event.currentTarget; image.onerror = null; image.src = makeLogoFallback(item.displaySymbol || item.symbol); }} /></span><span className="quote-instrument-name"><b>{String(item.displaySymbol || item.symbol).toUpperCase()}</b><small>{String(item.name || item.displaySymbol || item.symbol).toUpperCase()}</small></span><span className="quote-broker"><span className="quote-exchange-logo-wrap"><img className="quote-exchange-logo" src={makeProviderLogoFallback(item)} alt="" decoding="async" onError={event => {
+      <aside className="native-symbol-sidebar symbol-sidebar">
+        <SireMarketFilters
+          value={marketFilter}
+          onChange={setMarketFilter}
+          search={search}
+          onSearchChange={setSearch}
+          count={filtered.length}
+        />{derivError && <div className="sire-deriv-error">{derivError}</div>}<div className="native-symbol-list symbol-list" onScroll={event => setQuoteScrollTop(event.currentTarget.scrollTop)}><div style={{height: quoteWindow.top}} aria-hidden="true" /><div className="sire-quote-window">{quoteWindow.items.map(item => <button key={item.id} className={`symbol-row ${selected?.id === item.id ? 'active' : ''}`} data-provider={item.provider} onClick={() => selectInstrument(item)}><span className="quote-asset-logo-wrap"><img className="quote-asset-logo" src={item.logoUrl || makeAssetLogoFallback(item)} alt="" decoding="async" onError={event => { const image = event.currentTarget; image.onerror = null; image.src = makeLogoFallback(item.displaySymbol || item.symbol); }} /></span><span className="quote-instrument-name"><b>{String(item.displaySymbol || item.symbol).toUpperCase()}</b><small>{String(item.name || item.displaySymbol || item.symbol).toUpperCase()}</small></span><span className="quote-broker"><span className="quote-exchange-logo-wrap"><img className="quote-exchange-logo" src={makeProviderLogoFallback(item)} alt="" decoding="async" onError={event => {
   const image = event.currentTarget;
   image.onerror = null;
   image.src = makeLogoFallback(item.providerLabel || item.provider);
