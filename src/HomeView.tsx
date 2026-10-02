@@ -194,33 +194,6 @@ export default function HomeView({ instruments, onSelectInstrument, videoSrc = '
     return crypto.length ? crypto : instruments.slice(0, 8);
   }, [instruments]);
 
-  const legacyMarketRows = useMemo(() => {
-    const combined = [...binanceMarketRows, ...bitgetMarketRows, ...gateioMarketRows];
-    const seen = new Set<string>();
-    const mixed = combined.filter(item => {
-      if (seen.has(item.id)) return false;
-      seen.add(item.id);
-      return true;
-    });
-    const groups = ['BINANCE', 'BITGET', 'GATEIO'].map(provider =>
-      mixed.filter(item => item.provider === provider)
-    );
-    const others = mixed.filter(item => !['BINANCE', 'BITGET', 'GATEIO'].includes(String(item.provider)));
-    const out: HomeInstrument[] = [];
-    const indexes = [0, 0, 0];
-    let added = true;
-    while (added) {
-      added = false;
-      for (let i = 0; i < groups.length; i += 1) {
-        if (indexes[i] < groups[i].length) {
-          out.push(groups[i][indexes[i]++]);
-          added = true;
-        }
-      }
-    }
-    return out.concat(others);
-  }, [binanceMarketRows, bitgetMarketRows, gateioMarketRows]);
-
   const marketRows = useMemo(() => {
     const q = marketSearch.trim().toLowerCase();
     const source = [...instruments.filter(item => item.provider !== 'GATEIO'), ...gateioLiveUniverse];
@@ -388,7 +361,7 @@ export default function HomeView({ instruments, onSelectInstrument, videoSrc = '
             onSearchChange={setMarketSearch}
             count={marketRows.length}
           />
-          <div className="sire-home-watchlist" aria-label={activeMarketFilter + ' markets'}>
+          <div className="sire-home-watchlist" aria-label="SIRE market instruments">
             {marketRows.slice(0, 7).map(item => {
               const raw = item as any;
               const change = Number(raw.change24h ?? raw.changePercent24h ?? raw.priceChangePercent ?? raw.percentChange24h ?? raw.changePercent);
