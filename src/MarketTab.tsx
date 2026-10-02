@@ -228,33 +228,17 @@ export default function MarketTab({ instruments, onSelectInstrument }: Props) {
     </div>
 
     <div className="sire-market-rail">
-      <div className="sire-market-row-label">MARKET CLASS</div>
-      <div className="sire-market-chips sire-market-class-chips">
-        {(['Crypto','TradFi','Onchain','Prediction','Other'] as ClassName[]).map(item => <button key={item} className={marketClass === item ? 'active' : ''} onClick={() => setClass(item)}>{item}</button>)}
-      </div>
-
-      <div className="sire-market-row-label">INSTRUMENT</div>
-      <div className="sire-market-chips">
-        {branchOptions.map(item => <button key={item} className={branch === item ? 'active' : ''} onClick={() => setBranchSafe(item)}>{item}</button>)}
-      </div>
-
-      {groups.length > 0 && <div className="sire-market-secondary">
-        <div className="sire-market-chips sire-market-group-chips">
-          {groups.map(item => <button key={item} className={group === item ? 'active' : ''} onClick={() => { setGroup(item); setLeaf('All'); }}>{item}</button>)}
+      <div className="sire-market-viewbar">
+        <div className="sire-market-chips sire-market-view-chips">
+          {(['All','Favorites','Hot','New','Gainers','Losers','Volume','Market Cap'] as ViewName[]).map(item => <button key={item} className={view === item ? 'active' : ''} onClick={() => chooseView(item)}>{item === 'Favorites' && <Star size={13}/>} {item}</button>)}
         </div>
-        <div className="sire-market-chips sire-market-leaf-chips">
-          {leafOptions.map(item => <button key={item} className={leaf === item ? 'active' : ''} onClick={() => setLeaf(item)}>{item}</button>)}
-        </div>
-      </div>}
-
-      {groups.length === 0 && <div className="sire-market-chips sire-market-leaf-chips">
-        {leafOptions.map(item => <button key={item} className={leaf === item ? 'active' : ''} onClick={() => setLeaf(item)}>{item}</button>)}
-      </div>}
-
-      <div className="sire-market-view-divider" />
-      <div className="sire-market-row-label">MARKET VIEWS</div>
-      <div className="sire-market-chips sire-market-view-chips">
-        {(['All','Favorites','Hot','New','Gainers','Losers','Volume','Market Cap'] as ViewName[]).map(item => <button key={item} className={view === item ? 'active' : ''} onClick={() => chooseView(item)}>{item === 'Favorites' && <Star size={13}/>} {item}</button>)}
+      </div>
+      <div className="sire-market-filterbar">
+        <button type="button" className="sire-market-context" onClick={() => setFiltersOpen(true)}><span>MARKET</span><b>{marketClass}</b></button>
+        <span className="sire-market-filter-separator">/</span>
+        <button type="button" className="sire-market-context" onClick={() => setFiltersOpen(true)}><span>TYPE</span><b>{branch}</b></button>
+        {(leaf !== 'All' || (marketClass === 'Crypto' && group !== 'Quote')) && <span className="sire-market-active-filter">{group}{leaf !== 'All' ? ': ' + leaf : ''}</span>}
+        <button type="button" className="sire-market-more-filter" onClick={() => setFiltersOpen(true)}><SlidersHorizontal size={14}/><span>Filters</span></button>
       </div>
     </div>
 
@@ -285,10 +269,12 @@ export default function MarketTab({ instruments, onSelectInstrument }: Props) {
 
     {filtersOpen && <div className="sire-market-drawer-backdrop" onClick={() => setFiltersOpen(false)}>
       <aside className="sire-market-drawer" onClick={e => e.stopPropagation()}>
-        <div className="sire-market-drawer-head"><div><small>MARKET FILTERS</small><strong>{marketClass}</strong></div><button type="button" onClick={() => setFiltersOpen(false)}><X size={18}/></button></div>
+        <div className="sire-market-drawer-head"><div><small>FILTERS</small><strong>Market</strong></div><button type="button" onClick={() => setFiltersOpen(false)}><X size={18}/></button></div>
         <div className="sire-market-drawer-section"><span>Market class</span>{(['Crypto','TradFi','Onchain','Prediction','Other'] as ClassName[]).map(item => <button key={item} className={marketClass === item ? 'active' : ''} onClick={() => setClass(item)}>{item}</button>)}</div>
         <div className="sire-market-drawer-section"><span>Instrument</span>{branchOptions.map(item => <button key={item} className={branch === item ? 'active' : ''} onClick={() => setBranchSafe(item)}>{item}</button>)}</div>
-        <div className="sire-market-drawer-footer"><button type="button" onClick={() => { setView('All'); setLeaf('All'); setFiltersOpen(false); }}>Reset filters</button><button type="button" className="primary" onClick={() => setFiltersOpen(false)}>Done</button></div>
+        {groups.length > 0 && <div className="sire-market-drawer-section"><span>{group === 'Contract' ? 'Contract' : 'Category'}</span>{groups.map(item => <button key={item} className={group === item ? 'active' : ''} onClick={() => { setGroup(item); setLeaf('All'); }}>{item}</button>)}</div>}
+        <div className="sire-market-drawer-section"><span>{groups.length > 0 ? group : 'Category'}</span>{leafOptions.map(item => <button key={item} className={leaf === item ? 'active' : ''} onClick={() => setLeaf(item)}>{item}</button>)}</div>
+        <div className="sire-market-drawer-footer"><button type="button" onClick={() => { setMarketClass('Crypto'); setBranch('Spot'); setGroup('Quote'); setLeaf('All'); setView('All'); }}>Reset</button><button type="button" className="primary" onClick={() => setFiltersOpen(false)}>Done</button></div>
       </aside>
     </div>}
   </section>;
