@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { getBinanceHotFromCatalogue } from './binanceMarketData';
 import './home.css';
+import SireMarketFilters, { matchesSireMarketFilter, type SireMarketFilter } from './SireMarketFilters';
 import SireVisualEngine from './SireVisualEngine';
 import {
   ArrowRight, Bell, BrainCircuit, ChevronRight, CircleUserRound, Eye, EyeOff, Flame,
@@ -86,6 +87,8 @@ export default function HomeView({ instruments, onSelectInstrument, videoSrc = '
   const [query, setQuery] = useState('');
   const [balanceVisible, setBalanceVisible] = useState(true);
   const [activeEvent, setActiveEvent] = useState(0);
+  const [marketFilter, setMarketFilter] = useState<SireMarketFilter>({ universe: 'All', instrument: '', branch: '', detail: '' });
+  const [marketSearch, setMarketSearch] = useState('');
   const [activeMarketFilter, setActiveMarketFilter] = useState('Hot');
   const [activeMarketSubfilter, setActiveMarketSubfilter] = useState('Spot');
   const [gateioQuotes, setGateioQuotes] = useState<Map<string, any>>(() => new Map());
@@ -654,7 +657,7 @@ export default function HomeView({ instruments, onSelectInstrument, videoSrc = '
     return crypto.length ? crypto : instruments.slice(0, 8);
   }, [instruments]);
 
-  const marketRows = useMemo(() => {
+  const legacyMarketRows = useMemo(() => {
     const combined = [...binanceMarketRows, ...bitgetMarketRows, ...gateioMarketRows];
     const seen = new Set<string>();
     const mixed = combined.filter(item => {
@@ -681,6 +684,28 @@ export default function HomeView({ instruments, onSelectInstrument, videoSrc = '
     return out.concat(others);
   }, [binanceMarketRows, bitgetMarketRows, gateioMarketRows]);
 
+  const marketRows = useMemo(() => {
+    const q = marketSearch.trim().toLowerCase();
+    const combined = instruments
+      .filter(item => matchesSireMarketFilter(item, marketFilter))
+      .filter(item => !q || `${item.displaySymbol || item.symbol} ${item.name || ''} ${item.providerLabel || item.provider || ''} ${item.marketType || ''}`.toLowerCase().includes(q))
+      .filter(item => Number.isFinite(Number(item.price)) || item.price === undefined);
+    const unique = combined.filter((item, index, rows) => rows.findIndex(candidate => candidate.id === item.id) === index);
+    const ranked = [...unique].sort((a,b) => Number(b.volume24h || 0) - Number(a.volume24h || 0) || Math.abs(Number(b.change24h || 0)) - Math.abs(Number(a.change24h || 0)));
+    const groups = ['BINANCE','BITGET','GATEIO'].map(provider => ranked.filter(item => item.provider === provider));
+    const others = ranked.filter(item => !['BINANCE','BITGET','GATEIO'].includes(String(item.provider)));
+    const out: HomeInstrument[] = [];
+    const indexes = [0,0,0];
+    let added = true;
+    while(added){
+      added=false;
+      for(let i=0;i<groups.length;i+=1){
+        if(indexes[i]<groups[i].length){out.push(groups[i][indexes[i]++]);added=true;}
+      }
+    }
+    return out.concat(others);
+  }, [instruments, marketFilter, marketSearch]);
+  
   useEffect(() => {
     const ids = marketRows.slice(0, 7)
       .filter(item => item.provider === 'BITGET')
@@ -818,60 +843,19 @@ export default function HomeView({ instruments, onSelectInstrument, videoSrc = '
             <div><span>MARKET DISCOVERY</span><h2>Markets</h2></div>
             <button type="button">See All <ChevronRight size={15} /></button>
           </div>
-          <div className="sire-home-market-filter-shell" aria-label="Market discovery filters">
-            <div className="sire-home-market-tabs" role="tablist" aria-label="Market filters">
-              {['Favorite', 'Hot', 'Spot', 'Futures', 'New', 'Gainers', 'Losers', 'Vol', 'Market Cap'].map(filter => (
-                <button
-                  key={filter}
-                  type="button"
-                  role="tab"
-                  aria-selected={activeMarketFilter === filter}
-                  className={activeMarketFilter === filter ? 'active' : ''}
-                  onClick={() => {
-                    setActiveMarketFilter(filter);
-                    setActiveMarketSubfilter(({
-                      Hot: 'Spot',
-                      Spot: 'All',
-                      Futures: 'USD-M',
-                      New: 'Spot',
-                      Gainers: 'Spot',
-                      Losers: 'Spot',
-                      Vol: 'Spot',
-                      'Market Cap': 'Spot',
-                    } as Record<string, string>)[filter] || '');
-                  }}
-                >
-                  {filter}
-                </button>
-              ))}
-            </div>
-            {marketSubfilters.length > 0 && (
-              <div className="sire-home-market-subtabs" role="tablist" aria-label={activeMarketFilter + ' categories'}>
-                <span className="sire-home-market-subtabs-label">VIEW</span>
-                <div className="sire-home-market-subtabs-track">
-                  {marketSubfilters.map(filter => (
-                    <button
-                      key={filter}
-                      type="button"
-                      role="tab"
-                      aria-selected={activeMarketSubfilter === filter}
-                      className={activeMarketSubfilter === filter ? 'active' : ''}
-                      onClick={() => setActiveMarketSubfilter(filter)}
-                    >
-                      {filter}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
+          <SireMarketFilters
+            value={marketFilter}
+            onChange={setMarketFilter}
+            search={marketSearch}
+            onSearchChange={setMarketSearch}
+            count={marketRows.length}
+          />
           <div className="sire-home-watchlist" aria-label={activeMarketFilter + ' markets'}>
             {marketRows.slice(0, 7).map(item => {
               const raw = item as any;
               const change = Number(raw.change24h ?? raw.changePercent24h ?? raw.priceChangePercent ?? raw.percentChange24h ?? raw.changePercent);
               const volume = Number(raw.volume24h ?? raw.quoteVolume ?? raw.volume);
               const isFavorite = favoriteIds.includes(item.id);
-              if (activeMarketFilter === 'Favorite' && !isFavorite) return null;
               const displayBase = String(raw.base || item.displaySymbol || item.symbol).replace(/\/USDT$|\/USD$|USDT$|USD$/i, '').toUpperCase();
               const tradeTone = Number.isFinite(change) ? (change > 0 ? 'positive' : change < 0 ? 'negative' : 'neutral') : 'neutral';
               return (
