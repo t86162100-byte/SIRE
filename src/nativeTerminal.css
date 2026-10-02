@@ -292,8 +292,10 @@
   height:100%;
   min-height:100dvh;
   box-sizing:border-box;
+  display:flex;
+  flex-direction:column;
   overflow:hidden;
-  padding:12px 24px 104px;
+  padding:12px 24px 0;
   background:#000;
 }
 .sire-market-topbar{
@@ -386,18 +388,24 @@
   white-space:nowrap;
 }
 .sire-market-majorbar{
+  width:100%;
   margin-top:6px;
+  display:flex;
+  align-items:center;
+  gap:6px;
+  min-width:0;
+}
+.sire-market-major-scroll{
+  flex:1 1 auto;
+  min-width:0;
+  display:flex;
+  align-items:center;
+  gap:3px;
   overflow-x:auto;
   overflow-y:hidden;
   scrollbar-width:none;
 }
-.sire-market-major-scroll{
-  width:max-content;
-  min-width:100%;
-  display:flex;
-  align-items:center;
-  gap:3px;
-}
+.sire-market-major-scroll::-webkit-scrollbar{display:none}
 .sire-market-major-scroll button{
   flex:0 0 auto;
   height:30px;
@@ -412,63 +420,22 @@
   white-space:nowrap;
 }
 .sire-market-major-scroll button:hover{color:#ddd;background:#0b0b0b}
-.sire-market-major-scroll button.active{
-  background:#fff;
-  color:#000;
-}
-.sire-market-typebar{
-  margin-top:5px;
-  display:flex;
-  align-items:center;
-  gap:6px;
-  min-width:0;
-}
-.sire-market-type-scroll{
-  flex:1 1 auto;
-  min-width:0;
-  display:flex;
-  align-items:center;
-  gap:4px;
-  overflow-x:auto;
-  overflow-y:hidden;
-  scrollbar-width:none;
-}
-.sire-market-type-scroll button{
-  flex:0 0 auto;
-  height:28px;
-  padding:0 10px;
-  border:1px solid #202020;
-  border-radius:5px;
-  background:#070707;
-  color:#777;
-  font-size:9px;
-  font-weight:700;
-  cursor:pointer;
-  white-space:nowrap;
-}
-.sire-market-type-scroll button:hover{color:#ddd;border-color:#333}
-.sire-market-type-scroll button.active{
-  background:#fff;
-  color:#000;
-  border-color:#fff;
-}
+.sire-market-major-scroll button.active{background:#fff;color:#000}
 .sire-market-more-filter{
-  flex:0 0 auto;
-  margin-left:auto;
-  height:28px;
+  flex:0 0 34px;
+  width:34px;
+  height:30px;
   display:inline-flex;
   align-items:center;
   justify-content:center;
-  gap:6px;
-  padding:0 9px;
+  padding:0;
   border:1px solid #292929;
   border-radius:5px;
   background:#fff;
   color:#000;
-  font-size:9px;
-  font-weight:800;
   cursor:pointer;
 }
+.sire-market-more-filter span{display:none}
 .sire-market-results-head{
   width:min(1180px,100%);
   margin:0 auto;
@@ -492,8 +459,8 @@
 .sire-market-results-head span{white-space:nowrap}
 .sire-market-list{
   width:min(1180px,100%);
-  height:calc(100% - 250px);
-  min-height:180px;
+  flex:1 1 auto;
+  min-height:0;
   margin:0 auto;
   overflow:auto;
   border-top:1px solid #1b1b1b;
@@ -707,14 +674,11 @@
   .sire-market-filter-button span{display:none}
   .sire-market-rail{padding:6px 0 7px}
   .sire-market-view-chips{min-width:max-content}
-  .sire-market-major-scroll{min-width:max-content}
+  .sire-market-majorbar{margin-top:5px}
+  .sire-market-major-scroll{min-width:0}
   .sire-market-major-scroll button{height:29px;padding:0 10px}
-  .sire-market-typebar{margin-top:4px}
-  .sire-market-type-scroll{min-width:0}
-  .sire-market-type-scroll button{height:27px;padding:0 9px}
-  .sire-market-more-filter{width:34px;padding:0}
-  .sire-market-more-filter span{display:none}
-  .sire-market-list{height:calc(100% - 295px);min-height:180px}
+  .sire-market-more-filter{flex-basis:34px;width:34px;height:29px}
+  .sire-market-list{flex:1 1 auto;min-height:0}
   .sire-market-list-head{display:none}
   .sire-market-row{
     grid-template-columns:minmax(0,1fr) auto;
