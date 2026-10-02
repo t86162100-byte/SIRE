@@ -433,7 +433,7 @@ export default function App() {
       const providers: MarketProvider[] = ['BINGX','BITRUE','ASCENDEX','WHITEBIT','COINW','DERIV','BINANCE','COINBASE','KRAKEN','BYBIT','OKX','BITGET','GATEIO','KUCOIN','MEXC','CRYPTOCOM','BITFINEX','GEMINI','BITSTAMP','COINEX','HTX','LBANK','BITTREX','BITMART','PHEMEX','BLANK','XT','DEEPCOIN','TOOBIT','WEEX','BITUNIX','BLOFIN','COINCATCH','ZOOMEX','BTCC','DIGIFINEX','COINSTORE','PROBIT','POLONIEX','COINDCX','BITHUMB','UPBIT','PIONEX','POLYMARKET','KALSHI','OPINION','UNISWAP','CURVE','PANCAKESWAP','SUSHISWAP','RAYDIUM','JUPITER','ORCA','AERODROME','TRADERJOE','ONEINCH','COWSWAP','BALANCER'];
       const requests = providers.map(async provider => {
         const controller = new AbortController();
-        const timer = window.setTimeout(() => controller.abort(), 15000);
+        const timer = window.setTimeout(() => controller.abort(), 60000);
         try {
           const response = await fetch('/api/sire/markets/provider/' + encodeURIComponent(provider), {
             cache: 'no-store',
@@ -458,7 +458,7 @@ export default function App() {
           return providerItems;
         } catch (error) {
           const message = error instanceof DOMException && error.name === 'AbortError'
-            ? provider + ': provider catalogue timed out after 15s'
+            ? provider + ': provider catalogue timed out after 60s'
             : (error instanceof Error ? error.message : String(error));
           throw new Error(message);
         } finally {
