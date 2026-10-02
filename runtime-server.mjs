@@ -1025,7 +1025,7 @@ const server = http.createServer(async (req,res) => {
     }
     if (req.method === 'GET' && pathname.startsWith('/api/sire/markets/provider/')) {
       const provider = decodeURIComponent(pathname.slice('/api/sire/markets/provider/'.length)).toUpperCase();
-      const allowed = new Set(['BINGX','BITRUE','ASCENDEX','WHITEBIT','COINW','DERIV','BINANCE','COINBASE','KRAKEN','BYBIT','OKX','BITGET','GATEIO','KUCOIN','MEXC','CRYPTOCOM','BITFINEX','GEMINI','BITSTAMP','COINEX','HTX','LBANK','BITTREX','BITMART','PHEMEX','BLANK','XT','DEEPCOIN','TOOBIT','WEEX','BITUNIX','BLOFIN','COINCATCH','ZOOMEX','BTCC','DIGIFINEX','BITHUMB','UPBIT','PIONEX','COINSTORE','PROBIT','POLONIEX','COINDCX','POLYMARKET','KALSHI','OPINION','UNISWAP','CURVE']);
+      const allowed = new Set(['BINGX','BITRUE','ASCENDEX','WHITEBIT','COINW','DERIV','BINANCE','COINBASE','KRAKEN','BYBIT','OKX','BITGET','GATEIO','KUCOIN','MEXC','CRYPTOCOM','BITFINEX','GEMINI','BITSTAMP','COINEX','HTX','LBANK','BITTREX','BITMART','PHEMEX','BLANK','XT','DEEPCOIN','TOOBIT','WEEX','BITUNIX','BLOFIN','COINCATCH','ZOOMEX','BTCC','DIGIFINEX','BITHUMB','UPBIT','PIONEX','COINSTORE','PROBIT','POLONIEX','COINDCX','POLYMARKET','KALSHI','OPINION','UNISWAP','CURVE','PANCAKESWAP','SUSHISWAP','RAYDIUM','JUPITER','ORCA','AERODROME','TRADERJOE','ONEINCH','COWSWAP','BALANCER']);
       if (!allowed.has(provider)) {
         return res.writeHead(404,{ 'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8' }).end(JSON.stringify({ok:false,error:'Unknown standalone market provider: '+provider}));
       }
