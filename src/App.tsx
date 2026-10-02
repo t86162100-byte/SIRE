@@ -430,89 +430,43 @@ export default function App() {
     let closeBinanceStream: (() => void) | null = null;
 
     const startup = async (): Promise<Instrument[]> => {
-      const providers: MarketProvider[] = ['BINGX','BITRUE','ASCENDEX','WHITEBIT','COINW','DERIV','BINANCE','COINBASE','KRAKEN','BYBIT','OKX','BITGET','GATEIO','KUCOIN','MEXC','CRYPTOCOM','BITFINEX','GEMINI','BITSTAMP','COINEX','HTX','LBANK','BITTREX','BITMART','PHEMEX','BLANK','XT','DEEPCOIN','TOOBIT','WEEX','BITUNIX','BLOFIN','COINCATCH','ZOOMEX','BTCC','DIGIFINEX','COINSTORE','PROBIT','POLONIEX','COINDCX','BITHUMB','UPBIT','PIONEX','POLYMARKET','KALSHI','OPINION','UNISWAP','CURVE','PANCAKESWAP','SUSHISWAP','RAYDIUM','JUPITER','ORCA','AERODROME','TRADERJOE','ONEINCH','COWSWAP','BALANCER'];
-      const requests = providers.map(async provider => {
-        const controller = new AbortController();
-        const timer = window.setTimeout(() => controller.abort(), 60000);
-        try {
-          const response = await fetch('/api/sire/markets/provider/' + encodeURIComponent(provider), {
-            cache: 'no-store',
-            headers: { 'Cache-Control': 'no-cache' },
-            signal: controller.signal,
-          });
-          const payload = await response.json().catch(() => null);
-          if (!response.ok || !payload?.ok || !Array.isArray(payload?.instruments)) {
-            throw new Error(provider + ': ' + (payload?.error || 'provider catalogue unavailable'));
-          }
-          console.info('[SIRE MARKET PROVIDER] loaded', { provider, count: payload.instruments.length });
-          const providerItems = payload.instruments as Instrument[];
-          // Publish each provider as soon as it returns instead of waiting for the
-          // slowest exchange in the global Promise.allSettled batch.
-          if (!cancelled && providerItems.length) {
-            setInstruments(current => {
-              const existing = new Set(current.map(item => item.id));
-              const additions = providerItems.filter(item => item?.id && !existing.has(item.id));
-              return additions.length ? current.concat(additions) : current;
-            });
-          }
-          return providerItems;
-        } catch (error) {
-          const message = error instanceof DOMException && error.name === 'AbortError'
-            ? provider + ': provider catalogue timed out after 60s'
-            : (error instanceof Error ? error.message : String(error));
-          throw new Error(message);
-        } finally {
-          window.clearTimeout(timer);
-        }
-      });
-
-      const results = await Promise.allSettled(requests);
-      const instruments = results.flatMap((result, index) => {
-        if (result.status === 'fulfilled') return result.value;
-        console.warn('[SIRE MARKET PROVIDER] unavailable', {
-          provider: providers[index],
-          error: result.reason instanceof Error ? result.reason.message : String(result.reason),
+      // The Market tab uses the same shared unified catalogue that powered the
+      // former Market workspace: every implemented exchange contributes to one
+      // instrument universe. Do not load exchanges as mutually exclusive views.
+      const controller = new AbortController();
+      const timer = window.setTimeout(() => controller.abort(), 180000);
+      try {
+        const response = await fetch('/api/sire/markets/catalog', {
+          cache: 'no-store',
+          headers: { 'Cache-Control': 'no-cache' },
+          signal: controller.signal,
         });
-        return [];
-      });
-
-      // Render can occasionally be unable to open Deriv's public WebSocket even though
-      // the user's browser can. If the server-side Deriv provider failed, use the
-      // same no-auth public catalogue directly from the browser rather than hiding Deriv.
-      if (!instruments.some(item => item.provider === 'DERIV')) {
-        try {
-          const directDeriv = await fetchDerivInstruments();
-          const browserDeriv = directDeriv.map(item => ({
-            ...item,
-            id: 'DERIV:' + item.symbol,
-            provider: 'DERIV' as MarketProvider,
-            providerLabel: 'Deriv',
-            marketType: item.category === 'synthetic' ? 'Synthetic Indices' : item.category,
-            category: item.category === 'synthetic' ? 'Synthetic Indices' : item.category,
-            displaySymbol: item.name || item.symbol,
-            logoUrl: makeLogoFallback(item.symbol),
-            providerLogoUrl: 'https://deriv.com/favicon.ico',
-          })) as Instrument[];
-          instruments.push(...browserDeriv);
-          console.info('[SIRE DERIV BROWSER] direct catalogue published', { count: browserDeriv.length });
-        } catch (error) {
-          console.warn('[SIRE DERIV BROWSER] direct catalogue failed:', error);
+        const payload = await response.json().catch(() => null);
+        if (!response.ok || !payload?.ok || !Array.isArray(payload?.instruments)) {
+          throw new Error(payload?.error || 'Unified market catalogue unavailable.');
         }
+        const catalogue = payload.instruments as Instrument[];
+        const seen = new Set<string>();
+        const unique = catalogue.filter(item => {
+          if (!item?.id || seen.has(item.id)) return false;
+          seen.add(item.id);
+          return true;
+        });
+        if (!unique.length) throw new Error('Unified market catalogue returned no instruments.');
+        console.info('[SIRE MARKET STARTUP] unified catalogue published', {
+          total: unique.length,
+          providers: payload.providers || [...new Set(unique.map(item => item.provider))],
+        });
+        if (!cancelled) setInstruments(unique);
+        return unique;
+      } catch (error) {
+        const message = error instanceof DOMException && error.name === 'AbortError'
+          ? 'Unified market catalogue timed out after 180s'
+          : (error instanceof Error ? error.message : String(error));
+        throw new Error(message);
+      } finally {
+        window.clearTimeout(timer);
       }
-
-      const seen = new Set<string>();
-      const unique = instruments.filter(item => {
-        if (!item?.id || seen.has(item.id)) return false;
-        seen.add(item.id);
-        return true;
-      });
-
-      if (!unique.length) throw new Error('All standalone market providers failed to return instruments.');
-      console.info('[SIRE MARKET STARTUP] standalone providers published', {
-        total: unique.length,
-        providers: providers.filter(provider => unique.some(item => item.provider === provider)),
-      });
-      return unique;
     };
 
     // Binance live data starts immediately, but quotes are cached so a catalogue
