@@ -948,7 +948,11 @@ export default function App() {
         || (categoryFilter === 'Options' && marketType.includes('option'))
         || (categoryFilter === 'Futures' && marketType === 'futures')
         || (categoryFilter === 'Perpetuals' && marketType === 'perpetuals')
-        || (categoryFilter === 'Crypto' && item.category === 'Crypto' && !marketType.includes('future') && !marketType.includes('option') && !marketType.includes('perpetual') && !marketType.includes('swap'));
+        || (categoryFilter === 'Crypto' && item.category === 'Crypto' && (
+          providerFilter === 'GATEIO'
+            ? true
+            : !marketType.includes('future') && !marketType.includes('option') && !marketType.includes('perpetual') && !marketType.includes('swap')
+        ));
       const searchMatch = !q || `${item.name} ${item.symbol} ${item.providerLabel} ${item.marketType} ${item.category}`.toLowerCase().includes(q);
       return providerMatch && categoryMatch && subcategoryMatch && searchMatch;
     });
