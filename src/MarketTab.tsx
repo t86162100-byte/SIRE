@@ -1,5 +1,5 @@
 import { useDeferredValue, useEffect, useMemo, useState } from 'react';
-import { Search, SlidersHorizontal, Star, X, ChevronDown } from 'lucide-react';
+import { Search, SlidersHorizontal, Star, X } from 'lucide-react';
 
 type MarketInstrument = {
   id: string;
