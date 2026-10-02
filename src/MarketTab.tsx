@@ -76,11 +76,26 @@ const textOf = (item: MarketInstrument) => [
 ].filter(Boolean).join(' ').toLowerCase();
 
 const normalizeClass = (item: MarketInstrument): ClassName => {
+  // The unified catalogue already carries the authoritative taxonomy. Prefer it
+  // over provider-name heuristics so Deriv synthetic instruments, TradFi feeds,
+  // prediction venues and DEX data land in the same classes as the former Market.
+  const explicit = String((item as any).marketGroup || '').trim().toLowerCase();
+  if (explicit === 'tradfi') return 'TradFi';
+  if (explicit === 'onchain') return 'Onchain';
+  if (explicit === 'prediction') return 'Prediction';
+  if (explicit === 'crypto') return 'Crypto';
+  const category = String((item as any).category || '').trim().toLowerCase();
+  if (category === 'prediction') return 'Prediction';
+  if (category === 'onchain') return 'Onchain';
+  if (category === 'tradfi') return 'TradFi';
+  if (category === 'crypto') return 'Crypto';
+
+  const provider = String(item.provider || '').toUpperCase();
   const raw = textOf(item);
-  if (raw.includes('prediction') || ['POLYMARKET', 'KALSHI', 'OPINION'].includes(String(item.provider).toUpperCase())) return 'Prediction';
-  if (raw.includes('onchain') || ['UNISWAP','CURVE','PANCAKESWAP','SUSHISWAP','RAYDIUM','JUPITER','ORCA','AERODROME','TRADERJOE','ONEINCH','COWSWAP','BALANCER'].includes(String(item.provider).toUpperCase())) return 'Onchain';
-  if (raw.includes('tradfi') || /stocks?|etf|forex|commodity|commodities|indices?|bonds?|funds?|cfds?|cfd/.test(raw)) return 'TradFi';
-  if (raw.includes('crypto') || /binance|bitget|gate|bybit|okx|kraken|coinbase|kucoin|mexc|bitfinex|htx|deriv/.test(raw)) return 'Crypto';
+  if (['POLYMARKET', 'KALSHI', 'OPINION'].includes(provider) || raw.includes('prediction')) return 'Prediction';
+  if (['UNISWAP','CURVE','PANCAKESWAP','SUSHISWAP','RAYDIUM','JUPITER','ORCA','AERODROME','TRADERJOE','ONEINCH','COWSWAP','BALANCER'].includes(provider) || raw.includes('onchain')) return 'Onchain';
+  if (/stocks?|etf|forex|commodity|commodities|indices?|bonds?|funds?|cfds?|cfd/.test(raw)) return 'TradFi';
+  if (/binance|bitget|gate|bybit|okx|kraken|coinbase|kucoin|mexc|bitfinex|htx/.test(raw)) return 'Crypto';
   return 'Other';
 };
 
