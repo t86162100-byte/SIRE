@@ -855,7 +855,6 @@ export default function HomeView({ instruments, onSelectInstrument, videoSrc = '
               const raw = item as any;
               const change = Number(raw.change24h ?? raw.changePercent24h ?? raw.priceChangePercent ?? raw.percentChange24h ?? raw.changePercent);
               const volume = Number(raw.volume24h ?? raw.quoteVolume ?? raw.volume);
-              const isFavorite = favoriteIds.includes(item.id);
               const displayBase = String(raw.base || item.displaySymbol || item.symbol).replace(/\/USDT$|\/USD$|USDT$|USD$/i, '').toUpperCase();
               const tradeTone = Number.isFinite(change) ? (change > 0 ? 'positive' : change < 0 ? 'negative' : 'neutral') : 'neutral';
               return (
