@@ -13,7 +13,6 @@ import './quoteLogoPositionFix';
 import './quoteInstrumentCards';
 import './marketCardDesigns';
 import './quoteListFullHeight';
-import './sireLoadingOverlay';
 import './sireChatLoader';
 import './sireTouchDrawingAdapter';
 
