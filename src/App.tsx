@@ -5,12 +5,11 @@ import ResearchLab from './ResearchLab';
 import HomeView from './HomeView';
 import FinancialChart from './FinancialChart';
 import { fetchDerivInstruments, type DerivInstrument } from './derivMarketData';
-import { fetchBinanceBrowserCatalogue, fetchBinanceLiveQuotes, fetchBinanceMarketMetadata, createBinanceCatalogueLiveFeed } from './binanceMarketData';
 import { SireErrorScreen } from './SireErrorBoundary';
 import './nativeTerminal.css';
 import { MarketInstrumentCard } from './marketCardDesigns';
 
-type MarketProvider = 'BINGX' | 'DERIV' | 'FXCM' | 'HYPERLIQUID' | 'GLOBALCRYPTO' | 'BINANCE' | 'BITGET' | 'BYBIT' | 'OKX' | 'KRAKEN' | 'COINBASE' | 'GATEIO' | 'KUCOIN' | 'GEMINI' | 'BITSO' | 'BITFINEX' | 'BITVAVO' | 'COINEX' | 'LBANK' | 'WOOX' | 'CRYPTOCOM' | 'HTX' | 'BITKUB' | 'UPBIT' | 'PIONEX' | 'POLONIEX' | 'BITHUMB' | 'MEXC' | 'PHEMEX' | 'WHITEBIT' | 'TWELVEDATA' | 'NASDAQTRADER' | 'NSE' | 'BITSTAMP' | 'OANDA' | 'TRADINGVIEW' | 'FOREXCOM' | 'INTERACTIVEBROKERS' | 'TRADESTATION' | 'WEBULL' | 'MOOMOO' | 'NINJATRADER' | 'TRADOVATE' | 'AMPFUTURES' | 'TASTYTRADE' | 'TASTYFX' | 'CRYPTOCOMEXCHANGE' | 'COINBASEADVANCED' | 'ALPACA' | 'TRADIERBROKERAGE' | 'TRADEZERO' | 'COBRATRADING' | 'CLEARSTREET' | 'INVESTRADE' | 'PUBLIC' | 'PLUS500US' | 'OPTIMUSFUTURES' | 'EDGECLEAR' | 'IRONBEAM' | 'STONEX' | 'DORMANTRADING' | 'TRADIERFUTURES' | 'BITTREX' | 'BITMART' | 'BLANK' | 'XT' | 'DEEPCOIN' | 'TOOBIT' | 'WEEX' | 'BITUNIX' | 'BLOFIN' | 'COINCATCH' | 'ZOOMEX' | 'BTCC' | 'DIGIFINEX' | 'COINSTORE' | 'PROBIT' | 'POLONIEX' | 'COINDCX' | 'POLYMARKET' | 'KALSHI' | 'OPINION' | 'UNISWAP' | 'CURVE' | 'PANCAKESWAP' | 'SUSHISWAP' | 'RAYDIUM' | 'JUPITER' | 'ORCA' | 'AERODROME' | 'TRADERJOE' | 'ONEINCH' | 'COWSWAP' | 'BALANCER';
+type MarketProvider = 'DERIV';
 export type Instrument = DerivInstrument & {
   id: string;
   provider: MarketProvider;
@@ -83,63 +82,7 @@ const makeLogoFallback = (label: string) => {
   return 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(svg);
 };
 
-const makeAssetLogoFallback = (item: Instrument) => {
-  const base = String(item.base || '').trim().toLowerCase();
-  return base ? 'https://cdn.jsdelivr.net/gh/vadimmalykhin/binance-icons/crypto/' + encodeURIComponent(base) + '.svg' : makeLogoFallback(item.displaySymbol || item.symbol);
-};
-/*
- * Exchange logos use the same working image-loading path as the existing
- * Deriv/provider logos. No npm icon package or runtime CDN is used.
- */
-const exchangeDomains: Record<string, string> = {
-  bingx: 'bingx.com',
-  bitrue: 'bitrue.com',
-  ascendex: 'ascendex.com',
-  whitebit: 'whitebit.com',
-  coinw: 'coinw.com',
-  xt: 'xt.com',
-  deepcoin: 'deepcoin.com',
-  toobit: 'toobit.com',
-  weex: 'weex.com',
-  bitunix: 'bitunix.com',
-  blofin: 'blofin.com',
-  coincatch: 'coincatch.com',
-  zoomex: 'zoomex.com',
-  btcc: 'btcc.com',
-  digifinex: 'digifinex.com',
-  coinstore: 'coinstore.com',
-  probit: 'probit.com',
-  poloniex: 'poloniex.com',
-  coindcx: 'coindcx.com',
-  binance: 'binance.com',
-  bitget: 'bitget.com',
-  bybit: 'bybit.com',
-  okx: 'okx.com',
-  kraken: 'kraken.com',
-  coinbase: 'coinbase.com',
-  gate: 'gate.io',
-  gateio: 'gate.io',
-  kucoin: 'kucoin.com',
-  mexc: 'mexc.com',
-  gemini: 'gemini.com',
-  bitfinex: 'bitfinex.com',
-  bitstamp: 'bitstamp.net',
-  bitvavo: 'bitvavo.com',
-  coinex: 'coinex.com',
-  lbank: 'lbank.com',
-  cryptocom: 'crypto.com',
-  htx: 'htx.com',
-  upbit: 'upbit.com',
-  bithumb: 'bithumb.com',
-  phemex: 'phemex.com',
-  bitso: 'bitso.com',
-  bitkub: 'bitkub.com',
-  pionex: 'pionex.com',
-  hyperliquid: 'hyperliquid.xyz',
-  oanda: 'oanda.com',
-  woox: 'woo.org',
-  uniswap: 'uniswap.org', curve: 'curve.fi', pancakeswap: 'pancakeswap.finance',
-};
+const makeAssetLogoFallback = (item: Instrument) => makeLogoFallback(item.displaySymbol || item.symbol);
 
 const MARKET_TOP_GROUPS = ['CRYPTO', 'TRADE FI', 'ON CHAIN', 'PREDICTIONS', 'OTHERS'] as const;
 
@@ -172,90 +115,9 @@ const MARKET_SUBSUBGROUPS: Record<string, readonly string[]> = {
   'OTHERS::Baskets': ['Crypto Baskets', 'Stock Baskets', 'Commodity Baskets', 'Index Baskets', 'Other Baskets'],
 };
 
-const MARKET_EXCHANGE_PROVIDERS = [
-  'ALL','BINGX','BITRUE','ASCENDEX','WHITEBIT','COINW','DERIV','BINANCE','COINBASE','KRAKEN','BYBIT','OKX','BITGET','GATEIO','KUCOIN','MEXC','CRYPTOCOM','BITFINEX','GEMINI','BITSTAMP','COINEX','HTX','BITTREX','BITMART','PHEMEX','LBANK','XT','DEEPCOIN','TOOBIT','WEEX','BITUNIX','BLOFIN','COINCATCH','ZOOMEX','BTCC','DIGIFINEX','COINSTORE','PROBIT','POLONIEX','COINDCX','POLYMARKET','KALSHI','OPINION','FXCM','TWELVEDATA','NASDAQTRADER','XETR','XFRA','EUREX','ASX','TWSE','PSX','IDX','HKEX','BSE','TSE','NSE','OANDA','FOREXCOM','INTERACTIVEBROKERS','TRADESTATION','WEBULL','MOOMOO','NINJATRADER','TRADOVATE','AMPFUTURES','TASTYTRADE','TASTYFX','ALPACA','TRADIERBROKERAGE','TRADEZERO','COBRATRADING','CLEARSTREET','INVESTRADE','PUBLIC','PLUS500US','OPTIMUSFUTURES','EDGECLEAR','IRONBEAM','STONEX','DORMANTRADING','TRADIERFUTURES','TRADINGVIEW','UNISWAP','CURVE','PANCAKESWAP','SUSHISWAP','RAYDIUM','JUPITER','ORCA','AERODROME','TRADERJOE','ONEINCH','COWSWAP','BALANCER'
-] as const;
-
-const exchangeDisplayName = (value: string) => {
-  const labels: Record<string, string> = {
-    ALL: 'All Exchanges',
-    CRYPTOCOM: 'Crypto.com',
-    GATEIO: 'Gate.io',
-    COINW: 'CoinW',
-    COINDCX: 'CoinDCX',
-    DEEPCOIN: 'Deepcoin',
-    COINCATCH: 'CoinCatch',
-    COINSTORE: 'Coinstore',
-    BTCC: 'BTCC',
-    DIGIFINEX: 'DigiFinex',
-    LBANK: 'LBank',
-    HTX: 'HTX',
-    MEXC: 'MEXC',
-    OKX: 'OKX',
-    FXCM: 'FXCM',
-    TWELVEDATA: 'Twelve Data',
-    NASDAQTRADER: 'Nasdaq Trader',
-    XETR: 'Xetra',
-    XFRA: 'Frankfurt',
-    EUREX: 'Eurex',
-    ASX: 'ASX',
-    TWSE: 'TWSE',
-    PSX: 'PSX',
-    IDX: 'IDX',
-    HKEX: 'HKEX',
-    BSE: 'BSE',
-    TSE: 'TSE',
-    NSE: 'NSE',
-    OANDA: 'OANDA',
-    FOREXCOM: 'Forex.com',
-    INTERACTIVEBROKERS: 'Interactive Brokers',
-    TRADESTATION: 'TradeStation',
-    WEBULL: 'Webull',
-    MOOMOO: 'Moomoo',
-    NINJATRADER: 'NinjaTrader',
-    TRADOVATE: 'Tradovate',
-    AMPFORES: 'AMP Futures',
-    AMPFUTURES: 'AMP Futures',
-    TASTYTRADE: 'tastytrade',
-    TASTYFX: 'tastyfx',
-    ALPACA: 'Alpaca',
-    TRADIERBROKERAGE: 'Tradier Brokerage',
-    TRADEZERO: 'TradeZero',
-    COBRATRADING: 'Cobra Trading',
-    CLEARSTREET: 'Clear Street',
-    INVESTRADE: 'Investrade',
-    PUBLIC: 'Public',
-    PLUS500US: 'Plus500 US',
-    OPTIMUSFUTURES: 'Optimus Futures',
-    EDGECLEAR: 'EdgeClear',
-    IRONBEAM: 'Ironbeam',
-    STONEX: 'StoneX',
-    DORMANTRADING: 'Dorman Trading',
-    TRADIERFUTURES: 'Tradier Futures',
-    TRADINGVIEW: 'TradingView',
-    PANCAKESWAP: 'PancakeSwap',
-    SUSHISWAP: 'SushiSwap',
-    TRADERJOE: 'Trader Joe',
-    ONEINCH: '1inch',
-    COWSWAP: 'CowSwap',
-  };
-  return labels[value] || (value === 'ALL' ? 'All Exchanges' : value[0] + value.slice(1).toLowerCase());
-};
-
-const exchangeLogoUrl = (value: string) => {
-  const aliases: Record<string, string> = {
-    CRYPTOCOM: 'crypto-com',
-    GATEIO: 'gate-io',
-    PANCAKESWAP: 'pancake-swap',
-    SUSHISWAP: 'sushi',
-    ONEINCH: '1inch',
-    COINDCX: 'coindcx',
-    DIGIFINEX: 'digifinex',
-    NASDAQTRADER: 'nasdaq',
-  };
-  const slug = aliases[value] || value.toLowerCase();
-  return 'https://cdn.simpleicons.org/' + encodeURIComponent(slug);
-};
+const MARKET_SOURCES = ['DERIV'] as const;
+const sourceDisplayName = (value: string) => value === 'DERIV' ? 'Deriv' : value;
+const sourceLogoUrl = (_value: string) => 'https://deriv.com/favicon.ico';
 
 const normalizeMarketLabel = (value: unknown) =>
   String(value || '').trim().toLowerCase().replace(/[\s_-]+/g, ' ');
@@ -379,63 +241,12 @@ const makeProviderLogoFallback = (item: Instrument) => {
   return 'https://www.google.com/s2/favicons?domain=' + encodeURIComponent(domain) + '&sz=128';
 };
 
-const bitgetWebSocketUrl = 'wss://ws.bitget.com/v3/ws/public';
-
-const getBitgetInstType = (item: Instrument): 'spot' | 'usdt-futures' | 'coin-futures' | 'usdc-futures' | null => {
-  const category = String((item as any).bitgetCategory || item.instrumentType || '').toUpperCase();
-  const marketType = String(item.marketType || '').toLowerCase();
-  if (category === 'CFD' || category === 'ONCHAIN' || marketType === 'cfd' || marketType === 'onchain') return null;
-  if (marketType.includes('spot') || marketType.includes('margin') || category === 'SPOT' || category === 'MARGIN') return 'spot';
-  if (category === 'USDC-FUTURES') return 'usdc-futures';
-  if (category === 'COIN-FUTURES') return 'coin-futures';
-  if (category === 'USDT-FUTURES' || marketType.includes('future') || marketType.includes('perpetual')) return 'usdt-futures';
-  return null;
-};
-
-const getBitgetLiveKey = (item: Instrument) => {
-  const instType = getBitgetInstType(item);
-  const category = String((item as any).bitgetCategory || item.instrumentType || '').toUpperCase();
-  const symbol = getBitgetInstId(item);
-  return category === 'CFD' || String(item.marketType || '').toLowerCase() === 'cfd'
-    ? 'cfd:' + symbol
-    : instType ? instType + ':' + symbol : null;
-};
-
-const getBitgetCardMarketLabel = (item: Instrument) => {
-  if (item.provider !== 'BITGET') {
-    return String(item.marketType || item.category).toLowerCase();
-  }
-  const rawType = String(item.marketType || item.instrumentType || '').trim().toLowerCase();
-  const type = rawType === 'perpetuals' || rawType === 'perpetual' ? 'perpetual' : rawType;
-  const group = String((item as any).marketGroup || item.category || '').trim().toLowerCase();
-  if (type && group) return type + '_' + group;
-  return type || group || 'market';
-};
-
-const getBitgetInstId = (item: Instrument) => {
-  // Normalize only the live transport identifier. The Bitget catalogue is
-  // left untouched. Some rows already include the quote in base, so avoid
-  // producing invalid subscriptions such as RAPAMUSDTUSDT.
-  const base = String((item as any).base || '').trim().toUpperCase();
-  const quote = String((item as any).quote || '').trim().toUpperCase();
-  if (base && quote) {
-    if (base.endsWith(quote)) return base;
-    return base + quote;
-  }
-  const raw = String(item.symbol || item.displaySymbol || '').trim().toUpperCase();
-  return raw
-    .replace(/^BITGET[:_]/, '')
-    .replace(/[^A-Z0-9]/g, '');
-};
-
 const chooseInitialDerivInstrument = (items: Instrument[]) =>
   items.find(item => item.provider === 'DERIV' && item.exchangeOpen !== 0 && item.tradingSuspended !== 1) ||
   items.find(item => item.provider === 'DERIV') || items[0] || null;
 
 export default function App() {
   const [instruments, setInstruments] = useState<Instrument[]>([]);
-  // One random seed per page load keeps the mixed order stable during browsing.
-  const catalogueShuffleSeedRef = useRef<number>(Math.floor(Math.random() * 0xffffffff));
   const [selected, setSelected] = useState<Instrument | null>(null);
   const [derivLoading, setDerivLoading] = useState(true);
   const [derivError, setDerivError] = useState('');
@@ -459,603 +270,44 @@ export default function App() {
   const [multiChartPosition, setMultiChartPosition] = useState<'up' | 'down' | 'left' | 'right'>('right');
   const [chartSymbols, setChartSymbols] = useState<string[]>([]);
   const linkGroupRef = useRef<LinkGroup | null>(null);
-  const binanceQuoteCacheRef = useRef<Record<string, any>>({});
-  const binanceMetadataCacheRef = useRef<Record<string, any>>({});
-  const [bitgetPriorityIds, setBitgetPriorityIds] = useState<string[]>([]);
-  // Bitget live quotes are kept outside the shared catalogue state. This prevents
-  // its high-frequency ticks from competing with Binance's live update path.
-  const [bitgetQuotes, setBitgetQuotes] = useState<Map<string, any>>(() => new Map());
-  // Binance live quotes are isolated from the shared catalogue for the same reason: catalogue refreshes must never overwrite ticks.
-  const [binanceQuotes, setBinanceQuotes] = useState<Map<string, any>>(() => new Map());
+
+  const liveInstruments = instruments;
 
   useEffect(() => {
-    const onBitgetPrioritySymbols = (event: Event) => {
-      const detail = (event as CustomEvent).detail as { ids?: unknown } | undefined;
-      const ids = Array.isArray(detail?.ids) ? detail.ids.map(value => String(value)).filter(Boolean) : [];
-      setBitgetPriorityIds(ids);
-    };
-    window.addEventListener('sire:bitget-priority-symbols', onBitgetPrioritySymbols);
-    return () => window.removeEventListener('sire:bitget-priority-symbols', onBitgetPrioritySymbols);
-  }, []);
-
-  // The catalogue stays complete and untouched. Live Bitget transport is scoped
-  // to the Home rows that are actually visible/needed, so thousands of catalogue
-  // entries cannot flood the relay with subscriptions or rate-limit the exchange.
-  const bitgetLiveItems = useMemo(() => {
-    const byId = new Map(instruments.filter(item => item.provider === 'BITGET').map(item => [item.id, item]));
-    const priority = bitgetPriorityIds.map(id => byId.get(id)).filter(Boolean) as Instrument[];
-    if (priority.length) return priority;
-    return instruments.filter(item =>
-      item.provider === 'BITGET' &&
-      getBitgetInstType(item) &&
-      getBitgetInstId(item)
-    ).slice(0, 7);
-  }, [instruments, bitgetPriorityIds]);
-
-  const bitgetSubscriptionSignature = useMemo(() => (
-    bitgetLiveItems
-      .filter(item => getBitgetInstType(item) && getBitgetInstId(item))
-      .map(item => getBitgetLiveKey(item) || '')
-      .filter(Boolean)
-      .sort()
-      .join('|')
-  ), [bitgetLiveItems]);
-
-  // One browser connection only. SIRE owns the Bitget upstream sockets and
-  // keeps the live set small/stable without touching the catalogue.
-  useEffect(() => {
-    if (!bitgetSubscriptionSignature) return;
     let cancelled = false;
-    let socket: WebSocket | null = null;
-    let reconnectTimer: number | null = null;
-    let pingTimer: number | null = null;
-    let reconnectAttempt = 0;
-
-    const subscriptions = bitgetLiveItems
-      .filter(item => getBitgetInstType(item) && getBitgetInstId(item))
-      .map(item => ({
-        instType: getBitgetInstType(item)!,
-        topic: 'ticker',
-        symbol: getBitgetInstId(item),
-      }));
-
-    const applyTicker = (message: any) => {
-      const arg = message?.arg;
-      const ticker = Array.isArray(message?.data) ? message.data[0] : null;
-      if (!arg || !ticker) return;
-
-      const instType = String(arg.instType || '').toLowerCase();
-      const symbol = String(arg.symbol || arg.instId || '').toUpperCase();
-      if (!instType || !symbol) return;
-
-      const price = Number(ticker.lastPrice ?? ticker.lastPr ?? ticker.last);
-      if (!Number.isFinite(price)) return;
-
-      const open24h = Number(ticker.openPrice24h ?? ticker.open24h);
-      const rawChange = Number(ticker.price24hPcnt ?? ticker.change24h);
-      const change24h = Number.isFinite(open24h) && open24h !== 0
-        ? ((price - open24h) / open24h) * 100
-        : Number.isFinite(rawChange)
-          ? (Math.abs(rawChange) <= 1 ? rawChange * 100 : rawChange)
-          : undefined;
-
-      const bid = Number(ticker.bid1Price ?? ticker.bidPr);
-      const ask = Number(ticker.ask1Price ?? ticker.askPr);
-      const volume = Number(ticker.volume24h ?? ticker.baseVolume);
-      const turnover = Number(ticker.turnover24h ?? ticker.quoteVolume);
-
-      const update = {
-        price,
-        bid: Number.isFinite(bid) ? bid : undefined,
-        ask: Number.isFinite(ask) ? ask : undefined,
-        volume24h: Number.isFinite(volume) ? volume : Number.isFinite(turnover) ? turnover : undefined,
-        change24h: Number.isFinite(change24h) ? change24h : undefined,
-        priceChangePercent: Number.isFinite(change24h) ? change24h : undefined,
-      };
-
-      const key = instType + ':' + symbol;
-      setBitgetQuotes(current => {
-        const next = new Map(current);
-        next.set(key, update);
-        return next;
-      });
-    };
-
-    const sendSubscriptions = () => {
-      if (!socket || socket.readyState !== WebSocket.OPEN) return;
-      // Send one complete subscription set per product family. SIRE performs the
-      // actual 50-channel upstream sharding, so the catalogue is never rebuilt
-      // repeatedly while the browser is connecting.
-      const grouped = new Map<string, typeof subscriptions>();
-      for (const item of subscriptions) {
-        const list = grouped.get(item.instType) || [];
-        list.push(item);
-        grouped.set(item.instType, list);
-      }
-      for (const args of grouped.values()) {
-        socket.send(JSON.stringify({ op: 'subscribe', args }));
-      }
-    };
-
-    const connect = () => {
-      if (cancelled) return;
-      socket = new WebSocket((window.location.protocol === 'https:' ? 'wss://' : 'ws://') + window.location.host + '/bitget/ws');
-
-      socket.onopen = () => {
-        reconnectAttempt = 0;
-        sendSubscriptions();
-        if (pingTimer !== null) window.clearInterval(pingTimer);
-        pingTimer = window.setInterval(() => {
-          if (socket?.readyState === WebSocket.OPEN) socket.send('ping');
-        }, 25000);
-        console.info('[SIRE BITGET LIVE] clean relay connected', { subscriptions: subscriptions.length });
-      };
-
-      socket.onmessage = event => {
-        if (event.data === 'pong') return;
-        try {
-          const message = JSON.parse(event.data);
-          if (message?.event === 'subscribe' || message?.event === 'connected') return;
-          if (message?.event === 'error' || (message?.code && message.code !== '00000')) {
-            console.warn('[SIRE BITGET LIVE] relay subscription error', message);
-            return;
-          }
-          if (message?.arg?.topic === 'ticker' && Array.isArray(message?.data)) {
-            applyTicker(message);
-          }
-        } catch {}
-      };
-
-      socket.onerror = () => {
-        console.warn('[SIRE BITGET LIVE] clean relay socket error');
-      };
-
-      socket.onclose = () => {
-        if (pingTimer !== null) {
-          window.clearInterval(pingTimer);
-          pingTimer = null;
-        }
+    const load = async () => {
+      try {
+        const rows = await fetchDerivInstruments();
         if (cancelled) return;
-        const delay = Math.min(10000, 1000 * Math.pow(2, reconnectAttempt++));
-        reconnectTimer = window.setTimeout(connect, delay);
-      };
-    };
-
-    connect();
-
-    return () => {
-      cancelled = true;
-      if (reconnectTimer !== null) window.clearTimeout(reconnectTimer);
-      if (pingTimer !== null) window.clearInterval(pingTimer);
-      try { socket?.close(); } catch {}
-      socket = null;
-    };
-  }, [bitgetSubscriptionSignature]);
-
-  const liveInstruments = useMemo(() => (
-    instruments.map(item => {
-      if (item.provider === 'BITGET') {
-        const key = getBitgetInstType(item).toLowerCase() + ':' + getBitgetInstId(item);
-        const update = bitgetQuotes.get(key);
-        return update ? { ...item, ...update } : item;
-      }
-      if (item.provider === 'BINANCE') {
-        const update = binanceQuotes.get(item.id);
-        return update ? { ...item, ...update, priceChangePercent: update.change24h } : item;
-      }
-      return item;
-    })
-  ), [instruments, bitgetQuotes, binanceQuotes]);
-
-  useEffect(() => {
-    let cancelled = false;
-    let retryTimer: number | null = null;
-    let globalCryptoRefresh: number | null = null;
-    let closeBinanceStream: (() => void) | null = null;
-
-    const startup = async (): Promise<Instrument[]> => {
-      const providers: MarketProvider[] = ['BINGX','BITRUE','ASCENDEX','WHITEBIT','COINW','DERIV','BINANCE','COINBASE','KRAKEN','BYBIT','OKX','BITGET','GATEIO','KUCOIN','MEXC','CRYPTOCOM','BITFINEX','GEMINI','BITSTAMP','COINEX','HTX','LBANK','BITTREX','BITMART','PHEMEX','BLANK','XT','DEEPCOIN','TOOBIT','WEEX','BITUNIX','BLOFIN','COINCATCH','ZOOMEX','BTCC','DIGIFINEX','COINSTORE','PROBIT','POLONIEX','COINDCX','BITHUMB','UPBIT','PIONEX','POLYMARKET','KALSHI','OPINION','UNISWAP','CURVE','PANCAKESWAP','SUSHISWAP','RAYDIUM','JUPITER','ORCA','AERODROME','TRADERJOE','ONEINCH','COWSWAP','BALANCER'];
-      const requests = providers.map(async provider => {
-        const controller = new AbortController();
-        const timer = window.setTimeout(() => controller.abort(), 60000);
-        try {
-          const response = await fetch('/api/sire/markets/provider/' + encodeURIComponent(provider), {
-            cache: 'no-store',
-            headers: { 'Cache-Control': 'no-cache' },
-            signal: controller.signal,
-          });
-          const payload = await response.json().catch(() => null);
-          if (!response.ok || !payload?.ok || !Array.isArray(payload?.instruments)) {
-            throw new Error(provider + ': ' + (payload?.error || 'provider catalogue unavailable'));
-          }
-          console.info('[SIRE MARKET PROVIDER] loaded', { provider, count: payload.instruments.length });
-          return payload.instruments as Instrument[];
-        } catch (error) {
-          const message = error instanceof DOMException && error.name === 'AbortError'
-            ? provider + ': provider catalogue timed out after 60s'
-            : (error instanceof Error ? error.message : String(error));
-          throw new Error(message);
-        } finally {
-          window.clearTimeout(timer);
-        }
-      });
-
-      const results = await Promise.allSettled(requests);
-      const instruments = results.flatMap((result, index) => {
-        if (result.status === 'fulfilled') return result.value;
-        console.warn('[SIRE MARKET PROVIDER] unavailable', {
-          provider: providers[index],
-          error: result.reason instanceof Error ? result.reason.message : String(result.reason),
-        });
-        return [];
-      });
-
-      // Render can occasionally be unable to open Deriv's public WebSocket even though
-      // the user's browser can. If the server-side Deriv provider failed, use the
-      // same no-auth public catalogue directly from the browser rather than hiding Deriv.
-      if (!instruments.some(item => item.provider === 'DERIV')) {
-        try {
-          const directDeriv = await fetchDerivInstruments();
-          const browserDeriv = directDeriv.map(item => ({
-            ...item,
-            id: 'DERIV:' + item.symbol,
-            provider: 'DERIV' as MarketProvider,
-            providerLabel: 'Deriv',
-            marketType: item.category === 'synthetic' ? 'Synthetic Indices' : item.category,
-            category: item.category === 'synthetic' ? 'Synthetic Indices' : item.category,
-            displaySymbol: item.name || item.symbol,
-            logoUrl: makeLogoFallback(item.symbol),
-            providerLogoUrl: 'https://deriv.com/favicon.ico',
-          })) as Instrument[];
-          instruments.push(...browserDeriv);
-          console.info('[SIRE DERIV BROWSER] direct catalogue published', { count: browserDeriv.length });
-        } catch (error) {
-          console.warn('[SIRE DERIV BROWSER] direct catalogue failed:', error);
-        }
-      }
-
-      const seen = new Set<string>();
-      const unique = instruments.filter(item => {
-        if (!item?.id || seen.has(item.id)) return false;
-        seen.add(item.id);
-        return true;
-      });
-
-      if (!unique.length) throw new Error('All standalone market providers failed to return instruments.');
-      console.info('[SIRE MARKET STARTUP] standalone providers published', {
-        total: unique.length,
-        providers: providers.filter(provider => unique.some(item => item.provider === provider)),
-      });
-      return unique;
-    };
-
-    // Binance live data starts immediately, but quotes are cached so a catalogue
-    // that arrives a moment later still receives the latest snapshot.
-    void (async () => {
-      try {
-        let pendingQuotes: Record<string, any> = {};
-        let flushTimer: number | null = null;
-        const applyQuotes = (quotes: Record<string, any>) => {
-          if (cancelled) return;
-          Object.assign(pendingQuotes, quotes);
-          if (flushTimer !== null) return;
-          flushTimer = window.setTimeout(() => {
-            flushTimer = null;
-            if (cancelled) return;
-            const batch = pendingQuotes;
-            pendingQuotes = {};
-            Object.assign(binanceQuoteCacheRef.current, batch);
-            setBinanceQuotes(current => {
-              const next = new Map(current);
-              Object.entries(batch).forEach(([id, quote]) => next.set(id, quote));
-              return next;
-            });
-          }, 1000);
-        };
-        const initialQuotes = await fetchBinanceLiveQuotes();
-        applyQuotes(initialQuotes);
-        closeBinanceStream = createBinanceCatalogueLiveFeed(applyQuotes);
-        // REST refresh is an isolated Binance fallback/verification path. It keeps Home live even if a browser WebSocket is blocked.
-        const binanceRestTimer = window.setInterval(() => {
-          void fetchBinanceLiveQuotes().then(quotes => applyQuotes(quotes));
-        }, 2000);
-        const previousCloseBinanceStream = closeBinanceStream;
-        closeBinanceStream = () => {
-          window.clearInterval(binanceRestTimer);
-          previousCloseBinanceStream?.();
-        };
-        void fetchBinanceMarketMetadata().then(metadata => {
-          if (cancelled) return;
-          Object.assign(binanceMetadataCacheRef.current, metadata);
-          setInstruments(current => current.map(item => {
-            if (item.provider !== 'BINANCE') return item;
-            const meta = metadata[String(item.base || '').toUpperCase()];
-            if (!meta) return item;
-            const supply = Number(meta.circulatingSupply);
-            const marketCap = Number.isFinite(supply) && Number.isFinite(Number(item.price))
-              ? supply * Number(item.price)
-              : meta.marketCap;
-            return {
-              ...item,
-              circulatingSupply: Number.isFinite(supply) ? supply : item.circulatingSupply,
-              marketCap: Number.isFinite(Number(marketCap)) ? Number(marketCap) : item.marketCap,
-              listedAt: ['Spot', 'Margin'].includes(String(item.marketType)) && Number.isFinite(Number(meta.listedAt)) ? Number(meta.listedAt) : item.listedAt,
-              onboardDate: ['Spot', 'Margin'].includes(String(item.marketType)) && Number.isFinite(Number(meta.listedAt)) ? Number(meta.listedAt) : item.onboardDate,
-              newListing: ['Spot', 'Margin'].includes(String(item.marketType)) && meta.newListing === true ? true : item.newListing,
-            };
-          }));
-        }).catch(error => console.warn('[SIRE BINANCE] market metadata failed:', error));
-      } catch (error) {
-        console.warn('[SIRE BINANCE LIVE] stream startup failed:', error);
-      }
-    })();
-
-
-    void (async () => {
-      try {
-        console.info('[SIRE BINANCE BROWSER] INDEPENDENT START');
-
-        // Hosted catalogue is generated by GitHub Actions from Binance's official
-        // exchangeInfo endpoints. This is the authoritative fallback when Render
-        // or the user's region receives HTTP 451 from Binance derivatives APIs.
-        try {
-          const hostedResponse = await fetch('/binance-catalogue.json?ts=' + Date.now(), { cache: 'no-store' });
-          if (hostedResponse.ok) {
-            const hosted = await hostedResponse.json();
-            const hostedItems = [
-              ...(Array.isArray(hosted?.spot) ? hosted.spot : []),
-              ...(Array.isArray(hosted?.margin) ? hosted.margin : []),
-              ...(Array.isArray(hosted?.derivatives) ? hosted.derivatives : []),
-            ];
-            const hostedMetadata = hosted?.metadata && typeof hosted.metadata === 'object' ? hosted.metadata : {};
-            Object.assign(binanceMetadataCacheRef.current, hostedMetadata);
-            if (hostedItems.length && !cancelled) {
-              setInstruments(current => {
-                const incoming = new Map(hostedItems.map((item:any) => [item.id, item]));
-                const mergedCurrent = current.map(item => {
-                  const incomingItem = incoming.get(item.id);
-                  if (!incomingItem) return item;
-                  incoming.delete(item.id);
-                  const meta = hostedMetadata[String(incomingItem.base || '').toUpperCase()];
-                  return {
-                    ...item,
-                    ...incomingItem,
-                    price: item.price ?? incomingItem.price,
-                    ...(['Spot', 'Margin'].includes(String(item.marketType)) && Number.isFinite(Number(meta?.listedAt)) ? { listedAt: Number(meta.listedAt), onboardDate: Number(meta.listedAt) } : {}),
-                    ...(['Spot', 'Margin'].includes(String(item.marketType)) && meta?.newListing === true ? { newListing: true } : {}),
-                  };
-                });
-                const additions = Array.from(incoming.values()).map((item:any) => {
-                  const quote = binanceQuoteCacheRef.current[item.id];
-                  const meta = hostedMetadata[String(item.base || '').toUpperCase()];
-                  return {
-                    ...item,
-                    ...(quote || {}),
-                    ...(quote ? { priceChangePercent: quote.change24h } : {}),
-                    ...(['Spot', 'Margin'].includes(String(item.marketType)) && Number.isFinite(Number(meta?.listedAt)) ? { listedAt: Number(meta.listedAt), onboardDate: Number(meta.listedAt) } : {}),
-                    ...(['Spot', 'Margin'].includes(String(item.marketType)) && meta?.newListing === true ? { newListing: true } : {}),
-                  };
-                });
-                console.info('[SIRE BINANCE HOSTED CATALOGUE] publishing', {
-                  generatedAt: hosted?.generatedAt,
-                  spot: hostedItems.filter((x:any) => x.marketType === 'Spot').length,
-                  margin: hostedItems.filter((x:any) => x.marketType === 'Margin').length,
-                  derivatives: hostedItems.filter((x:any) => x.marketType === 'Futures' || x.marketType === 'Perpetuals').length,
-                  added: additions.length,
-                });
-                return mergedCurrent.concat(additions);
-              });
-            }
-          }
-        } catch (error) {
-          console.warn('[SIRE BINANCE HOSTED CATALOGUE] failed:', error);
-        }
-
-        await fetch('/api/sire/binance/browser-diagnostic', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ source: 'browser-start', total: 0, counts: {}, failures: {}, reportedAt: Date.now() }),
-          keepalive: true,
-        });
-        const browserItems = await fetchBinanceBrowserCatalogue();
-        // Render can receive HTTP 451 from Binance's derivatives REST endpoints.
-        // The live miniTicker streams still expose every actively trading contract,
-        // so materialize those real symbols into the catalogue when exchangeInfo is blocked.
-        const liveFallbackItems: any[] = [];
-        for (const [id, quote] of Object.entries(binanceQuoteCacheRef.current)) {
-          const match = id.match(/^(BINANCE(?::COIN-M)?):(Perpetuals|Futures):(.+)$/);
-          if (!match) continue;
-          const [, prefix, marketType, symbol] = match;
-          const base = symbol.includes('_')
-            ? symbol.split('_')[0]
-            : symbol.replace(/USDT$|USDC$|BUSD$|USD$/i, '');
-          const quoteAsset = symbol.includes('_')
-            ? symbol.split('_')[1]
-            : (symbol.match(/(USDT|USDC|BUSD|USD)$/i)?.[1] || 'USDT').toUpperCase();
-          liveFallbackItems.push({
-            id,
-            provider: 'BINANCE',
-            providerLabel: 'Binance',
-            exchange: 'BINANCE',
-            marketType,
-            category: 'Crypto',
-            symbol,
-            displaySymbol: symbol,
-            name: base && quoteAsset ? base + ' / ' + quoteAsset : symbol,
-            base,
-            quote: quoteAsset,
-            exchangeOpen: 1,
-            status: 'online',
-            price: (quote as any)?.price,
-            change24h: (quote as any)?.change24h,
-            priceChangePercent: (quote as any)?.change24h,
-            volume24h: (quote as any)?.volume24h,
-            tradeCount24h: (quote as any)?.tradeCount24h,
-            logoUrl: 'https://cdn.jsdelivr.net/gh/vadimmalykhin/binance-icons/crypto/' + encodeURIComponent(String(base).toLowerCase()) + '.svg',
-            providerLogoUrl: 'https://www.binance.com/favicon.ico',
-            instrumentType: marketType,
-            contractType: marketType === 'Perpetuals' ? 'PERPETUAL' : 'FUTURE',
-          });
-        }
-        const catalogueWithLiveDerivatives = browserItems.concat(liveFallbackItems.filter(item =>
-          !browserItems.some(existing => existing.id === item.id)
-        ));
-        if (!cancelled && catalogueWithLiveDerivatives.length) {
-          if (liveFallbackItems.length) {
-            console.info('[SIRE BINANCE BROWSER] live derivatives fallback', { count: liveFallbackItems.length });
-          }
-          const binanceItems = catalogueWithLiveDerivatives;
-          setInstruments(current => {
-            const incoming = new Map(browserItems.map((item:any) => [item.id, item]));
-            const mergedCurrent = current.map(item => {
-              const incomingItem = incoming.get(item.id);
-              if (!incomingItem) return item;
-              incoming.delete(item.id);
-              return { ...item, ...incomingItem, price: item.price ?? incomingItem.price };
-            });
-            const additions = Array.from(incoming.values()).map((item:any) => {
-              const quote = binanceQuoteCacheRef.current[item.id];
-              const meta = binanceMetadataCacheRef.current[String(item.base || '').toUpperCase()];
-              const supply = Number(meta?.circulatingSupply);
-              const marketCap = Number.isFinite(supply) && Number.isFinite(Number(quote?.price)) ? supply * Number(quote.price) : meta?.marketCap;
-              return {
-                ...item,
-                ...(quote || {}),
-                ...(quote ? { priceChangePercent: quote.change24h } : {}),
-                ...(Number.isFinite(supply) ? { circulatingSupply: supply } : {}),
-                ...(Number.isFinite(Number(marketCap)) ? { marketCap: Number(marketCap) } : {}),
-                ...(['Spot', 'Margin'].includes(String(item.marketType)) && Number.isFinite(Number(meta?.listedAt)) ? { listedAt: Number(meta.listedAt), onboardDate: Number(meta.listedAt) } : {}),
-                ...(['Spot', 'Margin'].includes(String(item.marketType)) && meta?.newListing === true ? { newListing: true } : {}),
-              } as Instrument;
-            });
-            console.info('[SIRE BINANCE BROWSER] publishing instruments to SIRE', {received:browserItems.length,added:additions.length});
-            return mergedCurrent.concat(additions);
-          });
-        }
-      } catch (error) {
-        console.warn('[SIRE BINANCE BROWSER] independent discovery failed:', error);
-      }
-    })();
-
-    startup().then(async items => {
-      if (cancelled) return;
-      // The server catalogue already contains the required startup data (including
-      // Deriv). Publish it immediately so optional third-party browser augmentation
-      // can never block the entire SIRE interface.
-      const initial = chooseInitialDerivInstrument(items);
-      if (!initial) throw new Error('SIRE returned an empty active instrument catalogue.');
-      const hasDeriv = items.some(item => item.provider === 'DERIV');
-      setDerivError(hasDeriv ? '' : 'Deriv market data is temporarily unavailable; other market providers remain available.');
-      setDerivLoading(false);
-      setInstruments(current => {
-        const existing = new Set(current.map(item => item.id));
-        const additions = items.filter(item => !existing.has(item.id));
-        const merged = additions.length ? current.concat(additions.map((item: any) => {
-          if (item.provider !== 'BINANCE') return item;
-          const quote = binanceQuoteCacheRef.current[item.id];
-          const meta = binanceMetadataCacheRef.current[String(item.base || '').toUpperCase()];
-          const supply = Number(meta?.circulatingSupply);
-          const marketCap = Number.isFinite(supply) && Number.isFinite(Number(quote?.price)) ? supply * Number(quote.price) : meta?.marketCap;
-          return {
-            ...item,
-            ...(quote || {}),
-            ...(quote ? { priceChangePercent: quote.change24h } : {}),
-            ...(Number.isFinite(supply) ? { circulatingSupply: supply } : {}),
-            ...(Number.isFinite(Number(marketCap)) ? { marketCap: Number(marketCap) } : {}),
-            ...(['Spot', 'Margin'].includes(String(item.marketType)) && Number.isFinite(Number(meta?.listedAt)) ? { listedAt: Number(meta.listedAt), onboardDate: Number(meta.listedAt) } : {}),
-            ...(['Spot', 'Margin'].includes(String(item.marketType)) && meta?.newListing === true ? { newListing: true } : {}),
-          };
-        })) : current;
-        console.info('[SIRE MARKET STARTUP] publishing unified catalogue', {
-          received: items.length,
-          added: additions.length,
-          total: merged.length,
-          binance: merged.filter(item => item.provider === 'BINANCE').length,
-        });
-        return merged;
-      });
-      setSelected(current => current && (
-        items.some(item => item.id === current.id) ||
-        current.provider === 'BINANCE'
-      ) ? current : initial);
-      setChartSymbols(current => current.length ? current : [initial.symbol]);
-      try {
-        const response = await fetch('/api/sire/markets/global-crypto', { cache: 'no-store', headers: { 'Cache-Control': 'no-cache' } });
-        const payload = await response.json().catch(() => null);
-        if (!response.ok || !payload?.ok || !Array.isArray(payload?.instruments)) throw new Error(payload?.error || 'Global crypto catalogue unavailable');
-        const globalItems = payload.instruments.map((raw: any) => ({
-          ...raw,
-          provider: 'GLOBALCRYPTO',
-          exchange: raw.exchange,
-          providerLabel: raw.exchangeName || raw.exchange,
-          marketType: raw.type || 'Crypto',
-          category: 'Crypto',
-          displaySymbol: raw.symbol,
-          name: raw.symbol,
-          exchangeOpen: 1,
-          status: 'online',
-          logoUrl: raw.base ? makeAssetLogoFallback({ ...raw, base: raw.base, displaySymbol: raw.symbol } as Instrument) : '',
-          providerLogoUrl: makeProviderLogoFallback({ ...raw, provider: 'GLOBALCRYPTO' } as Instrument),
-          instrumentType: raw.type || 'crypto',
+        const normalized = rows.map(item => ({
+          ...item,
+          id: 'DERIV:' + item.symbol,
+          provider: 'DERIV' as MarketProvider,
+          providerLabel: 'Deriv',
+          marketType: item.category === 'synthetic' ? 'Synthetic Indices' : item.category,
+          category: item.category === 'synthetic' ? 'Synthetic Indices' : item.category,
+          displaySymbol: item.name || item.symbol,
+          logoUrl: makeLogoFallback(item.symbol),
+          providerLogoUrl: 'https://deriv.com/favicon.ico',
         })) as Instrument[];
-        if (cancelled) return;
-        setInstruments(current => {
-          const existing = new Set(current.map(item => item.id));
-          const additions = globalItems.filter(item => !existing.has(item.id));
-          return additions.length ? current.concat(additions) : current;
-        });
-        console.info('[SIRE MARKET STARTUP] Global CCXT crypto universe loaded', { total: globalItems.length });
+        const unique = normalized.filter((item, index, all) => item.id && all.findIndex(x => x.id === item.id) === index);
+        setInstruments(unique);
+        const initial = unique.find(item => item.exchangeOpen !== 0 && item.tradingSuspended !== 1) || unique[0] || null;
+        setSelected(initial);
+        setChartSymbols(initial ? [initial.symbol] : []);
+        setDerivError(initial ? '' : 'No market instruments are currently available.');
       } catch (error) {
-        console.warn('[SIRE MARKET STARTUP] Global CCXT crypto universe unavailable:', error);
+        if (cancelled) return;
+        setDerivError(error instanceof Error ? error.message : 'Market catalogue failed to load.');
+        setInstruments([]);
+        setSelected(null);
+        setChartSymbols([]);
+      } finally {
+        if (!cancelled) setDerivLoading(false);
       }
-
-      // CCXT expands the global universe in the backend after the fast first response.
-      // Keep polling so newly loaded exchanges/market types appear without requiring a reload.
-      globalCryptoRefresh = window.setInterval(async () => {
-        try {
-          const response = await fetch('/api/sire/markets/global-crypto', { cache: 'no-store' });
-          const payload = await response.json().catch(() => null);
-          if (!response.ok || !payload?.ok || !Array.isArray(payload?.instruments) || cancelled) return;
-          const refreshedItems = payload.instruments.map((raw: any) => ({
-            ...raw, provider: 'GLOBALCRYPTO', exchange: raw.exchange, providerLabel: raw.exchangeName || raw.exchange,
-            marketType: raw.type || 'Crypto', category: 'Crypto', displaySymbol: raw.symbol, name: raw.symbol,
-            exchangeOpen: 1, status: 'online',
-            logoUrl: raw.base ? makeAssetLogoFallback({ ...raw, base: raw.base, displaySymbol: raw.symbol } as Instrument) : '',
-            providerLogoUrl: makeProviderLogoFallback({ ...raw, provider: 'GLOBALCRYPTO' } as Instrument),
-            instrumentType: raw.type || 'crypto',
-          })) as Instrument[];
-          setInstruments(current => {
-            const existing = new Set(current.map(item => item.id));
-            const additions = refreshedItems.filter(item => !existing.has(item.id));
-            return additions.length ? current.concat(additions) : current;
-          });
-        } catch (error) {
-          console.warn('[SIRE MARKET STARTUP] Global CCXT catalogue refresh failed:', error);
-        }
-      }, 3000);
-
-    }).catch(error => {
-      if (cancelled || error?.message === 'SIRE startup cancelled.') return;
-      console.error('[DERIV MARKET DATA] active symbol discovery failed', error);
-      setDerivLoading(false);
-      setDerivError(error instanceof Error ? error.message : 'Deriv market catalogue failed to load.');
-      setInstruments(current => {
-        const preserved = current;
-        console.info('[SIRE MARKET STARTUP] preserving already-loaded standalone provider catalogues after startup failure', {
-          total: preserved.length,
-        });
-        return preserved;
-      });
-      setSelected(current => current?.provider === 'BINANCE' ? current : null);
-      setChartSymbols(current => current.length ? current : []);
-    });
-
-    return () => {
-      cancelled = true;
-      if (retryTimer !== null) window.clearTimeout(retryTimer);
-      if (globalCryptoRefresh !== null) window.clearInterval(globalCryptoRefresh);
-      if (closeBinanceStream) closeBinanceStream();
     };
+    void load();
+    return () => { cancelled = true; };
   }, []);
 
   useEffect(() => {
@@ -1151,7 +403,6 @@ export default function App() {
     return randomizedInstruments.filter(item => {
       const providerMatch = providerFilter === 'ALL' || item.provider === providerFilter;
       const marketType = String(item.marketType || '').trim().toLowerCase();
-      const isBinance = providerFilter === 'BINANCE' && item.provider === 'BINANCE';
       const isTopGroup = MARKET_TOP_GROUPS.includes(categoryFilter as typeof MARKET_TOP_GROUPS[number]);
       const categoryMatch = categoryFilter === 'ALL'
         ? true
@@ -1172,7 +423,7 @@ export default function App() {
     });
   }, [randomizedInstruments, search, providerFilter, categoryFilter, marketSubcategoryFilter, marketSubSubcategoryFilter]);
 
-  const chartableInstruments = useMemo(() => liveInstruments.filter(item => ['DERIV','FXCM','GLOBALCRYPTO','YFINANCE','SP','NASDAQTRADER','NYSEAMERICAN','CME','CBOT','NYMEX','COMEX','OANDA','TWELVEDATA'].includes(String(item.provider))), [instruments]);
+  const chartableInstruments = useMemo(() => liveInstruments.filter(item => item.provider === 'DERIV'), [liveInstruments]);
   const quoteWindow = useMemo(() => {
     const rowHeight = 88;
     const buffer = 18;
@@ -1251,7 +502,7 @@ export default function App() {
         <div className="sire-market-filter-head">
           <div className="sire-market-filter-title">
             <span>MARKET FILTERS</span>
-            <small>{providerFilter === 'ALL' ? 'All exchanges' : exchangeDisplayName(providerFilter)}</small>
+            <small>{providerFilter === 'ALL' ? 'All markets' : sourceDisplayName(providerFilter)}</small>
           </div>
           <button
             type="button"
@@ -1260,7 +511,7 @@ export default function App() {
             onClick={() => setExchangeDrawerOpen(true)}
           >
             <SlidersHorizontal size={14} />
-            <span>Exchanges</span>
+            <span>Sources</span>
             {providerFilter !== 'ALL' && <em>1</em>}
             <ChevronDown size={13} />
           </button>
@@ -1329,11 +580,11 @@ export default function App() {
 
         {exchangeDrawerOpen && (
           <div className="sire-exchange-drawer-backdrop" role="presentation" onClick={() => setExchangeDrawerOpen(false)}>
-            <section className="sire-exchange-drawer" role="dialog" aria-modal="true" aria-label="Select exchange" onClick={event => event.stopPropagation()}>
+            <section className="sire-exchange-drawer" role="dialog" aria-modal="true" aria-label="Select market source" onClick={event => event.stopPropagation()}>
               <div className="sire-exchange-drawer-head">
                 <div>
                   <span>MARKET VENUES</span>
-                  <strong>Select exchange</strong>
+                  <strong>Select market source</strong>
                   <small>Choose a venue without leaving the market view.</small>
                 </div>
                 <button type="button" className="sire-exchange-drawer-close" aria-label="Close exchange drawer" onClick={() => setExchangeDrawerOpen(false)}>
@@ -1344,11 +595,11 @@ export default function App() {
               <div className="sire-exchange-drawer-search">
                 <Search size={14} />
                 <input
-                  aria-label="Search exchanges"
-                  placeholder="Search exchanges"
+                  aria-label="Search market sources"
+                  placeholder="Search market sources"
                   onChange={event => {
                     const query = event.target.value.trim().toLowerCase();
-                    document.querySelectorAll<HTMLElement>('.sire-exchange-option').forEach(option => {
+                    document.querySelectorAll<HTMLElement>('.sire-market-source-option').forEach(option => {
                       option.style.display = !query || option.dataset.exchangeName?.includes(query) ? '' : 'none';
                     });
                   }}
@@ -1356,13 +607,13 @@ export default function App() {
               </div>
 
               <div className="sire-exchange-grid">
-                {MARKET_EXCHANGE_PROVIDERS.map(provider => {
-                  const label = exchangeDisplayName(provider);
+                {MARKET_SOURCES.map(provider => {
+                  const label = sourceDisplayName(provider);
                   return (
                     <button
                       key={provider}
                       type="button"
-                      data-exchange-name={label.toLowerCase()}
+                      data-source-name={label.toLowerCase()}
                       className={`sire-exchange-option${providerFilter === provider ? ' active' : ''}`}
                       onClick={() => {
                         setProviderFilter(provider);
@@ -1374,7 +625,7 @@ export default function App() {
                     >
                       <span className="sire-exchange-option-logo">
                         <img
-                          src={provider === 'ALL' ? '/sire-logo.svg' : exchangeLogoUrl(provider)}
+                          src={provider === 'ALL' ? '/sire-logo.svg' : sourceLogoUrl(provider)}
                           alt=""
                           loading="lazy"
                           onError={event => {
