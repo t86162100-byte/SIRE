@@ -62,51 +62,44 @@ const dateField = (v: unknown) => {
   return Number.isNaN(d.getTime()) ? str(v) : d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: '2-digit' });
 };
 
-const spotFields = (item: Instrument): Field[] => [
-  metric(item, '24H HIGH', compact(raw(item).high24h ?? raw(item).high)),
-  metric(item, '24H LOW', compact(raw(item).low24h ?? raw(item).low)),
-  metric(item, '24H VOL', compact(item.volume24h ?? raw(item).volume)),
-  metric(item, 'MARKET CAP', compact(item.marketCap ?? raw(item).market_cap)),
-].filter(Boolean) as Field[];
+const volumeField = (item: Instrument) =>
+  metric(item, 'VOL', compact(item.volume24h ?? raw(item).volume ?? raw(item).quoteVolume));
 
-const newFields = (item: Instrument): Field[] => [
-  ...spotFields(item),
-  metric(item, 'DATE LISTED', dateField(item.listedAt ?? item.onboardDate ?? raw(item).dateListed)),
-].filter(Boolean) as Field[];
+const marketCapField = (item: Instrument) =>
+  metric(item, 'MC', compact(item.marketCap ?? raw(item).market_cap));
 
-const futuresFields = (item: Instrument): Field[] => [
-  metric(item, '24H HIGH', compact(raw(item).high24h ?? raw(item).high)),
-  metric(item, '24H LOW', compact(raw(item).low24h ?? raw(item).low)),
-  metric(item, '24H VOL', compact(item.volume24h ?? raw(item).volume)),
-  metric(item, 'MARKET CAP', compact(item.marketCap ?? raw(item).market_cap)),
-].filter(Boolean) as Field[];
+const fundingField = (item: Instrument) =>
+  metric(item, 'FUND', pctField(raw(item).fundingRate ?? raw(item).funding));
+
+const spotFields = (item: Instrument): Field[] =>
+  [volumeField(item), marketCapField(item)].filter(Boolean) as Field[];
+
+const newFields = (item: Instrument): Field[] =>
+  [volumeField(item), marketCapField(item)].filter(Boolean) as Field[];
+
+const futuresFields = (item: Instrument): Field[] =>
+  [volumeField(item), fundingField(item)].filter(Boolean) as Field[];
 
 const optionsFields = (item: Instrument): Field[] => [
-  metric(item, 'STRIKE', compact(raw(item).strike)),
-  metric(item, 'EXPIRY', str(raw(item).expiry ?? raw(item).expiration)),
-  metric(item, 'TYPE', upper(raw(item).optionType)),
-  metric(item, '24H VOL', compact(item.volume24h ?? raw(item).volume)),
-  metric(item, 'OPEN INT', compact(raw(item).openInterest ?? raw(item).oi)),
+  metric(item, 'BID SIZE', raw(item).bidSize),
+  metric(item, 'ASK SIZE', raw(item).askSize),
+  metric(item, 'HIGH', compact(raw(item).high24h ?? raw(item).high)),
+  metric(item, 'LOW', compact(raw(item).low24h ?? raw(item).low)),
+  metric(item, 'LEVERAGE', raw(item).leverage),
+  volumeField(item),
+  metric(item, 'GAMMA', raw(item).gamma),
+  metric(item, 'VEGA', raw(item).vega),
+  metric(item, 'THETA', raw(item).theta),
 ].filter(Boolean) as Field[];
 
-const perpetualFields = (item: Instrument): Field[] => [
-  metric(item, '24H HIGH', compact(raw(item).high24h ?? raw(item).high)),
-  metric(item, '24H LOW', compact(raw(item).low24h ?? raw(item).low)),
-  metric(item, '24H VOL', compact(item.volume24h ?? raw(item).volume)),
-  metric(item, 'OPEN INT', compact(raw(item).openInterest ?? raw(item).oi ?? raw(item).holdingAmount)),
-].filter(Boolean) as Field[];
+const perpetualFields = (item: Instrument): Field[] =>
+  [volumeField(item), fundingField(item)].filter(Boolean) as Field[];
 
-const alphaFields = (item: Instrument): Field[] => [
-  metric(item, '24H VOL', compact(item.volume24h ?? raw(item).volume)),
-  metric(item, 'MARKET CAP', compact(item.marketCap ?? raw(item).market_cap)),
-].filter(Boolean) as Field[];
+const alphaFields = (item: Instrument): Field[] =>
+  [volumeField(item), marketCapField(item)].filter(Boolean) as Field[];
 
-const genericFields = (item: Instrument): Field[] => [
-  metric(item, '24H HIGH', compact(raw(item).high24h ?? raw(item).high)),
-  metric(item, '24H LOW', compact(raw(item).low24h ?? raw(item).low)),
-  metric(item, '24H VOL', compact(item.volume24h ?? raw(item).volume)),
-  metric(item, 'MARKET CAP', compact(item.marketCap ?? raw(item).market_cap)),
-].filter(Boolean) as Field[];
+const genericFields = (item: Instrument): Field[] =>
+  [volumeField(item), marketCapField(item)].filter(Boolean) as Field[];
 
 const fieldsFor = (item: Instrument, group: string, subgroup: string): Field[] => {
   if (group === 'CRYPTO' && subgroup === 'SPOT') return spotFields(item);
@@ -181,41 +174,70 @@ const Logo = ({ item, providerLogo = false }: { item: Instrument; providerLogo?:
 
 const BinanceShell = ({
   item, active, onSelect, fields, className, children,
-}: CardProps & { fields: Field[]; className: string; children: ReactNode }) => (
-  <button
-    type="button"
-    className={'bn-card ' + className + (active ? ' is-active' : '')}
-    onClick={() => onSelect(item)}
-  >
-    <div className="bn-identity">
-      <Logo item={item} />
-      <div className="bn-name">
-        <strong>{children}</strong>
-        <span>{name(item)}</span>
-        <small><Logo item={item} providerLogo />{provider(item)}</small>
-      </div>
-    </div>
+}: CardProps & { fields: Field[]; className: string; children: ReactNode }) => {
+  const volume = compact(item.volume24h ?? raw(item).volume ?? raw(item).quoteVolume);
+  const visibleFields = fields.filter(f => str(f.value));
 
-    <div className="bn-metrics">
-      {fields.length > 0 ? (
-        <div className="bn-metrics-track">
-          <div className="bn-metrics-set">{fields.map((f, i) => <span className="bn-metric" key={'a' + i}><b>{f.label}</b><i>{f.value}</i></span>)}</div>
-          {fields.length > 1 && <div className="bn-metrics-set" aria-hidden="true">{fields.map((f, i) => <span className="bn-metric" key={'b' + i}><b>{f.label}</b><i>{f.value}</i></span>)}</div>}
+  return (
+    <button
+      type="button"
+      className={'bn-card ' + className + (active ? ' is-active' : '')}
+      onClick={() => onSelect(item)}
+    >
+      <div className="bn-identity">
+        <Logo item={item} />
+        <div className="bn-name">
+          <strong>
+            {children}
+            {quote(item) && upper(item.subgroup) === 'SPOT' ? ' / ' + quote(item) : ''}
+          </strong>
+          <span>{name(item)}{volume ? <><b> | </b>{volume}</> : ''}</span>
+          <small><Logo item={item} providerLogo />{provider(item)}</small>
         </div>
-      ) : null}
-    </div>
+      </div>
 
-    <div className="bn-price">
-      <strong>{price(item) || '—'}</strong>
-      <em className={changeClass(item)}>{pct(item) || '—'}</em>
-    </div>
-  </button>
-);
+      <div className="bn-metrics" aria-label="Additional market data">
+        {visibleFields.length > 0 ? (
+          <div className="bn-metrics-track">
+            <div className="bn-metrics-set">
+              {visibleFields.map((f, i) => (
+                <span className="bn-metric" key={'a' + i}>
+                  <b>{f.label}</b><i>{f.value}</i>
+                </span>
+              ))}
+            </div>
+            {visibleFields.length > 1 && (
+              <div className="bn-metrics-set" aria-hidden="true">
+                {visibleFields.map((f, i) => (
+                  <span className="bn-metric" key={'b' + i}>
+                    <b>{f.label}</b><i>{f.value}</i>
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+        ) : null}
+      </div>
+
+      <div className="bn-quote">
+        <div className="bn-price">
+          <strong>{price(item) || '—'}</strong>
+        </div>
+        <div className={'bn-change ' + changeClass(item)}>
+          {pct(item) || '—'}
+        </div>
+      </div>
+    </button>
+  );
+};
 
 const Row = (p: CardProps & { fields?: Field[]; className?: string; title?: string }) => (
-  <BinanceShell {...p} fields={p.fields ?? fieldsFor(p.item, upper(p.group), upper(p.subgroup))} className={p.className || ''}>
+  <BinanceShell
+    {...p}
+    fields={p.fields ?? fieldsFor(p.item, upper(p.group), upper(p.subgroup))}
+    className={p.className || ''}
+  >
     {p.title || symbol(p.item)}
-    {quote(p.item) && upper(p.subgroup) === 'SPOT' ? ' / ' + quote(p.item) : ''}
   </BinanceShell>
 );
 
@@ -245,21 +267,21 @@ export const MarketInstrumentCard = (props: CardProps) => {
   return <Other {...props} />;
 };
 
-const styleId = 'sire-binance-market-cards-v2';
+const styleId = 'sire-binance-market-cards-v3';
 if (!document.getElementById(styleId)) {
   const style = document.createElement('style');
   style.id = styleId;
   style.textContent = `
     .bn-card {
       width:100%!important;
-      min-height:74px!important;
-      height:74px!important;
+      min-height:78px!important;
+      height:78px!important;
       box-sizing:border-box!important;
       display:grid!important;
-      grid-template-columns:minmax(150px,32%) minmax(0,1fr) 96px!important;
+      grid-template-columns:minmax(135px,40%) minmax(68px,1fr) minmax(128px,36%)!important;
       align-items:center!important;
-      gap:10px!important;
-      padding:9px 10px!important;
+      gap:7px!important;
+      padding:8px 12px!important;
       margin:0!important;
       border:0!important;
       border-bottom:1px solid rgba(255,255,255,.075)!important;
@@ -270,45 +292,210 @@ if (!document.getElementById(styleId)) {
       overflow:hidden!important;
       box-shadow:none!important;
     }
-    .bn-card:hover,.bn-card:active,.bn-card.is-active{background:#030303!important}
-    .bn-identity{min-width:0!important;display:flex!important;align-items:center!important;gap:9px!important;overflow:hidden!important}
-    .bn-logo{width:36px!important;height:36px!important;min-width:36px!important;border-radius:50%!important;overflow:hidden!important;display:grid!important;place-items:center!important;background:#151515!important}
-    .bn-logo img{width:100%!important;height:100%!important;display:block!important;object-fit:contain!important;border-radius:50%!important}
-    .bn-name{min-width:0!important;display:flex!important;flex-direction:column!important;gap:2px!important;overflow:hidden!important}
-    .bn-name strong{display:block!important;min-width:0!important;overflow:hidden!important;text-overflow:ellipsis!important;white-space:nowrap!important;font-size:13px!important;line-height:1.05!important;font-weight:850!important;color:#f6f6f7!important;letter-spacing:-.01em!important}
-    .bn-name span{display:block!important;min-width:0!important;overflow:hidden!important;text-overflow:ellipsis!important;white-space:nowrap!important;font-size:8px!important;line-height:1.05!important;color:rgba(255,255,255,.48)!important;font-weight:600!important}
-    .bn-name small{display:flex!important;align-items:center!important;gap:4px!important;min-width:0!important;overflow:hidden!important;text-overflow:ellipsis!important;white-space:nowrap!important;font-size:7px!important;line-height:1!important;color:rgba(255,255,255,.34)!important;font-weight:800!important;letter-spacing:.035em!important}
-    .bn-provider-logo{width:11px!important;height:11px!important;min-width:11px!important;background:#0d0d0d!important;border:1px solid rgba(255,255,255,.08)!important}
-    .bn-provider-logo img{width:11px!important;height:11px!important}
-    .bn-metrics{min-width:0!important;overflow:hidden!important;position:relative!important;mask-image:linear-gradient(90deg,transparent 0,#000 6%,#000 94%,transparent 100%)!important;-webkit-mask-image:linear-gradient(90deg,transparent 0,#000 6%,#000 94%,transparent 100%)!important}
-    .bn-metrics-track{display:flex!important;width:max-content!important;min-width:100%!important;gap:28px!important;animation:bn-metrics-scroll 24s linear infinite!important;will-change:transform!important}
-    .bn-metrics:hover .bn-metrics-track{animation-play-state:paused!important}
-    .bn-metrics-set{display:flex!important;align-items:center!important;gap:28px!important;flex:0 0 auto!important}
-    .bn-metric{display:flex!important;flex-direction:column!important;justify-content:center!important;gap:3px!important;min-width:58px!important;white-space:nowrap!important}
-    .bn-metric b{font-size:6px!important;line-height:1!important;color:rgba(255,255,255,.32)!important;font-weight:800!important;letter-spacing:.055em!important}
-    .bn-metric i{font-style:normal!important;font-size:8px!important;line-height:1!important;color:rgba(255,255,255,.76)!important;font-weight:800!important}
-    .bn-price{min-width:0!important;display:flex!important;flex-direction:column!important;align-items:flex-end!important;justify-content:center!important;gap:4px!important;text-align:right!important}
-    .bn-price strong{font-size:14px!important;line-height:1!important;font-weight:900!important;color:#fff!important;letter-spacing:-.02em!important;white-space:nowrap!important;overflow:hidden!important;text-overflow:ellipsis!important;max-width:100%!important}
-    .bn-price em{font-style:normal!important;font-size:9px!important;line-height:1!important;font-weight:850!important}
-    .bn-price em.up{color:#22c993!important}.bn-price em.down{color:#ff536d!important}
-    @keyframes bn-metrics-scroll{from{transform:translate3d(0,0,0)}to{transform:translate3d(calc(-50% - 14px),0,0)}}
-    .bn-options,.bn-futures,.bn-perpetual{min-height:78px!important;height:78px!important}
-    .bn-options .bn-logo{width:34px!important;height:34px!important;min-width:34px!important}
-    .bn-futures .bn-logo,.bn-perpetual .bn-logo{width:34px!important;height:34px!important;min-width:34px!important}
-    .bn-alpha{min-height:74px!important;height:74px!important}
-    .bn-alpha .bn-metrics-track{animation-duration:20s!important}
-    .bn-onchain,.bn-prediction,.bn-other{min-height:74px!important;height:74px!important}
-    @media(max-width:620px){
-      .bn-card{grid-template-columns:minmax(116px,39%) minmax(0,1fr) 78px!important;gap:7px!important;padding:8px!important}
-      .bn-logo{width:32px!important;height:32px!important;min-width:32px!important}
-      .bn-name strong{font-size:12px!important}
-      .bn-name span{font-size:7px!important}
-      .bn-name small{font-size:6px!important}
-      .bn-provider-logo,.bn-provider-logo img{width:10px!important;height:10px!important;min-width:10px!important}
-      .bn-metrics-set{gap:20px!important}.bn-metrics-track{gap:20px!important}
-      .bn-metric{min-width:52px!important}.bn-metric b{font-size:5.5px!important}.bn-metric i{font-size:7px!important}
-      .bn-price strong{font-size:13px!important}.bn-price em{font-size:8px!important}
+
+    .bn-card:hover,.bn-card:active,.bn-card.is-active{background:#000!important}
+
+    /* Binance-style left identity: logo, pair on top, asset name + volume below. */
+    .bn-identity{
+      min-width:0!important;
+      display:flex!important;
+      align-items:center!important;
+      gap:9px!important;
+      overflow:hidden!important;
     }
+    .bn-logo{
+      width:38px!important;
+      height:38px!important;
+      min-width:38px!important;
+      border-radius:50%!important;
+      overflow:hidden!important;
+      display:grid!important;
+      place-items:center!important;
+      background:#151515!important;
+    }
+    .bn-logo img{
+      width:100%!important;
+      height:100%!important;
+      display:block!important;
+      object-fit:contain!important;
+      border-radius:50%!important;
+    }
+    .bn-name{
+      min-width:0!important;
+      display:flex!important;
+      flex-direction:column!important;
+      gap:3px!important;
+      overflow:hidden!important;
+    }
+    .bn-name strong{
+      display:block!important;
+      min-width:0!important;
+      overflow:hidden!important;
+      text-overflow:ellipsis!important;
+      white-space:nowrap!important;
+      font-size:14px!important;
+      line-height:1.05!important;
+      font-weight:900!important;
+      color:#f5f5f7!important;
+      letter-spacing:-.015em!important;
+    }
+    .bn-name span{
+      display:block!important;
+      min-width:0!important;
+      overflow:hidden!important;
+      text-overflow:ellipsis!important;
+      white-space:nowrap!important;
+      font-size:9px!important;
+      line-height:1.05!important;
+      color:rgba(255,255,255,.53)!important;
+      font-weight:650!important;
+    }
+    .bn-name span b{color:rgba(255,255,255,.27)!important;font-weight:700!important}
+    .bn-name small{
+      display:flex!important;
+      align-items:center!important;
+      gap:4px!important;
+      min-width:0!important;
+      overflow:hidden!important;
+      text-overflow:ellipsis!important;
+      white-space:nowrap!important;
+      font-size:6.5px!important;
+      line-height:1!important;
+      color:rgba(255,255,255,.28)!important;
+      font-weight:800!important;
+      letter-spacing:.03em!important;
+    }
+    .bn-provider-logo{
+      width:10px!important;
+      height:10px!important;
+      min-width:10px!important;
+      background:#0d0d0d!important;
+      border:1px solid rgba(255,255,255,.08)!important;
+    }
+    .bn-provider-logo img{width:10px!important;height:10px!important}
+
+    /* Middle is a deliberately bounded marquee: it can never enter the price/change area. */
+    .bn-metrics{
+      min-width:0!important;
+      width:100%!important;
+      overflow:hidden!important;
+      position:relative!important;
+      isolation:isolate!important;
+      mask-image:linear-gradient(90deg,transparent 0,#000 8%,#000 92%,transparent 100%)!important;
+      -webkit-mask-image:linear-gradient(90deg,transparent 0,#000 8%,#000 92%,transparent 100%)!important;
+    }
+    .bn-metrics-track{
+      display:flex!important;
+      width:max-content!important;
+      min-width:100%!important;
+      gap:26px!important;
+      animation:bn-metrics-scroll 18s linear infinite!important;
+      will-change:transform!important;
+    }
+    .bn-metrics-set{
+      display:flex!important;
+      align-items:center!important;
+      gap:26px!important;
+      flex:0 0 auto!important;
+    }
+    .bn-metric{
+      display:flex!important;
+      flex-direction:column!important;
+      justify-content:center!important;
+      gap:3px!important;
+      min-width:max-content!important;
+      white-space:nowrap!important;
+    }
+    .bn-metric b{
+      font-size:6px!important;
+      line-height:1!important;
+      color:rgba(255,255,255,.30)!important;
+      font-weight:850!important;
+      letter-spacing:.055em!important;
+    }
+    .bn-metric i{
+      font-style:normal!important;
+      font-size:8px!important;
+      line-height:1!important;
+      color:rgba(255,255,255,.76)!important;
+      font-weight:850!important;
+    }
+
+    /* Right side deliberately mirrors the supplied Binance layout:
+       LAST PRICE first, then the 24h percentage in a filled bar. */
+    .bn-quote{
+      min-width:0!important;
+      display:grid!important;
+      grid-template-columns:minmax(48px,1fr) minmax(58px,78px)!important;
+      align-items:center!important;
+      gap:8px!important;
+      justify-content:end!important;
+    }
+    .bn-price{
+      min-width:0!important;
+      display:flex!important;
+      justify-content:flex-end!important;
+      align-items:center!important;
+      text-align:right!important;
+    }
+    .bn-price strong{
+      font-size:15px!important;
+      line-height:1!important;
+      font-weight:900!important;
+      color:#f7f7f8!important;
+      letter-spacing:-.025em!important;
+      white-space:nowrap!important;
+      overflow:hidden!important;
+      text-overflow:ellipsis!important;
+      max-width:100%!important;
+    }
+    .bn-change{
+      min-width:58px!important;
+      height:38px!important;
+      padding:0 7px!important;
+      border-radius:7px!important;
+      display:flex!important;
+      align-items:center!important;
+      justify-content:center!important;
+      box-sizing:border-box!important;
+      font-size:10px!important;
+      line-height:1!important;
+      font-weight:900!important;
+      white-space:nowrap!important;
+    }
+    .bn-change.up{background:#20bf8b!important;color:#fff!important}
+    .bn-change.down{background:#f04460!important;color:#fff!important}
+
+    .bn-options,.bn-futures,.bn-perpetual{min-height:80px!important;height:80px!important}
+    .bn-options .bn-logo,.bn-futures .bn-logo,.bn-perpetual .bn-logo{
+      width:36px!important;height:36px!important;min-width:36px!important
+    }
+
+    @keyframes bn-metrics-scroll{
+      from{transform:translate3d(0,0,0)}
+      to{transform:translate3d(calc(-50% - 13px),0,0)}
+    }
+
+    @media(max-width:620px){
+      .bn-card{
+        grid-template-columns:minmax(125px,40%) minmax(62px,1fr) minmax(124px,38%)!important;
+        gap:6px!important;
+        padding:8px 10px!important;
+      }
+      .bn-logo{width:36px!important;height:36px!important;min-width:36px!important}
+      .bn-name strong{font-size:13px!important}
+      .bn-name span{font-size:8px!important}
+      .bn-name small{font-size:6px!important}
+      .bn-provider-logo,.bn-provider-logo img{width:9px!important;height:9px!important;min-width:9px!important}
+      .bn-metrics-set{gap:20px!important}
+      .bn-metrics-track{gap:20px!important}
+      .bn-metric b{font-size:5.5px!important}
+      .bn-metric i{font-size:7px!important}
+      .bn-quote{grid-template-columns:minmax(44px,1fr) minmax(54px,64px)!important;gap:6px!important}
+      .bn-price strong{font-size:13px!important}
+      .bn-change{min-width:54px!important;height:36px!important;padding:0 5px!important;font-size:9px!important}
+    }
+
     @media(prefers-reduced-motion:reduce){
       .bn-metrics-track{animation:none!important}
     }
