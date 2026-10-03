@@ -1265,8 +1265,171 @@ function scheduleBinanceFuturesRelayReconnect() {
 }
 
 connectBinanceFuturesRelay();
+const bitgetLiveClients = new Set();
+const bitgetLiveDesired = new Map();
+const bitgetLiveUpstreams = new Map();
+const BITGET_LIVE_URL = 'wss://ws.bitget.com/v3/ws/public';
+const BITGET_LIVE_TYPES = ['spot', 'usdt-futures', 'coin-futures', 'usdc-futures'];
+const BITGET_LIVE_CHANNELS_PER_SOCKET = 50;
+const bitgetLiveTimers = new Map();
+const bitgetLiveSignatures = new Map();
+let bitgetLiveTickSamples = 0;
+
+function bitgetLiveBroadcast(data) {
+  const payload = typeof data === 'string' ? data : JSON.stringify(data);
+  for (const client of bitgetLiveClients) {
+    if (client.readyState === WebSocket.OPEN) {
+      try { client.send(payload); } catch {}
+    }
+  }
+}
+
+function bitgetLiveShardKey(instType, index) {
+  return instType + ':' + index;
+}
+
+function bitgetLiveShardItems(instType, index) {
+  const items = bitgetLiveDesired.get(instType) || [];
+  const start = index * BITGET_LIVE_CHANNELS_PER_SOCKET;
+  return items.slice(start, start + BITGET_LIVE_CHANNELS_PER_SOCKET);
+}
+
+function bitgetLiveCloseType(instType) {
+  for (const [key, upstream] of [...bitgetLiveUpstreams]) {
+    if (!key.startsWith(instType + ':')) continue;
+    const heartbeat = bitgetLiveTimers.get(key);
+    if (heartbeat) clearInterval(heartbeat);
+    bitgetLiveTimers.delete(key);
+    try { upstream.close(); } catch {}
+    bitgetLiveUpstreams.delete(key);
+  }
+  for (const [key, timer] of [...bitgetLiveTimers]) {
+    if (key.startsWith(instType + ':')) {
+      clearTimeout(timer);
+      bitgetLiveTimers.delete(key);
+    }
+  }
+}
+
+function bitgetLiveConnect(instType, index) {
+  const key = bitgetLiveShardKey(instType, index);
+  const existing = bitgetLiveUpstreams.get(key);
+  if (existing && (existing.readyState === WebSocket.OPEN || existing.readyState === WebSocket.CONNECTING)) return;
+
+  const items = bitgetLiveShardItems(instType, index);
+  if (!items.length) return;
+
+  let upstream;
+  try {
+    upstream = new WebSocket(BITGET_LIVE_URL);
+  } catch (error) {
+    console.error('[SIRE BITGET LIVE] connect failed', key, error instanceof Error ? error.message : String(error));
+    return;
+  }
+
+  bitgetLiveUpstreams.set(key, upstream);
+
+  upstream.on('open', () => {
+    const current = bitgetLiveShardItems(instType, index);
+    if (!current.length) return;
+    upstream.send(JSON.stringify({ op: 'subscribe', args: current }));
+    console.log('[SIRE BITGET LIVE] upstream connected', key, 'channels', current.length);
+
+    const heartbeat = setInterval(() => {
+      if (upstream.readyState === WebSocket.OPEN) upstream.send('ping');
+    }, 25000);
+    bitgetLiveTimers.set(key, heartbeat);
+  });
+
+  upstream.on('message', data => {
+    let parsed;
+    try { parsed = JSON.parse(String(data)); } catch { return; }
+
+    if (parsed?.event === 'error') {
+      console.warn('[SIRE BITGET LIVE] upstream subscription error', key, JSON.stringify(parsed));
+      return;
+    }
+
+    if (parsed?.arg?.topic === 'ticker' && Array.isArray(parsed?.data)) {
+      if (bitgetLiveTickSamples < 5) {
+        const ticker = parsed.data[0] || {};
+        bitgetLiveTickSamples += 1;
+        console.log('[SIRE BITGET LIVE] TICK', JSON.stringify({
+          instType: parsed.arg.instType,
+          symbol: parsed.arg.symbol,
+          price: ticker.lastPrice ?? ticker.lastPr,
+          ts: parsed.ts ?? ticker.ts ?? Date.now(),
+        }));
+      }
+      bitgetLiveBroadcast(parsed);
+    }
+  });
+
+  upstream.on('error', error => {
+    console.error('[SIRE BITGET LIVE] upstream error', key, error instanceof Error ? error.message : String(error));
+  });
+
+  upstream.on('close', () => {
+    const heartbeat = bitgetLiveTimers.get(key);
+    if (heartbeat) clearInterval(heartbeat);
+    bitgetLiveTimers.delete(key);
+    bitgetLiveUpstreams.delete(key);
+    if ((bitgetLiveDesired.get(instType) || []).length) {
+      const timer = setTimeout(() => bitgetLiveConnect(instType, index), 2000);
+      bitgetLiveTimers.set(key, timer);
+    }
+  });
+}
+
+function bitgetLiveApplySubscriptions(args) {
+  const grouped = new Map();
+  for (const raw of Array.isArray(args) ? args : []) {
+    const instType = String(raw?.instType || '').toLowerCase();
+    const topic = String(raw?.topic || '').toLowerCase();
+    const symbol = String(raw?.symbol || '').trim().toUpperCase();
+    if (!BITGET_LIVE_TYPES.includes(instType) || topic !== 'ticker' || !symbol) continue;
+    if (!grouped.has(instType)) grouped.set(instType, new Map());
+    grouped.get(instType).set(symbol, { instType, topic: 'ticker', symbol });
+  }
+
+  for (const [instType, symbolMap] of grouped) {
+    const next = [...symbolMap.values()];
+    const signature = next.map(item => item.symbol).join('|');
+    if (signature === (bitgetLiveSignatures.get(instType) || '')) continue;
+
+    bitgetLiveSignatures.set(instType, signature);
+    bitgetLiveDesired.set(instType, next);
+    bitgetLiveCloseType(instType);
+
+    const shardCount = Math.ceil(next.length / BITGET_LIVE_CHANNELS_PER_SOCKET);
+    for (let index = 0; index < shardCount; index += 1) {
+      bitgetLiveConnect(instType, index);
+    }
+  }
+}
+
+
+
 server.on('upgrade',(req,socket,head)=>{
   const url=new URL(req.url||'/',`http://${req.headers.host||'localhost'}`);
+  if(url.pathname==='/bitget/ws'){
+    console.log('[SIRE BITGET LIVE] browser relay connected');
+    wss.handleUpgrade(req,socket,head,clientSocket=>{
+      bitgetLiveClients.add(clientSocket);
+      clientSocket.send(JSON.stringify({event:'connected',service:'bitget-live'}));
+      clientSocket.on('message',data=>{
+        try {
+          if(String(data)==='ping'){ clientSocket.send('pong'); return; }
+          const parsed=JSON.parse(String(data));
+          if(parsed?.op==='subscribe') bitgetLiveApplySubscriptions(parsed.args);
+        } catch {}
+      });
+      clientSocket.on('close',()=>bitgetLiveClients.delete(clientSocket));
+      clientSocket.on('error',()=>bitgetLiveClients.delete(clientSocket));
+    });
+    return;
+  }
+
   if(url.pathname==='/binance/futures/ws'){
     console.log('[BINANCE FUTURES RELAY] Browser client connected');
     wss.handleUpgrade(req,socket,head,clientSocket=>{
