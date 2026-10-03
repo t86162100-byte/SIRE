@@ -109,7 +109,7 @@ const MARKET_SUBSUBGROUPS: Record<string, readonly string[]> = {
   'TRADE FI::Indices': ['US Indices', 'European Indices', 'Asian Indices', 'Global Indices', 'Other Indices'],
   'TRADE FI::Bonds': ['Government', 'Corporate', 'Municipal', 'Other Bonds'],
   'TRADE FI::Options': ['Calls', 'Puts', 'Equity Options', 'Index Options'],
-  'TRADE FI::Futures': ['Equity Index Futures', 'Commodity Futures', 'Currency Futures', 'Interest Rate Futures', 'Other Futures'],
+  'TRADE FI::Futures': ['Commodities','ETFs','Stocks','Fx','Pre-IPO'],
   'TRADE FI::Perpetuals': ['Index Perpetuals', 'Commodity Perpetuals', 'Currency Perpetuals', 'Other Perpetuals'],
   'ON CHAIN::Onchain': ['DEX', 'Lending', 'Staking', 'Liquidity Pools', 'Other Onchain'],
   'PREDICTIONS::Prediction Markets': ['Sports', 'Politics', 'Crypto', 'Finance', 'Culture', 'Other'],
