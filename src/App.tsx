@@ -86,36 +86,33 @@ const makeLogoFallback = (label: string) => {
 const makeAssetLogoFallback = (item: Instrument) => makeLogoFallback(item.displaySymbol || item.symbol);
 
 const MARKET_TOP_GROUPS = ['CRYPTO', 'TRADE FI', 'ON CHAIN', 'PREDICTIONS', 'OTHERS'] as const;
+const BINANCE_TOP_GROUPS = ['CRYPTO', 'TRADE FI', 'ALPHA'] as const;
 
-const MARKET_SUBGROUPS: Record<typeof MARKET_TOP_GROUPS[number], readonly string[]> = {
-  'CRYPTO': ['Spot','Margin','Options','Futures','Perpetuals','Alpha'],
-  'TRADE FI': ['Forex', 'Stocks', 'Funds', 'Commodities', 'Indices', 'Bonds', 'Options', 'Futures', 'Perpetuals'],
+const MARKET_SUBGROUPS: Record<string, readonly string[]> = {
+  'CRYPTO': ['Spot','Futures','Margin'],
+  'TRADE FI': ['Stocks','Futures','Spot'],
+  'ALPHA': ['Alpha'],
   'ON CHAIN': ['Onchain'],
   'PREDICTIONS': ['Prediction Markets'],
   'OTHERS': ['Synthetic Indices', 'Baskets'],
 };
 
 const MARKET_SUBSUBGROUPS: Record<string, readonly string[]> = {
-  'CRYPTO::Spot': ['ALL','USDT','USDC','U','USD','BNB','BTC','FIAT','BTCC','ETH','ALTs'],
-  'CRYPTO::Margin': ['ETH','XAU','BTC','XAG','SOL','XRP','DODGE','DOGE'],
-  'CRYPTO::Options': ['Calls', 'Puts', 'Expiring', 'Other'],
-  'CRYPTO::Futures': ['All','New','Crypto','DeFi','Metaverse','Payment','PoW','Storage','NFT','TradFi','Index','Pre-IPO','USDC','Chinese','Alpha','AI','Layer-1','RWA','Layer-2','Gaming','Meme','Infrastructure','USD-M','COIN-M','Expiring'],
-  'CRYPTO::Perpetuals': ['USD-M','COIN-M','USDC-M','TradFi','Crypto','DeFi','AI','RWA','Layer-1','Layer-2','Meme','Infrastructure'],
-  'CRYPTO::Alpha': ['Alpha', 'Other'],
-  'TRADE FI::Forex': ['Major Pairs', 'Minor Pairs', 'Exotic Pairs'],
-  'TRADE FI::Stocks': ['US Stocks', 'European Stocks', 'Asian Stocks', 'Other Stocks'],
-  'TRADE FI::Funds': ['ETFs', 'Mutual Funds', 'Money Market Funds', 'Other Funds'],
-  'TRADE FI::Commodities': ['Metals', 'Energy', 'Agriculture', 'Livestock', 'Other'],
-  'TRADE FI::Indices': ['US Indices', 'European Indices', 'Asian Indices', 'Global Indices', 'Other Indices'],
-  'TRADE FI::Bonds': ['Government', 'Corporate', 'Municipal', 'Other Bonds'],
-  'TRADE FI::Options': ['Calls', 'Puts', 'Equity Options', 'Index Options'],
+  'CRYPTO::Spot': ['ALL','USDT','USDC','U','USD1','USD','BNB','BTC','FIAT','BTCC','ETH','ALTs'],
+  'CRYPTO::Futures': ['All','USDT-M','COIN-M','New','Crypto','DeFi','Metaverse','Payment','PoW','Storage','NFT','TradFi','Index','Pre-IPO','USDC','Chinese','Alpha','AI','Layer-1','RWA','Layer-2','Gaming','Meme','Infrastructure'],
+  'CRYPTO::Margin': ['ETH','XAU','BTC','XAG','SOL','XRP','DODGE'],
+  'TRADE FI::Stocks': ['U.S. stock','ETFs'],
   'TRADE FI::Futures': ['Commodities','ETFs','Stocks','Fx','Pre-IPO'],
-  'TRADE FI::Perpetuals': ['Index Perpetuals', 'Commodity Perpetuals', 'Currency Perpetuals', 'Other Perpetuals'],
+  'TRADE FI::Spot': ['bstocks','tcommodities'],
+  'ALPHA::Alpha': ['Point+','Tokenized Securities','BSC','Robinhood','Ethereum','Solana','Base','Arbitrum','Sonic','Sui','TRON'],
   'ON CHAIN::Onchain': ['DEX', 'Lending', 'Staking', 'Liquidity Pools', 'Other Onchain'],
   'PREDICTIONS::Prediction Markets': ['Sports', 'Politics', 'Crypto', 'Finance', 'Culture', 'Other'],
   'OTHERS::Synthetic Indices': ['Volatility', 'Momentum', 'Volatility Index', 'Other Synthetic'],
   'OTHERS::Baskets': ['Crypto Baskets', 'Stock Baskets', 'Commodity Baskets', 'Index Baskets', 'Other Baskets'],
 };
+
+const visibleMarketTopGroups = (provider: 'ALL' | MarketProvider) =>
+  provider === 'BINANCE' ? BINANCE_TOP_GROUPS : MARKET_TOP_GROUPS;
 
 const MARKET_SOURCES = ['BINANCE','DERIV'] as const;
 const sourceDisplayName = (value: string) => value === 'DERIV' ? 'Deriv' : value === 'BINANCE' ? 'Binance' : value;
@@ -151,6 +148,7 @@ const matchesMarketTopGroup = (item: Instrument, group: string) => {
       (derivativeTypes.has(instrumentType) && marketGroup === 'tradfi') ||
       ['forex','stocks','funds','commodities','indices','bonds'].some(value => marketType.includes(value));
   }
+  if (group === 'ALPHA') { return marketGroup === 'alpha' || category === 'alpha' || instrumentType === 'alpha'; }
   if (group === 'ON CHAIN') {
     return marketGroup === 'onchain' || category === 'onchain' || category === 'on chain' ||
       instrumentType === 'onchain' || onChainProviders.has(provider) ||
@@ -218,16 +216,16 @@ const matchesMarketSubSubgroup = (item: Instrument, group: string, subgroup: str
   const option = normalizeMarketLabel((item as any).optionType);
 
   if (group === 'CRYPTO' && subgroup === 'Spot') {
+    if (marketType !== 'spot') return false;
     if (target === 'all') return true;
-    if (target === 'u') return quote === 'usdt' || quote === 'usdc';
-    if (['usdt','usdc','usd','bnb','btc','eth','btcc'].includes(target)) return quote === target;
+    if (['usdt','usdc','u','usd1','usd','bnb','btc','eth','btcc'].includes(target)) return quote === target;
     if (target === 'fiat') return ['eur','gbp','ngn','jpy','aud','cad','brl','try','zar'].includes(quote);
     if (target === 'alts') return quote === 'alts';
   }
   if (subgroup === 'Options' && ['calls','puts'].includes(target)) {
     return option === target || values.some(value => value === target || value.endsWith(' ' + target));
   }
-  if ((subgroup === 'Futures' || subgroup === 'Perpetuals') && ['usd m','coin m','usdc m'].includes(target)) {
+  if (subgroup === 'Futures' && ['usd m','coin m'].includes(target)) {
     const settlement = normalizeMarketLabel((item as any).settlement);
     return settlement === target || values.some(value => value === target || value.includes(target));
   }
@@ -558,7 +556,7 @@ export default function App() {
 
         <div className="sire-market-filter-stack">
           <div className="sire-market-top-groups" role="tablist" aria-label="Market groups">
-            {MARKET_TOP_GROUPS.map(group => (
+            {visibleMarketTopGroups(providerFilter).map(group => (
               <button
                 key={group}
                 type="button"
@@ -579,7 +577,7 @@ export default function App() {
 
           {Boolean(MARKET_SUBGROUPS[categoryFilter]) && (
             <div className="sire-market-subgroups" role="tablist" aria-label={categoryFilter + ' subcategories'}>
-              {(MARKET_SUBGROUPS[categoryFilter as typeof MARKET_TOP_GROUPS[number]] || []).map(subgroup => (
+              {(MARKET_SUBGROUPS[categoryFilter] || []).map(subgroup => (
                 <button
                   key={subgroup}
                   type="button"
@@ -656,9 +654,19 @@ export default function App() {
                       className={`sire-exchange-option${providerFilter === provider ? ' active' : ''}`}
                       onClick={() => {
                         setProviderFilter(provider);
-                        setCategoryFilter('ALL');
-                        setMarketSubcategoryFilter('ALL');
-                        setMarketSubSubcategoryFilter('ALL');
+                        if (provider === 'BINANCE') {
+                          setCategoryFilter('CRYPTO');
+                          setMarketSubcategoryFilter('Spot');
+                          setMarketSubSubcategoryFilter('ALL');
+                        } else if (provider === 'DERIV') {
+                          setCategoryFilter('OTHERS');
+                          setMarketSubcategoryFilter('Synthetic Indices');
+                          setMarketSubSubcategoryFilter('ALL');
+                        } else {
+                          setCategoryFilter('ALL');
+                          setMarketSubcategoryFilter('ALL');
+                          setMarketSubSubcategoryFilter('ALL');
+                        }
                         setExchangeDrawerOpen(false);
                       }}
                     >
