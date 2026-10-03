@@ -193,30 +193,18 @@ const BinanceShell = ({
           </strong>
           <span>{name(item)}{volume ? <><b> | </b>{volume}</> : ''}</span>
           <small><Logo item={item} providerLogo />{provider(item)}</small>
-        </div>
-      </div>
-
-      <div className="bn-metrics" aria-label="Additional market data">
-        {visibleFields.length > 0 ? (
-          <div className="bn-metrics-track">
-            <div className="bn-metrics-set">
-              {visibleFields.map((f, i) => (
-                <span className="bn-metric" key={'a' + i}>
-                  <b>{f.label}</b><i>{f.value}</i>
-                </span>
-              ))}
-            </div>
-            {visibleFields.length > 1 && (
-              <div className="bn-metrics-set" aria-hidden="true">
+          {visibleFields.length > 0 ? (
+            <div className="bn-metrics" aria-label="Additional market data">
+              <div className="bn-metrics-set">
                 {visibleFields.map((f, i) => (
-                  <span className="bn-metric" key={'b' + i}>
+                  <span className="bn-metric" key={i}>
                     <b>{f.label}</b><i>{f.value}</i>
                   </span>
                 ))}
               </div>
-            )}
-          </div>
-        ) : null}
+            </div>
+          ) : null}
+        </div>
       </div>
 
       <div className="bn-quote">
@@ -278,7 +266,7 @@ if (!document.getElementById(styleId)) {
       height:78px!important;
       box-sizing:border-box!important;
       display:grid!important;
-      grid-template-columns:minmax(135px,40%) minmax(68px,1fr) minmax(128px,36%)!important;
+      grid-template-columns:minmax(0,1fr) minmax(128px,36%)!important;
       align-items:center!important;
       gap:7px!important;
       padding:8px 12px!important;
@@ -372,36 +360,27 @@ if (!document.getElementById(styleId)) {
       background:#0d0d0d!important;
       border:1px solid rgba(255,255,255,.08)!important;
     }
-    .bn-provider-logo img{width:10px!important;height:10px!important}
+    .bn-provider-logo img{width:11px!important;height:11px!important;object-fit:contain!important}
 
-    /* Middle is a deliberately bounded marquee: it can never enter the price/change area. */
+    /* Compact Binance-style secondary data: directly below the venue, never in the price column. */
     .bn-metrics{
       min-width:0!important;
-      width:100%!important;
+      max-width:100%!important;
       overflow:hidden!important;
       position:relative!important;
-      isolation:isolate!important;
-      mask-image:linear-gradient(90deg,transparent 0,#000 8%,#000 92%,transparent 100%)!important;
-      -webkit-mask-image:linear-gradient(90deg,transparent 0,#000 8%,#000 92%,transparent 100%)!important;
-    }
-    .bn-metrics-track{
-      display:flex!important;
-      width:max-content!important;
-      min-width:100%!important;
-      gap:26px!important;
-      animation:bn-metrics-scroll 18s linear infinite!important;
-      will-change:transform!important;
+      margin-top:1px!important;
     }
     .bn-metrics-set{
       display:flex!important;
       align-items:center!important;
-      gap:26px!important;
-      flex:0 0 auto!important;
+      gap:10px!important;
+      width:max-content!important;
+      max-width:100%!important;
+      overflow:hidden!important;
     }
     .bn-metric{
-      display:flex!important;
-      flex-direction:column!important;
-      justify-content:center!important;
+      display:inline-flex!important;
+      align-items:baseline!important;
       gap:3px!important;
       min-width:max-content!important;
       white-space:nowrap!important;
@@ -409,15 +388,15 @@ if (!document.getElementById(styleId)) {
     .bn-metric b{
       font-size:6px!important;
       line-height:1!important;
-      color:rgba(255,255,255,.30)!important;
-      font-weight:850!important;
-      letter-spacing:.055em!important;
+      color:rgba(255,255,255,.40)!important;
+      font-weight:900!important;
+      letter-spacing:.045em!important;
     }
     .bn-metric i{
       font-style:normal!important;
-      font-size:8px!important;
+      font-size:7px!important;
       line-height:1!important;
-      color:rgba(255,255,255,.76)!important;
+      color:rgba(255,255,255,.78)!important;
       font-weight:850!important;
     }
 
@@ -468,7 +447,11 @@ if (!document.getElementById(styleId)) {
 
     .bn-options,.bn-futures,.bn-perpetual{min-height:80px!important;height:80px!important}
     .bn-options .bn-logo,.bn-futures .bn-logo,.bn-perpetual .bn-logo{
-      width:36px!important;height:36px!important;min-width:36px!important
+      width:38px!important;height:38px!important;min-width:38px!important
+    }
+    .bn-options .bn-provider-logo,.bn-futures .bn-provider-logo,.bn-perpetual .bn-provider-logo,
+    .bn-options .bn-provider-logo img,.bn-futures .bn-provider-logo img,.bn-perpetual .bn-provider-logo img{
+      width:11px!important;height:11px!important;min-width:11px!important;
     }
 
     @keyframes bn-metrics-scroll{
@@ -478,26 +461,21 @@ if (!document.getElementById(styleId)) {
 
     @media(max-width:620px){
       .bn-card{
-        grid-template-columns:minmax(125px,40%) minmax(62px,1fr) minmax(124px,38%)!important;
+        grid-template-columns:minmax(0,1fr) minmax(124px,38%)!important;
         gap:6px!important;
         padding:8px 10px!important;
       }
       .bn-logo{width:36px!important;height:36px!important;min-width:36px!important}
-      .bn-name strong{font-size:13px!important}
-      .bn-name span{font-size:8px!important}
-      .bn-name small{font-size:6px!important}
-      .bn-provider-logo,.bn-provider-logo img{width:9px!important;height:9px!important;min-width:9px!important}
-      .bn-metrics-set{gap:20px!important}
-      .bn-metrics-track{gap:20px!important}
+      .bn-name strong{font-size:14px!important}
+      .bn-name span{font-size:9px!important}
+      .bn-name small{font-size:7px!important}
+      .bn-provider-logo,.bn-provider-logo img{width:10px!important;height:10px!important;min-width:10px!important}
+      .bn-metrics-set{gap:8px!important}
       .bn-metric b{font-size:5.5px!important}
-      .bn-metric i{font-size:7px!important}
+      .bn-metric i{font-size:6.5px!important}
       .bn-quote{grid-template-columns:minmax(44px,1fr) minmax(54px,64px)!important;gap:6px!important}
       .bn-price strong{font-size:13px!important}
       .bn-change{min-width:54px!important;height:36px!important;padding:0 5px!important;font-size:9px!important}
-    }
-
-    @media(prefers-reduced-motion:reduce){
-      .bn-metrics-track{animation:none!important}
     }
   `;
   document.head.appendChild(style);
