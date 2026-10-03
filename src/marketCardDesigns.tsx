@@ -177,7 +177,8 @@ const providerLogoSources = (item: Instrument) => {
 };
 const assetLogoSources = (item: Instrument) => {
   const base = esc(item.base).toLowerCase();
-  const out = [assetLogo(item)];
+  const existing = String((item as any).logoUrl || (item as any).assetLogoUrl || '').trim();
+  const out = existing ? [existing] : [];
   if (base) {
     out.push('https://cdn.jsdelivr.net/gh/vadimmalykhin/binance-icons/crypto/' + encodeURIComponent(base) + '.svg');
     out.push('https://cdn.jsdelivr.net/gh/spothq/cryptocurrency-icons@master/128/color/' + encodeURIComponent(base) + '.png');
@@ -244,6 +245,14 @@ const M = ({ label, value }: { label: string; value?: unknown }) => (
     <b>{label}</b>
     <i>{esc(value) || '—'}</i>
   </span>
+);
+const Meta = ({ children }: { children: ReactNode }) => (
+  <div className="mc-meta">
+    <div className="mc-meta-track">
+      {children}
+      {children}
+    </div>
+  </div>
 );
 
 const CryptoSpotCard = (p: CardProps) => {
@@ -590,8 +599,34 @@ if (!document.getElementById(styleId)) {
     .mc-price strong { font-size:14px!important;line-height:1!important;font-weight:900!important;color:#fff!important;letter-spacing:-.02em!important; }
     .mc-price em { font-style:normal!important;font-size:9px!important;line-height:1!important;font-weight:850!important; }
     .mc-price em.up { color:#36d79b!important; }.mc-price em.down { color:#ff5570!important; }
-    .mc-meta { display:grid!important;grid-template-columns:repeat(4,minmax(0,1fr))!important;align-items:end!important;gap:5px 9px!important;min-width:0!important;overflow:hidden!important;margin-top:3px!important; }
-    .mc-meta span { min-width:0!important;overflow:hidden!important;display:flex!important;flex-direction:column!important;gap:2px!important;white-space:nowrap!important;font-size:7px!important;line-height:1!important;color:rgba(235,235,240,.52)!important;font-weight:700!important; }
+    .mc-meta {
+  position:relative!important;
+  display:flex!important;
+  align-items:center!important;
+  gap:14px!important;
+  min-width:0!important;
+  width:100%!important;
+  overflow:hidden!important;
+  margin-top:4px!important;
+  padding:0 6px!important;
+  mask-image:linear-gradient(90deg,transparent 0,#000 8%,#000 92%,transparent 100%)!important;
+  -webkit-mask-image:linear-gradient(90deg,transparent 0,#000 8%,#000 92%,transparent 100%)!important;
+}
+.mc-meta-track {
+  display:flex!important;
+  align-items:center!important;
+  gap:14px!important;
+  flex:0 0 max-content!important;
+  min-width:max-content!important;
+  animation:mc-metric-marquee 22s linear infinite!important;
+  will-change:transform!important;
+}
+.mc-meta:hover .mc-meta-track { animation-play-state:paused!important; }
+@keyframes mc-metric-marquee {
+  from { transform:translate3d(0,0,0); }
+  to { transform:translate3d(-50%,0,0); }
+}
+    .mc-meta span { flex:0 0 auto!important;min-width:46px!important;overflow:hidden!important;display:flex!important;flex-direction:column!important;gap:2px!important;white-space:nowrap!important;font-size:7px!important;line-height:1!important;color:rgba(235,235,240,.52)!important;font-weight:700!important; }
     .mc-meta b { overflow:hidden!important;text-overflow:ellipsis!important;color:rgba(235,235,240,.28)!important;font-size:6px!important;line-height:1!important;font-weight:850!important;letter-spacing:.05em!important; }\n.mc-meta i { overflow:hidden!important;text-overflow:ellipsis!important;font-style:normal!important;color:rgba(245,245,248,.72)!important;font-size:7px!important;line-height:1!important;font-weight:800!important; }
     .mc-card > .mc-price { grid-row:1!important; }
 
