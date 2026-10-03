@@ -30,14 +30,22 @@ function spot(raw:any):BinanceInstrument|null{
     marketFilters:uniq([qb,margin?'Margin':'Spot']),marketFilter:qb,instrumentType:'Crypto Spot',
     quote,baseAsset:base,status:s(raw?.status),pipSize:tick,margin};
 }
+function tradfiClass(base:string, subs:string[]) {
+  if (subs.some(v=>v.toLowerCase()==='pre-ipo')) return 'Pre-IPO';
+  const b=base.toUpperCase();
+  if (/^(EURUSD|GBPUSD|USDJPY|USDCHF|AUDUSD|USDCAD|NZDUSD|EURGBP|EURJPY|GBPJPY)$/.test(b)) return 'Fx';
+  if (['XAU','XAG','XPT','XPD','COPPER','CL','BZ','NG','HO','RB','GOLD','SILVER'].includes(b)) return 'Commodities';
+  if (['SPY','QQQ','IWM','DIA','TLT','GLD','SLV','USO','UNG','EEM','EWJ','EWY','FXI','XLE','XLK','XLF','XLV','XLI','XLP','XLU','ARKK'].includes(b)) return 'ETFs';
+  return 'Stocks';
+}
 function future(raw:any,kind:'USDT-M'|'COIN-M',now:number):BinanceInstrument|null{
   const symbol=s(raw?.symbol);if(!symbol)return null;
   const subs=uniq(Array.isArray(raw?.underlyingSubType)?raw.underlyingSubType:[]), tradfi=isTradFi(subs);
-  const base=s(raw?.baseAsset),quote=s(raw?.quoteAsset),ct=s(raw?.contractType),onboard=n(raw?.onboardDate),expiry=n(raw?.deliveryDate);
+  const base=s(raw?.baseAsset),quote=s(raw?.quoteAsset),ct=s(raw?.contractType),onboard=n(raw?.onboardDate),expiry=n(raw?.deliveryDate),tradfiKind=tradfi?tradfiClass(base,subs):undefined;
   return {symbol,name:base+(quote?'/'+quote:'')+(ct==='PERPETUAL'?' Perpetual':' '+ct),provider:'BINANCE',exchange:'BINANCE',
     marketGroup:tradfi?'TRADE FI':'CRYPTO',marketType:'Futures',category:tradfi?'TradFi Futures':'Futures',
-    marketSubcategory:kind,marketSubSubcategory:subs[0]||'All',
-    marketFilters:uniq([...subs,kind,ct==='PERPETUAL'?'Perpetual':'Expiring',quote]),marketFilter:subs[0]||kind,
+    marketSubcategory:kind,marketSubSubcategory:tradfiKind||subs[0]||'All',
+    marketFilters:uniq([...subs,...(tradfiKind?[tradfiKind]:[]),kind,ct==='PERPETUAL'?'Perpetual':'Expiring',quote]),marketFilter:tradfiKind||subs[0]||kind,
     instrumentType:tradfi?'TradFi Futures':'Crypto Futures',instrumentSubtype:subs.join(', '),quote,baseAsset:base,
     settlement:kind,status:s(raw?.status||raw?.contractStatus),pipSize:n(raw?.filters?.find?.((f:any)=>f?.filterType==='PRICE_FILTER')?.tickSize),
     onboardDate:onboard,expiry,newListing:Number.isFinite(onboard)?now-Number(onboard)<30*86400000:false};
@@ -47,7 +55,7 @@ async function json(url:string){const r=await fetch(url,{cache:'no-store',header
 export async function fetchBinanceInstruments():Promise<BinanceInstrument[]>{
   const now=Date.now();
   const [sp,um,cm,alpha]=await Promise.all([
-    json(SPOT+'/api/v3/exchangeInfo?symbolStatus=TRADING'),
+    json(SPOT+'/api/v3/exchangeInfo'),
     json(UM+'/fapi/v1/exchangeInfo'),
     json(CM+'/dapi/v1/exchangeInfo'),
     json(ALPHA+'/bapi/defi/v1/public/wallet-direct/buw/wallet/cex/alpha/all/token/list').catch(()=>null)
