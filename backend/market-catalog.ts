@@ -86,6 +86,9 @@ const execFileAsync = promisify(execFile);
 const CACHE_MS = 5 * 60 * 1000;
 let cached: { at: number; instruments: UnifiedInstrument[] } | null = null;
 let loading: Promise<UnifiedInstrument[]> | null = null;
+// Keep the last successful Bitget instrument snapshot per product line so a transient
+// Bitget endpoint failure/404 cannot make an already-visible category disappear.
+const bitgetCategoryCache = new Map<string, UnifiedInstrument[]>();
 
 const providerLogo = (name: string) => {
   const value = String(name || '').trim().toLowerCase();
@@ -2167,10 +2170,26 @@ async function bitget(): Promise<UnifiedInstrument[]> {
       const response = await getJsonAny(instrumentUrls, 15000);
       if (String(response?.code || '00000') !== '00000') throw new Error(String(response?.msg || 'Bitget instruments request failed'));
       const rows = Array.isArray(response?.data) ? response.data : [];
-      for (const raw of rows) add(raw, category);
-      console.log('[SIRE BITGET] v3 ' + category + ': ' + rows.length);
+      if (rows.length > 0) {
+        const before = out.length;
+        for (const raw of rows) add(raw, category);
+        bitgetCategoryCache.set(category, out.slice(before));
+        console.log('[SIRE BITGET] v3 ' + category + ': ' + rows.length);
+      } else {
+        const cachedRows = bitgetCategoryCache.get(category) || [];
+        for (const item of cachedRows) {
+          const key = category + ':' + item.symbol + ':' + (item.marketSubcategory || item.marketFilter || 'ALL');
+          if (!seen.has(key)) { seen.add(key); out.push(item); }
+        }
+        console.warn('[SIRE BITGET] v3 ' + category + ' returned no instruments; retained last successful snapshot: ' + cachedRows.length);
+      }
     } catch (error) {
-      console.warn('[SIRE BITGET] v3 ' + category + ' failed:', error);
+      const cachedRows = bitgetCategoryCache.get(category) || [];
+      for (const item of cachedRows) {
+        const key = category + ':' + item.symbol + ':' + (item.marketSubcategory || item.marketFilter || 'ALL');
+        if (!seen.has(key)) { seen.add(key); out.push(item); }
+      }
+      console.warn('[SIRE BITGET] v3 ' + category + ' failed; retained last successful snapshot: ' + cachedRows.length, error);
     }
   }
 
@@ -2179,15 +2198,31 @@ async function bitget(): Promise<UnifiedInstrument[]> {
     try {
       const response = await getJson('https://api.bitget.com/api/v2/mix/market/contracts?productType=' + productType, 15000);
       const rows = Array.isArray(response?.data) ? response.data : [];
-      for (const raw of rows) add({
-        ...raw,
-        category: productType,
-        type: String(raw?.symbolType || '').toLowerCase() === 'perpetual' ? 'perpetual' : 'delivery',
-        settleCoin: raw?.supportMarginCoins?.[0] || raw?.marginCoin,
-      }, productType);
-      console.log('[SIRE BITGET] v2 ' + productType + ': ' + rows.length);
+      if (rows.length > 0) {
+        const before = out.length;
+        for (const raw of rows) add({
+          ...raw,
+          category: productType,
+          type: String(raw?.symbolType || '').toLowerCase() === 'perpetual' ? 'perpetual' : 'delivery',
+          settleCoin: raw?.supportMarginCoins?.[0] || raw?.marginCoin,
+        }, productType);
+        bitgetCategoryCache.set(productType, out.slice(before));
+        console.log('[SIRE BITGET] v2 ' + productType + ': ' + rows.length);
+      } else {
+        const cachedRows = bitgetCategoryCache.get(productType) || [];
+        for (const item of cachedRows) {
+          const key = productType + ':' + item.symbol + ':' + (item.marketSubcategory || item.marketFilter || 'ALL');
+          if (!seen.has(key)) { seen.add(key); out.push(item); }
+        }
+        console.warn('[SIRE BITGET] v2 ' + productType + ' returned no instruments; retained last successful snapshot: ' + cachedRows.length);
+      }
     } catch (error) {
-      console.warn('[SIRE BITGET] v2 ' + productType + ' failed:', error);
+      const cachedRows = bitgetCategoryCache.get(productType) || [];
+      for (const item of cachedRows) {
+        const key = productType + ':' + item.symbol + ':' + (item.marketSubcategory || item.marketFilter || 'ALL');
+        if (!seen.has(key)) { seen.add(key); out.push(item); }
+      }
+      console.warn('[SIRE BITGET] v2 ' + productType + ' failed; retained last successful snapshot: ' + cachedRows.length, error);
     }
   }
 
