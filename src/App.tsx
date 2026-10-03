@@ -486,14 +486,7 @@ export default function App() {
     setInstrumentSearchOpen(true);
   };
 
-  if (derivLoading) {
-    return <SireErrorScreen
-      source="SIRE startup"
-      message="Loading the active market catalogue. The interface will remain usable if an individual provider is unavailable."
-    />;
-  }
-
-  if (!instruments.length || !selected) {
+  if (!derivLoading && (!instruments.length || !selected)) {
     return <SireErrorScreen
       source="SIRE startup validation"
       message={derivError || "No market provider returned a usable instrument catalogue yet. Retrying startup."}
