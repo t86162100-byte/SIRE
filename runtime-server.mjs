@@ -14,8 +14,6 @@ import { signup, login, logout, currentUser, googleStart, googleCallback } from 
 import { runSireDiagnostics } from './backend/sire-diagnostics.ts';
 import { runAutonomousCycle } from './autonomous/sire-autonomous-cycle.ts';
 import { recordIssue, getRecentIssues } from './backend/sire-issue-tracker.ts';
-import { getUnifiedMarketCatalogue, getStandaloneMarketProviderCatalogue } from './backend/market-catalog.ts';
-import { binanceHistory, binanceQuote } from './backend/binance-market-data.ts';
 
 const PORT = Number(process.env.PORT || 10000);
 const HOST = '0.0.0.0';
@@ -772,29 +770,6 @@ const server = http.createServer(async (req,res) => {
       try { const u=new URL(req.url||'/',`http://${req.headers.host||'localhost'}`); const symbol=String(u.searchParams.get('symbol')||'').trim(); if(!symbol) throw new Error('symbol is required'); const quote=await fxcmQuote(symbol); return res.writeHead(200,{'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify({ok:true,quote})); }
       catch(e){ return res.writeHead(502,{'Access-Control-Allow-Origin':'*','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify({ok:false,error:e instanceof Error?e.message:String(e)})); }
     }
-    if (req.method === 'GET' && pathname === '/api/sire/binance/history') {
-      try {
-        const u=new URL(req.url||'/',`http://${req.headers.host||'localhost'}`);
-        const symbol=String(u.searchParams.get('symbol')||'').trim();
-        const marketType=String(u.searchParams.get('marketType')||'Spot').trim();
-        const interval=String(u.searchParams.get('interval')||'1min').trim();
-        const count=Math.max(2,Math.min(1500,Number(u.searchParams.get('count')||500)));
-        const from=Number(u.searchParams.get('from')),to=Number(u.searchParams.get('to'));
-        if(!symbol) throw new Error('symbol is required');
-        const bars=await binanceHistory({symbol,marketType,interval,count,from,to});
-        return res.writeHead(200,{'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify({ok:true,symbol,marketType,interval,bars}));
-      } catch(e) { return res.writeHead(502,{'Access-Control-Allow-Origin':'*','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify({ok:false,error:e instanceof Error?e.message:String(e)})); }
-    }
-    if (req.method === 'GET' && pathname === '/api/sire/binance/quote') {
-      try {
-        const u=new URL(req.url||'/',`http://${req.headers.host||'localhost'}`);
-        const symbol=String(u.searchParams.get('symbol')||'').trim();
-        const marketType=String(u.searchParams.get('marketType')||'Spot').trim();
-        if(!symbol) throw new Error('symbol is required');
-        const quote=await binanceQuote({symbol,marketType});
-        return res.writeHead(200,{'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify({ok:true,quote}));
-      } catch(e) { return res.writeHead(502,{'Access-Control-Allow-Origin':'*','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify({ok:false,error:e instanceof Error?e.message:String(e)})); }
-    }
     if (req.method === 'GET' && pathname === '/api/sire/market-data/history') {
       try {
         const u=new URL(req.url||'/',`http://${req.headers.host||'localhost'}`);
@@ -914,156 +889,6 @@ const server = http.createServer(async (req,res) => {
         sireHistoryStore: { enabled: stored.enabled, chunks: stored.chunks },
       }));
     }
-    if (req.method === 'POST' && pathname === '/api/sire/binance/browser-diagnostic') {
-      let parsed = {};
-      try { parsed = body ? JSON.parse(body) : {}; } catch { return res.writeHead(400,{ 'Access-Control-Allow-Origin':'*','Content-Type':'application/json; charset=utf-8' }).end(JSON.stringify({ok:false,error:'Invalid JSON request.'})); }
-      const total = Math.max(0, Number(parsed.total) || 0);
-      const counts = parsed.counts && typeof parsed.counts === 'object' ? parsed.counts : {};
-      const failures = parsed.failures && typeof parsed.failures === 'object' ? parsed.failures : {};
-      console.log('[SIRE BINANCE BROWSER REPORT]', JSON.stringify({source:'browser',total,counts,failures,reportedAt:parsed.reportedAt||Date.now()}));
-      return res.writeHead(200,{ 'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8' }).end(JSON.stringify({ok:true,total,counts,failures}));
-    }
-    if (req.method === 'GET' && pathname === '/api/sire/binance/new-listings') {
-      try {
-        const cacheKey = 'binance-new-listings-v1';
-        const now = Date.now();
-        globalThis.__sireBinanceNewCache = globalThis.__sireBinanceNewCache || new Map();
-        const cached = globalThis.__sireBinanceNewCache.get(cacheKey);
-        if (cached && now - cached.at < 5 * 60 * 1000) {
-          return res.writeHead(200,{ 'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8' }).end(JSON.stringify(cached.value));
-        }
-        const url = 'https://www.binance.com/bapi/composite/v1/public/cms/article/list/query?type=1&pageNo=1&pageSize=50&category=48';
-        const response = await fetch(url, {
-          headers: {
-            Accept: 'application/json',
-            'User-Agent': 'SIRE-market-data/1.0',
-            Referer: 'https://www.binance.com/en/support/announcement/list/48',
-          },
-        });
-        if (!response.ok) throw new Error('Binance announcement API HTTP ' + response.status);
-        const payload = await response.json();
-        const articles = Array.isArray(payload?.data?.articles) ? payload.data.articles : [];
-        const output = [];
-        const seen = new Set();
-        const collectStrings = (value, out = []) => {
-          if (typeof value === 'string') out.push(value);
-          else if (Array.isArray(value)) value.forEach(v => collectStrings(v, out));
-          else if (value && typeof value === 'object') Object.values(value).forEach(v => collectStrings(v, out));
-          return out;
-        };
-        for (const article of articles) {
-          const strings = collectStrings(article);
-          const title = strings.find(s => /Binance|Futures|Spot|List|Add|Launch/i.test(s)) || '';
-          const blob = strings.join(' ');
-          const future = /\bFutures?\b|Perpetual|USDⓈ-M|COIN-M|Delivery Contract|Pre-IPO/i.test(blob);
-          const dateRaw = article?.releaseDate || article?.publishDate || article?.createTime || article?.updateTime || article?.releaseTime;
-          const timestamp = Number.isFinite(Number(dateRaw)) ? Number(dateRaw) : (dateRaw ? Date.parse(String(dateRaw)) : NaN);
-          const date = Number.isFinite(timestamp) ? timestamp : Date.now();
-          const symbols = new Set();
-          for (const match of blob.matchAll(/\b([A-Z0-9]{2,20}(?:USDT|USDC|BUSD))\b/g)) symbols.add(match[1]);
-          for (const match of blob.matchAll(/\(([A-Z][A-Z0-9]{1,15})\)/g)) symbols.add(match[1]);
-          for (const symbol of symbols) {
-            const key = (future ? 'F:' : 'S:') + symbol;
-            if (seen.has(key)) continue;
-            seen.add(key);
-            output.push({ symbol, marketType: future ? 'Futures' : 'Spot', listedAt: date, title });
-          }
-        }
-        output.sort((a,b) => Number(b.listedAt) - Number(a.listedAt));
-        const value = { ok: true, generatedAt: now, items: output };
-        globalThis.__sireBinanceNewCache.set(cacheKey, { at: now, value });
-        console.log('[SIRE BINANCE NEW] refreshed', JSON.stringify({articles: articles.length, items: output.length}));
-        return res.writeHead(200,{ 'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8' }).end(JSON.stringify(value));
-      } catch (error) {
-        console.warn('[SIRE BINANCE NEW] failed:', error);
-        return res.writeHead(502,{ 'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8' }).end(JSON.stringify({ok:false,error:String(error?.message || error),items:[]}));
-      }
-    }
-    if (req.method === 'GET' && pathname === '/api/sire/gateio/tickers') {
-      const url = new URL(req.url || '/', 'http://sire.local');
-      const market = String(url.searchParams.get('market') || 'spot').toLowerCase();
-      const endpoints = {
-        spot: 'https://api.gateio.ws/api/v4/spot/tickers',
-        usdt: 'https://api.gateio.ws/api/v4/futures/usdt/tickers',
-        usd1: 'https://api.gateio.ws/api/v4/futures/usd1/tickers',
-        btc: 'https://api.gateio.ws/api/v4/futures/btc/tickers',
-      };
-      const endpoint = endpoints[market];
-      if (!endpoint) {
-        return res.writeHead(400,{ 'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8' }).end(JSON.stringify({ok:false,error:'Unsupported Gate.io market'}));
-      }
-      try {
-        const response = await fetch(endpoint, { headers: { Accept: 'application/json' }, cache: 'no-store' });
-        const data = await response.json();
-        if (!response.ok || !Array.isArray(data)) throw new Error('HTTP ' + response.status);
-        console.log('[SIRE GATEIO LIVE] ' + market + ': ' + data.length);
-        return res.writeHead(200,{ 'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8' }).end(JSON.stringify({ok:true,market,data}));
-      } catch (cause) {
-        const message = cause instanceof Error ? cause.message : String(cause);
-        console.warn('[SIRE GATEIO LIVE] failed', JSON.stringify({market,error:message}));
-        return res.writeHead(502,{ 'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8' }).end(JSON.stringify({ok:false,market,error:message,data:[]}));
-      }
-    }
-    if (req.method === 'GET' && pathname === '/api/sire/bitget/tickers') {
-      const url = new URL(req.url || '/', 'http://sire.local');
-      const category = String(url.searchParams.get('category') || 'SPOT').toUpperCase();
-      const allowedCategories = new Set(['SPOT','USDT-FUTURES','COIN-FUTURES','USDC-FUTURES']);
-      if (!allowedCategories.has(category)) {
-        return res.writeHead(400,{ 'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8' }).end(JSON.stringify({ok:false,error:'Unsupported Bitget category'}));
-      }
-      try {
-        const endpoint = 'https://api.bitget.com/api/v3/market/tickers?category=' + encodeURIComponent(category);
-        const response = await fetch(endpoint, { headers: { Accept: 'application/json' } });
-        const payload = await response.json();
-        if (!response.ok || String(payload?.code || '00000') !== '00000') throw new Error(String(payload?.msg || ('HTTP ' + response.status)));
-        return res.writeHead(200,{ 'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8' }).end(JSON.stringify({ok:true,category,data:Array.isArray(payload?.data) ? payload.data : []}));
-      } catch (cause) {
-        const message = cause instanceof Error ? cause.message : String(cause);
-        console.warn('[SIRE BITGET LIVE REST] failed', JSON.stringify({category,error:message}));
-        return res.writeHead(502,{ 'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8' }).end(JSON.stringify({ok:false,category,error:message,data:[]}));
-      }
-    }
-    if (req.method === 'GET' && pathname.startsWith('/api/sire/markets/provider/')) {
-      const provider = decodeURIComponent(pathname.slice('/api/sire/markets/provider/'.length)).toUpperCase();
-      const allowed = new Set(['BINGX','BITRUE','ASCENDEX','WHITEBIT','COINW','DERIV','BINANCE','COINBASE','KRAKEN','BYBIT','OKX','BITGET','GATEIO','KUCOIN','MEXC','CRYPTOCOM','BITFINEX','GEMINI','BITSTAMP','COINEX','HTX','LBANK','BITTREX','BITMART','PHEMEX','BLANK','XT','DEEPCOIN','TOOBIT','WEEX','BITUNIX','BLOFIN','COINCATCH','ZOOMEX','BTCC','DIGIFINEX','BITHUMB','UPBIT','PIONEX','COINSTORE','PROBIT','POLONIEX','COINDCX','POLYMARKET','KALSHI','OPINION','UNISWAP','CURVE']);
-      if (!allowed.has(provider)) {
-        return res.writeHead(404,{ 'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8' }).end(JSON.stringify({ok:false,error:'Unknown standalone market provider: '+provider}));
-      }
-      try {
-        const result = await getStandaloneMarketProviderCatalogue(provider, async () => {
-          const health = await checkDerivPublicMarketData();
-          if (!health.ok || !Array.isArray(health.activeSymbols)) throw new Error(health.error || 'Deriv catalogue unavailable.');
-          return health.activeSymbols;
-        });
-        console.log('[SIRE MARKET PROVIDER] COMPLETE', JSON.stringify({provider,count:result.length}));
-        return res.writeHead(200,{ 'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8' }).end(JSON.stringify({
-          ok:true, provider, count:result.length, instruments:result,
-        }));
-      } catch (cause) {
-        const message=cause instanceof Error?cause.message:String(cause);
-        console.error('[SIRE MARKET PROVIDER] FAILED', JSON.stringify({provider,error:message}));
-        return res.writeHead(502,{ 'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8' }).end(JSON.stringify({ok:false,provider,error:message,instruments:[]}));
-      }
-    }
-    if (req.method === 'GET' && pathname === '/api/sire/markets/catalog') {
-      try {
-        const result = await getUnifiedMarketCatalogue(async () => {
-          const health = await checkDerivPublicMarketData();
-          if (!health.ok || !Array.isArray(health.activeSymbols)) throw new Error(health.error || 'Deriv catalogue unavailable.');
-          return health.activeSymbols;
-        });
-        return res.writeHead(200,{ 'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8' }).end(JSON.stringify({
-          ok:true,
-          count:result.length,
-          providers:[...new Set(result.map(item => item.provider))],
-          instruments:result,
-        }));
-      } catch (cause) {
-        const message=cause instanceof Error?cause.message:String(cause);
-        console.error('[SIRE MARKET CATALOG]', message);
-        return res.writeHead(502,{ 'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8' }).end(JSON.stringify({ ok:false,error:message }));
-      }
-    }
     if (req.method === 'GET' && pathname === '/api/sire/deriv/history/status') {
       const status = await historyStoreStatus();
       return res.writeHead(200,{ 'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8' }).end(JSON.stringify(status));
@@ -1121,54 +946,7 @@ const server = http.createServer(async (req,res) => {
     }
     if (req.method === 'POST' && pathname === '/api/sire/agent/gpt') { const parsed = body ? JSON.parse(body) : {}; if (!String(parsed.query || '').trim()) return res.writeHead(400,{ 'Access-Control-Allow-Origin':'*','Content-Type':'application/json; charset=utf-8' }).end(JSON.stringify({ error:'query is required' })); try { const response = await handleDirectGptRequest(parsed); return res.writeHead(200,{ 'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8' }).end(JSON.stringify(response)); } catch (cause) { const message = cause instanceof Error ? cause.message : String(cause); console.error('[DIRECT GPT]', message); return res.writeHead(502,{ 'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8' }).end(JSON.stringify({ error:`Direct GPT test failed: ${message}` })); } }
     if (req.method === 'GET' && pathname === '/api/sire/market-history') {
-      const url = new URL(req.url || '/', `http://sire.local`);
-      const provider = String(url.searchParams.get('provider') || '').toUpperCase();
-      const symbol = String(url.searchParams.get('symbol') || '').trim();
-      const marketType = String(url.searchParams.get('marketType') || 'Spot').trim();
-      if (!provider || !symbol) return res.writeHead(400,{ 'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8' }).end(JSON.stringify({ ok:false,error:'provider and symbol are required' }));
-      const jsonFetch = async (target) => {
-        const response = await fetch(target,{headers:{Accept:'application/json','User-Agent':'SIRE-MarketPulse/1.0'},signal:AbortSignal.timeout(12000)});
-        const raw=await response.text();
-        let payload={}; try{payload=raw?JSON.parse(raw):{}}catch{}
-        if(!response.ok) throw new Error('HTTP '+response.status);
-        return payload;
-      };
-      try {
-        let points=[];
-        if(provider==='BINANCE'){
-          const mt=marketType.toLowerCase();
-          const base = (mt==='spot'||mt==='margin') ? 'https://api.binance.com/api/v3/klines'
-            : (mt==='options' ? 'https://eapi.binance.com/eapi/v1/klines'
-            : (symbol.includes('_') || mt==='futures' ? 'https://dapi.binance.com/dapi/v1/klines' : 'https://fapi.binance.com/fapi/v1/klines'));
-          const query=new URLSearchParams({symbol,interval:'1h',limit:'24'});
-          const rows=await jsonFetch(base+'?'+query.toString());
-          points=(Array.isArray(rows)?rows:[]).map(row=>({time:Number(row?.[0])/1000,price:Number(row?.[4])})).filter(row=>Number.isFinite(row.time)&&Number.isFinite(row.price));
-        } else if(provider==='BITGET'){
-          const mt=marketType.toLowerCase();
-          if(mt==='spot'){
-            const rows=await jsonFetch('https://api.bitget.com/api/v2/spot/market/candles?symbol='+encodeURIComponent(symbol)+'&granularity=1H&limit=24');
-            points=(Array.isArray(rows?.data)?rows.data:[]).map(row=>({time:Number(row?.[0])/1000,price:Number(row?.[4])})).filter(row=>Number.isFinite(row.time)&&Number.isFinite(row.price));
-          } else {
-            const productType=String(marketType).toLowerCase().includes('coin')?'COIN-FUTURES':'USDT-FUTURES';
-            const rows=await jsonFetch('https://api.bitget.com/api/v2/mix/market/candles?productType='+encodeURIComponent(productType)+'&symbol='+encodeURIComponent(symbol)+'&granularity=1H&limit=24');
-            points=(Array.isArray(rows?.data)?rows.data:[]).map(row=>({time:Number(row?.[0])/1000,price:Number(row?.[4])})).filter(row=>Number.isFinite(row.time)&&Number.isFinite(row.price));
-          }
-        } else if(provider==='GATEIO'){
-          const isFutures=marketType.toLowerCase()!=='spot';
-          const normalized=symbol.replace(/-/g,'_');
-          const target=isFutures
-            ? 'https://api.gateio.ws/api/v4/futures/usdt/candlesticks?contract='+encodeURIComponent(normalized)+'&interval=1h&limit=24'
-            : 'https://api.gateio.ws/api/v4/spot/candlesticks?currency_pair='+encodeURIComponent(normalized)+'&interval=1h&limit=24';
-          const rows=await jsonFetch(target);
-          points=(Array.isArray(rows)?rows:[]).map(row=>({time:Number(row?.[0]),price:Number(row?.[2]??row?.[5])})).filter(row=>Number.isFinite(row.time)&&Number.isFinite(row.price));
-        }
-        points.sort((a,b)=>a.time-b.time);
-        return res.writeHead(200,{ 'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8' }).end(JSON.stringify({ok:true,provider,symbol,marketType,interval:'1h',points}));
-      } catch(error) {
-        const message=error instanceof Error?error.message:String(error);
-        console.warn('[MARKET PULSE HISTORY]',provider,symbol,marketType,message);
-        return res.writeHead(502,{ 'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8' }).end(JSON.stringify({ok:false,error:message,provider,symbol,marketType,points:[]}));
-      }
+      return res.writeHead(200,{'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify({ok:true,points:[]}));
     }
     const response=await handler(toEvent(req,body)); const statusCode=Number.isInteger(response?.statusCode)?response.statusCode:200; const rawBody=response?.body!==undefined?response.body:response; const isString=typeof rawBody==='string'; res.writeHead(statusCode,{ 'Access-Control-Allow-Origin':'*','Cache-Control':'no-store',...(isString?{}:{'Content-Type':'application/json; charset=utf-8'}),...(response?.headers||{}) }); res.end(isString?rawBody:JSON.stringify(rawBody??{}));
   } catch(cause) { const message=cause instanceof Error?cause.message:String(cause); console.error('[HTTP ERROR]',req.method,req.url,message); if (!res.headersSent) res.writeHead(500,{'Content-Type':'application/json','Access-Control-Allow-Origin':'*'}); res.end(JSON.stringify({error:message})); } });
@@ -1176,324 +954,63 @@ const server = http.createServer(async (req,res) => {
 
 const wss = new WebSocketServer({ noServer:true });
 
-/*
- * Binance USD-M Futures relay.
- * The browser can reach Binance Spot directly, but Futures WebSockets can be
- * unavailable from some client networks. Keep the same live-tick pattern while
- * relaying the public Futures streams through the SIRE Render server.
- */
-const binanceFuturesClients = new Set();
-let binanceFuturesMini = null;
-let binanceFuturesMark = null;
-let binanceFuturesReconnectTimer = null;
-let binanceFuturesTickLogged = false;
-
-function broadcastBinanceFutures(data) {
-  const text = typeof data === 'string' ? data : JSON.stringify(data);
-  for (const client of binanceFuturesClients) {
-    if (client.readyState === WebSocket.OPEN) {
-      try { client.send(text); } catch {}
-    }
-  }
-}
-
-function connectBinanceFuturesRelay() {
-  if (binanceFuturesReconnectTimer) {
-    clearTimeout(binanceFuturesReconnectTimer);
-    binanceFuturesReconnectTimer = null;
-  }
-  try {
-    binanceFuturesMini = new WebSocket('wss://fstream.binance.com/market/ws/!miniTicker@arr');
-    binanceFuturesMini.on('open', () => console.log('[BINANCE FUTURES RELAY] mini ticker connected'));
-    binanceFuturesMini.on('message', data => {
-      try {
-        const parsed = JSON.parse(String(data));
-        const rows = Array.isArray(parsed) ? parsed : [parsed];
-        if (rows.some(row => row?.s && (row?.c || row?.p))) {
-          if (!binanceFuturesTickLogged) {
-            binanceFuturesTickLogged = true;
-            const row = rows.find(item => item?.s && (item?.c || item?.p));
-            console.log('[BINANCE FUTURES RELAY] TICK', JSON.stringify({ symbol: row?.s, price: row?.c ?? row?.p, eventTime: row?.E ?? Date.now() }));
-          }
-          broadcastBinanceFutures(parsed);
-        }
-      } catch {}
-    });
-    binanceFuturesMini.on('error', error => console.error('[BINANCE FUTURES RELAY] mini error', error instanceof Error ? error.message : String(error)));
-    binanceFuturesMini.on('close', () => {
-      console.warn('[BINANCE FUTURES RELAY] mini disconnected');
-      scheduleBinanceFuturesRelayReconnect();
-    });
-
-    binanceFuturesMark = new WebSocket('wss://fstream.binance.com/market/ws/!markPrice@arr@1s');
-    binanceFuturesMark.on('open', () => console.log('[BINANCE FUTURES RELAY] mark-price connected'));
-    binanceFuturesMark.on('message', data => {
-      try {
-        const parsed = JSON.parse(String(data));
-        const rows = Array.isArray(parsed) ? parsed : [parsed];
-        if (rows.some(row => row?.s && Number.isFinite(Number(row?.p)))) {
-          if (!binanceFuturesTickLogged) {
-            binanceFuturesTickLogged = true;
-            const row = rows.find(item => item?.s && Number.isFinite(Number(item?.p)));
-            console.log('[BINANCE FUTURES RELAY] TICK', JSON.stringify({ symbol: row?.s, price: row?.p, eventTime: row?.E ?? Date.now() }));
-          }
-          broadcastBinanceFutures(parsed);
-        }
-      } catch {}
-    });
-    binanceFuturesMark.on('error', error => console.error('[BINANCE FUTURES RELAY] mark error', error instanceof Error ? error.message : String(error)));
-    binanceFuturesMark.on('close', () => {
-      console.warn('[BINANCE FUTURES RELAY] mark-price disconnected');
-      scheduleBinanceFuturesRelayReconnect();
-    });
-  } catch (error) {
-    console.error('[BINANCE FUTURES RELAY] connect failed', error instanceof Error ? error.message : String(error));
-    scheduleBinanceFuturesRelayReconnect();
-  }
-}
-
-function scheduleBinanceFuturesRelayReconnect() {
-  if (binanceFuturesReconnectTimer) return;
-  binanceFuturesReconnectTimer = setTimeout(() => {
-    binanceFuturesReconnectTimer = null;
-    try { binanceFuturesMini?.close(); } catch {}
-    try { binanceFuturesMark?.close(); } catch {}
-    binanceFuturesMini = null;
-    binanceFuturesMark = null;
-    connectBinanceFuturesRelay();
-  }, 2000);
-}
-
-connectBinanceFuturesRelay();
-const bitgetLiveClients = new Set();
-const bitgetLiveDesired = new Map();
-const bitgetLiveUpstreams = new Map();
-const BITGET_LIVE_URL = 'wss://ws.bitget.com/v3/ws/public';
-const BITGET_LIVE_TYPES = ['spot', 'usdt-futures', 'coin-futures', 'usdc-futures'];
-const BITGET_LIVE_CHANNELS_PER_SOCKET = 50;
-const bitgetLiveTimers = new Map();
-const bitgetLiveSignatures = new Map();
-let bitgetLiveTickSamples = 0;
-
-function bitgetLiveBroadcast(data) {
-  const payload = typeof data === 'string' ? data : JSON.stringify(data);
-  for (const client of bitgetLiveClients) {
-    if (client.readyState === WebSocket.OPEN) {
-      try { client.send(payload); } catch {}
-    }
-  }
-}
-
-function bitgetLiveShardKey(instType, index) {
-  return instType + ':' + index;
-}
-
-function bitgetLiveShardItems(instType, index) {
-  const items = bitgetLiveDesired.get(instType) || [];
-  const start = index * BITGET_LIVE_CHANNELS_PER_SOCKET;
-  return items.slice(start, start + BITGET_LIVE_CHANNELS_PER_SOCKET);
-}
-
-function bitgetLiveCloseType(instType) {
-  for (const [key, upstream] of [...bitgetLiveUpstreams]) {
-    if (!key.startsWith(instType + ':')) continue;
-    const heartbeat = bitgetLiveTimers.get(key);
-    if (heartbeat) clearInterval(heartbeat);
-    bitgetLiveTimers.delete(key);
-    try { upstream.close(); } catch {}
-    bitgetLiveUpstreams.delete(key);
-  }
-  for (const [key, timer] of [...bitgetLiveTimers]) {
-    if (key.startsWith(instType + ':')) {
-      clearTimeout(timer);
-      bitgetLiveTimers.delete(key);
-    }
-  }
-}
-
-function bitgetLiveConnect(instType, index) {
-  const key = bitgetLiveShardKey(instType, index);
-  const existing = bitgetLiveUpstreams.get(key);
-  if (existing && (existing.readyState === WebSocket.OPEN || existing.readyState === WebSocket.CONNECTING)) return;
-
-  const items = bitgetLiveShardItems(instType, index);
-  if (!items.length) return;
-
-  let upstream;
-  try {
-    upstream = new WebSocket(BITGET_LIVE_URL);
-  } catch (error) {
-    console.error('[SIRE BITGET LIVE] connect failed', key, error instanceof Error ? error.message : String(error));
-    return;
-  }
-
-  bitgetLiveUpstreams.set(key, upstream);
-
-  upstream.on('open', () => {
-    const current = bitgetLiveShardItems(instType, index);
-    if (!current.length) return;
-    upstream.send(JSON.stringify({ op: 'subscribe', args: current }));
-    console.log('[SIRE BITGET LIVE] upstream connected', key, 'channels', current.length);
-
-    const heartbeat = setInterval(() => {
-      if (upstream.readyState === WebSocket.OPEN) upstream.send('ping');
-    }, 25000);
-    bitgetLiveTimers.set(key, heartbeat);
-  });
-
-  upstream.on('message', data => {
-    let parsed;
-    try { parsed = JSON.parse(String(data)); } catch { return; }
-
-    if (parsed?.event === 'error') {
-      console.warn('[SIRE BITGET LIVE] upstream subscription error', key, JSON.stringify(parsed));
-      return;
-    }
-
-    if (parsed?.arg?.topic === 'ticker' && Array.isArray(parsed?.data)) {
-      if (bitgetLiveTickSamples < 5) {
-        const ticker = parsed.data[0] || {};
-        bitgetLiveTickSamples += 1;
-        console.log('[SIRE BITGET LIVE] TICK', JSON.stringify({
-          instType: parsed.arg.instType,
-          symbol: parsed.arg.symbol,
-          price: ticker.lastPrice ?? ticker.lastPr,
-          ts: parsed.ts ?? ticker.ts ?? Date.now(),
-        }));
-      }
-      bitgetLiveBroadcast(parsed);
-    }
-  });
-
-  upstream.on('error', error => {
-    console.error('[SIRE BITGET LIVE] upstream error', key, error instanceof Error ? error.message : String(error));
-  });
-
-  upstream.on('close', () => {
-    const heartbeat = bitgetLiveTimers.get(key);
-    if (heartbeat) clearInterval(heartbeat);
-    bitgetLiveTimers.delete(key);
-    bitgetLiveUpstreams.delete(key);
-    if ((bitgetLiveDesired.get(instType) || []).length) {
-      const timer = setTimeout(() => bitgetLiveConnect(instType, index), 2000);
-      bitgetLiveTimers.set(key, timer);
-    }
-  });
-}
-
-function bitgetLiveApplySubscriptions(args) {
-  const grouped = new Map();
-  for (const raw of Array.isArray(args) ? args : []) {
-    const instType = String(raw?.instType || '').toLowerCase();
-    const topic = String(raw?.topic || '').toLowerCase();
-    const symbol = String(raw?.symbol || '').trim().toUpperCase();
-    if (!BITGET_LIVE_TYPES.includes(instType) || topic !== 'ticker' || !symbol) continue;
-    if (!grouped.has(instType)) grouped.set(instType, new Map());
-    grouped.get(instType).set(symbol, { instType, topic: 'ticker', symbol });
-  }
-
-  for (const [instType, symbolMap] of grouped) {
-    const next = [...symbolMap.values()];
-    const signature = next.map(item => item.symbol).join('|');
-    if (signature === (bitgetLiveSignatures.get(instType) || '')) continue;
-
-    bitgetLiveSignatures.set(instType, signature);
-    bitgetLiveDesired.set(instType, next);
-    bitgetLiveCloseType(instType);
-
-    const shardCount = Math.ceil(next.length / BITGET_LIVE_CHANNELS_PER_SOCKET);
-    for (let index = 0; index < shardCount; index += 1) {
-      bitgetLiveConnect(instType, index);
-    }
-  }
-}
-
-
-
 server.on('upgrade',(req,socket,head)=>{
   const url=new URL(req.url||'/',`http://${req.headers.host||'localhost'}`);
-  if(url.pathname==='/bitget/ws'){
-    console.log('[SIRE BITGET LIVE] browser relay connected');
-    wss.handleUpgrade(req,socket,head,clientSocket=>{
-      bitgetLiveClients.add(clientSocket);
-      clientSocket.send(JSON.stringify({event:'connected',service:'bitget-live'}));
-      clientSocket.on('message',data=>{
-        try {
-          if(String(data)==='ping'){ clientSocket.send('pong'); return; }
-          const parsed=JSON.parse(String(data));
-          if(parsed?.op==='subscribe') bitgetLiveApplySubscriptions(parsed.args);
-        } catch {}
-      });
-      clientSocket.on('close',()=>bitgetLiveClients.delete(clientSocket));
-      clientSocket.on('error',()=>bitgetLiveClients.delete(clientSocket));
-    });
-    return;
-  }
-
-  if(url.pathname==='/binance/futures/ws'){
-    console.log('[BINANCE FUTURES RELAY] Browser client connected');
-    wss.handleUpgrade(req,socket,head,clientSocket=>{
-      binanceFuturesClients.add(clientSocket);
-      clientSocket.send(JSON.stringify({type:'sire.binance.futures.connected',timestamp:Date.now()}));
-      clientSocket.on('close',()=>binanceFuturesClients.delete(clientSocket));
-      clientSocket.on('error',()=>binanceFuturesClients.delete(clientSocket));
-    });
-    return;
-  }
     if(url.pathname==='/deriv/ws'){
-    console.log('[DERIV PROXY] Browser market-data client connected');
-    wss.handleUpgrade(req,socket,head,clientSocket=>{
-      const upstream=new WebSocket('wss://api.derivws.com/trading/v1/options/ws/public');
-      const queued=[];
-      let upstreamOpen=false;
-      const fail=(message)=>{
-        const detail = String(message || 'Unknown Deriv upstream error.');
-        console.error('[DERIV PROXY] FAIL', detail);
-        if(clientSocket.readyState===WebSocket.OPEN) {
-          clientSocket.send(JSON.stringify({error:{message:detail}}));
-          clientSocket.close(1011, detail.slice(0, 120));
-        } else if(clientSocket.readyState===WebSocket.CONNECTING) {
-          clientSocket.close();
-        }
-      };
-      const upstreamTimer=setTimeout(()=>{ if(!upstreamOpen) fail('Deriv upstream connection timed out.'); },15000);
-      upstream.on('open',()=>{
-        upstreamOpen=true;
-        clearTimeout(upstreamTimer);
-        for(const data of queued) upstream.send(data);
-        queued.length=0;
+      console.log('[DERIV PROXY] Browser market-data client connected');
+      wss.handleUpgrade(req,socket,head,clientSocket=>{
+        const upstream=new WebSocket('wss://api.derivws.com/trading/v1/options/ws/public');
+        const queued=[];
+        let upstreamOpen=false;
+        const fail=(message)=>{
+          const detail = String(message || 'Unknown Deriv upstream error.');
+          console.error('[DERIV PROXY] FAIL', detail);
+          if(clientSocket.readyState===WebSocket.OPEN) {
+            clientSocket.send(JSON.stringify({error:{message:detail}}));
+            clientSocket.close(1011, detail.slice(0, 120));
+          } else if(clientSocket.readyState===WebSocket.CONNECTING) {
+            clientSocket.close();
+          }
+        };
+        const upstreamTimer=setTimeout(()=>{ if(!upstreamOpen) fail('Deriv upstream connection timed out.'); },15000);
+        upstream.on('open',()=>{
+          upstreamOpen=true;
+          clearTimeout(upstreamTimer);
+          for(const data of queued) upstream.send(data);
+          queued.length=0;
+        });
+        upstream.on('message',data=>{
+          try {
+            const parsed=JSON.parse(String(data));
+            if(parsed?.error) console.error('[DERIV PROXY] upstream error', JSON.stringify(parsed.error));
+          } catch {}
+          if(clientSocket.readyState===WebSocket.OPEN) clientSocket.send(data);
+        });
+        upstream.on('error',error=>{
+          const detail = error instanceof Error ? error.message : String(error);
+          console.error('[DERIV PROXY]', detail);
+          fail(`Deriv upstream WebSocket error: ${detail}`);
+        });
+        upstream.on('close',(code,reason)=>{
+          clearTimeout(upstreamTimer);
+          const detail = reason ? String(reason) : '';
+          if(clientSocket.readyState===WebSocket.OPEN) {
+            clientSocket.close(code && code !== 1000 ? 1011 : 1000, detail.slice(0, 120));
+          }
+        });
+        clientSocket.on('message',data=>{
+          if(upstreamOpen && upstream.readyState===WebSocket.OPEN) upstream.send(data);
+          else if(!upstreamOpen) queued.push(data);
+        });
+        clientSocket.on('close',()=>{
+          clearTimeout(upstreamTimer);
+          queued.length=0;
+          if(upstream.readyState===WebSocket.OPEN || upstream.readyState===WebSocket.CONNECTING) upstream.close();
+        });
       });
-      upstream.on('message',data=>{
-        try {
-          const parsed=JSON.parse(String(data));
-          if(parsed?.error) console.error('[DERIV PROXY] upstream error', JSON.stringify(parsed.error));
-        } catch {}
-        if(clientSocket.readyState===WebSocket.OPEN) clientSocket.send(data);
-      });
-      upstream.on('error',error=>{
-        const detail = error instanceof Error ? error.message : String(error);
-        console.error('[DERIV PROXY]', detail);
-        fail(`Deriv upstream WebSocket error: ${detail}`);
-      });
-      upstream.on('close',(code,reason)=>{
-        clearTimeout(upstreamTimer);
-        const detail = reason ? String(reason) : '';
-        if(clientSocket.readyState===WebSocket.OPEN) {
-          clientSocket.close(code && code !== 1000 ? 1011 : 1000, detail.slice(0, 120));
-        }
-      });
-      clientSocket.on('message',data=>{
-        if(upstreamOpen && upstream.readyState===WebSocket.OPEN) upstream.send(data);
-        else if(!upstreamOpen) queued.push(data);
-      });
-      clientSocket.on('close',()=>{
-        clearTimeout(upstreamTimer);
-        queued.length=0;
-        if(upstream.readyState===WebSocket.OPEN || upstream.readyState===WebSocket.CONNECTING) upstream.close();
-      });
-    });
-    return;
-  }
+      return;
+    }
+  
   if(url.pathname!=='/ws'){socket.destroy();return;}
   wss.handleUpgrade(req,socket,head,wsSocket=>{
     const connectionId=url.searchParams.get('connection_id')||randomUUID();
