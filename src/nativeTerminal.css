@@ -589,3 +589,104 @@
   .sire-exchange-grid{grid-template-columns:1fr;gap:6px}
   .sire-exchange-option{min-height:58px}
 }
+
+
+/* Compact taxonomy sub-navigation: one slim rail beneath the selected market group. */
+.sire-market-filter-stack{
+  margin:0 0 10px;
+  padding:4px;
+  border:1px solid #202020;
+  border-radius:17px;
+  background:#070707;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.035);
+  overflow:hidden;
+}
+.sire-market-filter-stack .sire-market-top-groups{
+  display:grid;
+  grid-template-columns:repeat(5,minmax(0,1fr));
+  gap:4px;
+  margin:0;
+}
+.sire-market-filter-stack .sire-market-top-groups button{
+  min-height:36px;
+  border:0;
+  border-radius:11px;
+  background:transparent;
+}
+.sire-market-filter-stack .sire-market-top-groups button:hover{
+  background:#111;
+  border-color:transparent;
+}
+.sire-market-filter-stack .sire-market-top-groups button.active{
+  background:#fff;
+  border-color:#fff;
+  box-shadow:none;
+}
+.sire-market-filter-stack .sire-market-top-groups button i{
+  left:9px;
+  right:9px;
+  bottom:3px;
+}
+.sire-market-subgroups{
+  display:flex;
+  align-items:center;
+  gap:4px;
+  min-width:100%;
+  min-height:31px;
+  margin-top:4px;
+  padding:4px 2px 1px;
+  border-top:1px solid #1c1c1c;
+  overflow-x:auto;
+  overflow-y:hidden;
+  overscroll-behavior-x:contain;
+  scrollbar-width:none;
+  -webkit-overflow-scrolling:touch;
+}
+.sire-market-subgroups::-webkit-scrollbar{display:none}
+.sire-market-subgroups button{
+  flex:0 0 auto;
+  min-height:25px;
+  padding:0 9px;
+  border:1px solid #252525;
+  border-radius:999px;
+  background:#0c0c0c;
+  color:#686868;
+  font:700 7px/1 inherit;
+  letter-spacing:.04em;
+  white-space:nowrap;
+  cursor:pointer;
+  transition:background .14s ease,border-color .14s ease,color .14s ease;
+}
+.sire-market-subgroups button:hover{
+  color:#e5e5e5;
+  border-color:#3b3b3b;
+  background:#121212;
+}
+.sire-market-subgroups button.active{
+  color:#050505;
+  background:#fff;
+  border-color:#fff;
+}
+@media(max-width:560px){
+  .sire-market-filter-stack{
+    margin-bottom:8px;
+    padding:3px;
+    border-radius:15px;
+  }
+  .sire-market-filter-stack .sire-market-top-groups{gap:3px}
+  .sire-market-filter-stack .sire-market-top-groups button{
+    min-height:34px;
+    border-radius:10px;
+    font-size:7px;
+  }
+  .sire-market-subgroups{
+    gap:3px;
+    min-height:29px;
+    padding-top:3px;
+  }
+  .sire-market-subgroups button{
+    min-height:24px;
+    padding:0 8px;
+    font-size:7px;
+  }
+}
