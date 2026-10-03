@@ -108,6 +108,27 @@ const MARKET_SUBGROUPS: Record<typeof MARKET_TOP_GROUPS[number], readonly string
   'OTHERS': ['Synthetic Indices', 'Baskets'],
 };
 
+const MARKET_SUBSUBGROUPS: Record<string, readonly string[]> = {
+  'CRYPTO::Spot': ['USDT', 'USDC', 'FDUSD', 'BTC', 'Fiat', 'Other'],
+  'CRYPTO::Options': ['Calls', 'Puts', 'Expiring', 'Other'],
+  'CRYPTO::Futures': ['USD-M', 'COIN-M', 'Expiring', 'Other'],
+  'CRYPTO::Perpetuals': ['USD-M', 'COIN-M', 'USDC-M', 'Other'],
+  'CRYPTO::Alpha': ['Alpha', 'Other'],
+  'TRADE FI::Forex': ['Major Pairs', 'Minor Pairs', 'Exotic Pairs'],
+  'TRADE FI::Stocks': ['US Stocks', 'European Stocks', 'Asian Stocks', 'Other Stocks'],
+  'TRADE FI::Funds': ['ETFs', 'Mutual Funds', 'Money Market Funds', 'Other Funds'],
+  'TRADE FI::Commodities': ['Metals', 'Energy', 'Agriculture', 'Livestock', 'Other'],
+  'TRADE FI::Indices': ['US Indices', 'European Indices', 'Asian Indices', 'Global Indices', 'Other Indices'],
+  'TRADE FI::Bonds': ['Government', 'Corporate', 'Municipal', 'Other Bonds'],
+  'TRADE FI::Options': ['Calls', 'Puts', 'Equity Options', 'Index Options'],
+  'TRADE FI::Futures': ['Equity Index Futures', 'Commodity Futures', 'Currency Futures', 'Interest Rate Futures', 'Other Futures'],
+  'TRADE FI::Perpetuals': ['Index Perpetuals', 'Commodity Perpetuals', 'Currency Perpetuals', 'Other Perpetuals'],
+  'ON CHAIN::Onchain': ['DEX', 'Lending', 'Staking', 'Liquidity Pools', 'Other Onchain'],
+  'PREDICTIONS::Prediction Markets': ['Sports', 'Politics', 'Crypto', 'Finance', 'Culture', 'Other'],
+  'OTHERS::Synthetic Indices': ['Volatility', 'Momentum', 'Volatility Index', 'Other Synthetic'],
+  'OTHERS::Baskets': ['Crypto Baskets', 'Stock Baskets', 'Commodity Baskets', 'Index Baskets', 'Other Baskets'],
+};
+
 const MARKET_EXCHANGE_PROVIDERS = [
   'ALL','BINGX','BITRUE','ASCENDEX','WHITEBIT','COINW','DERIV','BINANCE','COINBASE','KRAKEN','BYBIT','OKX','BITGET','GATEIO','KUCOIN','MEXC','CRYPTOCOM','BITFINEX','GEMINI','BITSTAMP','COINEX','HTX','BITTREX','BITMART','PHEMEX','LBANK','XT','DEEPCOIN','TOOBIT','WEEX','BITUNIX','BLOFIN','COINCATCH','ZOOMEX','BTCC','DIGIFINEX','COINSTORE','PROBIT','POLONIEX','COINDCX','POLYMARKET','KALSHI','OPINION','FXCM','TWELVEDATA','NASDAQTRADER','XETR','XFRA','EUREX','ASX','TWSE','PSX','IDX','HKEX','BSE','TSE','NSE','OANDA','FOREXCOM','INTERACTIVEBROKERS','TRADESTATION','WEBULL','MOOMOO','NINJATRADER','TRADOVATE','AMPFUTURES','TASTYTRADE','TASTYFX','ALPACA','TRADIERBROKERAGE','TRADEZERO','COBRATRADING','CLEARSTREET','INVESTRADE','PUBLIC','PLUS500US','OPTIMUSFUTURES','EDGECLEAR','IRONBEAM','STONEX','DORMANTRADING','TRADIERFUTURES','TRADINGVIEW','UNISWAP','CURVE','PANCAKESWAP','SUSHISWAP','RAYDIUM','JUPITER','ORCA','AERODROME','TRADERJOE','ONEINCH','COWSWAP','BALANCER'
 ] as const;
