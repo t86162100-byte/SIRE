@@ -88,7 +88,7 @@ const makeAssetLogoFallback = (item: Instrument) => makeLogoFallback(item.displa
 const MARKET_TOP_GROUPS = ['CRYPTO', 'TRADE FI', 'ON CHAIN', 'PREDICTIONS', 'OTHERS'] as const;
 
 const MARKET_SUBGROUPS: Record<typeof MARKET_TOP_GROUPS[number], readonly string[]> = {
-  'CRYPTO': ['Spot', 'Options', 'Futures', 'Perpetuals', 'Alpha'],
+  'CRYPTO': ['Spot','Margin','Options','Futures','Perpetuals','Alpha'],
   'TRADE FI': ['Forex', 'Stocks', 'Funds', 'Commodities', 'Indices', 'Bonds', 'Options', 'Futures', 'Perpetuals'],
   'ON CHAIN': ['Onchain'],
   'PREDICTIONS': ['Prediction Markets'],
@@ -97,6 +97,7 @@ const MARKET_SUBGROUPS: Record<typeof MARKET_TOP_GROUPS[number], readonly string
 
 const MARKET_SUBSUBGROUPS: Record<string, readonly string[]> = {
   'CRYPTO::Spot': ['ALL','USDT','USDC','U','USD','BNB','BTC','FIAT','BTCC','ETH','ALTs'],
+  'CRYPTO::Margin': ['ETH','XAU','BTC','XAG','SOL','XRP','DODGE','DOGE'],
   'CRYPTO::Options': ['Calls', 'Puts', 'Expiring', 'Other'],
   'CRYPTO::Futures': ['All','New','Crypto','DeFi','Metaverse','Payment','PoW','Storage','NFT','TradFi','Index','Pre-IPO','USDC','Chinese','Alpha','AI','Layer-1','RWA','Layer-2','Gaming','Meme','Infrastructure','USD-M','COIN-M','Expiring'],
   'CRYPTO::Perpetuals': ['USD-M','COIN-M','USDC-M','TradFi','Crypto','DeFi','AI','RWA','Layer-1','Layer-2','Meme','Infrastructure'],
@@ -207,6 +208,7 @@ const matchesMarketSubSubgroup = (item: Instrument, group: string, subgroup: str
     (item as any).optionType,
     (item as any).settlement,
     (item as any).quote,
+    (item as any).baseAsset,
     (item as any).marketFilter,
     ...(Array.isArray((item as any).marketFilters) ? (item as any).marketFilters : []),
     (item as any).category,
@@ -231,6 +233,7 @@ const matchesMarketSubSubgroup = (item: Instrument, group: string, subgroup: str
   }
   if (target === 'new') return Boolean((item as any).newListing);
   if (target === 'all') return true;
+  if (subgroup === 'Margin') return values.includes(target === 'dodge' ? 'doge' : target);
   if (target === 'alts') return values.some(value => value === 'alts');
   if (target === 'expiring') {
     const expiry = Number((item as any).expiry);
