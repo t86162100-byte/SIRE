@@ -381,13 +381,24 @@ const makeProviderLogoFallback = (item: Instrument) => {
 
 const bitgetWebSocketUrl = 'wss://ws.bitget.com/v3/ws/public';
 
-const getBitgetInstType = (item: Instrument) => {
+const getBitgetInstType = (item: Instrument): 'spot' | 'usdt-futures' | 'coin-futures' | 'usdc-futures' | null => {
   const category = String((item as any).bitgetCategory || item.instrumentType || '').toUpperCase();
   const marketType = String(item.marketType || '').toLowerCase();
+  if (category === 'CFD' || category === 'ONCHAIN' || marketType === 'cfd' || marketType === 'onchain') return null;
   if (marketType.includes('spot') || marketType.includes('margin') || category === 'SPOT' || category === 'MARGIN') return 'spot';
   if (category === 'USDC-FUTURES') return 'usdc-futures';
   if (category === 'COIN-FUTURES') return 'coin-futures';
-  return 'usdt-futures';
+  if (category === 'USDT-FUTURES' || marketType.includes('future') || marketType.includes('perpetual')) return 'usdt-futures';
+  return null;
+};
+
+const getBitgetLiveKey = (item: Instrument) => {
+  const instType = getBitgetInstType(item);
+  const category = String((item as any).bitgetCategory || item.instrumentType || '').toUpperCase();
+  const symbol = getBitgetInstId(item);
+  return category === 'CFD' || String(item.marketType || '').toLowerCase() === 'cfd'
+    ? 'cfd:' + symbol
+    : instType ? instType + ':' + symbol : null;
 };
 
 const getBitgetCardMarketLabel = (item: Instrument) => {
@@ -402,9 +413,15 @@ const getBitgetCardMarketLabel = (item: Instrument) => {
 };
 
 const getBitgetInstId = (item: Instrument) => {
+  // Normalize only the live transport identifier. The Bitget catalogue is
+  // left untouched. Some rows already include the quote in base, so avoid
+  // producing invalid subscriptions such as RAPAMUSDTUSDT.
   const base = String((item as any).base || '').trim().toUpperCase();
   const quote = String((item as any).quote || '').trim().toUpperCase();
-  if (base && quote) return base + quote;
+  if (base && quote) {
+    if (base.endsWith(quote)) return base;
+    return base + quote;
+  }
   const raw = String(item.symbol || item.displaySymbol || '').trim().toUpperCase();
   return raw
     .replace(/^BITGET[:_]/, '')
@@ -461,224 +478,159 @@ export default function App() {
     return () => window.removeEventListener('sire:bitget-priority-symbols', onBitgetPrioritySymbols);
   }, []);
 
+  // The catalogue stays complete and untouched. Live Bitget transport is scoped
+  // to the Home rows that are actually visible/needed, so thousands of catalogue
+  // entries cannot flood the relay with subscriptions or rate-limit the exchange.
+  const bitgetLiveItems = useMemo(() => {
+    const byId = new Map(instruments.filter(item => item.provider === 'BITGET').map(item => [item.id, item]));
+    const priority = bitgetPriorityIds.map(id => byId.get(id)).filter(Boolean) as Instrument[];
+    if (priority.length) return priority;
+    return instruments.filter(item =>
+      item.provider === 'BITGET' &&
+      getBitgetInstType(item) &&
+      getBitgetInstId(item)
+    ).slice(0, 7);
+  }, [instruments, bitgetPriorityIds]);
+
   const bitgetSubscriptionSignature = useMemo(() => (
-    instruments
-      .filter(item => item.provider === 'BITGET')
-      .map(item => item.id + ':' + getBitgetInstType(item) + ':' + getBitgetInstId(item))
+    bitgetLiveItems
+      .filter(item => getBitgetInstType(item) && getBitgetInstId(item))
+      .map(item => getBitgetLiveKey(item) || '')
+      .filter(Boolean)
       .sort()
-      .join('|') + '||priority:' + bitgetPriorityIds.join('|')
-  ), [instruments]);
+      .join('|')
+  ), [bitgetLiveItems]);
 
-  useEffect(() => {
-    if (!instruments.some(item => item.provider === 'BITGET')) return;
-    let cancelled = false;
-    const refresh = async () => {
-      const categories = ['SPOT', 'USDT-FUTURES', 'COIN-FUTURES', 'USDC-FUTURES'];
-      const updates = new Map<string, any>();
-      await Promise.all(categories.map(async category => {
-        try {
-          const response = await fetch('/api/sire/bitget/tickers?category=' + encodeURIComponent(category), { cache: 'no-store' });
-          if (!response.ok) return;
-          const payload = await response.json();
-          const rows = Array.isArray(payload?.data) ? payload.data : [];
-          for (const row of rows) {
-            const symbol = String(row?.symbol || '').toUpperCase();
-            const price = Number(row?.lastPrice ?? row?.lastPr ?? row?.last);
-            if (!symbol || !Number.isFinite(price)) continue;
-            const open = Number(row?.openPrice24h);
-            const pct = Number(row?.price24hPcnt);
-            const change = Number.isFinite(open) && open !== 0
-              ? ((price - open) / open) * 100
-              : (Number.isFinite(pct) ? (Math.abs(pct) <= 1 ? pct * 100 : pct) : undefined);
-            updates.set(category.toLowerCase() + ':' + symbol, {
-              price,
-              bid: Number.isFinite(Number(row?.bid1Price)) ? Number(row.bid1Price) : undefined,
-              ask: Number.isFinite(Number(row?.ask1Price)) ? Number(row.ask1Price) : undefined,
-              volume24h: Number.isFinite(Number(row?.turnover24h)) ? Number(row.turnover24h) : undefined,
-              change24h: Number.isFinite(change) ? change : undefined,
-              priceChangePercent: Number.isFinite(change) ? change : undefined,
-            });
-          }
-        } catch {}
-      }));
-      if (cancelled || !updates.size) return;
-      setBitgetQuotes(current => {
-        const next = new Map(current);
-        updates.forEach((update, key) => next.set(key, update));
-        return next;
-      });
-    };
-    void refresh();
-    const timer = window.setInterval(() => { void refresh(); }, 2000);
-    return () => { cancelled = true; window.clearInterval(timer); };
-  }, [instruments.length]);
-
-
+  // One browser connection only. SIRE owns the Bitget upstream sockets and
+  // keeps the live set small/stable without touching the catalogue.
   useEffect(() => {
     if (!bitgetSubscriptionSignature) return;
     let cancelled = false;
-    const sockets: WebSocket[] = [];
-    const reconnectTimers: number[] = [];
-    const pingTimers: number[] = [];
-    let flushTimer: number | null = null;
-    const pending = new Map<string, any>();
+    let socket: WebSocket | null = null;
+    let reconnectTimer: number | null = null;
+    let pingTimer: number | null = null;
     let reconnectAttempt = 0;
 
-    const currentItems = () => {
-      const items = instruments.filter(item => item.provider === 'BITGET');
-      const priority = new Set(bitgetPriorityIds);
-      return [...items].sort((a, b) => {
-        const ap = priority.has(a.id) ? 0 : 1;
-        const bp = priority.has(b.id) ? 0 : 1;
-        return ap - bp || Number((b as any).volume24h || 0) - Number((a as any).volume24h || 0);
-      });
-    };
+    const subscriptions = bitgetLiveItems
+      .filter(item => getBitgetInstType(item) && getBitgetInstId(item))
+      .map(item => ({
+        instType: getBitgetInstType(item)!,
+        topic: 'ticker',
+        symbol: getBitgetInstId(item),
+      }));
 
-    const flush = () => {
-      flushTimer = null;
-      if (cancelled || !pending.size) return;
-      const updates = new Map(pending);
-      pending.clear();
+    const applyTicker = (message: any) => {
+      const arg = message?.arg;
+      const ticker = Array.isArray(message?.data) ? message.data[0] : null;
+      if (!arg || !ticker) return;
+
+      const instType = String(arg.instType || '').toLowerCase();
+      const symbol = String(arg.symbol || arg.instId || '').toUpperCase();
+      if (!instType || !symbol) return;
+
+      const price = Number(ticker.lastPrice ?? ticker.lastPr ?? ticker.last);
+      if (!Number.isFinite(price)) return;
+
+      const open24h = Number(ticker.openPrice24h ?? ticker.open24h);
+      const rawChange = Number(ticker.price24hPcnt ?? ticker.change24h);
+      const change24h = Number.isFinite(open24h) && open24h !== 0
+        ? ((price - open24h) / open24h) * 100
+        : Number.isFinite(rawChange)
+          ? (Math.abs(rawChange) <= 1 ? rawChange * 100 : rawChange)
+          : undefined;
+
+      const bid = Number(ticker.bid1Price ?? ticker.bidPr);
+      const ask = Number(ticker.ask1Price ?? ticker.askPr);
+      const volume = Number(ticker.volume24h ?? ticker.baseVolume);
+      const turnover = Number(ticker.turnover24h ?? ticker.quoteVolume);
+
+      const update = {
+        price,
+        bid: Number.isFinite(bid) ? bid : undefined,
+        ask: Number.isFinite(ask) ? ask : undefined,
+        volume24h: Number.isFinite(volume) ? volume : Number.isFinite(turnover) ? turnover : undefined,
+        change24h: Number.isFinite(change24h) ? change24h : undefined,
+        priceChangePercent: Number.isFinite(change24h) ? change24h : undefined,
+      };
+
+      const key = instType + ':' + symbol;
       setBitgetQuotes(current => {
         const next = new Map(current);
-        updates.forEach((update, key) => next.set(key, update));
+        next.set(key, update);
         return next;
       });
     };
 
-    const queueUpdate = (key: string, update: any) => {
-      pending.set(key, update);
-      if (flushTimer === null) flushTimer = window.setTimeout(flush, 250);
+    const sendSubscriptions = () => {
+      if (!socket || socket.readyState !== WebSocket.OPEN) return;
+      // Send one complete subscription set per product family. SIRE performs the
+      // actual 50-channel upstream sharding, so the catalogue is never rebuilt
+      // repeatedly while the browser is connecting.
+      const grouped = new Map<string, typeof subscriptions>();
+      for (const item of subscriptions) {
+        const list = grouped.get(item.instType) || [];
+        list.push(item);
+        grouped.set(item.instType, list);
+      }
+      for (const args of grouped.values()) {
+        socket.send(JSON.stringify({ op: 'subscribe', args }));
+      }
     };
 
-    const connect = (items: Instrument[]) => {
-      if (cancelled || !items.length) return;
-      const socket = new WebSocket(bitgetWebSocketUrl);
-      sockets.push(socket);
+    const connect = () => {
+      if (cancelled) return;
+      socket = new WebSocket((window.location.protocol === 'https:' ? 'wss://' : 'ws://') + window.location.host + '/bitget/ws');
 
       socket.onopen = () => {
         reconnectAttempt = 0;
-        // Bitget allows up to 1000 channel subscriptions per connection.
-        // We deliberately subscribe to the complete product-family list rather
-        // than silently limiting live coverage to the first 40 symbols.
-        const args = items.slice(0, 1000).map(item => ({
-          instType: getBitgetInstType(item),
-          topic: 'ticker',
-          symbol: getBitgetInstId(item),
-        }));
-        if (args.length) socket.send(JSON.stringify({ op: 'subscribe', args }));
-
-        const ping = window.setInterval(() => {
-          if (socket.readyState === WebSocket.OPEN) socket.send('ping');
+        sendSubscriptions();
+        if (pingTimer !== null) window.clearInterval(pingTimer);
+        pingTimer = window.setInterval(() => {
+          if (socket?.readyState === WebSocket.OPEN) socket.send('ping');
         }, 25000);
-        pingTimers.push(ping);
-        console.info('[SIRE BITGET LIVE] ticker connection active', {
-          subscriptions: args.length,
-          first: args[0],
-          endpoint: bitgetWebSocketUrl,
-          protocol: 'Bitget UTA v3 ticker',
-        });
+        console.info('[SIRE BITGET LIVE] clean relay connected', { subscriptions: subscriptions.length });
       };
 
       socket.onmessage = event => {
         if (event.data === 'pong') return;
-        let message: any;
-        try { message = JSON.parse(event.data); } catch { return; }
-        if (message?.event === 'subscribe') return;
-        if (message?.event === 'error' || (message?.code !== undefined && message?.code !== '00000')) {
-          console.warn('[SIRE BITGET LIVE] subscription/message error', message);
-          return;
-        }
-        if (!Array.isArray(message?.data) || !message?.arg) return;
-
-        // UTA v3 identifies the ticker by arg.symbol. Keep v2 instId support
-        // as a compatibility fallback so older Bitget responses cannot break
-        // live prices during an endpoint transition.
-        const rawInstType = String(message.arg.instType || '');
-        const instType = rawInstType.toLowerCase();
-        const instId = String(message.arg.symbol || message.arg.instId || '').toUpperCase();
-        if (!instId) return;
-        const key = instType + ':' + instId;
-        const ticker = message.data[0] || {};
-        const price = Number(ticker.lastPr ?? ticker.lastPrice ?? ticker.last);
-        if (!Number.isFinite(price)) return;
-
-        const open24h = Number(ticker.open24h ?? ticker.openPrice24h);
-        const rawChange = Number(ticker.change24h ?? ticker.price24hPcnt);
-        const change24h = Number.isFinite(open24h) && open24h !== 0
-          ? ((price - open24h) / open24h) * 100
-          : Number.isFinite(rawChange)
-            ? (Math.abs(rawChange) <= 1 ? rawChange * 100 : rawChange)
-            : undefined;
-
-        const bid = Number(ticker.bidPr ?? ticker.bid1Price);
-        const ask = Number(ticker.askPr ?? ticker.ask1Price);
-        const volume = Number(ticker.baseVolume ?? ticker.volume24h ?? ticker.quoteVolume);
-
-        queueUpdate(key, {
-          price,
-          bid: Number.isFinite(bid) ? bid : undefined,
-          ask: Number.isFinite(ask) ? ask : undefined,
-          volume24h: Number.isFinite(volume) ? volume : undefined,
-          change24h: Number.isFinite(change24h) ? change24h : undefined,
-          priceChangePercent: Number.isFinite(change24h) ? change24h : undefined,
-        });
+        try {
+          const message = JSON.parse(event.data);
+          if (message?.event === 'subscribe' || message?.event === 'connected') return;
+          if (message?.event === 'error' || (message?.code && message.code !== '00000')) {
+            console.warn('[SIRE BITGET LIVE] relay subscription error', message);
+            return;
+          }
+          if (message?.arg?.topic === 'ticker' && Array.isArray(message?.data)) {
+            applyTicker(message);
+          }
+        } catch {}
       };
 
       socket.onerror = () => {
-        console.warn('[SIRE BITGET LIVE] ticker connection error');
+        console.warn('[SIRE BITGET LIVE] clean relay socket error');
       };
 
       socket.onclose = () => {
+        if (pingTimer !== null) {
+          window.clearInterval(pingTimer);
+          pingTimer = null;
+        }
         if (cancelled) return;
-        const delay = Math.min(15000, 1000 * Math.pow(2, reconnectAttempt++));
-        const timer = window.setTimeout(() => connect(items), delay);
-        reconnectTimers.push(timer);
+        const delay = Math.min(10000, 1000 * Math.pow(2, reconnectAttempt++));
+        reconnectTimer = window.setTimeout(connect, delay);
       };
     };
 
-    // Subscribe to the most liquid symbols in each Bitget product family, but
-    // always put the symbols currently displayed in Home's market section first.
-    // The Home filters can surface a lower-volume symbol, so volume-only ranking
-    // can otherwise leave its displayed price stuck at the startup REST snapshot.
-    const grouped = new Map<string, Instrument[]>();
-    for (const item of currentItems()) {
-      const type = getBitgetInstType(item);
-      const list = grouped.get(type) || [];
-      list.push(item);
-      grouped.set(type, list);
-    }
-
-    for (const [type, items] of grouped) {
-      const ranked = [...items].sort((a, b) => {
-        const priority = new Set(bitgetPriorityIds);
-        const ap = priority.has(a.id) ? 0 : 1;
-        const bp = priority.has(b.id) ? 0 : 1;
-        return ap - bp || Number((b as any).volume24h || 0) - Number((a as any).volume24h || 0);
-      });
-      // Subscribe to the complete product family. Bitget's hard limit is
-      // 1000 channel subscriptions per connection, so only very large
-      // families are split into 1000-symbol connections. Nothing is dropped.
-      for (let offset = 0; offset < ranked.length; offset += 1000) {
-        connect(ranked.slice(offset, offset + 1000));
-      }
-    }
+    connect();
 
     return () => {
       cancelled = true;
-      if (flushTimer !== null) window.clearTimeout(flushTimer);
-      reconnectTimers.forEach(timer => window.clearTimeout(timer));
-      pingTimers.forEach(timer => window.clearInterval(timer));
-      sockets.forEach(socket => socket.close());
-      pending.clear();
+      if (reconnectTimer !== null) window.clearTimeout(reconnectTimer);
+      if (pingTimer !== null) window.clearInterval(pingTimer);
+      try { socket?.close(); } catch {}
+      socket = null;
     };
   }, [bitgetSubscriptionSignature]);
-
-
-
-
-
-
 
   const liveInstruments = useMemo(() => (
     instruments.map(item => {
