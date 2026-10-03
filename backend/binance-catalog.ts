@@ -1,8 +1,8 @@
 type Json = Record<string, any>;
 
 const SPOT_HOSTS = ['https://data-api.binance.vision/api/v3','https://api.binance.com/api/v3','https://api-gcp.binance.com/api/v3','https://api1.binance.com/api/v3','https://api2.binance.com/api/v3','https://api3.binance.com/api/v3','https://api4.binance.com/api/v3'];
-const UM = 'https://fapi.binance.com/fapi/v1';
-const CM = 'https://dapi.binance.com/dapi/v1';
+const UM_HOSTS = ['https://fapi.binance.com/fapi/v1','https://fapi1.binance.com/fapi/v1','https://fapi2.binance.com/fapi/v1','https://fapi3.binance.com/fapi/v1','https://fapi4.binance.com/fapi/v1'];
+const CM_HOSTS = ['https://dapi.binance.com/dapi/v1'];
 const EQUITY = 'https://api.binance.com/sapi/v1/equity/market';
 const ALPHA = 'https://www.binance.com/bapi/defi/v1/public';
 
@@ -208,8 +208,8 @@ export async function fetchBinanceCatalogServer() {
 
   const sources = [
     {name:'spot', urls:SPOT_HOSTS.map(host=>host+'/exchangeInfo'), apiKey:false},
-    {name:'usdtm', urls:[UM+'/exchangeInfo'], apiKey:false},
-    {name:'coinm', urls:[CM+'/exchangeInfo'], apiKey:false},
+    {name:'usdtm', urls:UM_HOSTS.map(host=>host+'/exchangeInfo'), apiKey:false},
+    {name:'coinm', urls:CM_HOSTS.map(host=>host+'/exchangeInfo'), apiKey:false},
     {name:'stocks', urls:[EQUITY+'/exchangeInfo'], apiKey:true},
     {name:'tokenized', urls:[EQUITY+'/tokenized-assets'], apiKey:true},
     {name:'alphaExchange', urls:[ALPHA+'/alpha-trade/get-exchange-info'], apiKey:false},
@@ -238,7 +238,6 @@ export async function fetchBinanceCatalogServer() {
     if(result.status==='fulfilled') {
       raw[source.name]=result.value.data;
       diagnostics.sources[source.name]={ok:true,url:result.value.url,shape:shapeOf(result.value.data)};
-      raw[source.name]=result.value.data;
     } else {
       const message=result.reason instanceof Error ? result.reason.message : String(result.reason);
       diagnostics.sources[source.name]={ok:false,urls:source.urls,error:message};
