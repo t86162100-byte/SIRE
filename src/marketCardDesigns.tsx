@@ -239,7 +239,6 @@ const Price = ({ item, label }: { item: Instrument; label?: string }) => (
   </div>
 );
 
-const Meta = ({ children }: { children: React.ReactNode }) => <div className="mc-meta">{children}</div>;
 const M = ({ label, value }: { label: string; value?: unknown }) => (
   <span className="mc-metric">
     <b>{label}</b>
@@ -599,7 +598,8 @@ if (!document.getElementById(styleId)) {
     .mc-price strong { font-size:14px!important;line-height:1!important;font-weight:900!important;color:#fff!important;letter-spacing:-.02em!important; }
     .mc-price em { font-style:normal!important;font-size:9px!important;line-height:1!important;font-weight:850!important; }
     .mc-price em.up { color:#36d79b!important; }.mc-price em.down { color:#ff5570!important; }
-    .mc-meta {
+    .mc-meta { grid-column:2!important; grid-row:auto!important; justify-self:stretch!important; align-self:end!important; }
+
   position:relative!important;
   display:flex!important;
   align-items:center!important;
