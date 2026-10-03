@@ -49,6 +49,7 @@ const marketCapOf = (item: Instrument) => compact(rawOf(item).marketCap ?? rawOf
 const fdvOf = (item: Instrument) => compact(rawOf(item).fdv ?? rawOf(item).FDV ?? rawOf(item).fullyDilutedValuation);
 const supplyOf = (item: Instrument) => compact(rawOf(item).circulatingSupply ?? rawOf(item).circulating_supply ?? rawOf(item).supply);
 const oiOf = (item: Instrument) => compact(rawOf(item).openInterest ?? rawOf(item).oi ?? rawOf(item).holdingAmount);
+const oiOf = (item: Instrument) => compact(rawOf(item).openInterest ?? rawOf(item).oi ?? rawOf(item).holdingAmount);
 const change7dOf = (item: Instrument) => {
   const v = n(rawOf(item).change7d ?? rawOf(item).priceChange7d ?? rawOf(item).change7D);
   return Number.isFinite(v) ? (v >= 0 ? '+' : '') + v.toFixed(2) + '%' : '';
@@ -113,7 +114,7 @@ const lastUpdatedOf = (item: Instrument) => {
   const date = new Date(Number(value));
   return Number.isNaN(date.getTime()) ? '' : date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
 }
-const oiOf = (item: Instrument) => compact(rawOf(item).openInterest ?? rawOf(item).oi);
+
 const fundingOf = (item: Instrument) => {
   const v = n(rawOf(item).fundingRate ?? rawOf(item).funding);
   return Number.isFinite(v) ? (v * 100).toFixed(3) + '%' : '';
