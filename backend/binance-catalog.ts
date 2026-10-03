@@ -4,12 +4,12 @@ const SPOT = 'https://api.binance.com/api/v3';
 const UM = 'https://fapi.binance.com/fapi/v1';
 const CM = 'https://dapi.binance.com/dapi/v1';
 const EQUITY = 'https://api.binance.com/sapi/v1/equity/market';
-const ALPHA = 'https://www.binance.com/bapi/defi/v1/public/wallet-direct/buw/wallet/cex/alpha/all/token/list';
+const ALPHA = 'https://www.binance.com/bapi/defi/v1/public';
 
 const s = (v: unknown) => String(v ?? '').trim();
 const n = (v: unknown) => { const x = Number(v); return Number.isFinite(x) ? x : undefined; };
 const uniq = (values: string[]) => [...new Set(values.map(s).filter(Boolean))];
-const norm = (v: unknown) => s(v).toLowerCase().replace(/[\\s_-]+/g, '');
+const norm = (v: unknown) => s(v).toLowerCase().replace(/[\s_-]+/g, '');
 
 const SPOT_QUOTES = new Set(['USDT','USDC','U','USD','BNB','BTC','BTCC','ETH']);
 const FIAT_QUOTES = new Set(['EUR','GBP','AUD','BRL','TRY','RUB','ZAR','NGN','JPY','PLN','RON','UAH','CHF','CAD','HKD','SGD','MXN','ARS']);
@@ -45,14 +45,17 @@ function spotInstrument(raw: Json, margin = false): Json | null {
   const quote = s(raw?.quoteAsset).toUpperCase();
   const base = s(raw?.baseAsset).toUpperCase();
   const bucket = quoteBucket(quote);
-  const filters = uniq([bucket, 'Spot', ...(margin ? ['Margin'] : [])]);
   return {
     symbol, name: base + '/' + quote, provider:'BINANCE', exchange:'BINANCE',
     marketGroup:'CRYPTO', marketType:margin?'Margin':'Spot', category:margin?'Margin':'Spot',
-    marketSubcategory:margin?'Margin':'Spot', marketSubSubcategory:margin?(MARGIN_ASSETS.has(base)?base:'All'):bucket,
-    marketFilters:filters, marketFilter:margin?base:bucket,
-    instrumentType:margin?'Crypto Margin':'Crypto Spot', instrumentSubtype:margin?'Margin':'Spot',
-    quote, baseAsset:base, status:s(raw?.status), pipSize:tickSize(raw), margin,
+    marketSubcategory:margin?'Margin':'Spot',
+    marketSubSubcategory:margin ? (MARGIN_ASSETS.has(base) ? base : 'All') : bucket,
+    marketFilters:uniq([bucket, 'Spot', ...(margin ? ['Margin'] : [])]),
+    marketFilter:margin ? base : bucket,
+    instrumentType:margin?'Crypto Margin':'Crypto Spot',
+    instrumentSubtype:margin?'Margin':'Spot',
+    quote, baseAsset:base, status:s(raw?.status), pipSize:tickSize(raw),
+    margin, marginEnabled:Boolean(raw?.isMarginTradingAllowed || raw?.permissions?.includes?.('MARGIN')),
     onboardDate:n(raw?.onboardDate), newListing:false
   };
 }
@@ -76,28 +79,36 @@ function futureInstrument(raw: Json, kind: 'USDT-M'|'COIN-M', now:number): Json 
     name:base+(quote?'/'+quote:'')+(ct==='PERPETUAL'?' Perpetual':' '+ct),
     provider:'BINANCE', exchange:'BINANCE',
     marketGroup:tradfi?'TRADE FI':'CRYPTO', marketType:'Futures',
-    category:tradfi?'TradFi Futures':'Futures',
-    marketSubcategory:kind,
+    category:tradfi?'TradFi Futures':'Futures', marketSubcategory:kind,
     marketSubSubcategory:tradfi ? (tags[0] || 'Stocks') : kind,
     marketFilters:uniq([...derived, kind, ct==='PERPETUAL'?'Perpetual':'Expiring', quote]),
-    marketFilter:tags[0] || kind,
-    instrumentType:tradfi?'TradFi Futures':'Crypto Futures',
+    marketFilter:tags[0] || kind, instrumentType:tradfi?'TradFi Futures':'Crypto Futures',
     instrumentSubtype:tags.join(', '), quote, baseAsset:base, settlement:kind,
     status:s(raw?.status || raw?.contractStatus), pipSize:tickSize(raw),
     onboardDate:onboard, expiry:n(raw?.deliveryDate), newListing:isNew
   };
 }
 
-function equityInstrument(raw: Json, etfSymbols: Set<string>): Json | null {
+function isEtfFromBinance(raw: Json) {
+  if (raw?.isETF === true || raw?.isEtf === true) return true;
+  const text = [
+    raw?.assetType, raw?.instrumentType, raw?.securityType, raw?.productType,
+    raw?.symbolType, raw?.securityCategory
+  ].map(s).join(' ').toLowerCase();
+  return /(^|\W)etf($|\W)|exchange.traded.fund/.test(text);
+}
+
+function equityInstrument(raw: Json): Json | null {
   const symbol=s(raw?.symbol).toUpperCase();
   if(!symbol || s(raw?.tradability)==='NONE') return null;
-  const isEtf=etfSymbols.has(symbol);
+  const isEtf=isEtfFromBinance(raw);
   return {
-    symbol, name:symbol, provider:'BINANCE', exchange:'BINANCE',
+    symbol, name:s(raw?.name || symbol), provider:'BINANCE', exchange:'BINANCE',
     marketGroup:'TRADE FI', marketType:'Stocks', category:'Stocks',
     marketSubcategory:'Stocks', marketSubSubcategory:isEtf?'ETFs':'U.S. stock',
     marketFilters:uniq([isEtf?'ETFs':'U.S. stock','Stocks']),
-    marketFilter:isEtf?'ETFs':'U.S. stock', instrumentType:isEtf?'ETF':'U.S. stock',
+    marketFilter:isEtf?'ETFs':'U.S. stock',
+    instrumentType:isEtf?'ETF':'U.S. stock', instrumentSubtype:s(raw?.assetType || raw?.securityType),
     quote:'USD', baseAsset:symbol, status:s(raw?.tradability),
     listedAt:n(raw?.listingTime), onboardDate:n(raw?.listingTime)
   };
@@ -116,37 +127,49 @@ function tokenizedInstrument(raw: Json): Json | null {
     marketFilter:commodity?'tCommodities':'bStocks',
     instrumentType:commodity?'Tokenized Commodity':'Tokenized Stock',
     instrumentSubtype:'Tokenized Securities', baseAsset:symbol, quote:'USD',
+    underlyingEquitySymbol:s(raw?.underlyingEquitySymbol),
+    multiplier:s(raw?.multiplier), multiplierValid:Boolean(raw?.multiplierValid),
     status:'TRADING'
   };
 }
 
-function alphaInstrument(raw: Json): Json | null {
-  const id=s(raw?.alphaId || raw?.tokenId || raw?.id);
-  const symbol=s(raw?.tradingPair || ((id && /^ALPHA_/i.test(id)) ? id + s(raw?.quoteAsset || 'USDT').toUpperCase() : ''));
-  if(!symbol) return null;
-  const chain=s(raw?.chainName || raw?.chain || raw?.network);
-  const chainLabels: Record<string,string> = {
-    bsc:'BSC', ethereum:'Ethereum', eth:'Ethereum', solana:'Solana', sol:'Solana',
-    base:'Base', arbitrum:'Arbitrum', sonic:'Sonic', sui:'Sui', tron:'TRON'
-  };
+const CHAIN_LABELS: Record<string,string> = {
+  bsc:'BSC', ethereum:'Ethereum', eth:'Ethereum', solana:'Solana', sol:'Solana',
+  base:'Base', arbitrum:'Arbitrum', sonic:'Sonic', sui:'Sui', tron:'TRON'
+};
+
+function alphaInstrument(exchangeSymbol: Json, token: Json | undefined, now:number): Json | null {
+  const symbol=s(exchangeSymbol?.symbol);
+  if(!symbol || s(exchangeSymbol?.status) !== 'TRADING') return null;
+  const base=s(exchangeSymbol?.baseAsset);
+  const quote=s(exchangeSymbol?.quoteAsset);
+  const chain=CHAIN_LABELS[norm(token?.chainName)] || s(token?.chainName);
+  const listingTime=n(token?.listingTime);
+  // Binance describes Points+ as the new-coin bonus/leaderboard for qualifying
+  // new Alpha launches; use only Binance token-list fields, never an external list.
+  const pointPlus=Boolean(chain==='BSC' && Number.isFinite(listingTime) && now-Number(listingTime)<30*86400000);
   const tags=uniq([
-    'Alpha',
-    chainLabels[norm(chain)] || chain,
-    raw?.stockState ? 'Tokenized Securities' : '',
-    /robinhood/i.test(s(raw?.cexCoinName)) ? 'Robinhood' : '',
-    /point/i.test(s(raw?.cexCoinName)) ? 'Point+' : ''
+    'Alpha', chain,
+    token?.stockState ? 'Tokenized Securities' : '',
+    /robinhood/i.test(s(token?.cexCoinName)) ? 'Robinhood' : '',
+    pointPlus ? 'Point+' : ''
   ]);
   return {
-    symbol, name:s(raw?.name || raw?.symbol || symbol), provider:'BINANCE', exchange:'BINANCE',
+    symbol,
+    name:s(token?.name || token?.symbol || base || symbol),
+    provider:'BINANCE', exchange:'BINANCE',
     marketGroup:'ALPHA', marketType:'Alpha', category:'Alpha',
-    marketSubcategory:'Alpha', marketSubSubcategory:chainLabels[norm(chain)] || chain || 'Alpha',
-    marketFilters:tags, marketFilter:chainLabels[norm(chain)] || chain || 'Alpha',
-    instrumentType:'Alpha', instrumentSubtype:chain, quote:s(raw?.quoteAsset || 'USDT').toUpperCase(),
-    baseAsset:s(raw?.symbol || id), status:raw?.offline?'BREAK':'TRADING',
-    price:n(raw?.price), priceChangePercent:n(raw?.percentChange24h),
-    volume24h:n(raw?.volume24h), marketCap:n(raw?.marketCap), fdv:n(raw?.fdv),
-    liquidity:n(raw?.liquidity), holders:n(raw?.holders), listedAt:n(raw?.listingTime),
-    newListing:Number.isFinite(n(raw?.listingTime)) ? Date.now()-Number(raw.listingTime)<30*86400000 : false
+    marketSubcategory:'Alpha', marketSubSubcategory:chain || 'Alpha',
+    marketFilters:tags, marketFilter:chain || 'Alpha',
+    instrumentType:'Alpha', instrumentSubtype:chain,
+    quote, baseAsset:base, status:s(exchangeSymbol?.status),
+    price:n(token?.price), priceChangePercent:n(token?.percentChange24h),
+    volume24h:n(token?.volume24h), marketCap:n(token?.marketCap), fdv:n(token?.fdv),
+    liquidity:n(token?.liquidity), holders:n(token?.holders),
+    high24h:n(token?.priceHigh24h), low24h:n(token?.priceLow24h),
+    listedAt:listingTime, newListing:pointPlus,
+    chainId:s(token?.chainId), contractAddress:s(token?.contractAddress),
+    iconUrl:s(token?.iconUrl), alphaId:s(token?.alphaId || base)
   };
 }
 
@@ -161,37 +184,122 @@ async function getJson(url:string, apiKey='') {
   return data;
 }
 
+function shapeOf(data:any) {
+  return {
+    topLevel:Array.isArray(data)?'array':data && typeof data==='object'?'object':typeof data,
+    keys:data && typeof data==='object' && !Array.isArray(data) ? Object.keys(data).slice(0,30) : [],
+    count:Array.isArray(data)?data.length:
+      Array.isArray(data?.symbols)?data.symbols.length:
+      Array.isArray(data?.data)?data.data.length:
+      undefined,
+    sampleKeys:Array.isArray(data?.symbols) && data.symbols[0] ? Object.keys(data.symbols[0]) :
+      Array.isArray(data?.data) && data.data[0] ? Object.keys(data.data[0]) : []
+  };
+}
+
 export async function fetchBinanceCatalogServer() {
-  const apiKey=s(process.env.BINANCE_API_KEY || process.env.BINANCE_KEY || process.env.BINANCE_APIKEY);
+  const apiKey=s(process.env.BINANCE_API_KEY);
+  const apiSecretConfigured=Boolean(s(process.env.BINANCE_API_SECRET));
   const now=Date.now();
-  const requests=[
-    getJson(SPOT+'/exchangeInfo'),
-    getJson(SPOT+'/exchangeInfo?permissions=MARGIN'),
-    getJson(UM+'/exchangeInfo'),
-    getJson(CM+'/exchangeInfo'),
-    apiKey ? getJson(EQUITY+'/exchangeInfo',apiKey) : Promise.resolve({symbols:[]}),
-    apiKey ? getJson(EQUITY+'/tokenized-assets',apiKey) : Promise.resolve([]),
-    getJson(ALPHA).catch(()=>null)
+
+  const sources = [
+    {name:'spot', url:SPOT+'/exchangeInfo', apiKey:true},
+    {name:'usdtm', url:UM+'/exchangeInfo', apiKey:false},
+    {name:'coinm', url:CM+'/exchangeInfo', apiKey:false},
+    {name:'stocks', url:EQUITY+'/exchangeInfo', apiKey:true},
+    {name:'tokenized', url:EQUITY+'/tokenized-assets', apiKey:true},
+    {name:'alphaExchange', url:ALPHA+'/alpha-trade/get-exchange-info', apiKey:false},
+    {name:'alphaTokens', url:ALPHA+'/wallet-direct/buw/wallet/cex/alpha/all/token/list', apiKey:false}
   ];
-  const [spot,margin,um,cm,equity,tokenized,alpha]=await Promise.all(requests);
+
+  const settled = await Promise.allSettled(sources.map(source =>
+    getJson(source.url, source.apiKey ? apiKey : '')
+  ));
+
+  const raw: Record<string, any> = {};
+  const diagnostics: Record<string, any> = {
+    apiKeyConfigured:Boolean(apiKey),
+    apiSecretConfigured,
+    signingRequiredForCatalog:false,
+    sources:{}
+  };
+
+  settled.forEach((result,index)=>{
+    const source=sources[index];
+    if(result.status==='fulfilled') {
+      raw[source.name]=result.value;
+      diagnostics.sources[source.name]={ok:true,url:source.url,shape:shapeOf(result.value)};
+    } else {
+      const message=result.reason instanceof Error ? result.reason.message : String(result.reason);
+      diagnostics.sources[source.name]={ok:false,url:source.url,error:message};
+    }
+  });
+
   const out: Json[]=[];
-  for(const raw of (spot?.symbols||[])){ const i=spotInstrument(raw,false); if(i) out.push(i); }
-  for(const raw of (margin?.symbols||[])){
-    const base=s(raw?.baseAsset).toUpperCase(), quote=s(raw?.quoteAsset).toUpperCase();
-    if(MARGIN_ASSETS.has(base)||MARGIN_ASSETS.has(quote)){ const i=spotInstrument(raw,true); if(i) out.push(i); }
+  const spotRows=Array.isArray(raw.spot?.symbols)?raw.spot.symbols:[];
+  for(const row of spotRows) {
+    const spotItem=spotInstrument(row,false);
+    if(spotItem) out.push(spotItem);
+    if(Boolean(row?.isMarginTradingAllowed || row?.permissions?.includes?.('MARGIN'))) {
+      const base=s(row?.baseAsset).toUpperCase(), quote=s(row?.quoteAsset).toUpperCase();
+      if(MARGIN_ASSETS.has(base) || MARGIN_ASSETS.has(quote)) {
+        const marginItem=spotInstrument(row,true);
+        if(marginItem) out.push(marginItem);
+      }
+    }
   }
-  for(const raw of (um?.symbols||[])){const i=futureInstrument(raw,'USDT-M',now);if(i)out.push(i);}
-  for(const raw of (cm?.symbols||[])){const i=futureInstrument(raw,'COIN-M',now);if(i)out.push(i);}
-  const etfSymbols=new Set(['SPY','QQQ','IWM','DIA','TLT','GLD','SLV','USO','UNG','EEM','EWJ','EWY','FXI','XLE','XLK','XLF','XLV','XLI','XLP','XLU','ARKK']);
-  for(const raw of (equity?.symbols||[])){const i=equityInstrument(raw,etfSymbols);if(i)out.push(i);}
-  const tokenRows=Array.isArray(tokenized)?tokenized:Array.isArray(tokenized?.data)?tokenized.data:[];
-  for(const raw of tokenRows){const i=tokenizedInstrument(raw);if(i)out.push(i);}
-  const alphaRows=Array.isArray(alpha?.data)?alpha.data:Array.isArray(alpha?.data?.tokens)?alpha.data.tokens:Array.isArray(alpha?.tokens)?alpha.tokens:[];
-  for(const raw of alphaRows){const i=alphaInstrument(raw);if(i)out.push(i);}
+
+  for(const row of (Array.isArray(raw.usdtm?.symbols)?raw.usdtm.symbols:[])) {
+    const item=futureInstrument(row,'USDT-M',now); if(item) out.push(item);
+  }
+  for(const row of (Array.isArray(raw.coinm?.symbols)?raw.coinm.symbols:[])) {
+    const item=futureInstrument(row,'COIN-M',now); if(item) out.push(item);
+  }
+
+  for(const row of (Array.isArray(raw.stocks?.symbols)?raw.stocks.symbols:[])) {
+    const item=equityInstrument(row); if(item) out.push(item);
+  }
+
+  const tokenRows=Array.isArray(raw.tokenized)?raw.tokenized:Array.isArray(raw.tokenized?.data)?raw.tokenized.data:[];
+  for(const row of tokenRows) {
+    const item=tokenizedInstrument(row); if(item) out.push(item);
+  }
+
+  const alphaSymbols=Array.isArray(raw.alphaExchange?.data?.symbols)?raw.alphaExchange.data.symbols:[];
+  const alphaTokens=Array.isArray(raw.alphaTokens?.data)?raw.alphaTokens.data:[];
+  const tokenByAlphaId=new Map<string,Json>();
+  for(const token of alphaTokens) {
+    const id=s(token?.alphaId);
+    if(id) tokenByAlphaId.set(id,token);
+  }
+  for(const row of alphaSymbols) {
+    const token=tokenByAlphaId.get(s(row?.baseAsset));
+    const item=alphaInstrument(row,token,now);
+    if(item) out.push(item);
+  }
+
   const map=new Map<string,Json>();
-  for(const item of out){
+  for(const item of out) {
     const key=item.marketType+':'+item.symbol;
     if(!map.has(key)) map.set(key,item);
   }
-  return [...map.values()].sort((a,b)=>String(a.marketGroup).localeCompare(String(b.marketGroup))||String(a.marketType).localeCompare(String(b.marketType))||String(a.symbol).localeCompare(String(b.symbol)));
+
+  const instruments=[...map.values()].sort((a,b)=>
+    String(a.marketGroup).localeCompare(String(b.marketGroup)) ||
+    String(a.marketType).localeCompare(String(b.marketType)) ||
+    String(a.symbol).localeCompare(String(b.symbol))
+  );
+
+  diagnostics.instrumentCount=instruments.length;
+  diagnostics.counts={
+    spot:instruments.filter(x=>x.marketType==='Spot' && x.marketGroup==='CRYPTO').length,
+    margin:instruments.filter(x=>x.marketType==='Margin').length,
+    usdtm:instruments.filter(x=>x.marketSubcategory==='USDT-M').length,
+    coinm:instruments.filter(x=>x.marketSubcategory==='COIN-M').length,
+    stocks:instruments.filter(x=>x.marketGroup==='TRADE FI' && x.marketType==='Stocks').length,
+    tokenized:instruments.filter(x=>x.instrumentSubtype==='Tokenized Securities').length,
+    alpha:instruments.filter(x=>x.marketGroup==='ALPHA').length
+  };
+
+  return {instruments, diagnostics};
 }
