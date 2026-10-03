@@ -1,6 +1,6 @@
 type Json = Record<string, any>;
 
-const SPOT = 'https://api.binance.com/api/v3';
+const SPOT_HOSTS = ['https://data-api.binance.vision/api/v3','https://api.binance.com/api/v3','https://api-gcp.binance.com/api/v3','https://api1.binance.com/api/v3','https://api2.binance.com/api/v3','https://api3.binance.com/api/v3','https://api4.binance.com/api/v3'];
 const UM = 'https://fapi.binance.com/fapi/v1';
 const CM = 'https://dapi.binance.com/dapi/v1';
 const EQUITY = 'https://api.binance.com/sapi/v1/equity/market';
@@ -174,9 +174,13 @@ function alphaInstrument(exchangeSymbol: Json, token: Json | undefined, now:numb
 }
 
 async function getJson(url:string, apiKey='') {
-  const headers: Record<string,string> = {Accept:'application/json'};
+  const headers: Record<string,string> = {Accept:'application/json','User-Agent':'SIRE-Binance-Catalog/1.0'};
   if(apiKey) headers['X-MBX-APIKEY']=apiKey;
-  const response=await fetch(url,{cache:'no-store',headers});
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 15000);
+  let response: Response;
+  try { response=await fetch(url,{cache:'no-store',headers,signal:controller.signal}); }
+  finally { clearTimeout(timer); }
   const text=await response.text();
   let data:any={};
   try { data=text?JSON.parse(text):{}; } catch { throw new Error('Binance returned invalid JSON from '+url); }
@@ -203,18 +207,23 @@ export async function fetchBinanceCatalogServer() {
   const now=Date.now();
 
   const sources = [
-    {name:'spot', url:SPOT+'/exchangeInfo', apiKey:true},
-    {name:'usdtm', url:UM+'/exchangeInfo', apiKey:false},
-    {name:'coinm', url:CM+'/exchangeInfo', apiKey:false},
-    {name:'stocks', url:EQUITY+'/exchangeInfo', apiKey:true},
-    {name:'tokenized', url:EQUITY+'/tokenized-assets', apiKey:true},
-    {name:'alphaExchange', url:ALPHA+'/alpha-trade/get-exchange-info', apiKey:false},
-    {name:'alphaTokens', url:ALPHA+'/wallet-direct/buw/wallet/cex/alpha/all/token/list', apiKey:false}
+    {name:'spot', urls:SPOT_HOSTS.map(host=>host+'/exchangeInfo'), apiKey:false},
+    {name:'usdtm', urls:[UM+'/exchangeInfo'], apiKey:false},
+    {name:'coinm', urls:[CM+'/exchangeInfo'], apiKey:false},
+    {name:'stocks', urls:[EQUITY+'/exchangeInfo'], apiKey:true},
+    {name:'tokenized', urls:[EQUITY+'/tokenized-assets'], apiKey:true},
+    {name:'alphaExchange', urls:[ALPHA+'/alpha-trade/get-exchange-info'], apiKey:false},
+    {name:'alphaTokens', urls:[ALPHA+'/wallet-direct/buw/wallet/cex/alpha/all/token/list'], apiKey:false}
   ];
 
-  const settled = await Promise.allSettled(sources.map(source =>
-    getJson(source.url, source.apiKey ? apiKey : '')
-  ));
+  const settled = await Promise.allSettled(sources.map(async source => {
+    const errors:string[]=[];
+    for(const url of source.urls) {
+      try { return {data:await getJson(url, source.apiKey ? apiKey : ''), url}; }
+      catch(error) { errors.push(error instanceof Error ? error.message : String(error)); }
+    }
+    throw new Error(errors.join(' | '));
+  }));
 
   const raw: Record<string, any> = {};
   const diagnostics: Record<string, any> = {
@@ -227,11 +236,12 @@ export async function fetchBinanceCatalogServer() {
   settled.forEach((result,index)=>{
     const source=sources[index];
     if(result.status==='fulfilled') {
-      raw[source.name]=result.value;
-      diagnostics.sources[source.name]={ok:true,url:source.url,shape:shapeOf(result.value)};
+      raw[source.name]=result.value.data;
+      diagnostics.sources[source.name]={ok:true,url:result.value.url,shape:shapeOf(result.value.data)};
+      raw[source.name]=result.value.data;
     } else {
       const message=result.reason instanceof Error ? result.reason.message : String(result.reason);
-      diagnostics.sources[source.name]={ok:false,url:source.url,error:message};
+      diagnostics.sources[source.name]={ok:false,urls:source.urls,error:message};
     }
   });
 
