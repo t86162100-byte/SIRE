@@ -262,14 +262,14 @@ if (!document.getElementById(styleId)) {
   style.textContent = `
     .bn-card {
       width:100%!important;
-      min-height:78px!important;
-      height:78px!important;
+      min-height:150px!important;
+      height:150px!important;
       box-sizing:border-box!important;
       display:grid!important;
       grid-template-columns:minmax(0,1fr) minmax(128px,36%)!important;
       align-items:center!important;
       gap:7px!important;
-      padding:8px 12px!important;
+      padding:14px 12px!important;
       margin:0!important;
       border:0!important;
       border-bottom:1px solid rgba(255,255,255,.075)!important;
@@ -293,7 +293,7 @@ if (!document.getElementById(styleId)) {
     }
     .bn-logo{
       width:38px!important;
-      height:38px!important;
+      height:64px!important;
       min-width:38px!important;
       border-radius:50%!important;
       overflow:hidden!important;
@@ -321,8 +321,8 @@ if (!document.getElementById(styleId)) {
       overflow:hidden!important;
       text-overflow:ellipsis!important;
       white-space:nowrap!important;
-      font-size:14px!important;
-      line-height:1.05!important;
+      font-size:42px!important;
+      line-height:.98!important;
       font-weight:900!important;
       color:#f5f5f7!important;
       letter-spacing:-.015em!important;
@@ -333,8 +333,8 @@ if (!document.getElementById(styleId)) {
       overflow:hidden!important;
       text-overflow:ellipsis!important;
       white-space:nowrap!important;
-      font-size:9px!important;
-      line-height:1.05!important;
+      font-size:27px!important;
+      line-height:1!important;
       color:rgba(255,255,255,.53)!important;
       font-weight:650!important;
     }
@@ -347,20 +347,20 @@ if (!document.getElementById(styleId)) {
       overflow:hidden!important;
       text-overflow:ellipsis!important;
       white-space:nowrap!important;
-      font-size:6.5px!important;
+      font-size:19px!important;
       line-height:1!important;
       color:rgba(255,255,255,.28)!important;
       font-weight:800!important;
       letter-spacing:.03em!important;
     }
     .bn-provider-logo{
-      width:10px!important;
-      height:10px!important;
-      min-width:10px!important;
+      width:12px!important;
+      height:12px!important;
+      min-width:12px!important;
       background:#0d0d0d!important;
       border:1px solid rgba(255,255,255,.08)!important;
     }
-    .bn-provider-logo img{width:11px!important;height:11px!important;object-fit:contain!important}
+    .bn-provider-logo img{width:12px!important;height:12px!important;object-fit:contain!important}
 
     /* Compact Binance-style secondary data: directly below the venue, never in the price column. */
     .bn-metrics{
@@ -386,7 +386,7 @@ if (!document.getElementById(styleId)) {
       white-space:nowrap!important;
     }
     .bn-metric b{
-      font-size:6px!important;
+      font-size:18px!important;
       line-height:1!important;
       color:rgba(255,255,255,.40)!important;
       font-weight:900!important;
@@ -394,7 +394,7 @@ if (!document.getElementById(styleId)) {
     }
     .bn-metric i{
       font-style:normal!important;
-      font-size:7px!important;
+      font-size:21px!important;
       line-height:1!important;
       color:rgba(255,255,255,.78)!important;
       font-weight:850!important;
@@ -418,8 +418,8 @@ if (!document.getElementById(styleId)) {
       text-align:right!important;
     }
     .bn-price strong{
-      font-size:15px!important;
-      line-height:1!important;
+      font-size:45px!important;
+      line-height:.95!important;
       font-weight:900!important;
       color:#f7f7f8!important;
       letter-spacing:-.025em!important;
@@ -429,15 +429,15 @@ if (!document.getElementById(styleId)) {
       max-width:100%!important;
     }
     .bn-change{
-      min-width:58px!important;
+      min-width:78px!important;
       height:38px!important;
-      padding:0 7px!important;
+      padding:0 10px!important;
       border-radius:7px!important;
       display:flex!important;
       align-items:center!important;
       justify-content:center!important;
       box-sizing:border-box!important;
-      font-size:10px!important;
+      font-size:30px!important;
       line-height:1!important;
       font-weight:900!important;
       white-space:nowrap!important;
@@ -445,13 +445,13 @@ if (!document.getElementById(styleId)) {
     .bn-change.up{background:#20bf8b!important;color:#fff!important}
     .bn-change.down{background:#f04460!important;color:#fff!important}
 
-    .bn-options,.bn-futures,.bn-perpetual{min-height:80px!important;height:80px!important}
+     .bn-options,.bn-futures,.bn-perpetual{min-height:150px!important;height:150px!important}
     .bn-options .bn-logo,.bn-futures .bn-logo,.bn-perpetual .bn-logo{
       width:38px!important;height:38px!important;min-width:38px!important
     }
     .bn-options .bn-provider-logo,.bn-futures .bn-provider-logo,.bn-perpetual .bn-provider-logo,
     .bn-options .bn-provider-logo img,.bn-futures .bn-provider-logo img,.bn-perpetual .bn-provider-logo img{
-      width:11px!important;height:11px!important;min-width:11px!important;
+      width:12px!important;height:12px!important;min-width:12px!important;
     }
 
     @keyframes bn-metrics-scroll{
@@ -461,20 +461,20 @@ if (!document.getElementById(styleId)) {
 
     @media(max-width:620px){
       .bn-card{
-        grid-template-columns:minmax(0,1fr) minmax(124px,38%)!important;
+        grid-template-columns:minmax(0,1fr) minmax(220px,42%)!important;
         gap:6px!important;
-        padding:8px 10px!important;
+        padding:14px 10px!important;
       }
       .bn-logo{width:36px!important;height:36px!important;min-width:36px!important}
-      .bn-name strong{font-size:14px!important}
-      .bn-name span{font-size:9px!important}
-      .bn-name small{font-size:7px!important}
+       .bn-name strong{font-size:42px!important}
+       .bn-name span{font-size:27px!important}
+       .bn-name small{font-size:19px!important}
       .bn-provider-logo,.bn-provider-logo img{width:10px!important;height:10px!important;min-width:10px!important}
       .bn-metrics-set{gap:8px!important}
-      .bn-metric b{font-size:5.5px!important}
-      .bn-metric i{font-size:6.5px!important}
+       .bn-metric b{font-size:18px!important}
+       .bn-metric i{font-size:21px!important}
       .bn-quote{grid-template-columns:minmax(44px,1fr) minmax(54px,64px)!important;gap:6px!important}
-      .bn-price strong{font-size:13px!important}
+       .bn-price strong{font-size:39px!important}
       .bn-change{min-width:54px!important;height:36px!important;padding:0 5px!important;font-size:9px!important}
     }
   `;
