@@ -1403,7 +1403,7 @@ export default function App() {
           </div>
         )}
 
-{derivError && <div className="sire-deriv-error">{derivError}</div>}<div className="native-symbol-list symbol-list" onScroll={event => setQuoteScrollTop(event.currentTarget.scrollTop)}><div style={{height: quoteWindow.top}} aria-hidden="true" /><div className="sire-quote-window">{quoteWindow.items.map(item => <MarketInstrumentCard key={item.id} item={item} active={selected?.id === item.id} onSelect={selectInstrument} />)}</div><div style={{height: quoteWindow.bottom}} aria-hidden="true" /></div></aside>
+{derivError && <div className="sire-deriv-error">{derivError}</div>}<div className="native-symbol-list symbol-list" onScroll={event => setQuoteScrollTop(event.currentTarget.scrollTop)}><div style={{height: quoteWindow.top}} aria-hidden="true" /><div className="sire-quote-window">{quoteWindow.items.map(item => <MarketInstrumentCard key={item.id} item={item} active={selected?.id === item.id} onSelect={selectInstrument} group={categoryFilter} subgroup={marketSubcategoryFilter} subSubgroup={marketSubSubcategoryFilter} />)}</div><div style={{height: quoteWindow.bottom}} aria-hidden="true" /></div></aside>
       <section className="native-chart-panel">
         <div className={`sire-chart-grid sire-chart-grid--${chartLayout}${chartLayout === 2 ? ` sire-chart-grid--${multiChartPosition}` : ''}`} onContextMenu={event => event.preventDefault()}>
           {chartItems.map((chartSymbol, index) => <div className={`sire-chart-cell${activeChartIndex === index ? ' sire-chart-cell--active' : ''}`} key={index} onPointerDown={() => setActiveChartIndex(index)}>{chartSymbol && <FinancialChart
