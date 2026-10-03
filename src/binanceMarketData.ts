@@ -19,7 +19,7 @@ const n=(v:unknown)=>{const x=Number(v);return Number.isFinite(x)?x:undefined;};
 const s=(v:unknown)=>String(v??'').trim();
 const uniq=(a:string[])=>[...new Set(a.map(s).filter(Boolean))];
 const isTradFi=(a:string[])=>a.some(v=>v.toLowerCase()==='tradfi');
-function quoteBucket(q:string){q=q.toUpperCase();if(['USDT','USDC','U','USD1','USD','BNB','BTC','ETH','BTCC'].includes(q))return q;if(['EUR','GBP','AUD','BRL','TRY','RUB','ZAR','NGN','JPY','PLN','RON','UAH'].includes(q))return 'FIAT';return 'ALTs';}
+function quoteBucket(q:string){q=q.toUpperCase();if(['USDT','USDC','U','USD1','USD','BNB','BTC','ETH','BTCC'].includes(q))return q;if(['EUR','GBP','AUD','BRL','TRY','RUB','ZAR','NGN','JPY','PLN','RON','UAH','CHF','CAD','HKD','SGD','MXN','ARS'].includes(q))return 'FIAT';return 'ALTs';}
 
 function spot(raw:any):BinanceInstrument|null{
   const symbol=s(raw?.symbol); if(!symbol)return null;
@@ -53,6 +53,11 @@ function future(raw:any,kind:'USDT-M'|'COIN-M',now:number):BinanceInstrument|nul
 async function json(url:string){const r=await fetch(url,{cache:'no-store',headers:{Accept:'application/json'}});const t=await r.text();let d:any={};try{d=t?JSON.parse(t):{};}catch{throw new Error('Binance returned invalid JSON.');}if(!r.ok)throw new Error('Binance HTTP '+r.status+': '+s(d?.msg||d?.message||t).slice(0,300));return d;}
 
 export async function fetchBinanceInstruments():Promise<BinanceInstrument[]>{
+  try {
+    const response = await fetch('/api/sire/binance/catalog', { cache:'no-store' });
+    const payload = await response.json().catch(() => ({}));
+    if (response.ok && payload?.ok && Array.isArray(payload.instruments)) return payload.instruments as BinanceInstrument[];
+  } catch {}
   const now=Date.now();
   const [sp,um,cm,alpha]=await Promise.all([
     json(SPOT+'/api/v3/exchangeInfo'),
