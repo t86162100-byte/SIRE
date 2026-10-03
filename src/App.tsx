@@ -661,6 +661,19 @@ const MarketInstrumentCard = ({ item, active, onSelect }: { item: Instrument; ac
         <span className="sire-card-identity">
           <b>{identity}</b>
           <small>{secondary}</small>
+          <span className="sire-card-provider-inline">
+            <span className="quote-exchange-logo-wrap">
+              <img className="quote-exchange-logo" src={makeProviderLogoFallback(item)} alt="" decoding="async"
+                onError={event => {
+                  const image = event.currentTarget;
+                  image.onerror = null;
+                  image.src = makeLogoFallback(item.providerLabel || item.provider);
+                }}
+              />
+            </span>
+            <b>{String(item.providerLabel || item.provider).toUpperCase()}</b>
+            <small>{sourceLabel}</small>
+          </span>
         </span>
         <span className="sire-card-market">
           {valueLabel && <small className="sire-card-value-label">{valueLabel}</small>}
@@ -668,22 +681,7 @@ const MarketInstrumentCard = ({ item, active, onSelect }: { item: Instrument; ac
           {hasChange && <em className={change >= 0 ? 'positive' : 'negative'}>{formatCardPercent(item)}</em>}
         </span>
         {metrics.length > 0 && <span className="sire-card-metrics">{metrics.slice(0, 4).map(metric => <small key={metric}>{metric}</small>)}</span>}
-      </span>
-
-      <span className="sire-card-provider">
-        <span className="quote-exchange-logo-wrap">
-          <img className="quote-exchange-logo" src={makeProviderLogoFallback(item)} alt="" decoding="async"
-            onError={event => {
-              const image = event.currentTarget;
-              image.onerror = null;
-              image.src = makeLogoFallback(item.providerLabel || item.provider);
-            }}
-          />
-        </span>
-        <b>{String(item.providerLabel || item.provider).toUpperCase()}</b>
-        <small>{sourceLabel}</small>
-      </span>
-    </button>
+      </span>    </button>
   );
 };
 
