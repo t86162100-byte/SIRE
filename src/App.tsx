@@ -96,10 +96,10 @@ const MARKET_SUBGROUPS: Record<typeof MARKET_TOP_GROUPS[number], readonly string
 };
 
 const MARKET_SUBSUBGROUPS: Record<string, readonly string[]> = {
-  'CRYPTO::Spot': ['USDT', 'USDC', 'FDUSD', 'BTC', 'Fiat', 'Other'],
+  'CRYPTO::Spot': ['ALL','USDT','USDC','U','USD','BNB','BTC','FIAT','BTCC','ETH','ALTs'],
   'CRYPTO::Options': ['Calls', 'Puts', 'Expiring', 'Other'],
-  'CRYPTO::Futures': ['USD-M', 'COIN-M', 'Expiring', 'Other'],
-  'CRYPTO::Perpetuals': ['USD-M', 'COIN-M', 'USDC-M', 'Other'],
+  'CRYPTO::Futures': ['All','New','Crypto','DeFi','Metaverse','Payment','PoW','Storage','NFT','TradFi','Index','Pre-IPO','USDC','Chinese','Alpha','AI','Layer-1','RWA','Layer-2','Gaming','Meme','Infrastructure','USD-M','COIN-M','Expiring'],
+  'CRYPTO::Perpetuals': ['USD-M','COIN-M','USDC-M','TradFi','Crypto','DeFi','AI','RWA','Layer-1','Layer-2','Meme','Infrastructure'],
   'CRYPTO::Alpha': ['Alpha', 'Other'],
   'TRADE FI::Forex': ['Major Pairs', 'Minor Pairs', 'Exotic Pairs'],
   'TRADE FI::Stocks': ['US Stocks', 'European Stocks', 'Asian Stocks', 'Other Stocks'],
@@ -216,8 +216,11 @@ const matchesMarketSubSubgroup = (item: Instrument, group: string, subgroup: str
   const option = normalizeMarketLabel((item as any).optionType);
 
   if (group === 'CRYPTO' && subgroup === 'Spot') {
-    if (['usdt','usdc','fdusd','btc'].includes(target)) return quote === target;
-    if (target === 'fiat') return ['usd','eur','gbp','ngn','jpy','aud','cad','brl','try','zar'].includes(quote);
+    if (target === 'all') return true;
+    if (target === 'u') return quote === 'usdt' || quote === 'usdc';
+    if (['usdt','usdc','usd','bnb','btc','eth','btcc'].includes(target)) return quote === target;
+    if (target === 'fiat') return ['eur','gbp','ngn','jpy','aud','cad','brl','try','zar'].includes(quote);
+    if (target === 'alts') return quote === 'alts';
   }
   if (subgroup === 'Options' && ['calls','puts'].includes(target)) {
     return option === target || values.some(value => value === target || value.endsWith(' ' + target));
@@ -226,6 +229,9 @@ const matchesMarketSubSubgroup = (item: Instrument, group: string, subgroup: str
     const settlement = normalizeMarketLabel((item as any).settlement);
     return settlement === target || values.some(value => value === target || value.includes(target));
   }
+  if (target === 'new') return Boolean((item as any).newListing);
+  if (target === 'all') return true;
+  if (target === 'alts') return values.some(value => value === 'alts');
   if (target === 'expiring') {
     const expiry = Number((item as any).expiry);
     return Number.isFinite(expiry) || values.some(value => value.includes('expir'));
@@ -315,7 +321,7 @@ export default function App() {
         if(item.provider!=='BINANCE') return item;
         const tick=byKey.get(item.symbol);
         if(!tick) return item;
-        return {...item,price:tick.price,change24h:tick.percent,priceChangePercent:tick.percent,high24h:tick.high24h,low24h:tick.low24h,volume24h:tick.volume24h};
+        return {...item,price:tick.price,change24h:tick.percent,priceChangePercent:tick.percent,high24h:tick.high,low24h:tick.low,volume24h:tick.volume};
       }));
     }).catch(()=>{});
     return()=>{cancelled=true;};
