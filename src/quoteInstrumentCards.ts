@@ -197,7 +197,7 @@ function installStyles() {
     }
 
     .sire-instrument-card .sire-card-main {
-      grid-column:2!important;
+      grid-column:2 / span 2!important;
       grid-row:1!important;
       min-width:0!important;
       display:grid!important;
