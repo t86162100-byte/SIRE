@@ -386,39 +386,49 @@ const formatCardPercent = (item: Instrument) => {
   return (n >= 0 ? '+' : '') + n.toFixed(2) + '%';
 };
 
+const getCardArchetype = (item: Instrument) => {
+  const group = String((item as any).marketGroup || '').toUpperCase();
+  const sub = String((item as any).marketSubcategory || '').toUpperCase();
+  const type = String((item as any).instrumentType || (item as any).marketType || '').toUpperCase();
+  if (group === 'CRYPTO' && sub === 'SPOT') return 'crypto-spot';
+  if (group === 'CRYPTO' && sub === 'FUTURES') return 'crypto-futures';
+  if (group === 'CRYPTO' && sub === 'PERPETUALS') return 'crypto-perpetual';
+  if (group === 'CRYPTO' && sub === 'OPTIONS') return 'crypto-options';
+  if (group === 'CRYPTO' && sub === 'ALPHA') return 'crypto-alpha';
+  if (type.includes('OPTION')) return 'crypto-options';
+  if (type.includes('PERPETUAL')) return 'crypto-perpetual';
+  if (type.includes('FUTURE')) return 'crypto-futures';
+  return 'default';
+};
+
 const MarketInstrumentCard = ({ item, active, onSelect }: { item: Instrument; active: boolean; onSelect: (item: Instrument) => void }) => {
+  const archetype = getCardArchetype(item);
   const change = Number(item.priceChangePercent ?? item.change24h);
   const hasChange = Number.isFinite(change);
   const volume = Number(item.volume24h);
   const marketCap = Number(item.marketCap);
-  const metrics = [
-    Number.isFinite(volume) ? 'VOL ' + formatCardNumber(volume) : '',
-    Number.isFinite(marketCap) ? 'MC ' + formatCardNumber(marketCap) : '',
-  ].filter(Boolean);
+  const quote = String((item as any).quote || '').toUpperCase();
+  const metrics = archetype === 'crypto-spot'
+    ? [
+        Number.isFinite(volume) ? 'VOL ' + formatCardNumber(volume) : '',
+        Number.isFinite(marketCap) ? 'MC ' + formatCardNumber(marketCap) : '',
+      ].filter(Boolean)
+    : [
+        Number.isFinite(volume) ? 'VOL ' + formatCardNumber(volume) : '',
+        Number.isFinite(marketCap) ? 'MC ' + formatCardNumber(marketCap) : '',
+      ].filter(Boolean);
 
   return (
-    <button
-      type="button"
-      className={`symbol-row sire-instrument-card${active ? ' active' : ''}`}
-      data-provider={item.provider}
-      onClick={() => onSelect(item)}
-    >
+    <button type="button" className={`symbol-row sire-instrument-card sire-archetype-${archetype}${active ? ' active' : ''}`} data-provider={item.provider} onClick={() => onSelect(item)}>
       <span className="sire-card-asset">
         <span className="quote-asset-logo-wrap">
-          <img
-            className="quote-asset-logo"
-            src={item.logoUrl || makeAssetLogoFallback(item)}
-            alt=""
-            decoding="async"
-            onError={event => {
-              const image = event.currentTarget;
-              image.onerror = null;
-              image.src = makeLogoFallback(item.displaySymbol || item.symbol);
-            }}
-          />
+          <img className="quote-asset-logo" src={item.logoUrl || makeAssetLogoFallback(item)} alt="" decoding="async" onError={event => {
+            const image = event.currentTarget;
+            image.onerror = null;
+            image.src = makeLogoFallback(item.displaySymbol || item.symbol);
+          }} />
         </span>
       </span>
-
       <span className="sire-card-main">
         <span className="sire-card-identity">
           <b>{String(item.displaySymbol || item.symbol).toUpperCase()}</b>
@@ -428,22 +438,18 @@ const MarketInstrumentCard = ({ item, active, onSelect }: { item: Instrument; ac
           {formatCardPrice(item) && <strong>{formatCardPrice(item)}</strong>}
           {hasChange && <em className={change >= 0 ? 'positive' : 'negative'}>{formatCardPercent(item)}</em>}
         </span>
-        {metrics.length > 0 && <span className="sire-card-metrics">{metrics.map(metric => <small key={metric}>{metric}</small>)}</span>}
+        <span className="sire-card-metrics">
+          {archetype === 'crypto-spot' && quote && <small>PAIR {quote}</small>}
+          {metrics.map(metric => <small key={metric}>{metric}</small>)}
+        </span>
       </span>
-
       <span className="sire-card-provider">
         <span className="quote-exchange-logo-wrap">
-          <img
-            className="quote-exchange-logo"
-            src={makeProviderLogoFallback(item)}
-            alt=""
-            decoding="async"
-            onError={event => {
-              const image = event.currentTarget;
-              image.onerror = null;
-              image.src = makeLogoFallback(item.providerLabel || item.provider);
-            }}
-          />
+          <img className="quote-exchange-logo" src={makeProviderLogoFallback(item)} alt="" decoding="async" onError={event => {
+            const image = event.currentTarget;
+            image.onerror = null;
+            image.src = makeLogoFallback(item.providerLabel || item.provider);
+          }} />
         </span>
         <b>{String(item.providerLabel || item.provider).toUpperCase()}</b>
         <small>{getBitgetCardMarketLabel(item)}</small>
