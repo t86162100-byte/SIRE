@@ -198,7 +198,6 @@ const matchesMarketTopGroup = (item: Instrument, group: string) => {
   }
   if (group === 'TRADE FI') {
     return marketGroup === 'tradfi' || marketGroup === 'trade fi' || category === 'tradfi' ||
-      ['forex','stocks','funds','commodities','indices','bonds'].has?.(category) ||
       ['forex','stocks','funds','commodities','indices','bonds'].includes(category) ||
       (leaf.has(instrumentType) && marketGroup === 'tradfi') ||
       ['forex','stocks','funds','commodities','indices','bonds'].some(value => marketType.includes(value));
