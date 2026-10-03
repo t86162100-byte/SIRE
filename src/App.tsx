@@ -500,7 +500,7 @@ export default function App() {
           </div>
           <button
             type="button"
-            className={`sire-market-source-trigger${providerFilter !== 'ALL' ? ' active' : ''}`}
+            className={`sire-market-exchange-trigger${providerFilter !== 'ALL' ? ' active' : ''}`}
             aria-expanded={exchangeDrawerOpen}
             onClick={() => setExchangeDrawerOpen(true)}
           >
@@ -573,7 +573,7 @@ export default function App() {
         </div>
 
         {exchangeDrawerOpen && (
-          <div className="sire-market-source-drawer-backdrop" role="presentation" onClick={() => setExchangeDrawerOpen(false)}>
+          <div className="sire-exchange-drawer-backdrop" role="presentation" onClick={() => setExchangeDrawerOpen(false)}>
             <section className="sire-exchange-drawer" role="dialog" aria-modal="true" aria-label="Select market source" onClick={event => event.stopPropagation()}>
               <div className="sire-exchange-drawer-head">
                 <div>
@@ -593,22 +593,22 @@ export default function App() {
                   placeholder="Search market sources"
                   onChange={event => {
                     const query = event.target.value.trim().toLowerCase();
-                    document.querySelectorAll<HTMLElement>('.sire-market-source-option').forEach(option => {
-                      option.style.display = !query || option.dataset.sourceName?.includes(query) ? '' : 'none';
+                    document.querySelectorAll<HTMLElement>('.sire-exchange-option').forEach(option => {
+                      option.style.display = !query || option.dataset.exchangeName?.includes(query) ? '' : 'none';
                     });
                   }}
                 />
               </div>
 
-              <div className="sire-market-source-grid">
+              <div className="sire-exchange-grid">
                 {MARKET_SOURCES.map(provider => {
                   const label = sourceDisplayName(provider);
                   return (
                     <button
                       key={provider}
                       type="button"
-                      data-source-name={label.toLowerCase()}
-                      className={`sire-market-source-option${providerFilter === provider ? ' active' : ''}`}
+                      data-exchange-name={label.toLowerCase()}
+                      className={`sire-exchange-option${providerFilter === provider ? ' active' : ''}`}
                       onClick={() => {
                         setProviderFilter(provider);
                         setCategoryFilter('ALL');
@@ -617,7 +617,7 @@ export default function App() {
                         setExchangeDrawerOpen(false);
                       }}
                     >
-                      <span className="sire-market-source-option-logo">
+                      <span className="sire-exchange-option-logo">
                         <img
                           src={provider === 'ALL' ? '/sire-logo.svg' : sourceLogoUrl(provider)}
                           alt=""
@@ -629,11 +629,11 @@ export default function App() {
                           }}
                         />
                       </span>
-                      <span className="sire-market-source-option-copy">
+                      <span className="sire-exchange-option-copy">
                         <b>{label}</b>
                         <small>{provider === 'ALL' ? 'Combined market' : 'Market venue'}</small>
                       </span>
-                      {providerFilter === provider && <span className="sire-market-source-option-check">✓</span>}
+                      {providerFilter === provider && <span className="sire-exchange-option-check">✓</span>}
                     </button>
                   );
                 })}
