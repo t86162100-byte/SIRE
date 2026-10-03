@@ -52,46 +52,13 @@ function future(raw:any,kind:'USDT-M'|'COIN-M',now:number):BinanceInstrument|nul
 }
 async function json(url:string){const r=await fetch(url,{cache:'no-store',headers:{Accept:'application/json'}});const t=await r.text();let d:any={};try{d=t?JSON.parse(t):{};}catch{throw new Error('Binance returned invalid JSON.');}if(!r.ok)throw new Error('Binance HTTP '+r.status+': '+s(d?.msg||d?.message||t).slice(0,300));return d;}
 
-export async function fetchBinanceInstruments():Promise<BinanceInstrument[]>{
-  try {
-    const response = await fetch('/api/sire/binance/catalog', { cache:'no-store' });
-    const payload = await response.json().catch(() => ({}));
-    if (response.ok && payload?.ok && Array.isArray(payload.instruments)) return payload.instruments as BinanceInstrument[];
-  } catch {}
-  const now=Date.now();
-  const [sp,um,cm,alpha]=await Promise.all([
-    json(SPOT+'/api/v3/exchangeInfo'),
-    json(UM+'/fapi/v1/exchangeInfo'),
-    json(CM+'/dapi/v1/exchangeInfo'),
-    json(ALPHA+'/bapi/defi/v1/public/wallet-direct/buw/wallet/cex/alpha/all/token/list').catch(()=>null)
-  ]);
-  const out:BinanceInstrument[]=[];
-  for(const x of (sp?.symbols||[])){const i=spot(x);if(i)out.push(i);}
-  for(const x of (um?.symbols||[])){const i=future(x,'USDT-M',now);if(i&&['TRADING','PENDING_TRADING'].includes(i.status||''))out.push(i);}
-  for(const x of (cm?.symbols||[])){const i=future(x,'COIN-M',now);if(i&&['TRADING','PENDING_TRADING'].includes(i.status||''))out.push(i);}
-  const tokens=Array.isArray(alpha?.data)?alpha.data:Array.isArray(alpha?.data?.tokens)?alpha.data.tokens:Array.isArray(alpha?.tokens)?alpha.tokens:[];
-  for(const x of tokens){
-    const alphaId=s(x?.alphaId||x?.tokenId||x?.id);
-    const quote=s(x?.quoteAsset||'USDT').toUpperCase();
-    const symbol=s(x?.tradingPair||((alphaId && /^ALPHA_/i.test(alphaId)) ? alphaId+quote : ''));
-    if(!symbol)continue;
-    const chain=s(x?.chainName||x?.chain||x?.network);
-    const extra:string[]=[];
-    if(chain) extra.push(chain);
-    if(x?.stockState) extra.push('Tokenized Securities');
-    if(s(x?.cexCoinName).toLowerCase().includes('robinhood')) extra.push('Robinhood');
-    if(s(x?.cexCoinName).toLowerCase().includes('point')) extra.push('Point+');
-    out.push({symbol,name:s(x?.name||x?.symbol||symbol),provider:'BINANCE',exchange:'BINANCE',marketGroup:'CRYPTO',
-      marketType:'Alpha',category:'Alpha',marketSubcategory:'Alpha',marketSubSubcategory:chain||'Alpha',
-      marketFilters:uniq(['Alpha',...extra]),marketFilter:chain||'Alpha',instrumentType:'Alpha',
-      instrumentSubtype:chain,quote,baseAsset:s(x?.symbol||alphaId),status:x?.offline?'BREAK':'TRADING',
-      price:n(x?.price),priceChangePercent:n(x?.percentChange24h),volume24h:n(x?.volume24h),
-      marketCap:n(x?.marketCap),fdv:n(x?.fdv),liquidity:n(x?.liquidity),holders:n(x?.holders),
-      high24h:n(x?.priceHigh24h),low24h:n(x?.priceLow24h),listedAt:n(x?.listingTime),
-      newListing:Number.isFinite(n(x?.listingTime)) ? now-n(x.listingTime)<30*86400000 : false});
+export async function fetchBinanceInstruments():Promise<BinanceInstrument[]> {
+  const response = await fetch('/api/sire/binance/catalog', { cache:'no-store' });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok || !payload?.ok || !Array.isArray(payload.instruments)) {
+    throw new Error(payload?.error || 'Binance native catalog is unavailable.');
   }
-  const map=new Map<string,BinanceInstrument>();for(const i of out){const k=i.marketType+':'+i.symbol;if(!map.has(k))map.set(k,i);}
-  return [...map.values()].sort((a,b)=>a.marketGroup.localeCompare(b.marketGroup)||a.marketType.localeCompare(b.marketType)||a.symbol.localeCompare(b.symbol));
+  return payload.instruments as BinanceInstrument[];
 }
 
 type Handler=(tick:BinanceTick)=>void;
