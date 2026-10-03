@@ -1,5 +1,4 @@
 import { createDerivDataFeed, type DerivFeedDiagnostic } from './derivMarketData';
-import { createFxcmDataFeed } from './fxcmMarketData';
 
 export type SireMarketProvider = string;
 
@@ -34,7 +33,6 @@ export type MarketFeedFactory = (
 
 const providers = new Map<string, MarketFeedFactory>([
   ['DERIV', (_instrument, onQuote, reportDiagnostic) => createDerivDataFeed(onQuote, reportDiagnostic)],
-  ['FXCM', (_instrument, onQuote, reportDiagnostic) => createFxcmDataFeed(onQuote, reportDiagnostic)],
 ]);
 
 export function registerMarketFeed(provider: string, factory: MarketFeedFactory) {
