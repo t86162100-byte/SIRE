@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "python3 -m venv .venv && .venv/bin/pip install --disable-pip-version-check -q yfinance && vite build",
+    "build": "vite build",
     "preview": "vite preview",
     "start": "tsx runtime-server.mjs",
     "postinstall": "if [ \"$RENDER\" = \"true\" ]; then echo \"Skipping Puppeteer Chrome download on Render\"; else puppeteer browsers install chrome; fi",
