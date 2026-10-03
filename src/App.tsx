@@ -627,8 +627,8 @@ export default function App() {
                           setMarketSubSubcategoryFilter('ALL');
                           setMarketLeafFilter('ALL');
                         } else if (provider === 'DERIV') {
-                          setCategoryFilter('OTHERS');
-                          setMarketSubcategoryFilter('Synthetic Indices');
+                          setCategoryFilter('ALL');
+                          setMarketSubcategoryFilter('ALL');
                           setMarketSubSubcategoryFilter('ALL');
                         } else {
                           setCategoryFilter('ALL');
