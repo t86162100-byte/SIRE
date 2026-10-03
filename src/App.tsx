@@ -328,6 +328,7 @@ export default function App() {
   const [providerFilter, setProviderFilter] = useState<'ALL' | MarketProvider>('ALL');
   const [categoryFilter, setCategoryFilter] = useState<string>('ALL');
   const [marketSubcategoryFilter, setMarketSubcategoryFilter] = useState<string>('ALL');
+  const [marketSubSubcategoryFilter, setMarketSubSubcategoryFilter] = useState<string>('ALL');
   const [exchangeDrawerOpen, setExchangeDrawerOpen] = useState(false);
   const [quoteScrollTop, setQuoteScrollTop] = useState(0);
   const deferredSearch = useDeferredValue(search);
