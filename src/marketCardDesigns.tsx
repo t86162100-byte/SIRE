@@ -153,6 +153,11 @@ const providerDomains: Record<string,string> = {
   cowswap:'swap.cow.fi', balancer:'balancer.fi', polymarket:'polymarket.com',
   kalshi:'kalshi.com', opinion:'opinion.trade', deriv:'deriv.com'
 };
+const assetLogo = (item: Instrument) => {
+  const raw = rawOf(item);
+  return esc(item.logoUrl || raw.assetLogoUrl || raw.tokenLogoUrl || raw.iconUrl || raw.logo);
+};
+
 const providerKeyOf = (item: Instrument) =>
   String(item.exchange || item.providerLabel || item.provider || '').trim().toLowerCase().replace(/[^a-z0-9]/g,'');
 const providerLogoSources = (item: Instrument) => {
