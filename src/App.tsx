@@ -293,6 +293,40 @@ const matchesMarketSubgroup = (item: Instrument, group: string, subgroup: string
   return false;
 };
 
+const matchesMarketSubSubgroup = (item: Instrument, group: string, subgroup: string, subSubgroup: string) => {
+  const target = normalizeMarketLabel(subSubgroup);
+  const values = [
+    (item as any).marketSubSubcategory,
+    (item as any).instrumentSubtype,
+    (item as any).optionType,
+    (item as any).settlement,
+    (item as any).quote,
+    (item as any).marketFilter,
+    ...(Array.isArray((item as any).marketFilters) ? (item as any).marketFilters : []),
+    (item as any).category,
+    (item as any).marketType,
+  ].map(normalizeMarketLabel).filter(Boolean);
+  const quote = normalizeMarketLabel((item as any).quote);
+  const option = normalizeMarketLabel((item as any).optionType);
+
+  if (group === 'CRYPTO' && subgroup === 'Spot') {
+    if (['usdt','usdc','fdusd','btc'].includes(target)) return quote === target;
+    if (target === 'fiat') return ['usd','eur','gbp','ngn','jpy','aud','cad','brl','try','zar'].includes(quote);
+  }
+  if (subgroup === 'Options' && ['calls','puts'].includes(target)) {
+    return option === target || values.some(value => value === target || value.endsWith(' ' + target));
+  }
+  if ((subgroup === 'Futures' || subgroup === 'Perpetuals') && ['usd m','coin m','usdc m'].includes(target)) {
+    const settlement = normalizeMarketLabel((item as any).settlement);
+    return settlement === target || values.some(value => value === target || value.includes(target));
+  }
+  if (target === 'expiring') {
+    const expiry = Number((item as any).expiry);
+    return Number.isFinite(expiry) || values.some(value => value.includes('expir'));
+  }
+  return values.some(value => value === target || value.includes(target) || (target.length > 2 && target.includes(value)));
+};
+
 const makeProviderLogoFallback = (item: Instrument) => {
   const key = String(item.exchange || item.providerLabel || item.provider || '')
     .trim().toLowerCase().replace(/[^a-z0-9]/g, '');
