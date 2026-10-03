@@ -115,6 +115,8 @@ const sourceLogoUrl = (value: string) => value === 'BINANCE' ? 'https://www.bina
 const normalizeMarketLabel = (value: unknown) =>
   String(value || '').trim().toLowerCase().replace(/[\\s_-]+/g, ' ');
 
+const quoteBucketForFilter = (quote: unknown) => { const q = String(quote || '').toUpperCase(); if (['EUR','GBP','AUD','BRL','TRY','RUB','ZAR','NGN','JPY','PLN','RON','UAH','CHF','CAD','HKD','SGD','MXN','ARS'].includes(q)) return 'fiat'; if (['USDT','USDC','U','USD','BNB','BTC','BTCC','ETH'].includes(q)) return q.toLowerCase(); return 'alts'; };
+
 const hasMarketValue = (item: Instrument, target: string) => {
   const needle = normalizeMarketLabel(target);
   const values = [
@@ -147,7 +149,7 @@ const matchesMarketTopGroup = (item: Instrument, group: string) => {
 const matchesMarketSubgroup = (item: Instrument, group: string, subgroup: string) => {
   const target = normalizeMarketLabel(subgroup);
   if (group === 'CRYPTO' && subgroup === 'Spot') return normalizeMarketLabel(item.marketType) === 'spot';
-  if (group === 'CRYPTO' && subgroup === 'Futures') return normalizeMarketLabel(item.marketType) === 'futures';
+  if (group === 'CRYPTO' && subgroup === 'Futures') return ['futures','margin'].includes(normalizeMarketLabel(item.marketType));
   if (group === 'TRADE FI' && subgroup === 'Stocks') return normalizeMarketLabel((item as any).marketType) === 'stocks' || normalizeMarketLabel(item.category) === 'stocks';
   if (group === 'TRADE FI' && subgroup === 'Futures') return normalizeMarketLabel((item as any).marketType) === 'futures' && matchesMarketTopGroup(item, 'TRADE FI');
   if (group === 'TRADE FI' && subgroup === 'Spot') return normalizeMarketLabel((item as any).marketType) === 'spot' && matchesMarketTopGroup(item, 'TRADE FI');
@@ -161,7 +163,7 @@ const matchesMarketSubSubgroup = (item: Instrument, group: string, subgroup: str
     const quote = normalizeMarketLabel((item as any).quote);
     if (['usdt','usdc','u','usd','bnb','btc','btcc','eth'].includes(target)) return quote === target;
     if (target === 'fiat') return ['eur','gbp','aud','brl','try','rub','zar','ngn','jpy','pln','ron','uah'].includes(quote);
-    if (target === 'alts') return quote === 'alts';
+    if (target === 'alts') return quote === 'alts' || quoteBucketForFilter((item as any).quote) === 'alts';
     return false;
   }
   if (group === 'CRYPTO' && subgroup === 'Futures') {
@@ -235,7 +237,14 @@ export default function App() {
   useEffect(() => {
     let cancelled = false;
     const load = async () => {
-      const [derivResult, binanceResult] = await Promise.allSettled([fetchDerivInstruments(), fetchBinanceInstruments()]);
+      const binanceCatalog = fetch('/api/sire/binance/catalog', { cache:'no-store' })
+        .then(async response => {
+          const payload = await response.json().catch(() => ({}));
+          if (!response.ok || !payload?.ok) throw new Error(payload?.error || 'Binance catalog request failed.');
+          return Array.isArray(payload.instruments) ? payload.instruments as BinanceInstrument[] : [];
+        })
+        .catch(() => fetchBinanceInstruments());
+      const [derivResult, binanceResult] = await Promise.allSettled([fetchDerivInstruments(), binanceCatalog]);
       if (cancelled) return;
       const normalized: Instrument[] = [];
       if (derivResult.status === 'fulfilled') {
