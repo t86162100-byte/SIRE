@@ -1,6 +1,6 @@
 import { startTransition, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import { createLinkGroup, type LinkGroup } from 'openalgo-charts';
-import { Search } from 'lucide-react';
+import { Search, SlidersHorizontal, X, ChevronDown } from 'lucide-react';
 import ResearchLab from './ResearchLab';
 import HomeView from './HomeView';
 import FinancialChart from './FinancialChart';
@@ -98,6 +98,129 @@ const exchangeDomains: Record<string, string> = {
   uniswap: 'uniswap.org', curve: 'curve.fi', pancakeswap: 'pancakeswap.finance',
 };
 
+const MARKET_TOP_GROUPS = ['CRYPTO', 'TRADE FI', 'ON CHAIN', 'PREDICTIONS', 'OTHERS'] as const;
+
+const MARKET_EXCHANGE_PROVIDERS = [
+  'ALL','BINGX','BITRUE','ASCENDEX','WHITEBIT','COINW','DERIV','BINANCE','COINBASE','KRAKEN','BYBIT','OKX','BITGET','GATEIO','KUCOIN','MEXC','CRYPTOCOM','BITFINEX','GEMINI','BITSTAMP','COINEX','HTX','BITTREX','BITMART','PHEMEX','LBANK','XT','DEEPCOIN','TOOBIT','WEEX','BITUNIX','BLOFIN','COINCATCH','ZOOMEX','BTCC','DIGIFINEX','COINSTORE','PROBIT','POLONIEX','COINDCX','POLYMARKET','KALSHI','OPINION','FXCM','TWELVEDATA','NASDAQTRADER','XETR','XFRA','EUREX','ASX','TWSE','PSX','IDX','HKEX','BSE','TSE','NSE','OANDA','FOREXCOM','INTERACTIVEBROKERS','TRADESTATION','WEBULL','MOOMOO','NINJATRADER','TRADOVATE','AMPFUTURES','TASTYTRADE','TASTYFX','ALPACA','TRADIERBROKERAGE','TRADEZERO','COBRATRADING','CLEARSTREET','INVESTRADE','PUBLIC','PLUS500US','OPTIMUSFUTURES','EDGECLEAR','IRONBEAM','STONEX','DORMANTRADING','TRADIERFUTURES','TRADINGVIEW','UNISWAP','CURVE','PANCAKESWAP','SUSHISWAP','RAYDIUM','JUPITER','ORCA','AERODROME','TRADERJOE','ONEINCH','COWSWAP','BALANCER'
+] as const;
+
+const exchangeDisplayName = (value: string) => {
+  const labels: Record<string, string> = {
+    ALL: 'All Exchanges',
+    CRYPTOCOM: 'Crypto.com',
+    GATEIO: 'Gate.io',
+    COINW: 'CoinW',
+    COINDCX: 'CoinDCX',
+    DEEPCOIN: 'Deepcoin',
+    COINCATCH: 'CoinCatch',
+    COINSTORE: 'Coinstore',
+    BTCC: 'BTCC',
+    DIGIFINEX: 'DigiFinex',
+    LBANK: 'LBank',
+    HTX: 'HTX',
+    MEXC: 'MEXC',
+    OKX: 'OKX',
+    FXCM: 'FXCM',
+    TWELVEDATA: 'Twelve Data',
+    NASDAQTRADER: 'Nasdaq Trader',
+    XETR: 'Xetra',
+    XFRA: 'Frankfurt',
+    EUREX: 'Eurex',
+    ASX: 'ASX',
+    TWSE: 'TWSE',
+    PSX: 'PSX',
+    IDX: 'IDX',
+    HKEX: 'HKEX',
+    BSE: 'BSE',
+    TSE: 'TSE',
+    NSE: 'NSE',
+    OANDA: 'OANDA',
+    FOREXCOM: 'Forex.com',
+    INTERACTIVEBROKERS: 'Interactive Brokers',
+    TRADESTATION: 'TradeStation',
+    WEBULL: 'Webull',
+    MOOMOO: 'Moomoo',
+    NINJATRADER: 'NinjaTrader',
+    TRADOVATE: 'Tradovate',
+    AMPFORES: 'AMP Futures',
+    AMPFUTURES: 'AMP Futures',
+    TASTYTRADE: 'tastytrade',
+    TASTYFX: 'tastyfx',
+    ALPACA: 'Alpaca',
+    TRADIERBROKERAGE: 'Tradier Brokerage',
+    TRADEZERO: 'TradeZero',
+    COBRATRADING: 'Cobra Trading',
+    CLEARSTREET: 'Clear Street',
+    INVESTRADE: 'Investrade',
+    PUBLIC: 'Public',
+    PLUS500US: 'Plus500 US',
+    OPTIMUSFUTURES: 'Optimus Futures',
+    EDGECLEAR: 'EdgeClear',
+    IRONBEAM: 'Ironbeam',
+    STONEX: 'StoneX',
+    DORMANTRADING: 'Dorman Trading',
+    TRADIERFUTURES: 'Tradier Futures',
+    TRADINGVIEW: 'TradingView',
+    PANCAKESWAP: 'PancakeSwap',
+    SUSHISWAP: 'SushiSwap',
+    TRADERJOE: 'Trader Joe',
+    ONEINCH: '1inch',
+    COWSWAP: 'CowSwap',
+  };
+  return labels[value] || (value === 'ALL' ? 'All Exchanges' : value[0] + value.slice(1).toLowerCase());
+};
+
+const exchangeLogoUrl = (value: string) => {
+  const aliases: Record<string, string> = {
+    CRYPTOCOM: 'crypto-com',
+    GATEIO: 'gate-io',
+    PANCAKESWAP: 'pancake-swap',
+    SUSHISWAP: 'sushi',
+    ONEINCH: '1inch',
+    COINDCX: 'coindcx',
+    DIGIFINEX: 'digifinex',
+    NASDAQTRADER: 'nasdaq',
+  };
+  const slug = aliases[value] || value.toLowerCase();
+  return 'https://cdn.simpleicons.org/' + encodeURIComponent(slug);
+};
+
+const matchesMarketTopGroup = (item: Instrument, group: string) => {
+  const category = String((item as any).category || '').trim().toLowerCase();
+  const marketGroup = String((item as any).marketGroup || '').trim().toLowerCase();
+  const instrumentType = String((item as any).instrumentType || '').trim().toLowerCase();
+  const marketType = String(item.marketType || '').trim().toLowerCase();
+  const leaf = new Set(['forex','stocks','funds','commodities','indices','bonds','options','futures','perpetuals']);
+
+  if (group === 'CRYPTO') {
+    return marketGroup === 'crypto' || category === 'crypto' ||
+      instrumentType === 'crypto' || (leaf.has(instrumentType) && marketGroup === 'crypto');
+  }
+  if (group === 'TRADE FI') {
+    return marketGroup === 'tradfi' || marketGroup === 'trade fi' || category === 'tradfi' ||
+      ['forex','stocks','funds','commodities','indices','bonds'].has?.(category) ||
+      ['forex','stocks','funds','commodities','indices','bonds'].includes(category) ||
+      (leaf.has(instrumentType) && marketGroup === 'tradfi') ||
+      ['forex','stocks','funds','commodities','indices','bonds'].some(value => marketType.includes(value));
+  }
+  if (group === 'ON CHAIN') {
+    return marketGroup === 'onchain' || category === 'onchain' || category === 'on chain' ||
+      instrumentType === 'onchain';
+  }
+  if (group === 'PREDICTIONS') {
+    return marketGroup === 'prediction' || marketGroup === 'predictions' ||
+      category === 'prediction' || category === 'prediction markets' ||
+      instrumentType === 'prediction';
+  }
+  if (group === 'OTHERS') {
+    return marketGroup === 'other' || marketGroup === 'others' ||
+      category === 'other' || category === 'synthetic indices' || category === 'baskets' ||
+      instrumentType === 'synthetic indices' || instrumentType === 'baskets' ||
+      marketType === 'synthetic indices' || marketType === 'baskets';
+  }
+  return false;
+};
+
 const makeProviderLogoFallback = (item: Instrument) => {
   const key = String(item.exchange || item.providerLabel || item.provider || '')
     .trim().toLowerCase().replace(/[^a-z0-9]/g, '');
@@ -154,6 +277,7 @@ export default function App() {
   const [providerFilter, setProviderFilter] = useState<'ALL' | MarketProvider>('ALL');
   const [categoryFilter, setCategoryFilter] = useState<string>('ALL');
   const [marketSubcategoryFilter, setMarketSubcategoryFilter] = useState<string>('ALL');
+  const [exchangeDrawerOpen, setExchangeDrawerOpen] = useState(false);
   const [quoteScrollTop, setQuoteScrollTop] = useState(0);
   const deferredSearch = useDeferredValue(search);
   const [instrumentSearchOpen, setInstrumentSearchOpen] = useState(false);
@@ -944,15 +1068,12 @@ export default function App() {
         || selectedTaxonomy === itemFilter.split(':')[0]
         || taxonomyMatches;
       const categoryMatch = categoryFilter === 'ALL'
-        || item.category === categoryFilter
-        || (categoryFilter === 'Options' && marketType.includes('option'))
-        || (categoryFilter === 'Futures' && marketType === 'futures')
-        || (categoryFilter === 'Perpetuals' && marketType === 'perpetuals')
-        || (categoryFilter === 'Crypto' && item.category === 'Crypto' && (
-          providerFilter === 'GATEIO'
-            ? true
-            : !marketType.includes('future') && !marketType.includes('option') && !marketType.includes('perpetual') && !marketType.includes('swap')
-        ));
+        || MARKET_TOP_GROUPS.includes(categoryFilter as typeof MARKET_TOP_GROUPS[number])
+          ? (categoryFilter === 'ALL' || matchesMarketTopGroup(item, categoryFilter))
+          : item.category === categoryFilter
+            || (categoryFilter === 'Options' && marketType.includes('option'))
+            || (categoryFilter === 'Futures' && marketType === 'futures')
+            || (categoryFilter === 'Perpetuals' && marketType === 'perpetuals');
       const searchMatch = !q || `${item.name} ${item.symbol} ${item.providerLabel} ${item.marketType} ${item.category}`.toLowerCase().includes(q);
       return providerMatch && categoryMatch && subcategoryMatch && searchMatch;
     });
@@ -1034,135 +1155,112 @@ export default function App() {
 
     <div className="native-terminal-body">
       <aside className="native-symbol-sidebar symbol-sidebar"><div className="sidebar-search"><Search size={15} /><input value={search} onChange={event => setSearch(event.target.value)} placeholder="Search" /></div><div className="sidebar-meta"><span>{derivLoading ? "LOADING MARKETS" : derivError ? "MARKET ERROR" : "ALL MARKETS"}</span><b>{instruments.length}</b></div>
-        <div className="sire-market-providers">
-          {(['ALL','BINGX','BITRUE','ASCENDEX','WHITEBIT','COINW','DERIV','BINANCE','COINBASE','KRAKEN','BYBIT','OKX','BITGET','GATEIO','KUCOIN','MEXC','CRYPTOCOM','BITFINEX','GEMINI','BITSTAMP','COINEX','HTX','BITTREX','BITMART','PHEMEX','LBANK','XT','DEEPCOIN','TOOBIT','WEEX','BITUNIX','BLOFIN','COINCATCH','ZOOMEX','BTCC','DIGIFINEX','COINSTORE','PROBIT','POLONIEX','COINDCX','POLYMARKET','KALSHI','OPINION','FXCM','TWELVEDATA','NASDAQTRADER','XETR','XFRA','EUREX','ASX','TWSE','PSX','IDX','HKEX','BSE','TSE','NSE','BITSTAMP','OANDA','FOREXCOM','INTERACTIVEBROKERS','TRADESTATION','WEBULL','MOOMOO','NINJATRADER','TRADOVATE','AMPFUTURES','TASTYTRADE','TASTYFX','ALPACA','TRADIERBROKERAGE','TRADEZERO','COBRATRADING','CLEARSTREET','INVESTRADE','PUBLIC','PLUS500US','OPTIMUSFUTURES','EDGECLEAR','IRONBEAM','STONEX','DORMANTRADING','TRADIERFUTURES','TRADINGVIEW','UNISWAP','CURVE','PANCAKESWAP','SUSHISWAP','RAYDIUM','JUPITER','ORCA','AERODROME','TRADERJOE','ONEINCH','COWSWAP','BALANCER'] as const).map(provider => (
-            <button key={provider} type="button" className={providerFilter === provider ? 'active' : ''} onClick={() => setProviderFilter(provider)}>{provider === 'ALL' ? 'All' : provider[0] + provider.slice(1).toLowerCase()}</button>
+        <div className="sire-market-filter-head">
+          <div className="sire-market-filter-title">
+            <span>MARKET FILTERS</span>
+            <small>{providerFilter === 'ALL' ? 'All exchanges' : exchangeDisplayName(providerFilter)}</small>
+          </div>
+          <button
+            type="button"
+            className={`sire-market-exchange-trigger${providerFilter !== 'ALL' ? ' active' : ''}`}
+            aria-expanded={exchangeDrawerOpen}
+            onClick={() => setExchangeDrawerOpen(true)}
+          >
+            <SlidersHorizontal size={14} />
+            <span>Exchanges</span>
+            {providerFilter !== 'ALL' && <em>1</em>}
+            <ChevronDown size={13} />
+          </button>
+        </div>
+
+        <div className="sire-market-top-groups" role="tablist" aria-label="Market groups">
+          {MARKET_TOP_GROUPS.map(group => (
+            <button
+              key={group}
+              type="button"
+              role="tab"
+              aria-selected={categoryFilter === group}
+              className={categoryFilter === group ? 'active' : ''}
+              onClick={() => {
+                setCategoryFilter(group);
+                setMarketSubcategoryFilter('ALL');
+              }}
+            >
+              <span>{group}</span>
+              <i aria-hidden="true" />
+            </button>
           ))}
-        </div><div className="sire-market-providers sire-market-categories">
-          {(providerFilter === 'BINANCE'
-            ? (['ALL','Crypto','TradFi','Alpha'] as const)
-            : providerFilter === 'GATEIO'
-              ? (['ALL','Crypto','TradFi'] as const)
-              : (['ALL','Forex','Stocks','Funds','Commodities','Indices','Bonds','Options','Futures','Perpetuals','Crypto','Onchain','Prediction Markets','Synthetic Indices','Baskets'] as const)
-          ).map(category => (
-            <button key={category} type="button" className={categoryFilter === category ? 'active' : ''} onClick={() => { setCategoryFilter(category); setMarketSubcategoryFilter('ALL'); }}>{category}</button>
-          ))}
-          {providerFilter === 'GATEIO' && categoryFilter === 'Crypto' && <div className="sire-market-providers sire-market-subcategories">
-            {(['ALL','Spot','Margin','Futures','Options'] as const).map(subcategory => {
-              const value = subcategory === 'ALL' ? 'ALL' : subcategory;
-              return <button key={subcategory} type="button" className={marketSubcategoryFilter === value ? 'active' : ''} onClick={() => setMarketSubcategoryFilter(value)}>{subcategory}</button>;
-            })}
-            {marketSubcategoryFilter === 'Spot' && <div className="sire-market-providers sire-market-subcategories">
-              {(['ALL','USDT','USDC','USD','BTC','ETH','GT','FIAT','ALTs'] as const).map(filter => {
-                const value = filter === 'ALL' ? 'Spot' : 'Spot:' + filter;
-                return <button key={filter} type="button" className={marketSubcategoryFilter === value ? 'active' : ''} onClick={() => setMarketSubcategoryFilter(value)}>{filter}</button>;
-              })}
-            </div>}
-            {marketSubcategoryFilter === 'Margin' && <div className="sire-market-providers sire-market-subcategories">
-              {(['ALL','USDT','USDC','USD','BTC','ETH','FIAT','ALTs'] as const).map(filter => {
-                const value = filter === 'ALL' ? 'Margin' : 'Margin:' + filter;
-                return <button key={filter} type="button" className={marketSubcategoryFilter === value ? 'active' : ''} onClick={() => setMarketSubcategoryFilter(value)}>{filter}</button>;
-              })}
-            </div>}
-            {marketSubcategoryFilter === 'Futures' && <div className="sire-market-providers sire-market-subcategories">
-              {(['ALL','Perpetuals','Delivery'] as const).map(filter => {
-                const value = filter === 'ALL' ? 'Futures' : 'Futures:' + filter;
-                return <button key={filter} type="button" className={marketSubcategoryFilter === value ? 'active' : ''} onClick={() => setMarketSubcategoryFilter(value)}>{filter}</button>;
-              })}
-            </div>}
-            {marketSubcategoryFilter === 'Perpetuals' && <div className="sire-market-providers sire-market-subcategories">
-              {(['ALL','USDT','USD1','BTC'] as const).map(filter => {
-                const value = filter === 'ALL' ? 'Perpetuals' : 'Perpetuals:' + filter;
-                return <button key={filter} type="button" className={marketSubcategoryFilter === value ? 'active' : ''} onClick={() => setMarketSubcategoryFilter(value)}>{filter}</button>;
-              })}
-            </div>}
-            {marketSubcategoryFilter === 'Delivery' && <div className="sire-market-providers sire-market-subcategories">
-              {(['ALL','USDT'] as const).map(filter => {
-                const value = filter === 'ALL' ? 'Futures:Delivery' : 'Futures:Delivery:' + filter;
-                return <button key={filter} type="button" className={marketSubcategoryFilter === value ? 'active' : ''} onClick={() => setMarketSubcategoryFilter(value)}>{filter}</button>;
-              })}
-            </div>}
-            {marketSubcategoryFilter === 'Options' && <div className="sire-market-providers sire-market-subcategories">
-              {(['ALL','Calls','Puts'] as const).map(filter => {
-                const value = filter === 'ALL' ? 'Options' : 'Options:' + filter;
-                return <button key={filter} type="button" className={marketSubcategoryFilter === value ? 'active' : ''} onClick={() => setMarketSubcategoryFilter(value)}>{filter}</button>;
-              })}
-            </div>}
-          </div>}
-          {providerFilter === 'GATEIO' && categoryFilter === 'TradFi' && <div className="sire-market-providers sire-market-subcategories">
-            {(['Stocks','CFD'] as const).map(subcategory => (
-              <button key={subcategory} type="button" className={marketSubcategoryFilter === subcategory ? 'active' : ''} onClick={() => setMarketSubcategoryFilter(subcategory)}>{subcategory}</button>
-            ))}
-            {marketSubcategoryFilter === 'Stocks' && <div className="sire-market-providers sire-market-subcategories">
-              {(['ALL','U.S. stock','ETFs','ADR','ETV','Preferred','ETS','ETN','Funds','US','HK','KR','JP'] as const).map(filter => {
-                const value = filter === 'ALL' ? 'Stocks' : 'Stocks:' + filter;
-                return <button key={filter} type="button" className={marketSubcategoryFilter === value ? 'active' : ''} onClick={() => setMarketSubcategoryFilter(value)}>{filter}</button>;
-              })}
-            </div>}
-            {marketSubcategoryFilter === 'CFD' && <div className="sire-market-providers sire-market-subcategories">
-              {(['ALL','Stocks','Forex','Commodities','Metals','Indices'] as const).map(filter => {
-                const value = filter === 'ALL' ? 'CFD' : 'CFD:' + filter;
-                return <button key={filter} type="button" className={marketSubcategoryFilter === value ? 'active' : ''} onClick={() => setMarketSubcategoryFilter(value)}>{filter}</button>;
-              })}
-            </div>}
-          </div>}
-          {providerFilter === 'BINANCE' && categoryFilter === 'Alpha' && <div className="sire-market-providers sire-market-subcategories">
-            {(['ALL','Point+','Tokenized Securities','BSC','Robinhood','Ethereum','Solana','Base','Arbitrum','Sonic','Sui','TRON'] as const).map(filter => {
-              const value = filter === 'ALL' ? 'ALL' : 'Alpha:' + filter;
-              return <button key={filter} type="button" className={marketSubcategoryFilter === value ? 'active' : ''} onClick={() => setMarketSubcategoryFilter(value)}>{filter}</button>;
-            })}
-          </div>}
-          {providerFilter === 'BINANCE' && categoryFilter === 'TradFi' && <div className="sire-market-providers sire-market-subcategories">
-            {(['Stocks','Futures','Spot'] as const).map(subcategory => (
-              <button key={subcategory} type="button" className={marketSubcategoryFilter === subcategory ? 'active' : ''} onClick={() => setMarketSubcategoryFilter(subcategory)}>{subcategory}</button>
-            ))}
-            {marketSubcategoryFilter === 'Stocks' && <div className="sire-market-providers sire-market-subcategories">
-              {(['U.S. stock','ETFs'] as const).map(filter => <button key={filter} type="button" className={marketSubcategoryFilter === 'Stocks:' + filter ? 'active' : ''} onClick={() => setMarketSubcategoryFilter('Stocks:' + filter)}>{filter}</button>)}
-            </div>}
-            {marketSubcategoryFilter === 'Futures' && <div className="sire-market-providers sire-market-subcategories">
-              {(['Commodities','ETFs','Stocks','FX','Pre-IPO'] as const).map(filter => <button key={filter} type="button" className={marketSubcategoryFilter === 'Futures:' + filter ? 'active' : ''} onClick={() => setMarketSubcategoryFilter('Futures:' + filter)}>{filter}</button>)}
-            </div>}
-            {marketSubcategoryFilter === 'Spot' && <div className="sire-market-providers sire-market-subcategories">
-              {(['Stocks','Commodities'] as const).map(filter => <button key={filter} type="button" className={marketSubcategoryFilter === 'Spot:' + filter ? 'active' : ''} onClick={() => setMarketSubcategoryFilter('Spot:' + filter)}>{filter}</button>)}
-            </div>}
-          </div>}
-          {providerFilter === 'BINANCE' && categoryFilter === 'Crypto' && <div className="sire-market-providers sire-market-subcategories">
-            {(['ALL','Spot','Futures','Margin'] as const).map(subcategory => (
-              <button key={subcategory} type="button" className={marketSubcategoryFilter === subcategory ? 'active' : ''} onClick={() => setMarketSubcategoryFilter(subcategory)}>{subcategory}</button>
-            ))}
-            {marketSubcategoryFilter === 'Spot' && <div className="sire-market-providers sire-market-subcategories">
-              {(['ALL','USDT','USDC','USD','BNB','BTC','FIAT','BTCC','ETH','ALTs'] as const).map(filter => {
-                const value = filter === 'ALL' ? 'Spot' : 'Spot:' + filter;
-                return <button key={filter} type="button" className={marketSubcategoryFilter === value ? 'active' : ''} onClick={() => setMarketSubcategoryFilter(value)}>{filter}</button>;
-              })}
-            </div>}
-            {marketSubcategoryFilter === 'Futures' && <div className="sire-market-providers sire-market-subcategories">
-              {(['USDT-M','COIN-M'] as const).map(market => (
-                <button key={market} type="button" className={marketSubcategoryFilter === market ? 'active' : ''} onClick={() => setMarketSubcategoryFilter(market)}>{market}</button>
-              ))}
-            </div>}
-            {marketSubcategoryFilter === 'USDT-M' && <div className="sire-market-providers sire-market-subcategories">
-              {(['All','New','Crypto','DeFi','Metaverse','Payment','PoW','Storage','NFT','TradFi','Index','Pre-IPO','USDC','Chinese','Alpha','AI','Layer-1','RWA','Layer-2','Gaming','Meme','Infrastructure'] as const).map(filter => (
-                <button key={filter} type="button" className={marketSubcategoryFilter === 'USDT-M:' + filter ? 'active' : ''} onClick={() => setMarketSubcategoryFilter('USDT-M:' + filter)}>{filter}</button>
-              ))}
-            </div>}
-            {marketSubcategoryFilter === 'COIN-M' && <div className="sire-market-providers sire-market-subcategories">
-              {(['All','PoW','Storage','Layer-1','Layer-2','Meme','infrastructure','Payment'] as const).map(filter => (
-                <button key={filter} type="button" className={marketSubcategoryFilter === 'COIN-M:' + filter ? 'active' : ''} onClick={() => setMarketSubcategoryFilter('COIN-M:' + filter)}>{filter}</button>
-              ))}
-            </div>}
-            {marketSubcategoryFilter === 'Margin' && <div className="sire-market-providers sire-market-subcategories">
-              {(['ALL','ETH','XAU','BTC','XAG','SOL','XRP','DOGE'] as const).map(filter => {
-                const value = filter === 'ALL' ? 'Margin' : 'Margin:' + filter;
-                return <button key={filter} type="button" className={marketSubcategoryFilter === value ? 'active' : ''} onClick={() => setMarketSubcategoryFilter(value)}>{filter}</button>;
-              })}
-            </div>}
-          </div>}
-          {categoryFilter === 'Onchain' && <div className="sire-market-providers sire-market-subcategories">
-            {(['ALL','Trending','Latest'] as const).map(subcategory => (
-              <button key={subcategory} type="button" className={marketSubcategoryFilter === subcategory ? 'active' : ''} onClick={() => setMarketSubcategoryFilter(subcategory)}>{subcategory}</button>
-            ))}
-          </div>}
+        </div>
+
+        {exchangeDrawerOpen && (
+          <div className="sire-exchange-drawer-backdrop" role="presentation" onClick={() => setExchangeDrawerOpen(false)}>
+            <section className="sire-exchange-drawer" role="dialog" aria-modal="true" aria-label="Select exchange" onClick={event => event.stopPropagation()}>
+              <div className="sire-exchange-drawer-head">
+                <div>
+                  <span>MARKET VENUES</span>
+                  <strong>Select exchange</strong>
+                  <small>Choose a venue without leaving the market view.</small>
+                </div>
+                <button type="button" className="sire-exchange-drawer-close" aria-label="Close exchange drawer" onClick={() => setExchangeDrawerOpen(false)}>
+                  <X size={17} />
+                </button>
+              </div>
+
+              <div className="sire-exchange-drawer-search">
+                <Search size={14} />
+                <input
+                  aria-label="Search exchanges"
+                  placeholder="Search exchanges"
+                  onChange={event => {
+                    const query = event.target.value.trim().toLowerCase();
+                    document.querySelectorAll<HTMLElement>('.sire-exchange-option').forEach(option => {
+                      option.style.display = !query || option.dataset.exchangeName?.includes(query) ? '' : 'none';
+                    });
+                  }}
+                />
+              </div>
+
+              <div className="sire-exchange-grid">
+                {MARKET_EXCHANGE_PROVIDERS.map(provider => {
+                  const label = exchangeDisplayName(provider);
+                  return (
+                    <button
+                      key={provider}
+                      type="button"
+                      data-exchange-name={label.toLowerCase()}
+                      className={`sire-exchange-option${providerFilter === provider ? ' active' : ''}`}
+                      onClick={() => {
+                        setProviderFilter(provider);
+                        setCategoryFilter('ALL');
+                        setMarketSubcategoryFilter('ALL');
+                        setExchangeDrawerOpen(false);
+                      }}
+                    >
+                      <span className="sire-exchange-option-logo">
+                        <img
+                          src={provider === 'ALL' ? '/sire-logo.svg' : exchangeLogoUrl(provider)}
+                          alt=""
+                          loading="lazy"
+                          onError={event => {
+                            const image = event.currentTarget;
+                            image.onerror = null;
+                            image.src = makeLogoFallback(label);
+                          }}
+                        />
+                      </span>
+                      <span className="sire-exchange-option-copy">
+                        <b>{label}</b>
+                        <small>{provider === 'ALL' ? 'Combined market' : 'Market venue'}</small>
+                      </span>
+                      {providerFilter === provider && <span className="sire-exchange-option-check">✓</span>}
+                    </button>
+                  );
+                })}
+              </div>
+            </section>
+          </div>
+        )}
+
         </div>{derivError && <div className="sire-deriv-error">{derivError}</div>}<div className="native-symbol-list symbol-list" onScroll={event => setQuoteScrollTop(event.currentTarget.scrollTop)}><div style={{height: quoteWindow.top}} aria-hidden="true" /><div className="sire-quote-window">{quoteWindow.items.map(item => <button key={item.id} className={`symbol-row ${selected?.id === item.id ? 'active' : ''}`} data-provider={item.provider} onClick={() => selectInstrument(item)}><span className="quote-asset-logo-wrap"><img className="quote-asset-logo" src={item.logoUrl || makeAssetLogoFallback(item)} alt="" decoding="async" onError={event => { const image = event.currentTarget; image.onerror = null; image.src = makeLogoFallback(item.displaySymbol || item.symbol); }} /></span><span className="quote-instrument-name"><b>{String(item.displaySymbol || item.symbol).toUpperCase()}</b><small>{String(item.name || item.displaySymbol || item.symbol).toUpperCase()}</small></span><span className="quote-broker"><span className="quote-exchange-logo-wrap"><img className="quote-exchange-logo" src={makeProviderLogoFallback(item)} alt="" decoding="async" onError={event => {
   const image = event.currentTarget;
   image.onerror = null;
