@@ -369,6 +369,90 @@ const getBitgetInstId = (item: Instrument) => {
 };
 
 const chooseInitialDerivInstrument = (items: Instrument[]) =>
+const formatCardNumber = (value: unknown) => {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return '';
+  return n >= 1000 ? n.toLocaleString(undefined, { maximumFractionDigits: 2 }) : n.toLocaleString(undefined, { maximumFractionDigits: 8 });
+};
+
+const formatCardPrice = (item: Instrument) => {
+  const n = Number(item.price);
+  if (!Number.isFinite(n)) return '';
+  return n.toLocaleString(undefined, { maximumFractionDigits: n >= 1 ? 2 : 8 });
+};
+
+const formatCardPercent = (item: Instrument) => {
+  const n = Number(item.priceChangePercent ?? item.change24h);
+  if (!Number.isFinite(n)) return '';
+  return (n >= 0 ? '+' : '') + n.toFixed(2) + '%';
+};
+
+const MarketInstrumentCard = ({ item, active, onSelect }: { item: Instrument; active: boolean; onSelect: (item: Instrument) => void }) => {
+  const change = Number(item.priceChangePercent ?? item.change24h);
+  const hasChange = Number.isFinite(change);
+  const volume = Number(item.volume24h);
+  const marketCap = Number(item.marketCap);
+  const metrics = [
+    Number.isFinite(volume) ? 'VOL ' + formatCardNumber(volume) : '',
+    Number.isFinite(marketCap) ? 'MC ' + formatCardNumber(marketCap) : '',
+  ].filter(Boolean);
+
+  return (
+    <button
+      type="button"
+      className={`symbol-row sire-instrument-card${active ? ' active' : ''}`}
+      data-provider={item.provider}
+      onClick={() => onSelect(item)}
+    >
+      <span className="sire-card-asset">
+        <span className="quote-asset-logo-wrap">
+          <img
+            className="quote-asset-logo"
+            src={item.logoUrl || makeAssetLogoFallback(item)}
+            alt=""
+            decoding="async"
+            onError={event => {
+              const image = event.currentTarget;
+              image.onerror = null;
+              image.src = makeLogoFallback(item.displaySymbol || item.symbol);
+            }}
+          />
+        </span>
+      </span>
+
+      <span className="sire-card-main">
+        <span className="sire-card-identity">
+          <b>{String(item.displaySymbol || item.symbol).toUpperCase()}</b>
+          <small>{String(item.name || item.displaySymbol || item.symbol)}</small>
+        </span>
+        <span className="sire-card-market">
+          {formatCardPrice(item) && <strong>{formatCardPrice(item)}</strong>}
+          {hasChange && <em className={change >= 0 ? 'positive' : 'negative'}>{formatCardPercent(item)}</em>}
+        </span>
+        {metrics.length > 0 && <span className="sire-card-metrics">{metrics.map(metric => <small key={metric}>{metric}</small>)}</span>}
+      </span>
+
+      <span className="sire-card-provider">
+        <span className="quote-exchange-logo-wrap">
+          <img
+            className="quote-exchange-logo"
+            src={makeProviderLogoFallback(item)}
+            alt=""
+            decoding="async"
+            onError={event => {
+              const image = event.currentTarget;
+              image.onerror = null;
+              image.src = makeLogoFallback(item.providerLabel || item.provider);
+            }}
+          />
+        </span>
+        <b>{String(item.providerLabel || item.provider).toUpperCase()}</b>
+        <small>{getBitgetCardMarketLabel(item)}</small>
+      </span>
+    </button>
+  );
+};
+
   items.find(item => item.provider === 'DERIV' && item.exchangeOpen !== 0 && item.tradingSuspended !== 1) ||
   items.find(item => item.provider === 'DERIV') || items[0] || null;
 
@@ -1402,11 +1486,7 @@ export default function App() {
           </div>
         )}
 
-{derivError && <div className="sire-deriv-error">{derivError}</div>}<div className="native-symbol-list symbol-list" onScroll={event => setQuoteScrollTop(event.currentTarget.scrollTop)}><div style={{height: quoteWindow.top}} aria-hidden="true" /><div className="sire-quote-window">{quoteWindow.items.map(item => <button key={item.id} className={`symbol-row ${selected?.id === item.id ? 'active' : ''}`} data-provider={item.provider} onClick={() => selectInstrument(item)}><span className="quote-asset-logo-wrap"><img className="quote-asset-logo" src={item.logoUrl || makeAssetLogoFallback(item)} alt="" decoding="async" onError={event => { const image = event.currentTarget; image.onerror = null; image.src = makeLogoFallback(item.displaySymbol || item.symbol); }} /></span><span className="quote-instrument-name"><b>{String(item.displaySymbol || item.symbol).toUpperCase()}</b><small>{String(item.name || item.displaySymbol || item.symbol).toUpperCase()}</small></span><span className="quote-broker"><span className="quote-exchange-logo-wrap"><img className="quote-exchange-logo" src={makeProviderLogoFallback(item)} alt="" decoding="async" onError={event => {
-  const image = event.currentTarget;
-  image.onerror = null;
-  image.src = makeLogoFallback(item.providerLabel || item.provider);
-}} /></span><b>{String(item.providerLabel || item.provider).toUpperCase()}</b><small>{getBitgetCardMarketLabel(item)}</small></span></button>)}</div><div style={{height: quoteWindow.bottom}} aria-hidden="true" /></div></aside>
+{derivError && <div className="sire-deriv-error">{derivError}</div>}<div className="native-symbol-list symbol-list" onScroll={event => setQuoteScrollTop(event.currentTarget.scrollTop)}><div style={{height: quoteWindow.top}} aria-hidden="true" /><div className="sire-quote-window">{quoteWindow.items.map(item => <MarketInstrumentCard key={item.id} item={item} active={selected?.id === item.id} onSelect={selectInstrument} />)}</div><div style={{height: quoteWindow.bottom}} aria-hidden="true" /></div></aside>
       <section className="native-chart-panel">
         <div className={`sire-chart-grid sire-chart-grid--${chartLayout}${chartLayout === 2 ? ` sire-chart-grid--${multiChartPosition}` : ''}`} onContextMenu={event => event.preventDefault()}>
           {chartItems.map((chartSymbol, index) => <div className={`sire-chart-cell${activeChartIndex === index ? ' sire-chart-cell--active' : ''}`} key={index} onPointerDown={() => setActiveChartIndex(index)}>{chartSymbol && <FinancialChart
