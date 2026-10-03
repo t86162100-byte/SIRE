@@ -899,7 +899,7 @@ const server = http.createServer(async (req,res) => {
     if (req.method === 'GET' && pathname === '/api/sire/binance/catalog') {
       try {
         const catalog = await fetchBinanceCatalogServer();
-        return res.writeHead(200,{'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify({ok:true,instruments:catalog,source:'binance-exchange-info'}));
+        return res.writeHead(200,{'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify({ok:true,instruments:catalog.instruments,diagnostics:catalog.diagnostics,source:'binance-native-market-data'}));
       } catch (cause) {
         const message = cause instanceof Error ? cause.message : String(cause);
         console.error('[BINANCE CATALOG]', message);
