@@ -1283,6 +1283,7 @@ export default function App() {
                 onClick={() => {
                   setCategoryFilter(group);
                   setMarketSubcategoryFilter('ALL');
+                  setMarketSubSubcategoryFilter('ALL');
                 }}
               >
                 <span>{group}</span>
@@ -1300,13 +1301,35 @@ export default function App() {
                   role="tab"
                   aria-selected={marketSubcategoryFilter === subgroup}
                   className={marketSubcategoryFilter === subgroup ? 'active' : ''}
-                  onClick={() => setMarketSubcategoryFilter(subgroup)}
+                  onClick={() => {
+                    setMarketSubcategoryFilter(subgroup);
+                    setMarketSubSubcategoryFilter('ALL');
+                  }}
                 >
                   {subgroup}
                 </button>
               ))}
             </div>
           )}
+
+          {MARKET_TOP_GROUPS.includes(categoryFilter as typeof MARKET_TOP_GROUPS[number]) &&
+            marketSubcategoryFilter !== 'ALL' &&
+            (MARKET_SUBSUBGROUPS[categoryFilter + '::' + marketSubcategoryFilter] || []).length > 0 && (
+              <div className="sire-market-subsubgroups" role="tablist" aria-label={marketSubcategoryFilter + ' filters'}>
+                {(MARKET_SUBSUBGROUPS[categoryFilter + '::' + marketSubcategoryFilter] || []).map(subSubgroup => (
+                  <button
+                    key={subSubgroup}
+                    type="button"
+                    role="tab"
+                    aria-selected={marketSubSubcategoryFilter === subSubgroup}
+                    className={marketSubSubcategoryFilter === subSubgroup ? 'active' : ''}
+                    onClick={() => setMarketSubSubcategoryFilter(subSubgroup)}
+                  >
+                    {subSubgroup}
+                  </button>
+                ))}
+              </div>
+            )}
         </div>
 
         {exchangeDrawerOpen && (
