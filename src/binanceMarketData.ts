@@ -66,13 +66,24 @@ export async function fetchBinanceInstruments():Promise<BinanceInstrument[]>{
   for(const x of (cm?.symbols||[])){const i=future(x,'COIN-M',now);if(i&&['TRADING','PENDING_TRADING'].includes(i.status||''))out.push(i);}
   const tokens=Array.isArray(alpha?.data)?alpha.data:Array.isArray(alpha?.data?.tokens)?alpha.data.tokens:Array.isArray(alpha?.tokens)?alpha.tokens:[];
   for(const x of tokens){
-    const id=s(x?.tokenId||x?.id||x?.symbol), symbol=s(x?.symbol||x?.tradingPair||(id?id+'USDT':''));
+    const alphaId=s(x?.alphaId||x?.tokenId||x?.id);
+    const quote=s(x?.quoteAsset||'USDT').toUpperCase();
+    const symbol=s(x?.tradingPair||((alphaId && /^ALPHA_/i.test(alphaId)) ? alphaId+quote : ''));
     if(!symbol)continue;
-    out.push({symbol,name:s(x?.name||x?.tokenName||symbol),provider:'BINANCE',exchange:'BINANCE',marketGroup:'CRYPTO',
-      marketType:'Alpha',category:'Alpha',marketSubcategory:'Alpha',marketSubSubcategory:'Alpha',
-      marketFilters:uniq(['Alpha',s(x?.chain||x?.network)]),marketFilter:'Alpha',instrumentType:'Alpha',
-      instrumentSubtype:s(x?.chain||x?.network),quote:symbol.toUpperCase().endsWith('USDC')?'USDC':'USDT',
-      baseAsset:id||symbol.replace(/USDC$|USDT$/i,''),status:'TRADING'});
+    const chain=s(x?.chainName||x?.chain||x?.network);
+    const extra:string[]=[];
+    if(chain) extra.push(chain);
+    if(x?.stockState) extra.push('Tokenized Securities');
+    if(s(x?.cexCoinName).toLowerCase().includes('robinhood')) extra.push('Robinhood');
+    if(s(x?.cexCoinName).toLowerCase().includes('point')) extra.push('Point+');
+    out.push({symbol,name:s(x?.name||x?.symbol||symbol),provider:'BINANCE',exchange:'BINANCE',marketGroup:'CRYPTO',
+      marketType:'Alpha',category:'Alpha',marketSubcategory:'Alpha',marketSubSubcategory:chain||'Alpha',
+      marketFilters:uniq(['Alpha',...extra]),marketFilter:chain||'Alpha',instrumentType:'Alpha',
+      instrumentSubtype:chain,quote,baseAsset:s(x?.symbol||alphaId),status:x?.offline?'BREAK':'TRADING',
+      price:n(x?.price),priceChangePercent:n(x?.percentChange24h),volume24h:n(x?.volume24h),
+      marketCap:n(x?.marketCap),fdv:n(x?.fdv),liquidity:n(x?.liquidity),holders:n(x?.holders),
+      high24h:n(x?.priceHigh24h),low24h:n(x?.priceLow24h),listedAt:n(x?.listingTime),
+      newListing:Number.isFinite(n(x?.listingTime)) ? now-n(x.listingTime)<30*86400000 : false});
   }
   const map=new Map<string,BinanceInstrument>();for(const i of out){const k=i.marketType+':'+i.symbol;if(!map.has(k))map.set(k,i);}
   return [...map.values()].sort((a,b)=>a.marketGroup.localeCompare(b.marketGroup)||a.marketType.localeCompare(b.marketType)||a.symbol.localeCompare(b.symbol));
