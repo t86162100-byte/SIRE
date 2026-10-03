@@ -100,6 +100,14 @@ const exchangeDomains: Record<string, string> = {
 
 const MARKET_TOP_GROUPS = ['CRYPTO', 'TRADE FI', 'ON CHAIN', 'PREDICTIONS', 'OTHERS'] as const;
 
+const MARKET_SUBGROUPS: Record<typeof MARKET_TOP_GROUPS[number], readonly string[]> = {
+  'CRYPTO': ['Spot', 'Options', 'Futures', 'Perpetuals', 'Alpha'],
+  'TRADE FI': ['Forex', 'Stocks', 'Funds', 'Commodities', 'Indices', 'Bonds', 'Options', 'Futures', 'Perpetuals'],
+  'ON CHAIN': ['Onchain'],
+  'PREDICTIONS': ['Prediction Markets'],
+  'OTHERS': ['Synthetic Indices', 'Baskets'],
+};
+
 const MARKET_EXCHANGE_PROVIDERS = [
   'ALL','BINGX','BITRUE','ASCENDEX','WHITEBIT','COINW','DERIV','BINANCE','COINBASE','KRAKEN','BYBIT','OKX','BITGET','GATEIO','KUCOIN','MEXC','CRYPTOCOM','BITFINEX','GEMINI','BITSTAMP','COINEX','HTX','BITTREX','BITMART','PHEMEX','LBANK','XT','DEEPCOIN','TOOBIT','WEEX','BITUNIX','BLOFIN','COINCATCH','ZOOMEX','BTCC','DIGIFINEX','COINSTORE','PROBIT','POLONIEX','COINDCX','POLYMARKET','KALSHI','OPINION','FXCM','TWELVEDATA','NASDAQTRADER','XETR','XFRA','EUREX','ASX','TWSE','PSX','IDX','HKEX','BSE','TSE','NSE','OANDA','FOREXCOM','INTERACTIVEBROKERS','TRADESTATION','WEBULL','MOOMOO','NINJATRADER','TRADOVATE','AMPFUTURES','TASTYTRADE','TASTYFX','ALPACA','TRADIERBROKERAGE','TRADEZERO','COBRATRADING','CLEARSTREET','INVESTRADE','PUBLIC','PLUS500US','OPTIMUSFUTURES','EDGECLEAR','IRONBEAM','STONEX','DORMANTRADING','TRADIERFUTURES','TRADINGVIEW','UNISWAP','CURVE','PANCAKESWAP','SUSHISWAP','RAYDIUM','JUPITER','ORCA','AERODROME','TRADERJOE','ONEINCH','COWSWAP','BALANCER'
 ] as const;
@@ -185,31 +193,45 @@ const exchangeLogoUrl = (value: string) => {
   return 'https://cdn.simpleicons.org/' + encodeURIComponent(slug);
 };
 
+const normalizeMarketLabel = (value: unknown) =>
+  String(value || '').trim().toLowerCase().replace(/[\s_-]+/g, ' ');
+
 const matchesMarketTopGroup = (item: Instrument, group: string) => {
-  const category = String((item as any).category || '').trim().toLowerCase();
-  const marketGroup = String((item as any).marketGroup || '').trim().toLowerCase();
-  const instrumentType = String((item as any).instrumentType || '').trim().toLowerCase();
-  const marketType = String(item.marketType || '').trim().toLowerCase();
-  const leaf = new Set(['forex','stocks','funds','commodities','indices','bonds','options','futures','perpetuals']);
+  const category = normalizeMarketLabel((item as any).category);
+  const marketGroup = normalizeMarketLabel((item as any).marketGroup);
+  const instrumentType = normalizeMarketLabel((item as any).instrumentType);
+  const marketType = normalizeMarketLabel(item.marketType);
+  const provider = String(item.provider || '').toUpperCase();
+  const onChainProviders = new Set([
+    'UNISWAP','CURVE','PANCAKESWAP','SUSHISWAP','RAYDIUM','JUPITER','ORCA',
+    'AERODROME','TRADERJOE','ONEINCH','COWSWAP','BALANCER',
+  ]);
+  const predictionProviders = new Set(['POLYMARKET','KALSHI','OPINION']);
+  const derivativeTypes = new Set(['options','futures','perpetuals','perpetual futures']);
 
   if (group === 'CRYPTO') {
-    return marketGroup === 'crypto' || category === 'crypto' ||
-      instrumentType === 'crypto' || (leaf.has(instrumentType) && marketGroup === 'crypto');
+    return marketGroup === 'crypto' || marketGroup === 'alpha' ||
+      category === 'crypto' || category === 'alpha' ||
+      instrumentType === 'crypto' ||
+      (derivativeTypes.has(instrumentType) && marketGroup !== 'tradfi' && marketGroup !== 'onchain') ||
+      (derivativeTypes.has(marketType) && marketGroup !== 'tradfi' && marketGroup !== 'onchain') ||
+      (['spot','margin'].includes(marketType) && !onChainProviders.has(provider) && marketGroup !== 'tradfi' && marketGroup !== 'prediction');
   }
   if (group === 'TRADE FI') {
     return marketGroup === 'tradfi' || marketGroup === 'trade fi' || category === 'tradfi' ||
       ['forex','stocks','funds','commodities','indices','bonds'].includes(category) ||
-      (leaf.has(instrumentType) && marketGroup === 'tradfi') ||
+      (derivativeTypes.has(instrumentType) && marketGroup === 'tradfi') ||
       ['forex','stocks','funds','commodities','indices','bonds'].some(value => marketType.includes(value));
   }
   if (group === 'ON CHAIN') {
     return marketGroup === 'onchain' || category === 'onchain' || category === 'on chain' ||
-      instrumentType === 'onchain';
+      instrumentType === 'onchain' || onChainProviders.has(provider) ||
+      String((item as any).settlement || '').trim().toLowerCase() === 'on-chain';
   }
   if (group === 'PREDICTIONS') {
     return marketGroup === 'prediction' || marketGroup === 'predictions' ||
       category === 'prediction' || category === 'prediction markets' ||
-      instrumentType === 'prediction';
+      instrumentType === 'prediction' || predictionProviders.has(provider);
   }
   if (group === 'OTHERS') {
     return marketGroup === 'other' || marketGroup === 'others' ||
@@ -217,6 +239,36 @@ const matchesMarketTopGroup = (item: Instrument, group: string) => {
       instrumentType === 'synthetic indices' || instrumentType === 'baskets' ||
       marketType === 'synthetic indices' || marketType === 'baskets';
   }
+  return false;
+};
+
+const matchesMarketSubgroup = (item: Instrument, group: string, subgroup: string) => {
+  const target = normalizeMarketLabel(subgroup);
+  if (target === 'onchain') {
+    return matchesMarketTopGroup(item, 'ON CHAIN');
+  }
+  if (target === 'prediction markets') {
+    return matchesMarketTopGroup(item, 'PREDICTIONS');
+  }
+  if (target === 'synthetic indices' || target === 'baskets') {
+    return normalizeMarketLabel((item as any).marketSubcategory) === target ||
+      normalizeMarketLabel((item as any).category) === target ||
+      normalizeMarketLabel((item as any).instrumentType) === target ||
+      normalizeMarketLabel(item.marketType) === target;
+  }
+
+  const marketSubcategory = normalizeMarketLabel((item as any).marketSubcategory);
+  const instrumentType = normalizeMarketLabel((item as any).instrumentType);
+  const marketType = normalizeMarketLabel(item.marketType);
+  const category = normalizeMarketLabel((item as any).category);
+  const filters = Array.isArray((item as any).marketFilters)
+    ? (item as any).marketFilters.map((value: unknown) => normalizeMarketLabel(value))
+    : [];
+  const filter = normalizeMarketLabel((item as any).marketFilter);
+
+  if (marketSubcategory === target || instrumentType === target || marketType === target || category === target) return true;
+  if (filters.some(value => value === target || value.endsWith(' ' + target) || value.includes(': ' + target))) return true;
+  if (filter === target || filter.endsWith(' ' + target)) return true;
   return false;
 };
 
@@ -1066,13 +1118,18 @@ export default function App() {
         || selectedTaxonomy === itemFilter
         || selectedTaxonomy === itemFilter.split(':')[0]
         || taxonomyMatches;
+      const isTopGroup = MARKET_TOP_GROUPS.includes(categoryFilter as typeof MARKET_TOP_GROUPS[number]);
       const categoryMatch = categoryFilter === 'ALL'
-        || MARKET_TOP_GROUPS.includes(categoryFilter as typeof MARKET_TOP_GROUPS[number])
-          ? (categoryFilter === 'ALL' || matchesMarketTopGroup(item, categoryFilter))
+        ? true
+        : isTopGroup
+          ? matchesMarketTopGroup(item, categoryFilter)
           : item.category === categoryFilter
             || (categoryFilter === 'Options' && marketType.includes('option'))
             || (categoryFilter === 'Futures' && marketType === 'futures')
-            || (categoryFilter === 'Perpetuals' && marketType === 'perpetuals');
+            || (categoryFilter === 'Perpetuals' && marketType.includes('perpetual'));
+      const subcategoryMatch = !isTopGroup || marketSubcategoryFilter === 'ALL'
+        ? true
+        : matchesMarketSubgroup(item, categoryFilter, marketSubcategoryFilter);
       const searchMatch = !q || `${item.name} ${item.symbol} ${item.providerLabel} ${item.marketType} ${item.category}`.toLowerCase().includes(q);
       return providerMatch && categoryMatch && subcategoryMatch && searchMatch;
     });
@@ -1172,23 +1229,42 @@ export default function App() {
           </button>
         </div>
 
-        <div className="sire-market-top-groups" role="tablist" aria-label="Market groups">
-          {MARKET_TOP_GROUPS.map(group => (
-            <button
-              key={group}
-              type="button"
-              role="tab"
-              aria-selected={categoryFilter === group}
-              className={categoryFilter === group ? 'active' : ''}
-              onClick={() => {
-                setCategoryFilter(group);
-                setMarketSubcategoryFilter('ALL');
-              }}
-            >
-              <span>{group}</span>
-              <i aria-hidden="true" />
-            </button>
-          ))}
+        <div className="sire-market-filter-stack">
+          <div className="sire-market-top-groups" role="tablist" aria-label="Market groups">
+            {MARKET_TOP_GROUPS.map(group => (
+              <button
+                key={group}
+                type="button"
+                role="tab"
+                aria-selected={categoryFilter === group}
+                className={categoryFilter === group ? 'active' : ''}
+                onClick={() => {
+                  setCategoryFilter(group);
+                  setMarketSubcategoryFilter('ALL');
+                }}
+              >
+                <span>{group}</span>
+                <i aria-hidden="true" />
+              </button>
+            ))}
+          </div>
+
+          {MARKET_TOP_GROUPS.includes(categoryFilter as typeof MARKET_TOP_GROUPS[number]) && (
+            <div className="sire-market-subgroups" role="tablist" aria-label={categoryFilter + ' subcategories'}>
+              {(MARKET_SUBGROUPS[categoryFilter as typeof MARKET_TOP_GROUPS[number]] || []).map(subgroup => (
+                <button
+                  key={subgroup}
+                  type="button"
+                  role="tab"
+                  aria-selected={marketSubcategoryFilter === subgroup}
+                  className={marketSubcategoryFilter === subgroup ? 'active' : ''}
+                  onClick={() => setMarketSubcategoryFilter(subgroup)}
+                >
+                  {subgroup}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
 
         {exchangeDrawerOpen && (
