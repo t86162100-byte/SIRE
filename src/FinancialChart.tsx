@@ -12,7 +12,7 @@ import 'openalgo-charts/webgl';
 import { createWidget, type Widget } from 'openalgo-charts/widget';
 import './financialChart.css';
 
-type Instrument = { symbol: string; name: string; pipSize?: number; provider?: 'DERIV' | 'FXCM' | string; exchange?: string; marketType?: string; category?: string };
+type Instrument = { symbol: string; name: string; pipSize?: number; provider?: 'DERIV' | string; exchange?: string; marketType?: string; category?: string };
 type Props = {
   symbol: string;
   isActive?: boolean;
