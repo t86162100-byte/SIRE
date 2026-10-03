@@ -291,9 +291,9 @@ if (!document.getElementById(styleId)) {
       gap:9px!important;
       overflow:hidden!important;
     }
-    .bn-logo{
+     .bn-logo{
       width:38px!important;
-      height:64px!important;
+      height:38px!important;
       min-width:38px!important;
       border-radius:50%!important;
       overflow:hidden!important;
@@ -428,9 +428,9 @@ if (!document.getElementById(styleId)) {
       text-overflow:ellipsis!important;
       max-width:100%!important;
     }
-    .bn-change{
+     .bn-change{
       min-width:78px!important;
-      height:38px!important;
+      height:64px!important;
       padding:0 10px!important;
       border-radius:7px!important;
       display:flex!important;
@@ -469,13 +469,13 @@ if (!document.getElementById(styleId)) {
        .bn-name strong{font-size:42px!important}
        .bn-name span{font-size:27px!important}
        .bn-name small{font-size:19px!important}
-      .bn-provider-logo,.bn-provider-logo img{width:10px!important;height:10px!important;min-width:10px!important}
+      .bn-provider-logo,.bn-provider-logo img{width:12px!important;height:12px!important;min-width:12px!important}
       .bn-metrics-set{gap:8px!important}
        .bn-metric b{font-size:18px!important}
        .bn-metric i{font-size:21px!important}
       .bn-quote{grid-template-columns:minmax(44px,1fr) minmax(54px,64px)!important;gap:6px!important}
        .bn-price strong{font-size:39px!important}
-      .bn-change{min-width:54px!important;height:36px!important;padding:0 5px!important;font-size:9px!important}
+      .bn-change{min-width:64px!important;height:54px!important;padding:0 7px!important;font-size:27px!important}
     }
   `;
   document.head.appendChild(style);
