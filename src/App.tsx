@@ -85,164 +85,113 @@ const makeLogoFallback = (label: string) => {
 
 const makeAssetLogoFallback = (item: Instrument) => makeLogoFallback(item.displaySymbol || item.symbol);
 
-const MARKET_TOP_GROUPS = ['CRYPTO', 'TRADE FI', 'ON CHAIN', 'PREDICTIONS', 'OTHERS'] as const;
-const BINANCE_TOP_GROUPS = ['CRYPTO', 'TRADE FI', 'ALPHA'] as const;
+const MARKET_TOP_GROUPS = ['CRYPTO', 'TRADE FI', 'ALPHA'] as const;
+const BINANCE_TOP_GROUPS = MARKET_TOP_GROUPS;
 
 const MARKET_SUBGROUPS: Record<string, readonly string[]> = {
-  'CRYPTO': ['Spot','Futures','Margin'],
-  'TRADE FI': ['Stocks','Futures','Spot'],
-  'ALPHA': ['Alpha'],
-  'ON CHAIN': ['Onchain'],
-  'PREDICTIONS': ['Prediction Markets'],
-  'OTHERS': ['Synthetic Indices', 'Baskets'],
+  CRYPTO: ['Spot', 'Futures'],
+  'TRADE FI': ['Stocks', 'Futures', 'Spot'],
 };
 
 const MARKET_SUBSUBGROUPS: Record<string, readonly string[]> = {
-  'CRYPTO::Spot': ['ALL','USDT','USDC','U','USD1','USD','BNB','BTC','FIAT','BTCC','ETH','ALTs'],
-  'CRYPTO::Futures': ['All','USDT-M','COIN-M','New','Crypto','DeFi','Metaverse','Payment','PoW','Storage','NFT','TradFi','Index','Pre-IPO','USDC','Chinese','Alpha','AI','Layer-1','RWA','Layer-2','Gaming','Meme','Infrastructure'],
-  'CRYPTO::Margin': ['ETH','XAU','BTC','XAG','SOL','XRP','DODGE'],
-  'TRADE FI::Stocks': ['U.S. stock','ETFs'],
-  'TRADE FI::Futures': ['Commodities','ETFs','Stocks','Fx','Pre-IPO'],
-  'TRADE FI::Spot': ['bstocks','tcommodities'],
-  'ALPHA::Alpha': ['Point+','Tokenized Securities','BSC','Robinhood','Ethereum','Solana','Base','Arbitrum','Sonic','Sui','TRON'],
-  'ON CHAIN::Onchain': ['DEX', 'Lending', 'Staking', 'Liquidity Pools', 'Other Onchain'],
-  'PREDICTIONS::Prediction Markets': ['Sports', 'Politics', 'Crypto', 'Finance', 'Culture', 'Other'],
-  'OTHERS::Synthetic Indices': ['Volatility', 'Momentum', 'Volatility Index', 'Other Synthetic'],
-  'OTHERS::Baskets': ['Crypto Baskets', 'Stock Baskets', 'Commodity Baskets', 'Index Baskets', 'Other Baskets'],
+  'CRYPTO::Spot': ['ALL', 'USDT', 'USDC', 'U', 'USD', 'BNB', 'BTC', 'FIAT', 'BTCC', 'ETH', 'ALTs'],
+  'CRYPTO::Futures': ['USDT-M', 'COIN-M', 'Margin'],
+  'TRADE FI::Stocks': ['U.S. stock', 'ETFs'],
+  'TRADE FI::Futures': ['Commodities', 'ETFs', 'Stocks', 'Fx', 'Pre-IPO'],
+  'TRADE FI::Spot': ['bStocks', 'tCommodities'],
+  'ALPHA::Alpha': ['Point+', 'Tokenized Securities', 'BSC', 'Robinhood', 'Ethereum', 'Solana', 'Base', 'Arbitrum', 'Sonic', 'Sui', 'TRON'],
 };
 
-const visibleMarketTopGroups = (provider: 'ALL' | MarketProvider) =>
-  provider === 'BINANCE' ? BINANCE_TOP_GROUPS : MARKET_TOP_GROUPS;
+const MARKET_LEAF_FILTERS: Record<string, readonly string[]> = {
+  'CRYPTO::Futures::USDT-M': ['All', 'New', 'Crypto', 'DeFi', 'Metavers', 'Payment', 'PoW', 'Storage', 'NFT', 'TradFi', 'Index', 'Pre-IPO', 'USDC', 'Chinese', 'Alpha', 'AI', 'Layer-1', 'RWA', 'Layer-2', 'Gaming', 'Meme', 'Infrastructure'],
+  'CRYPTO::Futures::COIN-M': ['All', 'PoW', 'Storage', 'Layer-1', 'Layer-2', 'Meme', 'Infrastructure', 'Payment'],
+  'CRYPTO::Futures::Margin': ['ETH', 'XAU', 'BTC', 'XAG', 'SOL', 'XRP', 'DOGE'],
+};
 
-const MARKET_SOURCES = ['BINANCE','DERIV'] as const;
+const visibleMarketTopGroups = (_provider: 'ALL' | MarketProvider) => MARKET_TOP_GROUPS;
 const sourceDisplayName = (value: string) => value === 'DERIV' ? 'Deriv' : value === 'BINANCE' ? 'Binance' : value;
 const sourceLogoUrl = (value: string) => value === 'BINANCE' ? 'https://www.binance.com/favicon.ico' : 'https://deriv.com/favicon.ico';
 
 const normalizeMarketLabel = (value: unknown) =>
-  String(value || '').trim().toLowerCase().replace(/[\s_-]+/g, ' ');
+  String(value || '').trim().toLowerCase().replace(/[\\s_-]+/g, ' ');
+
+const hasMarketValue = (item: Instrument, target: string) => {
+  const needle = normalizeMarketLabel(target);
+  const values = [
+    (item as any).marketGroup,
+    (item as any).marketType,
+    (item as any).category,
+    (item as any).marketSubcategory,
+    (item as any).marketSubSubcategory,
+    (item as any).marketFilter,
+    (item as any).instrumentType,
+    (item as any).instrumentSubtype,
+    (item as any).settlement,
+    (item as any).quote,
+    (item as any).baseAsset,
+    ...(Array.isArray((item as any).marketFilters) ? (item as any).marketFilters : []),
+  ].map(normalizeMarketLabel).filter(Boolean);
+  return values.some(value => value === needle || value.includes(needle) || needle.includes(value));
+};
 
 const matchesMarketTopGroup = (item: Instrument, group: string) => {
-  const category = normalizeMarketLabel((item as any).category);
   const marketGroup = normalizeMarketLabel((item as any).marketGroup);
+  const category = normalizeMarketLabel(item.category);
   const instrumentType = normalizeMarketLabel((item as any).instrumentType);
-  const marketType = normalizeMarketLabel(item.marketType);
-  const provider = String(item.provider || '').toUpperCase();
-  const onChainProviders = new Set([
-    'UNISWAP','CURVE','PANCAKESWAP','SUSHISWAP','RAYDIUM','JUPITER','ORCA',
-    'AERODROME','TRADERJOE','ONEINCH','COWSWAP','BALANCER',
-  ]);
-  const predictionProviders = new Set(['POLYMARKET','KALSHI','OPINION']);
-  const derivativeTypes = new Set(['options','futures','perpetuals','perpetual futures']);
-
-  if (group === 'CRYPTO') {
-    return marketGroup === 'crypto' || marketGroup === 'alpha' ||
-      category === 'crypto' || category === 'alpha' ||
-      instrumentType === 'crypto' ||
-      (derivativeTypes.has(instrumentType) && marketGroup !== 'tradfi' && marketGroup !== 'onchain') ||
-      (derivativeTypes.has(marketType) && marketGroup !== 'tradfi' && marketGroup !== 'onchain') ||
-      (['spot','margin'].includes(marketType) && !onChainProviders.has(provider) && marketGroup !== 'tradfi' && marketGroup !== 'prediction');
-  }
-  if (group === 'TRADE FI') {
-    return marketGroup === 'tradfi' || marketGroup === 'trade fi' || category === 'tradfi' ||
-      ['forex','stocks','funds','commodities','indices','bonds'].includes(category) ||
-      (derivativeTypes.has(instrumentType) && marketGroup === 'tradfi') ||
-      ['forex','stocks','funds','commodities','indices','bonds'].some(value => marketType.includes(value));
-  }
-  if (group === 'ALPHA') { return marketGroup === 'alpha' || category === 'alpha' || instrumentType === 'alpha' || (provider === 'BINANCE' && marketType === 'alpha'); }
-  if (group === 'ON CHAIN') {
-    return marketGroup === 'onchain' || category === 'onchain' || category === 'on chain' ||
-      instrumentType === 'onchain' || onChainProviders.has(provider) ||
-      String((item as any).settlement || '').trim().toLowerCase() === 'on-chain';
-  }
-  if (group === 'PREDICTIONS') {
-    return marketGroup === 'prediction' || marketGroup === 'predictions' ||
-      category === 'prediction' || category === 'prediction markets' ||
-      instrumentType === 'prediction' || predictionProviders.has(provider);
-  }
-  if (group === 'OTHERS') {
-    return marketGroup === 'other' || marketGroup === 'others' ||
-      category === 'other' || category === 'synthetic indices' || category === 'baskets' ||
-      instrumentType === 'synthetic indices' || instrumentType === 'baskets' ||
-      marketType === 'synthetic indices' || marketType === 'baskets';
-  }
+  if (group === 'CRYPTO') return marketGroup === 'crypto' || category === 'crypto' || instrumentType.includes('crypto') || item.provider === 'BINANCE' && marketGroup === 'alpha';
+  if (group === 'TRADE FI') return marketGroup === 'tradfi' || marketGroup === 'trade fi' || category === 'tradfi' || category === 'stocks' || category === 'forex' || category === 'commodities';
+  if (group === 'ALPHA') return category === 'alpha' || marketGroup === 'alpha' || instrumentType === 'alpha';
   return false;
 };
 
 const matchesMarketSubgroup = (item: Instrument, group: string, subgroup: string) => {
   const target = normalizeMarketLabel(subgroup);
-  if (target === 'onchain') {
-    return matchesMarketTopGroup(item, 'ON CHAIN');
-  }
-  if (target === 'prediction markets') {
-    return matchesMarketTopGroup(item, 'PREDICTIONS');
-  }
-  if (target === 'synthetic indices' || target === 'baskets') {
-    return normalizeMarketLabel((item as any).marketSubcategory) === target ||
-      normalizeMarketLabel((item as any).category) === target ||
-      normalizeMarketLabel((item as any).instrumentType) === target ||
-      normalizeMarketLabel(item.marketType) === target;
-  }
-
-  const marketSubcategory = normalizeMarketLabel((item as any).marketSubcategory);
-  const instrumentType = normalizeMarketLabel((item as any).instrumentType);
-  const marketType = normalizeMarketLabel(item.marketType);
-  const category = normalizeMarketLabel((item as any).category);
-  const filters = Array.isArray((item as any).marketFilters)
-    ? (item as any).marketFilters.map((value: unknown) => normalizeMarketLabel(value))
-    : [];
-  const filter = normalizeMarketLabel((item as any).marketFilter);
-
-  if (marketSubcategory === target || instrumentType === target || marketType === target || category === target) return true;
-  if (filters.some(value => value === target || value.endsWith(' ' + target) || value.includes(': ' + target))) return true;
-  if (filter === target || filter.endsWith(' ' + target)) return true;
-  return false;
+  if (group === 'CRYPTO' && subgroup === 'Spot') return normalizeMarketLabel(item.marketType) === 'spot';
+  if (group === 'CRYPTO' && subgroup === 'Futures') return normalizeMarketLabel(item.marketType) === 'futures';
+  if (group === 'TRADE FI' && subgroup === 'Stocks') return normalizeMarketLabel((item as any).marketType) === 'stocks' || normalizeMarketLabel(item.category) === 'stocks';
+  if (group === 'TRADE FI' && subgroup === 'Futures') return normalizeMarketLabel((item as any).marketType) === 'futures' && matchesMarketTopGroup(item, 'TRADE FI');
+  if (group === 'TRADE FI' && subgroup === 'Spot') return normalizeMarketLabel((item as any).marketType) === 'spot' && matchesMarketTopGroup(item, 'TRADE FI');
+  return hasMarketValue(item, target);
 };
 
 const matchesMarketSubSubgroup = (item: Instrument, group: string, subgroup: string, subSubgroup: string) => {
   const target = normalizeMarketLabel(subSubgroup);
+  if (target === 'all') return true;
+  if (group === 'CRYPTO' && subgroup === 'Spot') {
+    const quote = normalizeMarketLabel((item as any).quote);
+    if (['usdt','usdc','u','usd','bnb','btc','btcc','eth'].includes(target)) return quote === target;
+    if (target === 'fiat') return ['eur','gbp','aud','brl','try','rub','zar','ngn','jpy','pln','ron','uah'].includes(quote);
+    if (target === 'alts') return quote === 'alts';
+    return false;
+  }
+  if (group === 'CRYPTO' && subgroup === 'Futures') {
+    return normalizeMarketLabel((item as any).marketSubcategory) === target ||
+      normalizeMarketLabel((item as any).settlement) === target ||
+      (target === 'margin' && Boolean((item as any).margin));
+  }
+  if (group === 'TRADE FI') return hasMarketValue(item, target);
+  if (group === 'ALPHA') return hasMarketValue(item, target);
+  return hasMarketValue(item, target);
+};
+
+const matchesMarketLeaf = (item: Instrument, group: string, subgroup: string, subSubgroup: string, leaf: string) => {
+  const target = normalizeMarketLabel(leaf);
+  if (target === 'all') return true;
+  const filters = Array.isArray((item as any).marketFilters) ? (item as any).marketFilters : [];
   const values = [
+    ...filters,
     (item as any).marketSubSubcategory,
     (item as any).instrumentSubtype,
-    (item as any).optionType,
-    (item as any).settlement,
-    (item as any).quote,
-    (item as any).baseAsset,
     (item as any).marketFilter,
-    ...(Array.isArray((item as any).marketFilters) ? (item as any).marketFilters : []),
     (item as any).category,
     (item as any).marketType,
-  ].map(normalizeMarketLabel).filter(Boolean);
-  const quote = normalizeMarketLabel((item as any).quote);
-  const option = normalizeMarketLabel((item as any).optionType);
-  const marketType = normalizeMarketLabel(item.marketType);
-
-  if (group === 'CRYPTO' && subgroup === 'Spot') {
-    if (marketType !== 'spot') return false;
-    if (target === 'all') return true;
-    if (['usdt','usdc','u','usd1','usd','bnb','btc','eth','btcc'].includes(target)) return quote === target;
-    if (target === 'fiat') return ['eur','gbp','ngn','jpy','aud','cad','brl','try','zar'].includes(quote);
-    if (target === 'alts') return quote === 'alts';
-  }
-  if (subgroup === 'Options' && ['calls','puts'].includes(target)) {
-    return option === target || values.some(value => value === target || value.endsWith(' ' + target));
-  }
-  if (subgroup === 'Futures' && ['usd m','coin m'].includes(target)) {
-    const settlement = normalizeMarketLabel((item as any).settlement);
-    return settlement === target || values.some(value => value === target || value.includes(target));
-  }
+  ].map(normalizeMarketLabel);
   if (target === 'new') return Boolean((item as any).newListing);
-  if (target === 'all') return true;
-  if (subgroup === 'Margin') {
-    if (!(item as any).margin) return false;
+  if (subSubgroup === 'Margin') {
     const base = normalizeMarketLabel((item as any).baseAsset);
-    return base === (target === 'dodge' ? 'doge' : target);
+    return base === target || values.some(value => value === target);
   }
-  if (target === 'alts') return values.some(value => value === 'alts');
-  if (target === 'expiring') {
-    const expiry = Number((item as any).expiry);
-    return Number.isFinite(expiry) || values.some(value => value.includes('expir'));
-  }
-  return values.some(value => value === target || value.includes(target) || (target.length > 2 && target.includes(value)));
+  return values.some(value => value === target || value.includes(target) || target.includes(value));
 };
 
 const makeProviderLogoFallback = (_item: Instrument) => 'https://deriv.com/favicon.ico';
@@ -263,6 +212,7 @@ export default function App() {
   const [categoryFilter, setCategoryFilter] = useState<string>('ALL');
   const [marketSubcategoryFilter, setMarketSubcategoryFilter] = useState<string>('ALL');
   const [marketSubSubcategoryFilter, setMarketSubSubcategoryFilter] = useState<string>('ALL');
+  const [marketLeafFilter, setMarketLeafFilter] = useState<string>('ALL');
   const [exchangeDrawerOpen, setExchangeDrawerOpen] = useState(false);
   const [quoteScrollTop, setQuoteScrollTop] = useState(0);
   const deferredSearch = useDeferredValue(search);
@@ -444,26 +394,18 @@ export default function App() {
     const q = deferredSearch.trim().toLowerCase();
     return randomizedInstruments.filter(item => {
       const providerMatch = providerFilter === 'ALL' || item.provider === providerFilter;
-      const marketType = String(item.marketType || '').trim().toLowerCase();
-      const isTopGroup = Boolean(MARKET_SUBGROUPS[categoryFilter]);
-      const categoryMatch = categoryFilter === 'ALL'
-        ? true
-        : isTopGroup
-          ? matchesMarketTopGroup(item, categoryFilter)
-          : item.category === categoryFilter
-            || (categoryFilter === 'Options' && marketType.includes('option'))
-            || (categoryFilter === 'Futures' && marketType === 'futures')
-            || (categoryFilter === 'Perpetuals' && marketType.includes('perpetual'));
-      const subcategoryMatch = !isTopGroup || marketSubcategoryFilter === 'ALL'
-        ? true
-        : matchesMarketSubgroup(item, categoryFilter, marketSubcategoryFilter);
-      const subSubcategoryMatch = !isTopGroup || marketSubcategoryFilter === 'ALL' || marketSubSubcategoryFilter === 'ALL'
+      const topMatch = categoryFilter === 'ALL' || matchesMarketTopGroup(item, categoryFilter);
+      const subgroupMatch = categoryFilter === 'ALL' || marketSubcategoryFilter === 'ALL' || matchesMarketSubgroup(item, categoryFilter, marketSubcategoryFilter);
+      const subSubgroupMatch = categoryFilter === 'ALL' || marketSubcategoryFilter === 'ALL' || marketSubSubcategoryFilter === 'ALL'
         ? true
         : matchesMarketSubSubgroup(item, categoryFilter, marketSubcategoryFilter, marketSubSubcategoryFilter);
+      const leafMatch = categoryFilter === 'ALL' || marketSubcategoryFilter === 'ALL' || marketSubSubcategoryFilter === 'ALL' || marketLeafFilter === 'ALL'
+        ? true
+        : matchesMarketLeaf(item, categoryFilter, marketSubcategoryFilter, marketSubSubcategoryFilter, marketLeafFilter);
       const searchMatch = !q || [item.name, item.symbol, item.providerLabel, item.marketType, item.category].map(value => String(value ?? '')).join(' ').toLowerCase().includes(q);
-      return providerMatch && categoryMatch && subcategoryMatch && subSubcategoryMatch && searchMatch;
+      return providerMatch && topMatch && subgroupMatch && subSubgroupMatch && leafMatch && searchMatch;
     });
-  }, [randomizedInstruments, search, providerFilter, categoryFilter, marketSubcategoryFilter, marketSubSubcategoryFilter]);
+  }, [randomizedInstruments, deferredSearch, providerFilter, categoryFilter, marketSubcategoryFilter, marketSubSubcategoryFilter, marketLeafFilter]);
 
   const chartableInstruments = useMemo(() => liveInstruments.filter(item => item.provider === 'DERIV' || item.provider === 'BINANCE'), [liveInstruments]);
   const quoteWindow = useMemo(() => {
@@ -565,6 +507,9 @@ export default function App() {
                   setCategoryFilter(group);
                   setMarketSubcategoryFilter('ALL');
                   setMarketSubSubcategoryFilter('ALL');
+                          setMarketLeafFilter('ALL');
+                          setMarketLeafFilter('ALL');
+                  setMarketLeafFilter('ALL');
                 }}
               >
                 <span>{group}</span>
@@ -585,6 +530,7 @@ export default function App() {
                   onClick={() => {
                     setMarketSubcategoryFilter(subgroup);
                     setMarketSubSubcategoryFilter('ALL');
+                    setMarketLeafFilter('ALL');
                   }}
                 >
                   {subgroup}
@@ -611,6 +557,29 @@ export default function App() {
                 ))}
               </div>
             )}
+          {categoryFilter === 'ALPHA' && (
+            <div className="sire-market-subsubgroups" role="tablist" aria-label="Alpha filters">
+              {(MARKET_SUBSUBGROUPS['ALPHA::Alpha'] || []).map(filter => (
+                <button key={filter} type="button" role="tab" aria-selected={marketSubSubcategoryFilter === filter}
+                  className={marketSubSubcategoryFilter === filter ? 'active' : ''}
+                  onClick={() => { setMarketSubcategoryFilter('Alpha'); setMarketSubSubcategoryFilter(filter); setMarketLeafFilter('ALL'); }}>
+                  {filter}
+                </button>
+              ))}
+            </div>
+          )}
+          {categoryFilter === 'CRYPTO' && marketSubcategoryFilter === 'Futures' && marketSubSubcategoryFilter !== 'ALL' &&
+            (MARKET_LEAF_FILTERS['CRYPTO::Futures::' + marketSubSubcategoryFilter] || []).length > 0 && (
+            <div className="sire-market-subsubgroups" role="tablist" aria-label={marketSubSubcategoryFilter + ' filters'}>
+              {(MARKET_LEAF_FILTERS['CRYPTO::Futures::' + marketSubSubcategoryFilter] || []).map(filter => (
+                <button key={filter} type="button" role="tab" aria-selected={marketLeafFilter === filter}
+                  className={marketLeafFilter === filter ? 'active' : ''}
+                  onClick={() => setMarketLeafFilter(filter)}>
+                  {filter}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
 
         {exchangeDrawerOpen && (
@@ -656,6 +625,7 @@ export default function App() {
                           setCategoryFilter('CRYPTO');
                           setMarketSubcategoryFilter('Spot');
                           setMarketSubSubcategoryFilter('ALL');
+                          setMarketLeafFilter('ALL');
                         } else if (provider === 'DERIV') {
                           setCategoryFilter('OTHERS');
                           setMarketSubcategoryFilter('Synthetic Indices');
@@ -664,6 +634,7 @@ export default function App() {
                           setCategoryFilter('ALL');
                           setMarketSubcategoryFilter('ALL');
                           setMarketSubSubcategoryFilter('ALL');
+                          setMarketLeafFilter('ALL');
                         }
                         setExchangeDrawerOpen(false);
                       }}
