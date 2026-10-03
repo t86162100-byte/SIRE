@@ -406,24 +406,96 @@ const MarketInstrumentCard = ({ item, active, onSelect }: { item: Instrument; ac
   const group = String(raw.marketGroup || '').toLowerCase();
   const subcategory = String(raw.marketSubcategory || '').toLowerCase();
   const instrumentType = String(raw.instrumentType || item.marketType || '').toLowerCase();
-  const isCryptoSpot = group === 'crypto' && (subcategory === 'spot' || instrumentType === 'spot');
+  const marketType = String(item.marketType || '').toLowerCase();
+
+  const family =
+    group === 'crypto' && subcategory === 'spot' ? 'crypto-spot' :
+    group === 'crypto' && subcategory === 'futures' ? 'crypto-futures' :
+    group === 'crypto' && subcategory === 'perpetuals' ? 'crypto-perpetual' :
+    group === 'crypto' && subcategory === 'options' ? 'crypto-options' :
+    group === 'crypto' && subcategory === 'alpha' ? 'crypto-alpha' :
+    subcategory === 'forex' || marketType === 'forex' ? 'forex' :
+    subcategory === 'stocks' ? 'stock' :
+    subcategory === 'funds' ? 'fund' :
+    subcategory === 'commodities' ? 'commodity' :
+    subcategory === 'indices' || subcategory === 'synthetic indices' ? 'index' :
+    subcategory === 'bonds' ? 'bond' :
+    subcategory === 'options' ? 'option' :
+    subcategory === 'futures' ? 'futures' :
+    subcategory === 'perpetuals' ? 'perpetual' :
+    group === 'on chain' || group === 'onchain' ? 'onchain' :
+    group === 'predictions' || subcategory === 'prediction markets' ? 'prediction' :
+    subcategory === 'synthetic indices' ? 'synthetic' :
+    subcategory === 'baskets' ? 'basket' :
+    instrumentType;
+
   const change = Number(item.priceChangePercent ?? item.change24h);
   const hasChange = Number.isFinite(change);
   const volume = Number(item.volume24h);
   const marketCap = Number(item.marketCap);
+  const bid = Number(item.bid);
+  const ask = Number(item.ask);
+  const spread = Number.isFinite(bid) && Number.isFinite(ask) ? ask - bid : NaN;
   const quote = String(item.quote || '').toUpperCase();
   const pair = quote ? ' / ' + quote : '';
-  const metrics = [
-    Number.isFinite(volume) ? 'VOL ' + formatCardNumber(volume) : '',
-    Number.isFinite(marketCap) ? 'MC ' + formatCardNumber(marketCap) : '',
-  ].filter(Boolean);
+  const expiry = raw.expiry ?? raw.expiration ?? raw.expirationTime;
+  const strike = Number(raw.strike);
+  const optionType = String(raw.optionType || '').trim();
+  const settlement = String(raw.settlement || raw.settleCoin || '').trim().toUpperCase();
+  const funding = Number(raw.fundingRate ?? raw.funding);
+  const openInterest = Number(raw.openInterest ?? raw.oi);
+  const probability = Number(raw.probability ?? raw.impliedProbability);
+  const tvl = Number(raw.tvl ?? raw.TVL);
+  const fdv = Number(raw.fdv ?? raw.FDV);
+
+  const metrics: string[] = [];
+  const add = (label: string, value: unknown, formatter = formatCardNumber) => {
+    const n = Number(value);
+    if (Number.isFinite(n)) metrics.push(label + ' ' + formatter(n));
+  };
+
+  if (family === 'forex') {
+    add('BID', bid);
+    add('ASK', ask);
+    if (Number.isFinite(spread)) metrics.push('SPR ' + formatCardNumber(spread));
+  } else if (family === 'crypto-futures' || family === 'futures' || family === 'crypto-perpetual' || family === 'perpetual') {
+    add('VOL', volume);
+    add('OI', openInterest);
+    if (settlement) metrics.push('SET ' + settlement);
+    if (expiry) metrics.push('EXP ' + String(expiry));
+    if (family === 'crypto-perpetual' || family === 'perpetual') add('FUND', funding);
+  } else if (family === 'crypto-options' || family === 'option') {
+    if (optionType) metrics.push(optionType.toUpperCase());
+    add('STR', strike);
+    if (expiry) metrics.push('EXP ' + String(expiry));
+    add('BID', bid);
+    add('ASK', ask);
+    add('VOL', volume);
+    add('OI', openInterest);
+    add('IV', raw.impliedVolatility ?? raw.iv);
+  } else if (family === 'crypto-spot' || family === 'crypto-alpha' || family === 'stock' || family === 'fund' || family === 'commodity' || family === 'index' || family === 'synthetic' || family === 'basket' || family === 'onchain') {
+    add('VOL', volume);
+    add('MC', marketCap);
+    add('FDV', fdv);
+    add('TVL', tvl);
+    if (family === 'basket' && Number.isFinite(Number(raw.constituentCount))) add('CNT', raw.constituentCount);
+  } else if (family === 'prediction') {
+    if (Number.isFinite(probability)) metrics.push('PROB ' + (probability <= 1 ? (probability * 100).toFixed(1) : probability.toFixed(1)) + '%');
+    add('VOL', volume);
+    if (expiry) metrics.push('END ' + String(expiry));
+  } else if (family === 'bond') {
+    if (raw.maturity) metrics.push('MAT ' + String(raw.maturity));
+    add('VOL', volume);
+  } else {
+    add('VOL', volume);
+  }
 
   return (
     <button
       type="button"
-      className={`symbol-row sire-instrument-card${active ? ' active' : ''}`}
+      className={`symbol-row sire-instrument-card sire-card-family-${family || 'default'}${active ? ' active' : ''}`}
       data-provider={item.provider}
-      data-card-family={isCryptoSpot ? 'crypto-spot' : 'default'}
+      data-card-family={family || 'default'}
       onClick={() => onSelect(item)}
     >
       <span className="sire-card-asset">
@@ -441,7 +513,7 @@ const MarketInstrumentCard = ({ item, active, onSelect }: { item: Instrument; ac
       <span className="sire-card-main">
         <span className="sire-card-identity">
           <b>{String(item.displaySymbol || item.symbol).toUpperCase()}</b>
-          <small>{isCryptoSpot ? String(item.name || item.displaySymbol || item.symbol) + pair : String(item.name || item.displaySymbol || item.symbol)}</small>
+          <small>{family === 'crypto-spot' || family === 'crypto-alpha' ? String(item.name || item.displaySymbol || item.symbol) + pair : String(item.name || item.displaySymbol || item.symbol)}</small>
         </span>
         <span className="sire-card-market">
           {formatCardPrice(item) && <strong>{formatCardPrice(item)}</strong>}
@@ -461,7 +533,7 @@ const MarketInstrumentCard = ({ item, active, onSelect }: { item: Instrument; ac
           />
         </span>
         <b>{String(item.providerLabel || item.provider).toUpperCase()}</b>
-        <small>{isCryptoSpot ? 'SPOT' : getBitgetCardMarketLabel(item)}</small>
+        <small>{family === 'crypto-spot' ? 'SPOT' : family === 'crypto-futures' ? 'FUTURES' : family === 'crypto-perpetual' ? 'PERPETUAL' : family === 'crypto-options' ? 'OPTIONS' : String(item.marketType || getBitgetCardMarketLabel(item)).toUpperCase()}</small>
       </span>
     </button>
   );
