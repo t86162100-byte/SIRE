@@ -14,6 +14,7 @@ import { signup, login, logout, currentUser, googleStart, googleCallback } from 
 import { runSireDiagnostics } from './backend/sire-diagnostics.ts';
 import { runAutonomousCycle } from './autonomous/sire-autonomous-cycle.ts';
 import { recordIssue, getRecentIssues } from './backend/sire-issue-tracker.ts';
+import { fetchBinanceCatalogServer } from './backend/binance-catalog.ts';
 
 const PORT = Number(process.env.PORT || 10000);
 const HOST = '0.0.0.0';
@@ -895,6 +896,16 @@ const server = http.createServer(async (req,res) => {
       return;
     }
     if (req.method === 'POST' && pathname === '/api/sire/agent/gpt') { const parsed = body ? JSON.parse(body) : {}; if (!String(parsed.query || '').trim()) return res.writeHead(400,{ 'Access-Control-Allow-Origin':'*','Content-Type':'application/json; charset=utf-8' }).end(JSON.stringify({ error:'query is required' })); try { const response = await handleDirectGptRequest(parsed); return res.writeHead(200,{ 'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8' }).end(JSON.stringify(response)); } catch (cause) { const message = cause instanceof Error ? cause.message : String(cause); console.error('[DIRECT GPT]', message); return res.writeHead(502,{ 'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8' }).end(JSON.stringify({ error:`Direct GPT test failed: ${message}` })); } }
+    if (req.method === 'GET' && pathname === '/api/sire/binance/catalog') {
+      try {
+        const catalog = await fetchBinanceCatalogServer();
+        return res.writeHead(200,{'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify({ok:true,instruments:catalog,source:'binance-exchange-info'}));
+      } catch (cause) {
+        const message = cause instanceof Error ? cause.message : String(cause);
+        console.error('[BINANCE CATALOG]', message);
+        return res.writeHead(502,{'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify({ok:false,error:message,instruments:[]}));
+      }
+    }
     if (req.method === 'GET' && pathname === '/api/sire/market-history') {
       return res.writeHead(200,{'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify({ok:true,points:[]}));
     }
