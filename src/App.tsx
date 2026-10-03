@@ -263,6 +263,7 @@ export default function App() {
   const [multiChartPosition, setMultiChartPosition] = useState<'up' | 'down' | 'left' | 'right'>('right');
   const [chartSymbols, setChartSymbols] = useState<string[]>([]);
   const linkGroupRef = useRef<LinkGroup | null>(null);
+  const catalogueShuffleSeedRef = useRef(0x51f15e1d);
 
   const liveInstruments = instruments;
 
