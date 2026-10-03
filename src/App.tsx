@@ -1169,10 +1169,13 @@ export default function App() {
       const subcategoryMatch = !isTopGroup || marketSubcategoryFilter === 'ALL'
         ? true
         : matchesMarketSubgroup(item, categoryFilter, marketSubcategoryFilter);
+      const subSubcategoryMatch = !isTopGroup || marketSubcategoryFilter === 'ALL' || marketSubSubcategoryFilter === 'ALL'
+        ? true
+        : matchesMarketSubSubgroup(item, categoryFilter, marketSubcategoryFilter, marketSubSubcategoryFilter);
       const searchMatch = !q || `${item.name} ${item.symbol} ${item.providerLabel} ${item.marketType} ${item.category}`.toLowerCase().includes(q);
-      return providerMatch && categoryMatch && subcategoryMatch && searchMatch;
+      return providerMatch && categoryMatch && subcategoryMatch && subSubcategoryMatch && searchMatch;
     });
-  }, [randomizedInstruments, search, providerFilter, categoryFilter, marketSubcategoryFilter]);
+  }, [randomizedInstruments, search, providerFilter, categoryFilter, marketSubcategoryFilter, marketSubSubcategoryFilter]);
 
   const chartableInstruments = useMemo(() => liveInstruments.filter(item => ['DERIV','FXCM','GLOBALCRYPTO','YFINANCE','SP','NASDAQTRADER','NYSEAMERICAN','CME','CBOT','NYMEX','COMEX','OANDA','TWELVEDATA'].includes(String(item.provider))), [instruments]);
   const quoteWindow = useMemo(() => {
