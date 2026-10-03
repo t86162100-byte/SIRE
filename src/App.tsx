@@ -368,7 +368,6 @@ const getBitgetInstId = (item: Instrument) => {
     .replace(/[^A-Z0-9]/g, '');
 };
 
-const chooseInitialDerivInstrument = (items: Instrument[]) =>
 const formatCardNumber = (value: unknown) => {
   const n = Number(value);
   if (!Number.isFinite(n)) return '';
@@ -453,6 +452,7 @@ const MarketInstrumentCard = ({ item, active, onSelect }: { item: Instrument; ac
   );
 };
 
+const chooseInitialDerivInstrument = (items: Instrument[]) =>
   items.find(item => item.provider === 'DERIV' && item.exchangeOpen !== 0 && item.tradingSuspended !== 1) ||
   items.find(item => item.provider === 'DERIV') || items[0] || null;
 
