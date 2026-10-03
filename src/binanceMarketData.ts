@@ -26,8 +26,8 @@ function spot(raw:any):BinanceInstrument|null{
   const quote=s(raw?.quoteAsset), base=s(raw?.baseAsset), margin=Boolean(raw?.isMarginTradingAllowed), qb=quoteBucket(quote);
   const tick=n(raw?.filters?.find?.((f:any)=>f?.filterType==='PRICE_FILTER')?.tickSize);
   return {symbol,name:base+'/'+quote,provider:'BINANCE',exchange:'BINANCE',marketGroup:'CRYPTO',
-    marketType:margin?'Margin':'Spot',category:'Spot',marketSubcategory:qb,marketSubSubcategory:qb,
-    marketFilters:uniq([qb,margin?'Margin':'Spot']),marketFilter:qb,instrumentType:'Crypto Spot',
+    marketType:'Spot',category:'Spot',marketSubcategory:qb,marketSubSubcategory:qb,
+    marketFilters:uniq([qb,'Spot',...(margin?['Margin']:[])]),marketFilter:qb,instrumentType:'Crypto Spot',
     quote,baseAsset:base,status:s(raw?.status),pipSize:tick,margin};
 }
 function tradfiClass(base:string, subs:string[]) {
