@@ -150,15 +150,15 @@ function installStyles() {
       width:100%!important;
       box-sizing:border-box!important;
       display:grid!important;
-      grid-template-columns:72px minmax(0,1fr) 112px!important;
+      grid-template-columns:58px minmax(0,1fr) 106px!important;
       align-items:center!important;
-      gap:0 14px!important;
-      min-height:104px!important;
-      height:104px!important;
-      padding:10px 14px!important;
+      gap:0 13px!important;
+      min-height:78px!important;
+      height:78px!important;
+      padding:7px 12px!important;
       margin:0!important;
       border:0!important;
-      border-bottom:1px solid rgba(255,255,255,.10)!important;
+      border-bottom:1px solid rgba(255,255,255,.085)!important;
       border-radius:0!important;
       background:transparent!important;
       box-shadow:none!important;
@@ -168,36 +168,49 @@ function installStyles() {
     .sire-tab-quote .symbol-list .sire-instrument-card:hover,
     .sire-tab-quote .symbol-list .sire-instrument-card:active,
     .sire-tab-quote .symbol-list .sire-instrument-card.active {
-      background:rgba(255,255,255,.045)!important;
+      background:rgba(255,255,255,.035)!important;
     }
     .sire-instrument-card .sire-card-asset {
       display:flex!important;
       align-items:center!important;
       justify-content:center!important;
-      width:68px!important;
-      height:68px!important;
+      width:52px!important;
+      height:52px!important;
+    }
+    .sire-instrument-card .sire-card-asset .quote-asset-logo-wrap {
+      width:52px!important;
+      height:52px!important;
+      display:flex!important;
+      align-items:center!important;
+      justify-content:center!important;
+    }
+    .sire-instrument-card .sire-card-asset .quote-asset-logo {
+      width:52px!important;
+      height:52px!important;
+      object-fit:contain!important;
+      border-radius:50%!important;
     }
     .sire-instrument-card .sire-card-main {
       min-width:0!important;
       display:grid!important;
       grid-template-columns:minmax(0,1fr) auto!important;
-      grid-template-rows:auto auto auto!important;
+      grid-template-rows:auto auto!important;
       align-items:center!important;
-      column-gap:12px!important;
-      row-gap:5px!important;
+      column-gap:10px!important;
+      row-gap:3px!important;
     }
     .sire-instrument-card .sire-card-identity {
       min-width:0!important;
       display:flex!important;
       flex-direction:column!important;
-      gap:3px!important;
+      gap:2px!important;
       overflow:hidden!important;
     }
     .sire-instrument-card .sire-card-identity b {
       overflow:hidden!important;
       text-overflow:ellipsis!important;
       white-space:nowrap!important;
-      font-size:18px!important;
+      font-size:16px!important;
       line-height:1.05!important;
       font-weight:900!important;
       color:#f5f5f5!important;
@@ -206,20 +219,23 @@ function installStyles() {
       overflow:hidden!important;
       text-overflow:ellipsis!important;
       white-space:nowrap!important;
-      font-size:11px!important;
-      line-height:1.15!important;
+      font-size:10px!important;
+      line-height:1.1!important;
       font-weight:600!important;
       color:rgba(235,235,240,.58)!important;
     }
     .sire-instrument-card .sire-card-market {
+      grid-column:2!important;
+      grid-row:1 / span 2!important;
       display:flex!important;
-      align-items:baseline!important;
-      justify-content:flex-end!important;
-      gap:8px!important;
+      flex-direction:column!important;
+      align-items:flex-end!important;
+      justify-content:center!important;
+      gap:3px!important;
       white-space:nowrap!important;
     }
     .sire-instrument-card .sire-card-market strong {
-      font-size:17px!important;
+      font-size:16px!important;
       line-height:1!important;
       font-weight:850!important;
       color:#fff!important;
@@ -228,15 +244,16 @@ function installStyles() {
       font-style:normal!important;
       font-size:11px!important;
       line-height:1!important;
-      font-weight:800!important;
+      font-weight:850!important;
     }
-    .sire-instrument-card .sire-card-market em.positive { color:#63e6a5!important; }
-    .sire-instrument-card .sire-card-market em.negative { color:#ff6f7d!important; }
+    .sire-instrument-card .sire-card-market em.positive { color:#42d99b!important; }
+    .sire-instrument-card .sire-card-market em.negative { color:#ff536b!important; }
     .sire-instrument-card .sire-card-metrics {
-      grid-column:1 / -1!important;
+      grid-column:1!important;
+      grid-row:2!important;
       display:flex!important;
       align-items:center!important;
-      gap:14px!important;
+      gap:10px!important;
       min-width:0!important;
       overflow:hidden!important;
     }
@@ -246,34 +263,36 @@ function installStyles() {
       white-space:nowrap!important;
       font-size:9px!important;
       line-height:1!important;
-      font-weight:750!important;
-      letter-spacing:.02em!important;
-      color:rgba(235,235,240,.48)!important;
+      font-weight:700!important;
+      letter-spacing:.015em!important;
+      color:rgba(235,235,240,.46)!important;
     }
     .sire-instrument-card .sire-card-provider {
       min-width:0!important;
-      height:78px!important;
+      height:64px!important;
       display:flex!important;
       flex-direction:column!important;
       align-items:center!important;
       justify-content:center!important;
-      gap:4px!important;
+      gap:3px!important;
       text-align:center!important;
       overflow:hidden!important;
+      border-left:1px solid rgba(255,255,255,.065)!important;
+      padding-left:10px!important;
     }
     .sire-instrument-card .sire-card-provider .quote-exchange-logo-wrap {
-      width:36px!important;
-      height:36px!important;
+      width:30px!important;
+      height:30px!important;
       display:flex!important;
       align-items:center!important;
       justify-content:center!important;
     }
     .sire-instrument-card .sire-card-provider .quote-exchange-logo {
-      width:34px!important;
-      height:34px!important;
+      width:30px!important;
+      height:30px!important;
       object-fit:contain!important;
       border-radius:50%!important;
-      background:rgba(255,255,255,.055)!important;
+      background:rgba(255,255,255,.045)!important;
       padding:2px!important;
     }
     .sire-instrument-card .sire-card-provider b {
@@ -281,10 +300,10 @@ function installStyles() {
       overflow:hidden!important;
       text-overflow:ellipsis!important;
       white-space:nowrap!important;
-      font-size:10px!important;
+      font-size:9px!important;
       line-height:1!important;
       font-weight:850!important;
-      color:rgba(245,245,250,.9)!important;
+      color:rgba(245,245,250,.88)!important;
     }
     .sire-instrument-card .sire-card-provider small {
       max-width:100%!important;
@@ -293,8 +312,10 @@ function installStyles() {
       white-space:nowrap!important;
       font-size:8px!important;
       line-height:1!important;
-      font-weight:650!important;
-      color:rgba(235,235,240,.5)!important;
+      font-weight:700!important;
+      color:rgba(235,235,240,.48)!important;
+      text-transform:uppercase!important;
+      letter-spacing:.03em!important;
     }
 
     .sire-tab-quote .symbol-list {
