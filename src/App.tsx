@@ -408,26 +408,25 @@ const MarketInstrumentCard = ({ item, active, onSelect }: { item: Instrument; ac
   const instrumentType = String(raw.instrumentType || item.marketType || '').toLowerCase();
   const marketType = String(item.marketType || '').toLowerCase();
 
-  const family =
-    group === 'crypto' && subcategory === 'spot' ? 'crypto-spot' :
-    group === 'crypto' && subcategory === 'futures' ? 'crypto-futures' :
-    group === 'crypto' && subcategory === 'perpetuals' ? 'crypto-perpetual' :
-    group === 'crypto' && subcategory === 'options' ? 'crypto-options' :
-    group === 'crypto' && subcategory === 'alpha' ? 'crypto-alpha' :
-    subcategory === 'forex' || marketType === 'forex' ? 'forex' :
-    subcategory === 'stocks' ? 'stock' :
-    subcategory === 'funds' ? 'fund' :
-    subcategory === 'commodities' ? 'commodity' :
-    subcategory === 'indices' || subcategory === 'synthetic indices' ? 'index' :
-    subcategory === 'bonds' ? 'bond' :
-    subcategory === 'options' ? 'option' :
-    subcategory === 'futures' ? 'futures' :
-    subcategory === 'perpetuals' ? 'perpetual' :
-    group === 'on chain' || group === 'onchain' ? 'onchain' :
-    group === 'predictions' || subcategory === 'prediction markets' ? 'prediction' :
-    subcategory === 'synthetic indices' ? 'synthetic' :
-    subcategory === 'baskets' ? 'basket' :
-    instrumentType;
+  const family = (() => {
+    const known = getCardArchetype(item);
+    if (known !== 'default') return known;
+    if (subcategory === 'forex' || marketType === 'forex') return 'forex';
+    if (subcategory === 'stocks') return 'stock';
+    if (subcategory === 'funds') return 'fund';
+    if (subcategory === 'commodities') return 'commodity';
+    if (subcategory === 'indices') return 'index';
+    if (subcategory === 'bonds') return 'bond';
+    if (subcategory === 'options') return 'option';
+    if (subcategory === 'futures') return 'futures';
+    if (subcategory === 'perpetuals') return 'perpetual';
+    if (group === 'on chain' || group === 'onchain') return 'onchain';
+    if (group === 'predictions' || subcategory === 'prediction markets') return 'prediction';
+    if (subcategory === 'synthetic indices') return 'synthetic';
+    if (subcategory === 'baskets') return 'basket';
+    if (instrumentType === 'spot') return group === 'crypto' ? 'crypto-spot' : 'default';
+    return instrumentType;
+  })();
 
   const change = Number(item.priceChangePercent ?? item.change24h);
   const hasChange = Number.isFinite(change);
