@@ -5,12 +5,13 @@ import ResearchLab from './ResearchLab';
 import HomeView from './HomeView';
 import FinancialChart from './FinancialChart';
 import { fetchDerivInstruments, type DerivInstrument } from './derivMarketData';
+import { fetchBinanceInstruments, fetchBinancePriceSnapshot, subscribeBinanceTick, type BinanceInstrument } from './binanceMarketData';
 import { SireErrorScreen } from './SireErrorBoundary';
 import './nativeTerminal.css';
 import { MarketInstrumentCard } from './marketCardDesigns';
 
-type MarketProvider = 'DERIV';
-export type Instrument = DerivInstrument & {
+type MarketProvider = 'DERIV' | 'BINANCE';
+export type Instrument = Partial<DerivInstrument> & Partial<BinanceInstrument> & {
   id: string;
   provider: MarketProvider;
   providerLabel: string;
@@ -115,9 +116,9 @@ const MARKET_SUBSUBGROUPS: Record<string, readonly string[]> = {
   'OTHERS::Baskets': ['Crypto Baskets', 'Stock Baskets', 'Commodity Baskets', 'Index Baskets', 'Other Baskets'],
 };
 
-const MARKET_SOURCES = ['DERIV'] as const;
-const sourceDisplayName = (value: string) => value === 'DERIV' ? 'Deriv' : value;
-const sourceLogoUrl = (_value: string) => 'https://deriv.com/favicon.ico';
+const MARKET_SOURCES = ['BINANCE','DERIV'] as const;
+const sourceDisplayName = (value: string) => value === 'DERIV' ? 'Deriv' : value === 'BINANCE' ? 'Binance' : value;
+const sourceLogoUrl = (value: string) => value === 'BINANCE' ? 'https://www.binance.com/favicon.ico' : 'https://deriv.com/favicon.ico';
 
 const normalizeMarketLabel = (value: unknown) =>
   String(value || '').trim().toLowerCase().replace(/[\s_-]+/g, ' ');
@@ -234,9 +235,11 @@ const matchesMarketSubSubgroup = (item: Instrument, group: string, subgroup: str
 
 const makeProviderLogoFallback = (_item: Instrument) => 'https://deriv.com/favicon.ico';
 
-const chooseInitialDerivInstrument = (items: Instrument[]) =>
+const chooseInitialMarketInstrument = (items: Instrument[]) =>
+  items.find(item => item.provider === 'BINANCE' && item.symbol === 'BTCUSDT') ||
+  items.find(item => item.provider === 'BINANCE' && item.marketType === 'Spot') ||
   items.find(item => item.provider === 'DERIV' && item.exchangeOpen !== 0 && item.tradingSuspended !== 1) ||
-  items.find(item => item.provider === 'DERIV') || items[0] || null;
+  items[0] || null;
 
 export default function App() {
   const [instruments, setInstruments] = useState<Instrument[]>([]);
@@ -270,46 +273,79 @@ export default function App() {
   useEffect(() => {
     let cancelled = false;
     const load = async () => {
-      try {
-        const rows = await fetchDerivInstruments();
-        if (cancelled) return;
-        const normalized = rows.map(item => ({
-          ...item,
-          id: 'DERIV:' + item.symbol,
-          provider: 'DERIV' as MarketProvider,
-          providerLabel: 'Deriv',
-          marketType: item.category === 'synthetic' ? 'Synthetic Indices' : item.category,
-          category: item.category === 'synthetic' ? 'Synthetic Indices' : item.category,
-          displaySymbol: item.name || item.symbol,
-          logoUrl: makeLogoFallback(item.symbol),
-          providerLogoUrl: 'https://deriv.com/favicon.ico',
-        })) as Instrument[];
-        const unique = normalized.filter((item, index, all) => item.id && all.findIndex(x => x.id === item.id) === index);
-        setInstruments(unique);
-        const initial = unique.find(item => item.exchangeOpen !== 0 && item.tradingSuspended !== 1) || unique[0] || null;
-        setSelected(initial);
-        setChartSymbols(initial ? [initial.symbol] : []);
-        setDerivError(initial ? '' : 'No market instruments are currently available.');
-      } catch (error) {
-        if (cancelled) return;
-        setDerivError(error instanceof Error ? error.message : 'Market catalogue failed to load.');
-        setInstruments([]);
-        setSelected(null);
-        setChartSymbols([]);
-      } finally {
-        if (!cancelled) setDerivLoading(false);
+      const [derivResult, binanceResult] = await Promise.allSettled([fetchDerivInstruments(), fetchBinanceInstruments()]);
+      if (cancelled) return;
+      const normalized: Instrument[] = [];
+      if (derivResult.status === 'fulfilled') {
+        normalized.push(...derivResult.value.map(item => ({
+          ...item, id:'DERIV:'+item.symbol, provider:'DERIV' as MarketProvider, providerLabel:'Deriv',
+          marketType:item.category === 'synthetic' ? 'Synthetic Indices' : item.category,
+          category:item.category === 'synthetic' ? 'Synthetic Indices' : item.category,
+          displaySymbol:item.name || item.symbol, logoUrl:makeLogoFallback(item.symbol),
+          providerLogoUrl:'https://deriv.com/favicon.ico',
+        })) as Instrument[]);
       }
+      if (binanceResult.status === 'fulfilled') {
+        normalized.push(...binanceResult.value.map(item => ({
+          ...item, id:'BINANCE:'+item.marketType+':'+item.symbol, provider:'BINANCE' as MarketProvider,
+          providerLabel:'Binance', displaySymbol:item.symbol, logoUrl:makeLogoFallback(item.baseAsset || item.symbol),
+          providerLogoUrl:'https://www.binance.com/favicon.ico',
+        })) as Instrument[]);
+      }
+      const unique = normalized.filter((item,index,all)=>item.id && all.findIndex(x=>x.id===item.id)===index);
+      setInstruments(unique);
+      const initial=chooseInitialMarketInstrument(unique);
+      setSelected(initial);
+      setChartSymbols(initial ? [initial.symbol] : []);
+      if (!unique.length) {
+        const errors = [derivResult,binanceResult].filter((x:any)=>x.status==='rejected').map((x:any)=>x.reason?.message || String(x.reason));
+        setDerivError(errors.join(' | ') || 'No market instruments are currently available.');
+      } else setDerivError('');
+      setDerivLoading(false);
     };
     void load();
-    return () => { cancelled = true; };
+    return () => { cancelled=true; };
   }, []);
+  useEffect(() => {
+    let cancelled=false;
+    void fetchBinancePriceSnapshot().then(ticks => {
+      if(cancelled) return;
+      const byKey=new Map(ticks.map(t=>[t.symbol,t]));
+      setInstruments(current=>current.map(item=>{
+        if(item.provider!=='BINANCE') return item;
+        const tick=byKey.get(item.symbol);
+        if(!tick) return item;
+        return {...item,price:tick.price,change24h:tick.percent,priceChangePercent:tick.percent,high24h:tick.high24h,low24h:tick.low24h,volume24h:tick.volume24h};
+      }));
+    }).catch(()=>{});
+    return()=>{cancelled=true;};
+  }, []);
+  useEffect(() => {
+    const binance = instruments.filter(item=>item.provider==='BINANCE');
+    if (!binance.length) return;
+    const pending = new Map<string, any>();
+    const unsubscribers = binance.map(item => subscribeBinanceTick(item, tick => {
+      pending.set(item.id, tick);
+    }));
+    const timer = window.setInterval(() => {
+      if (!pending.size) return;
+      const updates = new Map(pending);
+      pending.clear();
+      setInstruments(current => current.map(item => {
+        const tick=updates.get(item.id);
+        if (!tick) return item;
+        return {...item,price:tick.price,change24h:tick.percent,priceChangePercent:tick.percent,high24h:tick.high,low24h:tick.low,volume24h:tick.volume};
+      }));
+    }, 250);
+    return () => { window.clearInterval(timer); unsubscribers.forEach(fn=>fn()); };
+  }, [instruments.length, instruments.map(item=>item.provider==='BINANCE' ? item.id : '').filter(Boolean).join('|')]);
 
   useEffect(() => {
     if (!instruments.length) return;
     setChartSymbols(current => Array.from(
       { length: chartLayout },
       (_, index) => current[index] || (index === 0
-        ? (selected?.provider === 'DERIV' ? selected.symbol : (chooseInitialDerivInstrument(instruments)?.symbol || chartableInstruments[0]?.symbol || instruments[0].symbol))
+        ? (selected?.provider === 'DERIV' ? selected.symbol : (chooseInitialMarketInstrument(instruments)?.symbol || chartableInstruments[0]?.symbol || instruments[0].symbol))
         : chartableInstruments[index % Math.max(1, chartableInstruments.length)]?.symbol || ''),
     ));
   }, [chartLayout, selected?.symbol]);
@@ -417,7 +453,7 @@ export default function App() {
     });
   }, [randomizedInstruments, search, providerFilter, categoryFilter, marketSubcategoryFilter, marketSubSubcategoryFilter]);
 
-  const chartableInstruments = useMemo(() => liveInstruments.filter(item => item.provider === 'DERIV'), [liveInstruments]);
+  const chartableInstruments = useMemo(() => liveInstruments.filter(item => item.provider === 'DERIV' || item.provider === 'BINANCE'), [liveInstruments]);
   const quoteWindow = useMemo(() => {
     const rowHeight = 88;
     const buffer = 18;
