@@ -262,14 +262,14 @@ if (!document.getElementById(styleId)) {
   style.textContent = `
     .bn-card {
       width:100%!important;
-      min-height:118px!important;
-      height:118px!important;
+      min-height:83px!important;
+      height:83px!important;
       box-sizing:border-box!important;
       display:grid!important;
       grid-template-columns:minmax(0,1fr) minmax(128px,36%)!important;
       align-items:center!important;
       gap:7px!important;
-      padding:10px 12px!important;
+      padding:7px 10px!important;
       margin:0!important;
       border:0!important;
       border-bottom:1px solid rgba(255,255,255,.075)!important;
@@ -430,8 +430,8 @@ if (!document.getElementById(styleId)) {
     }
      .bn-change{
       min-width:74px!important;
-      height:42px!important;
-      padding:0 8px!important;
+      height:29px!important;
+      padding:0 7px!important;
       border-radius:7px!important;
       display:flex!important;
       align-items:center!important;
@@ -445,7 +445,7 @@ if (!document.getElementById(styleId)) {
     .bn-change.up{background:#20bf8b!important;color:#fff!important}
     .bn-change.down{background:#f04460!important;color:#fff!important}
 
-      .bn-options,.bn-futures,.bn-perpetual{min-height:118px!important;height:118px!important}
+      .bn-options,.bn-futures,.bn-perpetual{min-height:83px!important;height:83px!important}
     .bn-options .bn-logo,.bn-futures .bn-logo,.bn-perpetual .bn-logo{
       width:38px!important;height:38px!important;min-width:38px!important
     }
@@ -463,7 +463,7 @@ if (!document.getElementById(styleId)) {
       .bn-card{
         grid-template-columns:minmax(0,1fr) minmax(220px,42%)!important;
         gap:6px!important;
-        padding:10px 10px!important;
+        padding:7px 9px!important;
       }
       .bn-logo{width:36px!important;height:36px!important;min-width:36px!important}
        .bn-name strong{font-size:16.8px!important}
@@ -473,9 +473,9 @@ if (!document.getElementById(styleId)) {
       .bn-metrics-set{gap:8px!important}
        .bn-metric b{font-size:7.2px!important}
        .bn-metric i{font-size:8.4px!important}
-       .bn-quote{grid-template-columns:minmax(44px,1fr) minmax(52px,74px)!important;gap:6px!important}
+       .bn-quote{grid-template-columns:minmax(44px,1fr) minmax(48px,68px)!important;gap:6px!important}
        .bn-price strong{font-size:15.6px!important}
-       .bn-change{min-width:74px!important;height:42px!important;padding:0 7px!important;font-size:10.8px!important}
+       .bn-change{min-width:68px!important;height:29px!important;padding:0 6px!important;font-size:10.8px!important}
     }
   `;
   document.head.appendChild(style);
