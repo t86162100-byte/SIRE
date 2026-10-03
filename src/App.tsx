@@ -1373,6 +1373,7 @@ export default function App() {
                         setProviderFilter(provider);
                         setCategoryFilter('ALL');
                         setMarketSubcategoryFilter('ALL');
+                        setMarketSubSubcategoryFilter('ALL');
                         setExchangeDrawerOpen(false);
                       }}
                     >
