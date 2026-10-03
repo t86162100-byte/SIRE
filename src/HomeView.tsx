@@ -371,7 +371,7 @@ export default function HomeView({ instruments, onSelectInstrument, videoSrc = '
                   <button type="button" className="sire-home-watch-main" onClick={() => onSelectInstrument?.(item)}>
                     <span className="market-asset-logo">
                       <img className="market-token-logo" src={item.logoUrl || fallbackLogo(displayBase)} alt="" onError={event => { event.currentTarget.onerror = null; event.currentTarget.src = fallbackLogo(displayBase); }} />
-                      <span className="market-exchange-logo" aria-label={String(item.providerLabel || item.provider || 'Exchange')}>
+                      <span className="market-source-logo" aria-label={String(item.providerLabel || item.provider || 'Market source')}>
                         <img src={makeProviderLogoFallback(item)} alt="" onError={event => { event.currentTarget.onerror = null; event.currentTarget.src = fallbackLogo(String(item.providerLabel || item.provider || 'EX')); }} />
                       </span>
                     </span>
@@ -400,15 +400,15 @@ export default function HomeView({ instruments, onSelectInstrument, videoSrc = '
                 const change=Number(raw.change24h??raw.changePercent24h??raw.priceChangePercent??raw.percentChange24h??raw.changePercent);
                 const tone: 'positive'|'negative'|'neutral'=Number.isFinite(change)?(change>0?'positive':change<0?'negative':'neutral'):'neutral';
                 const base=String(raw.base||item.displaySymbol||item.symbol).replace(/\/USDT$|\/USD$|USDT$|USD$/i,'').toUpperCase();
-                const exchange=String(item.providerLabel||item.provider||'Exchange').toUpperCase();
+                const source=String(item.providerLabel||item.provider||'Market source').toUpperCase();
                 return <article key={item.id + '-' + index} className={`sire-home-pulse-card sire-home-pulse-card--${tone}`}>
-                  <button type="button" className="sire-home-pulse-main" onClick={()=>onSelectInstrument?.(item)} aria-label={`Open ${base} on ${exchange}`}>
+                  <button type="button" className="sire-home-pulse-main" onClick={()=>onSelectInstrument?.(item)} aria-label={`Open ${base} on ${source}`}>
                     <span className="sire-home-pulse-top">
                       <span className="sire-home-pulse-identity">
                         <span className="sire-home-pulse-logo"><img src={item.logoUrl||fallbackLogo(base)} alt="" decoding="async" onError={event=>{event.currentTarget.onerror=null;event.currentTarget.src=fallbackLogo(base)}}/></span>
                         <span className="sire-home-pulse-copy"><b>{base}</b><small>{String(item.name||item.displaySymbol||item.symbol).replace(/_/g,' ')}</small></span>
                       </span>
-                      <span className="sire-home-pulse-exchange"><img src={makeProviderLogoFallback(item)} alt="" decoding="async" onError={event=>{event.currentTarget.onerror=null;event.currentTarget.src=fallbackLogo(exchange)}}/><small>{exchange}</small></span>
+                      <span className="sire-home-pulse-source"><img src={makeProviderLogoFallback(item)} alt="" decoding="async" onError={event=>{event.currentTarget.onerror=null;event.currentTarget.src=fallbackLogo(source)}}/><small>{source}</small></span>
                     </span>
                     <span className="sire-home-pulse-value">
                       <strong>{money(item.price)}</strong>
