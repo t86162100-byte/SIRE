@@ -2155,33 +2155,34 @@ async function bitget(): Promise<UnifiedInstrument[]> {
   };
 
   // CEX UTA catalogue: the official public instrument endpoint covers these five product lines.
-  for (const category of categories) {
+  const fetchInstrumentCategory = async (category: typeof categories[number]) => {
     try {
-      const instrumentUrls = category === 'SPOT'
-        ? [
-            'https://api.bitget.com/api/v2/spot/public/symbols',
-            'https://api.bitget.com/api/v3/market/instruments?category=SPOT',
-            'https://api.bitget.com/api/v3/public/instruments?category=SPOT',
-          ]
-        : [
-            'https://api.bitget.com/api/v3/market/instruments?category=' + encodeURIComponent(category),
-            'https://api.bitget.com/api/v3/public/instruments?category=' + encodeURIComponent(category),
-          ];
+      // v3 is the current UTA instrument catalogue. Keep the older endpoints only
+      // as fallbacks so a transient v3 failure does not erase a whole product line.
+      const instrumentUrls = [
+        'https://api.bitget.com/api/v3/market/instruments?category=' + encodeURIComponent(category),
+        'https://api.bitget.com/api/v3/public/instruments?category=' + encodeURIComponent(category),
+        ...(category === 'SPOT' ? ['https://api.bitget.com/api/v2/spot/public/symbols'] : []),
+      ];
       const response = await getJsonAny(instrumentUrls, 15000);
       if (String(response?.code || '00000') !== '00000') throw new Error(String(response?.msg || 'Bitget instruments request failed'));
       const rows = Array.isArray(response?.data) ? response.data : [];
-      if (rows.length > 0) {
+      const categoryRows: UnifiedInstrument[] = [];
+      for (const raw of rows) {
         const before = out.length;
-        for (const raw of rows) add(raw, category);
-        bitgetCategoryCache.set(category, out.slice(before));
-        console.log('[SIRE BITGET] v3 ' + category + ': ' + rows.length);
+        add(raw, category);
+        if (out.length > before) categoryRows.push(out[out.length - 1]);
+      }
+      if (categoryRows.length > 0) {
+        bitgetCategoryCache.set(category, categoryRows);
+        console.log('[SIRE BITGET] v3 ' + category + ': ' + rows.length + ' returned, ' + categoryRows.length + ' classified');
       } else {
         const cachedRows = bitgetCategoryCache.get(category) || [];
         for (const item of cachedRows) {
           const key = category + ':' + item.symbol + ':' + (item.marketSubcategory || item.marketFilter || 'ALL');
           if (!seen.has(key)) { seen.add(key); out.push(item); }
         }
-        console.warn('[SIRE BITGET] v3 ' + category + ' returned no instruments; retained last successful snapshot: ' + cachedRows.length);
+        console.warn('[SIRE BITGET] v3 ' + category + ' returned no usable instruments; retained: ' + cachedRows.length);
       }
     } catch (error) {
       const cachedRows = bitgetCategoryCache.get(category) || [];
@@ -2189,12 +2190,16 @@ async function bitget(): Promise<UnifiedInstrument[]> {
         const key = category + ':' + item.symbol + ':' + (item.marketSubcategory || item.marketFilter || 'ALL');
         if (!seen.has(key)) { seen.add(key); out.push(item); }
       }
-      console.warn('[SIRE BITGET] v3 ' + category + ' failed; retained last successful snapshot: ' + cachedRows.length, error);
+      console.warn('[SIRE BITGET] v3 ' + category + ' failed; retained: ' + cachedRows.length, error);
     }
-  }
+  };
+
+  // Fetch every Bitget CEX product line concurrently. One slow category can no
+  // longer consume the timeout budget of the other categories.
+  await Promise.all(categories.map(fetchInstrumentCategory));
 
   // Legacy futures fallback is additive and deduplicated.
-  for (const productType of ['USDT-FUTURES', 'COIN-FUTURES', 'USDC-FUTURES']) {
+  const fetchLegacyFutures = async (productType: 'USDT-FUTURES' | 'COIN-FUTURES' | 'USDC-FUTURES') => {
     try {
       const response = await getJson('https://api.bitget.com/api/v2/mix/market/contracts?productType=' + productType, 15000);
       const rows = Array.isArray(response?.data) ? response.data : [];
@@ -2224,7 +2229,8 @@ async function bitget(): Promise<UnifiedInstrument[]> {
       }
       console.warn('[SIRE BITGET] v2 ' + productType + ' failed; retained last successful snapshot: ' + cachedRows.length, error);
     }
-  }
+  };
+  await Promise.all((['USDT-FUTURES', 'COIN-FUTURES', 'USDC-FUTURES'] as const).map(fetchLegacyFutures));
 
   // Reality public stock directory supplies the full U.S. stock token list and company names.
   try {
@@ -3881,7 +3887,7 @@ export async function getUnifiedMarketCatalogue(fetchDeriv: () => Promise<any[]>
     ];
     const results = await Promise.allSettled(
       providers.map(([provider, promise]) =>
-        withProviderTimeout(provider, promise, provider === 'DERIV' ? 10000 : provider === 'CME' || provider === 'NYSEAMERICAN' || provider === 'GEMINI' || provider === 'CRYPTOCOM' || provider === 'BITFINEX' || provider === 'BITSTAMP' ? 120000 : 20000)
+        withProviderTimeout(provider, promise, provider === 'DERIV' ? 10000 : provider === 'BITGET' ? 120000 : provider === 'CME' || provider === 'NYSEAMERICAN' || provider === 'GEMINI' || provider === 'CRYPTOCOM' || provider === 'BITFINEX' || provider === 'BITSTAMP' ? 120000 : 20000)
       )
     );
     results.forEach((result, index) => {
