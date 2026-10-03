@@ -74,7 +74,7 @@ type Handler=(tick:BinanceTick)=>void;
 type Bus={socket:WebSocket|null;handlers:Map<string,Set<Handler>>;url:string;timer?:number;connecting?:boolean};
 const buses=new Map<string,Bus>();
 function venue(item:any){const t=s(item?.marketType).toUpperCase();if(t==='ALPHA')return 'ALPHA';if(t==='FUTURES')return s(item?.marketSubcategory).toUpperCase()==='COIN-M'?'COIN':'UM';return 'SPOT';}
-function url(v:string){return v==='SPOT'?'wss://stream.binance.com:9443/ws/!miniTicker@arr':v==='UM'?'wss://fstream.binance.com/ws/!miniTicker@arr':v==='COIN'?'wss://dstream.binance.com/ws/!miniTicker@arr':ALPHA_WS+'?streams=!miniTicker@arr';}
+function url(v:string){return v==='SPOT'?'wss://stream.binance.com:9443/ws/!miniTicker@arr':v==='UM'?'wss://fstream.binance.com/market/ws/!miniTicker@arr':v==='COIN'?'wss://dstream.binance.com/ws/!miniTicker@arr':ALPHA_WS+'?streams=!miniTicker@arr';}
 function parse(raw:any):BinanceTick|null{
   const d=raw?.data&&typeof raw.data==='object'?raw.data:raw,symbol=s(d?.s),price=n(d?.c);if(!symbol||price===undefined)return null;
   const open=n(d?.o),epoch=n(d?.E)||Date.now();return {provider:'BINANCE',symbol,price,epoch:Math.floor(epoch/1000),open,high:n(d?.h),low:n(d?.l),volume:n(d?.v),quoteVolume:n(d?.q),percent:open?((price-open)/open)*100:undefined};
@@ -103,6 +103,31 @@ async function bars(item:any,interval:string,from?:number,to?:number,count=500){
   const d=await json(base(item)+'/klines?'+q),rows=Array.isArray(d)?d:Array.isArray(d?.data)?d.data:[];
   return aggregate(rows.map((r:any)=>({time:Math.floor(Number(r[0])/1000),open:Number(r[1]),high:Number(r[2]),low:Number(r[3]),close:Number(r[4]),volume:Number(r[5])||0})).filter((x:DerivBar)=>Number.isFinite(x.time)&&[x.open,x.high,x.low,x.close].every(Number.isFinite)),sec).sort((a,b)=>a.time-b.time);
 }
+export async function fetchBinancePriceSnapshot(): Promise<BinanceTick[]> {
+  const requests = [
+    ['SPOT', SPOT + '/api/v3/ticker/24hr'],
+    ['UM', UM + '/fapi/v1/ticker/24hr'],
+    ['COIN', CM + '/dapi/v1/ticker/24hr'],
+  ] as const;
+  const out: BinanceTick[] = [];
+  for (const [venueName, endpoint] of requests) {
+    try {
+      const rows = await json(endpoint);
+      for (const row of (Array.isArray(rows) ? rows : [])) {
+        const symbol = s(row?.symbol), price = n(row?.lastPrice);
+        if (!symbol || price === undefined) continue;
+        const open = n(row?.openPrice);
+        out.push({ provider:'BINANCE', symbol, price, epoch:Math.floor((n(row?.closeTime)||Date.now())/1000),
+          open, high:n(row?.highPrice), low:n(row?.lowPrice), volume:n(row?.volume), quoteVolume:n(row?.quoteVolume ?? row?.baseVolume),
+          percent:n(row?.priceChangePercent) });
+      }
+    } catch (error) {
+      console.warn('[BINANCE SNAPSHOT]', venueName, error);
+    }
+  }
+  return out;
+}
+
 export function createBinanceDataFeed(instrument:any,onQuote?:(q:BinanceTick)=>void,onDiagnostic?:(e:DerivFeedDiagnostic)=>void){
   let stopped=false,off:(()=>void)|null=null,latest:BinanceTick|null=null;let subscriptionStatus:'idle'|'connecting'|'active'|'error'|'stopped'='idle';
   const emit=(level:any,code:string,message:string,detail?:string)=>onDiagnostic?.({level,code,message,detail});
