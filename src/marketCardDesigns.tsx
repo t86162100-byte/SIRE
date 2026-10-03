@@ -321,7 +321,7 @@ if (!document.getElementById(styleId)) {
       overflow:hidden!important;
       text-overflow:ellipsis!important;
       white-space:nowrap!important;
-      font-size:42px!important;
+      font-size:16.8px!important;
       line-height:.98!important;
       font-weight:900!important;
       color:#f5f5f7!important;
@@ -333,7 +333,7 @@ if (!document.getElementById(styleId)) {
       overflow:hidden!important;
       text-overflow:ellipsis!important;
       white-space:nowrap!important;
-      font-size:27px!important;
+      font-size:10.8px!important;
       line-height:1!important;
       color:rgba(255,255,255,.53)!important;
       font-weight:650!important;
@@ -347,7 +347,7 @@ if (!document.getElementById(styleId)) {
       overflow:hidden!important;
       text-overflow:ellipsis!important;
       white-space:nowrap!important;
-      font-size:19px!important;
+      font-size:7.6px!important;
       line-height:1!important;
       color:rgba(255,255,255,.28)!important;
       font-weight:800!important;
@@ -386,7 +386,7 @@ if (!document.getElementById(styleId)) {
       white-space:nowrap!important;
     }
     .bn-metric b{
-      font-size:18px!important;
+      font-size:7.2px!important;
       line-height:1!important;
       color:rgba(255,255,255,.40)!important;
       font-weight:900!important;
@@ -394,7 +394,7 @@ if (!document.getElementById(styleId)) {
     }
     .bn-metric i{
       font-style:normal!important;
-      font-size:21px!important;
+      font-size:8.4px!important;
       line-height:1!important;
       color:rgba(255,255,255,.78)!important;
       font-weight:850!important;
@@ -418,7 +418,7 @@ if (!document.getElementById(styleId)) {
       text-align:right!important;
     }
     .bn-price strong{
-      font-size:45px!important;
+      font-size:18px!important;
       line-height:.95!important;
       font-weight:900!important;
       color:#f7f7f8!important;
@@ -437,7 +437,7 @@ if (!document.getElementById(styleId)) {
       align-items:center!important;
       justify-content:center!important;
       box-sizing:border-box!important;
-      font-size:30px!important;
+      font-size:12px!important;
       line-height:1!important;
       font-weight:900!important;
       white-space:nowrap!important;
@@ -466,16 +466,16 @@ if (!document.getElementById(styleId)) {
         padding:14px 10px!important;
       }
       .bn-logo{width:36px!important;height:36px!important;min-width:36px!important}
-       .bn-name strong{font-size:42px!important}
-       .bn-name span{font-size:27px!important}
-       .bn-name small{font-size:19px!important}
+       .bn-name strong{font-size:16.8px!important}
+       .bn-name span{font-size:10.8px!important}
+       .bn-name small{font-size:7.6px!important}
       .bn-provider-logo,.bn-provider-logo img{width:12px!important;height:12px!important;min-width:12px!important}
       .bn-metrics-set{gap:8px!important}
-       .bn-metric b{font-size:18px!important}
-       .bn-metric i{font-size:21px!important}
+       .bn-metric b{font-size:7.2px!important}
+       .bn-metric i{font-size:8.4px!important}
       .bn-quote{grid-template-columns:minmax(44px,1fr) minmax(54px,64px)!important;gap:6px!important}
-       .bn-price strong{font-size:39px!important}
-      .bn-change{min-width:64px!important;height:54px!important;padding:0 7px!important;font-size:27px!important}
+       .bn-price strong{font-size:15.6px!important}
+      .bn-change{min-width:64px!important;height:54px!important;padding:0 7px!important;font-size:10.8px!important}
     }
   `;
   document.head.appendChild(style);
