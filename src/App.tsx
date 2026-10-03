@@ -148,7 +148,7 @@ const matchesMarketTopGroup = (item: Instrument, group: string) => {
       (derivativeTypes.has(instrumentType) && marketGroup === 'tradfi') ||
       ['forex','stocks','funds','commodities','indices','bonds'].some(value => marketType.includes(value));
   }
-  if (group === 'ALPHA') { return marketGroup === 'alpha' || category === 'alpha' || instrumentType === 'alpha'; }
+  if (group === 'ALPHA') { return marketGroup === 'alpha' || category === 'alpha' || instrumentType === 'alpha' || (provider === 'BINANCE' && marketType === 'alpha'); }
   if (group === 'ON CHAIN') {
     return marketGroup === 'onchain' || category === 'onchain' || category === 'on chain' ||
       instrumentType === 'onchain' || onChainProviders.has(provider) ||
@@ -214,6 +214,7 @@ const matchesMarketSubSubgroup = (item: Instrument, group: string, subgroup: str
   ].map(normalizeMarketLabel).filter(Boolean);
   const quote = normalizeMarketLabel((item as any).quote);
   const option = normalizeMarketLabel((item as any).optionType);
+  const marketType = normalizeMarketLabel(item.marketType);
 
   if (group === 'CRYPTO' && subgroup === 'Spot') {
     if (marketType !== 'spot') return false;
@@ -231,7 +232,11 @@ const matchesMarketSubSubgroup = (item: Instrument, group: string, subgroup: str
   }
   if (target === 'new') return Boolean((item as any).newListing);
   if (target === 'all') return true;
-  if (subgroup === 'Margin') return values.includes(target === 'dodge' ? 'doge' : target);
+  if (subgroup === 'Margin') {
+    if (!(item as any).margin) return false;
+    const base = normalizeMarketLabel((item as any).baseAsset);
+    return base === (target === 'dodge' ? 'doge' : target);
+  }
   if (target === 'alts') return values.some(value => value === 'alts');
   if (target === 'expiring') {
     const expiry = Number((item as any).expiry);
