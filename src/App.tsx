@@ -387,107 +387,255 @@ const formatCardPercent = (item: Instrument) => {
 };
 
 const getCardArchetype = (item: Instrument) => {
-  const group = String((item as any).marketGroup || '').toUpperCase();
-  const sub = String((item as any).marketSubcategory || '').toUpperCase();
-  const type = String((item as any).instrumentType || (item as any).marketType || '').toUpperCase();
-  if (group === 'CRYPTO' && sub === 'SPOT') return 'crypto-spot';
-  if (group === 'CRYPTO' && sub === 'FUTURES') return 'crypto-futures';
-  if (group === 'CRYPTO' && sub === 'PERPETUALS') return 'crypto-perpetual';
-  if (group === 'CRYPTO' && sub === 'OPTIONS') return 'crypto-options';
-  if (group === 'CRYPTO' && sub === 'ALPHA') return 'crypto-alpha';
-  if (type.includes('OPTION')) return 'crypto-options';
-  if (type.includes('PERPETUAL')) return 'crypto-perpetual';
-  if (type.includes('FUTURE')) return 'crypto-futures';
+  const raw = item as any;
+  const group = String(raw.marketGroup || '').trim().toUpperCase();
+  const sub = String(raw.marketSubcategory || '').trim().toUpperCase();
+  const type = String(raw.instrumentType || raw.marketType || '').trim().toUpperCase();
+  const category = String(raw.category || '').trim().toUpperCase();
+
+  if (group === 'CRYPTO') {
+    if (sub === 'SPOT') return 'crypto-spot';
+    if (sub === 'FUTURES') return 'crypto-futures';
+    if (sub === 'PERPETUALS') return 'crypto-perpetual';
+    if (sub === 'OPTIONS') return 'crypto-options';
+    if (sub === 'ALPHA') return 'crypto-alpha';
+  }
+
+  if (group === 'TRADE FI') {
+    if (sub === 'FOREX') return 'forex';
+    if (sub === 'STOCKS') return 'stock';
+    if (sub === 'FUNDS') return 'fund';
+    if (sub === 'COMMODITIES') return 'commodity';
+    if (sub === 'INDICES') return 'index';
+    if (sub === 'BONDS') return 'bond';
+    if (sub === 'OPTIONS') return 'option';
+    if (sub === 'FUTURES') return 'futures';
+    if (sub === 'PERPETUALS') return 'perpetual';
+  }
+
+  if (group === 'ON CHAIN' || group === 'ONCHAIN') {
+    const lowerType = type.toLowerCase();
+    const lowerCategory = category.toLowerCase();
+    if (lowerType.includes('pool') || lowerCategory.includes('pool') || raw.tvl != null || raw.apr != null) return 'onchain-pool';
+    return 'onchain-token';
+  }
+
+  if (group === 'PREDICTIONS' || sub === 'PREDICTION MARKETS') return 'prediction';
+
+  if (group === 'OTHERS') {
+    if (sub === 'SYNTHETIC INDICES') return 'synthetic';
+    if (sub === 'BASKETS') return 'basket';
+  }
+
+  if (type.includes('OPTION')) return group === 'CRYPTO' ? 'crypto-options' : 'option';
+  if (type.includes('PERPETUAL')) return group === 'CRYPTO' ? 'crypto-perpetual' : 'perpetual';
+  if (type.includes('FUTURE')) return group === 'CRYPTO' ? 'crypto-futures' : 'futures';
+  if (type === 'SPOT' && group === 'CRYPTO') return 'crypto-spot';
+
   return 'default';
 };
 
 const MarketInstrumentCard = ({ item, active, onSelect }: { item: Instrument; active: boolean; onSelect: (item: Instrument) => void }) => {
   const raw = item as any;
-  const group = String(raw.marketGroup || '').toLowerCase();
-  const subcategory = String(raw.marketSubcategory || '').toLowerCase();
-  const instrumentType = String(raw.instrumentType || item.marketType || '').toLowerCase();
-  const marketType = String(item.marketType || '').toLowerCase();
-
-  const family = (() => {
-    const known = getCardArchetype(item);
-    if (known !== 'default') return known;
-    if (subcategory === 'forex' || marketType === 'forex') return 'forex';
-    if (subcategory === 'stocks') return 'stock';
-    if (subcategory === 'funds') return 'fund';
-    if (subcategory === 'commodities') return 'commodity';
-    if (subcategory === 'indices') return 'index';
-    if (subcategory === 'bonds') return 'bond';
-    if (subcategory === 'options') return 'option';
-    if (subcategory === 'futures') return 'futures';
-    if (subcategory === 'perpetuals') return 'perpetual';
-    if (group === 'on chain' || group === 'onchain') return 'onchain';
-    if (group === 'predictions' || subcategory === 'prediction markets') return 'prediction';
-    if (subcategory === 'synthetic indices') return 'synthetic';
-    if (subcategory === 'baskets') return 'basket';
-    if (instrumentType === 'spot') return group === 'crypto' ? 'crypto-spot' : 'default';
-    return instrumentType;
-  })();
-
+  const family = getCardArchetype(item);
+  const name = String(item.name || item.displaySymbol || item.symbol || '').trim();
+  const symbol = String(item.displaySymbol || item.symbol || '').toUpperCase();
+  const quote = String(item.quote || '').toUpperCase();
+  const pair = quote ? ' / ' + quote : '';
   const change = Number(item.priceChangePercent ?? item.change24h);
   const hasChange = Number.isFinite(change);
-  const volume = Number(item.volume24h);
-  const marketCap = Number(item.marketCap);
+  const price = Number(item.price);
+  const volume = Number(raw.volume24h ?? raw.volume);
+  const marketCap = Number(raw.marketCap);
+  const fdv = Number(raw.fdv ?? raw.FDV);
   const bid = Number(item.bid);
   const ask = Number(item.ask);
   const spread = Number.isFinite(bid) && Number.isFinite(ask) ? ask - bid : NaN;
-  const quote = String(item.quote || '').toUpperCase();
-  const pair = quote ? ' / ' + quote : '';
-  const expiry = raw.expiry ?? raw.expiration ?? raw.expirationTime;
-  const strike = Number(raw.strike);
-  const optionType = String(raw.optionType || '').trim();
-  const settlement = String(raw.settlement || raw.settleCoin || '').trim().toUpperCase();
-  const funding = Number(raw.fundingRate ?? raw.funding);
   const openInterest = Number(raw.openInterest ?? raw.oi);
+  const funding = Number(raw.fundingRate ?? raw.funding);
+  const strike = Number(raw.strike);
   const probability = Number(raw.probability ?? raw.impliedProbability);
   const tvl = Number(raw.tvl ?? raw.TVL);
-  const fdv = Number(raw.fdv ?? raw.FDV);
+  const apr = Number(raw.apr ?? raw.apy);
+  const expiry = raw.expiry ?? raw.expiration ?? raw.expirationTime;
+  const settlement = String(raw.settlement || raw.settleCoin || '').trim().toUpperCase();
+  const optionType = String(raw.optionType || '').trim().toUpperCase();
+  const maturity = raw.maturity ?? raw.maturityDate;
+  const yieldValue = Number(raw.yield ?? raw.yieldPercent ?? raw.ytm);
+  const aum = Number(raw.aum ?? raw.AUM);
+  const constituentCount = Number(raw.constituentCount ?? raw.constituentsCount);
+  const network = String(raw.network || raw.chain || '').trim();
+  const protocol = String(raw.protocol || raw.venue || '').trim();
+  const outcome = String(raw.outcome || raw.selectedOutcome || '').trim();
+  const question = String(raw.question || raw.event || name).trim();
 
   const metrics: string[] = [];
   const add = (label: string, value: unknown, formatter = formatCardNumber) => {
     const n = Number(value);
     if (Number.isFinite(n)) metrics.push(label + ' ' + formatter(n));
   };
+  const addText = (label: string, value: unknown) => {
+    const v = String(value ?? '').trim();
+    if (v) metrics.push(label ? label + ' ' + v : v);
+  };
 
-  if (family === 'forex') {
-    add('BID', bid);
-    add('ASK', ask);
-    if (Number.isFinite(spread)) metrics.push('SPR ' + formatCardNumber(spread));
-  } else if (family === 'crypto-futures' || family === 'futures' || family === 'crypto-perpetual' || family === 'perpetual') {
-    add('VOL', volume);
-    add('OI', openInterest);
-    if (settlement) metrics.push('SET ' + settlement);
-    if (expiry) metrics.push('EXP ' + String(expiry));
-    if (family === 'crypto-perpetual' || family === 'perpetual') add('FUND', funding);
-  } else if (family === 'crypto-options' || family === 'option') {
-    if (optionType) metrics.push(optionType.toUpperCase());
-    add('STR', strike);
-    if (expiry) metrics.push('EXP ' + String(expiry));
-    add('BID', bid);
-    add('ASK', ask);
-    add('VOL', volume);
-    add('OI', openInterest);
-    add('IV', raw.impliedVolatility ?? raw.iv);
-  } else if (family === 'crypto-spot' || family === 'crypto-alpha' || family === 'stock' || family === 'fund' || family === 'commodity' || family === 'index' || family === 'synthetic' || family === 'basket' || family === 'onchain') {
-    add('VOL', volume);
-    add('MC', marketCap);
-    add('FDV', fdv);
-    add('TVL', tvl);
-    if (family === 'basket' && Number.isFinite(Number(raw.constituentCount))) add('CNT', raw.constituentCount);
-  } else if (family === 'prediction') {
-    if (Number.isFinite(probability)) metrics.push('PROB ' + (probability <= 1 ? (probability * 100).toFixed(1) : probability.toFixed(1)) + '%');
-    add('VOL', volume);
-    if (expiry) metrics.push('END ' + String(expiry));
-  } else if (family === 'bond') {
-    if (raw.maturity) metrics.push('MAT ' + String(raw.maturity));
-    add('VOL', volume);
-  } else {
-    add('VOL', volume);
+  let identity = name;
+  let secondary = name;
+  let valueLabel = '';
+  let sourceLabel = String(item.marketType || '').toUpperCase();
+  let providerDetail = '';
+
+  switch (family) {
+    case 'crypto-spot':
+      identity = symbol + pair;
+      secondary = name;
+      add('VOL', volume);
+      add('MC', marketCap);
+      break;
+    case 'crypto-futures':
+      identity = symbol;
+      secondary = [settlement || 'FUTURES', expiry ? 'EXP ' + String(expiry) : ''].filter(Boolean).join(' · ');
+      add('VOL', volume);
+      add('OI', openInterest);
+      addText('SET', settlement);
+      if (expiry) addText('EXP', expiry);
+      sourceLabel = 'FUTURES';
+      break;
+    case 'crypto-perpetual':
+      identity = symbol;
+      secondary = [settlement || 'PERP', 'PERPETUAL'].filter(Boolean).join(' · ');
+      add('VOL', volume);
+      add('OI', openInterest);
+      add('FUND', funding);
+      sourceLabel = 'PERPETUAL';
+      break;
+    case 'crypto-options':
+    case 'option':
+      identity = symbol;
+      secondary = [optionType || '', expiry ? 'EXP ' + String(expiry) : ''].filter(Boolean).join(' · ');
+      add('STR', strike);
+      add('BID', bid);
+      add('ASK', ask);
+      add('OI', openInterest);
+      sourceLabel = 'OPTIONS';
+      if (Number.isFinite(Number(raw.impliedVolatility ?? raw.iv))) add('IV', raw.impliedVolatility ?? raw.iv);
+      break;
+    case 'crypto-alpha':
+      identity = symbol;
+      secondary = name;
+      add('MC', marketCap);
+      add('VOL', volume);
+      if (network) addText('', network);
+      sourceLabel = 'ALPHA';
+      break;
+    case 'stock':
+      identity = symbol;
+      secondary = name;
+      add('VOL', volume);
+      add('MC', marketCap);
+      sourceLabel = 'STOCK';
+      break;
+    case 'forex':
+      identity = symbol;
+      secondary = name;
+      add('BID', bid);
+      add('ASK', ask);
+      if (Number.isFinite(spread)) add('SPR', spread);
+      sourceLabel = 'FOREX';
+      break;
+    case 'fund':
+      identity = symbol;
+      secondary = name;
+      add('VOL', volume);
+      add('AUM', aum);
+      if (Number.isFinite(yieldValue)) add('YLD', yieldValue, n => n.toFixed(2) + '%');
+      sourceLabel = 'FUND';
+      break;
+    case 'commodity':
+      identity = symbol;
+      secondary = name;
+      add('VOL', volume);
+      add('OI', openInterest);
+      if (expiry) addText('EXP', expiry);
+      sourceLabel = String(raw.instrumentType || 'SPOT').toUpperCase();
+      break;
+    case 'index':
+      identity = symbol;
+      secondary = name;
+      add('HIGH', raw.dayHigh ?? raw.high);
+      add('LOW', raw.dayLow ?? raw.low);
+      add('OPEN', raw.open);
+      sourceLabel = 'INDEX';
+      break;
+    case 'bond':
+      identity = symbol;
+      secondary = name;
+      if (Number.isFinite(yieldValue)) valueLabel = 'YIELD';
+      addText('MAT', maturity);
+      add('PRICE', price);
+      sourceLabel = 'BOND';
+      break;
+    case 'futures':
+      identity = symbol;
+      secondary = [settlement || 'FUTURES', expiry ? 'EXP ' + String(expiry) : ''].filter(Boolean).join(' · ');
+      add('VOL', volume);
+      add('OI', openInterest);
+      sourceLabel = 'FUTURES';
+      break;
+    case 'perpetual':
+      identity = symbol;
+      secondary = 'PERPETUAL';
+      add('VOL', volume);
+      add('OI', openInterest);
+      add('FUND', funding);
+      sourceLabel = 'PERPETUAL';
+      break;
+    case 'onchain-token':
+      identity = symbol;
+      secondary = [name, network].filter(Boolean).join(' · ');
+      add('VOL', volume);
+      add('FDV', fdv);
+      add('TVL', tvl);
+      sourceLabel = 'TOKEN';
+      providerDetail = protocol;
+      break;
+    case 'onchain-pool':
+      identity = String(raw.pair || raw.poolName || symbol).trim();
+      secondary = [network, protocol].filter(Boolean).join(' · ');
+      add('TVL', tvl);
+      add('VOL', volume);
+      add('APR', apr, n => n.toFixed(2) + '%');
+      sourceLabel = 'POOL';
+      break;
+    case 'prediction':
+      identity = question;
+      secondary = outcome || 'MARKET';
+      if (Number.isFinite(probability)) metrics.push('PROB ' + (probability <= 1 ? (probability * 100).toFixed(1) : probability.toFixed(1)) + '%');
+      add('VOL', volume);
+      if (expiry) addText('END', expiry);
+      sourceLabel = 'PREDICTION';
+      break;
+    case 'synthetic':
+      identity = symbol;
+      secondary = name;
+      add('VOL', volume);
+      sourceLabel = 'SYNTHETIC';
+      break;
+    case 'basket':
+      identity = symbol;
+      secondary = name;
+      if (Number.isFinite(constituentCount)) add('CNT', constituentCount);
+      add('VOL', volume);
+      sourceLabel = 'BASKET';
+      break;
+    default:
+      identity = symbol;
+      secondary = name;
+      add('VOL', volume);
+      break;
   }
+
+  if (providerDetail) sourceLabel = providerDetail.toUpperCase() + ' · ' + sourceLabel;
 
   return (
     <button
@@ -511,14 +659,15 @@ const MarketInstrumentCard = ({ item, active, onSelect }: { item: Instrument; ac
 
       <span className="sire-card-main">
         <span className="sire-card-identity">
-          <b>{String(item.displaySymbol || item.symbol).toUpperCase()}</b>
-          <small>{family === 'crypto-spot' || family === 'crypto-alpha' ? String(item.name || item.displaySymbol || item.symbol) + pair : String(item.name || item.displaySymbol || item.symbol)}</small>
+          <b>{identity}</b>
+          <small>{secondary}</small>
         </span>
         <span className="sire-card-market">
+          {valueLabel && <small className="sire-card-value-label">{valueLabel}</small>}
           {formatCardPrice(item) && <strong>{formatCardPrice(item)}</strong>}
           {hasChange && <em className={change >= 0 ? 'positive' : 'negative'}>{formatCardPercent(item)}</em>}
         </span>
-        {metrics.length > 0 && <span className="sire-card-metrics">{metrics.map(metric => <small key={metric}>{metric}</small>)}</span>}
+        {metrics.length > 0 && <span className="sire-card-metrics">{metrics.slice(0, 4).map(metric => <small key={metric}>{metric}</small>)}</span>}
       </span>
 
       <span className="sire-card-provider">
@@ -532,7 +681,7 @@ const MarketInstrumentCard = ({ item, active, onSelect }: { item: Instrument; ac
           />
         </span>
         <b>{String(item.providerLabel || item.provider).toUpperCase()}</b>
-        <small>{family === 'crypto-spot' ? 'SPOT' : family === 'crypto-futures' ? 'FUTURES' : family === 'crypto-perpetual' ? 'PERPETUAL' : family === 'crypto-options' ? 'OPTIONS' : String(item.marketType || getBitgetCardMarketLabel(item)).toUpperCase()}</small>
+        <small>{sourceLabel}</small>
       </span>
     </button>
   );
