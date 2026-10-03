@@ -1167,7 +1167,7 @@ export default function App() {
       const subSubcategoryMatch = !isTopGroup || marketSubcategoryFilter === 'ALL' || marketSubSubcategoryFilter === 'ALL'
         ? true
         : matchesMarketSubSubgroup(item, categoryFilter, marketSubcategoryFilter, marketSubSubcategoryFilter);
-      const searchMatch = !q || `${item.name} ${item.symbol} ${item.providerLabel} ${item.marketType} ${item.category}`.toLowerCase().includes(q);
+      const searchMatch = !q || [item.name, item.symbol, item.providerLabel, item.marketType, item.category].map(value => String(value ?? '')).join(' ').toLowerCase().includes(q);
       return providerMatch && categoryMatch && subcategoryMatch && subSubcategoryMatch && searchMatch;
     });
   }, [randomizedInstruments, search, providerFilter, categoryFilter, marketSubcategoryFilter, marketSubSubcategoryFilter]);
