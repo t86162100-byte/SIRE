@@ -234,6 +234,14 @@ function installStyles() {
       gap:3px!important;
       white-space:nowrap!important;
     }
+    .sire-instrument-card .sire-card-market .sire-card-value-label {
+      font-size:8px!important;
+      line-height:1!important;
+      font-weight:750!important;
+      letter-spacing:.04em!important;
+      color:rgba(235,235,240,.42)!important;
+      text-transform:uppercase!important;
+    }
     .sire-instrument-card .sire-card-market strong {
       font-size:16px!important;
       line-height:1!important;
