@@ -430,7 +430,7 @@ const styleId = 'sire-independent-market-cards-style';
 if (!document.getElementById(styleId)) {
   const style = document.createElement('style');
   style.id = styleId;
-  style.textContent = String.raw\`
+  style.textContent = String.raw`
     .mc-card {
       --mc-pad: 10px;
       width:100%!important;
@@ -610,6 +610,6 @@ if (!document.getElementById(styleId)) {
       .mc-meta span { font-size:6.5px!important; }
       .mc-venue b { font-size:6.5px!important; }
     }
-  \`;
+  `;
   document.head.appendChild(style);
 }
