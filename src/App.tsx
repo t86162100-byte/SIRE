@@ -232,14 +232,7 @@ const matchesMarketSubSubgroup = (item: Instrument, group: string, subgroup: str
   return values.some(value => value === target || value.includes(target) || (target.length > 2 && target.includes(value)));
 };
 
-const makeProviderLogoFallback = (item: Instrument) => {
-  const key = String(item.exchange || item.providerLabel || item.provider || '')
-    .trim().toLowerCase().replace(/[^a-z0-9]/g, '');
-  const domain = item.provider === 'DERIV'
-    ? 'deriv.com'
-    : (exchangeDomains[key] || (key ? key + '.com' : 'deriv.com'));
-  return 'https://www.google.com/s2/favicons?domain=' + encodeURIComponent(domain) + '&sz=128';
-};
+const makeProviderLogoFallback = (_item: Instrument) => 'https://deriv.com/favicon.ico';
 
 const chooseInitialDerivInstrument = (items: Instrument[]) =>
   items.find(item => item.provider === 'DERIV' && item.exchangeOpen !== 0 && item.tradingSuspended !== 1) ||
@@ -506,7 +499,7 @@ export default function App() {
           </div>
           <button
             type="button"
-            className={`sire-market-exchange-trigger${providerFilter !== 'ALL' ? ' active' : ''}`}
+            className={`sire-market-source-trigger${providerFilter !== 'ALL' ? ' active' : ''}`}
             aria-expanded={exchangeDrawerOpen}
             onClick={() => setExchangeDrawerOpen(true)}
           >
@@ -579,7 +572,7 @@ export default function App() {
         </div>
 
         {exchangeDrawerOpen && (
-          <div className="sire-exchange-drawer-backdrop" role="presentation" onClick={() => setExchangeDrawerOpen(false)}>
+          <div className="sire-market-source-drawer-backdrop" role="presentation" onClick={() => setExchangeDrawerOpen(false)}>
             <section className="sire-exchange-drawer" role="dialog" aria-modal="true" aria-label="Select market source" onClick={event => event.stopPropagation()}>
               <div className="sire-exchange-drawer-head">
                 <div>
@@ -600,13 +593,13 @@ export default function App() {
                   onChange={event => {
                     const query = event.target.value.trim().toLowerCase();
                     document.querySelectorAll<HTMLElement>('.sire-market-source-option').forEach(option => {
-                      option.style.display = !query || option.dataset.exchangeName?.includes(query) ? '' : 'none';
+                      option.style.display = !query || option.dataset.sourceName?.includes(query) ? '' : 'none';
                     });
                   }}
                 />
               </div>
 
-              <div className="sire-exchange-grid">
+              <div className="sire-market-source-grid">
                 {MARKET_SOURCES.map(provider => {
                   const label = sourceDisplayName(provider);
                   return (
@@ -614,7 +607,7 @@ export default function App() {
                       key={provider}
                       type="button"
                       data-source-name={label.toLowerCase()}
-                      className={`sire-exchange-option${providerFilter === provider ? ' active' : ''}`}
+                      className={`sire-market-source-option${providerFilter === provider ? ' active' : ''}`}
                       onClick={() => {
                         setProviderFilter(provider);
                         setCategoryFilter('ALL');
@@ -623,7 +616,7 @@ export default function App() {
                         setExchangeDrawerOpen(false);
                       }}
                     >
-                      <span className="sire-exchange-option-logo">
+                      <span className="sire-market-source-option-logo">
                         <img
                           src={provider === 'ALL' ? '/sire-logo.svg' : sourceLogoUrl(provider)}
                           alt=""
@@ -635,11 +628,11 @@ export default function App() {
                           }}
                         />
                       </span>
-                      <span className="sire-exchange-option-copy">
+                      <span className="sire-market-source-option-copy">
                         <b>{label}</b>
                         <small>{provider === 'ALL' ? 'Combined market' : 'Market venue'}</small>
                       </span>
-                      {providerFilter === provider && <span className="sire-exchange-option-check">✓</span>}
+                      {providerFilter === provider && <span className="sire-market-source-option-check">✓</span>}
                     </button>
                   );
                 })}
@@ -692,7 +685,7 @@ export default function App() {
             </div>
             <div className="sire-instrument-search-list">
               {filtered.slice(0, 120).map(item => <button key={item.id} type="button" onClick={() => { if (instrumentSearchMode === 'multi') { setMultiChartInstrument(item.symbol); setSearch(''); setInstrumentSearchOpen(false); } else { selectInstrument(item); setInstrumentSearchOpen(false); } }}>
-                <span className="quote-asset-logo-wrap"><img className="quote-asset-logo" src={item.logoUrl || makeAssetLogoFallback(item)} alt="" onError={event => { const image=event.currentTarget; image.onerror=null; image.src=makeLogoFallback(item.displaySymbol || item.symbol); }} /></span><span className="quote-instrument-name"><b>{String(item.displaySymbol || item.symbol).toUpperCase()}</b><small>{String(item.name || item.displaySymbol || item.symbol).toUpperCase()}</small></span><span className="quote-broker"><span className="quote-exchange-logo-wrap"><img className="quote-exchange-logo" src={makeProviderLogoFallback(item)} alt="" onError={event => { const image = event.currentTarget; image.onerror = null; image.src = makeLogoFallback(item.providerLabel || item.provider); }} /></span><b>{String(item.providerLabel || item.provider).toUpperCase()}</b><small>{getBitgetCardMarketLabel(item)}</small></span>
+                <span className="quote-asset-logo-wrap"><img className="quote-asset-logo" src={item.logoUrl || makeAssetLogoFallback(item)} alt="" onError={event => { const image=event.currentTarget; image.onerror=null; image.src=makeLogoFallback(item.displaySymbol || item.symbol); }} /></span><span className="quote-instrument-name"><b>{String(item.displaySymbol || item.symbol).toUpperCase()}</b><small>{String(item.name || item.displaySymbol || item.symbol).toUpperCase()}</small></span><span className="quote-broker"><span className="quote-provider-logo-wrap"><img className="quote-provider-logo" src={makeProviderLogoFallback(item)} alt="" onError={event => { const image = event.currentTarget; image.onerror = null; image.src = makeLogoFallback(item.providerLabel || item.provider); }} /></span><b>{String(item.providerLabel || item.provider).toUpperCase()}</b><small>{String(item.marketType || item.category || 'Market')}</small></span>
               </button>)}
             </div>
           </div>
