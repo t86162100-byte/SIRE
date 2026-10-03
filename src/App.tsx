@@ -1101,23 +1101,6 @@ export default function App() {
       const providerMatch = providerFilter === 'ALL' || item.provider === providerFilter;
       const marketType = String(item.marketType || '').trim().toLowerCase();
       const isBinance = providerFilter === 'BINANCE' && item.provider === 'BINANCE';
-      const selectedTaxonomy = String(marketSubcategoryFilter || 'ALL');
-      const itemSubcategory = String((item as any).marketSubcategory || '');
-      const itemFilter = String((item as any).marketFilter || 'ALL');
-      const itemFilters = Array.isArray((item as any).marketFilters) ? (item as any).marketFilters.map((value: unknown) => String(value)) : [];
-      const taxonomyMatches = itemFilters.length
-        ? itemFilters.some(value =>
-            value === selectedTaxonomy ||
-            value === selectedTaxonomy.replace(/^Futures:/, '') ||
-            value.endsWith(':' + selectedTaxonomy) ||
-            selectedTaxonomy.startsWith(value + ':')
-          )
-        : selectedTaxonomy === itemFilter || selectedTaxonomy === itemFilter.split(':')[0];
-      const subcategoryMatch = selectedTaxonomy === 'ALL'
-        || selectedTaxonomy === itemSubcategory
-        || selectedTaxonomy === itemFilter
-        || selectedTaxonomy === itemFilter.split(':')[0]
-        || taxonomyMatches;
       const isTopGroup = MARKET_TOP_GROUPS.includes(categoryFilter as typeof MARKET_TOP_GROUPS[number]);
       const categoryMatch = categoryFilter === 'ALL'
         ? true
