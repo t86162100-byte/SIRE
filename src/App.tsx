@@ -640,6 +640,28 @@ export default function App() {
                           setMarketSubcategoryFilter('Spot');
                           setMarketSubSubcategoryFilter('ALL');
                           setMarketLeafFilter('ALL');
+                          void fetch('/api/sire/binance/catalog?uiSource=market-source', { cache: 'no-store' })
+                            .then(async response => {
+                              const payload = await response.json().catch(() => ({}));
+                              if (!response.ok || !payload?.ok || !Array.isArray(payload.instruments)) {
+                                throw new Error(payload?.error || 'Binance catalog request failed.');
+                              }
+                              const binanceItems = payload.instruments as BinanceInstrument[];
+                              setInstruments(current => {
+                                const deriv = current.filter(item => item.provider !== 'BINANCE');
+                                const normalized = binanceItems.map(item => ({
+                                  ...item,
+                                  id: 'BINANCE:' + item.marketType + ':' + item.symbol,
+                                  provider: 'BINANCE' as MarketProvider,
+                                  providerLabel: 'Binance',
+                                  displaySymbol: item.symbol,
+                                  logoUrl: makeLogoFallback(item.baseAsset || item.symbol),
+                                  providerLogoUrl: 'https://www.binance.com/favicon.ico',
+                                })) as Instrument[];
+                                return [...deriv, ...normalized];
+                              });
+                            })
+                            .catch(error => setDerivError(error instanceof Error ? error.message : String(error)));
                         } else if (provider === 'DERIV') {
                           setCategoryFilter('ALL');
                           setMarketSubcategoryFilter('ALL');
