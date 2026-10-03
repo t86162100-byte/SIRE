@@ -442,7 +442,7 @@ export default function App() {
     return randomizedInstruments.filter(item => {
       const providerMatch = providerFilter === 'ALL' || item.provider === providerFilter;
       const marketType = String(item.marketType || '').trim().toLowerCase();
-      const isTopGroup = MARKET_TOP_GROUPS.includes(categoryFilter as typeof MARKET_TOP_GROUPS[number]);
+      const isTopGroup = Boolean(MARKET_SUBGROUPS[categoryFilter]);
       const categoryMatch = categoryFilter === 'ALL'
         ? true
         : isTopGroup
@@ -577,7 +577,7 @@ export default function App() {
             ))}
           </div>
 
-          {MARKET_TOP_GROUPS.includes(categoryFilter as typeof MARKET_TOP_GROUPS[number]) && (
+          {Boolean(MARKET_SUBGROUPS[categoryFilter]) && (
             <div className="sire-market-subgroups" role="tablist" aria-label={categoryFilter + ' subcategories'}>
               {(MARKET_SUBGROUPS[categoryFilter as typeof MARKET_TOP_GROUPS[number]] || []).map(subgroup => (
                 <button
@@ -597,7 +597,7 @@ export default function App() {
             </div>
           )}
 
-          {MARKET_TOP_GROUPS.includes(categoryFilter as typeof MARKET_TOP_GROUPS[number]) &&
+          {Boolean(MARKET_SUBGROUPS[categoryFilter]) &&
             marketSubcategoryFilter !== 'ALL' &&
             (MARKET_SUBSUBGROUPS[categoryFilter + '::' + marketSubcategoryFilter] || []).length > 0 && (
               <div className="sire-market-subsubgroups" role="tablist" aria-label={marketSubcategoryFilter + ' filters'}>
