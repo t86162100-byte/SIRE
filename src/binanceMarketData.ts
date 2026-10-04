@@ -63,7 +63,7 @@ export async function fetchBinanceInstruments():Promise<BinanceInstrument[]> {
 
 type Handler=(tick:BinanceTick)=>void;
 type Bus={socket:WebSocket|null;handlers:Map<string,Set<Handler>>;url:string;timer?:number;connecting?:boolean};
-type FastBus=Bus&{symbols:Set<string>;subscribeTimer?:number;requestId:number};
+type FastBus=Bus&{symbols:Set<string>;subscribeTimer?:number;requestId:number;latest:Map<string,BinanceTick>};
 const buses=new Map<string,Bus>();
 const fastBuses=new Map<string,FastBus>();
 
@@ -80,6 +80,7 @@ function fastUrl(v:string){
   if(v==='SPOT') return 'wss://stream.binance.com:9443/stream';
   if(v==='UM') return 'wss://fstream.binance.com/market/stream';
   if(v==='COIN') return 'wss://dstream.binance.com/stream';
+  if(v==='ALPHA') return ALPHA_WS;
   return '';
 }
 
@@ -117,7 +118,7 @@ function bus(v:string){
 function fastBus(v:string){
   let b=fastBuses.get(v);
   if(b?.socket?.readyState===WebSocket.OPEN||b?.connecting)return b!;
-  b=b||{socket:null,handlers:new Map(),url:fastUrl(v),symbols:new Set(),requestId:0};
+  b=b||{socket:null,handlers:new Map(),url:fastUrl(v),symbols:new Set(),requestId:0,latest:new Map()};
   b.connecting=true;buses.delete(v);fastBuses.set(v,b);
   const ws=new WebSocket(b.url);b.socket=ws;
   const queueSubscribe=()=>{
@@ -125,12 +126,12 @@ function fastBus(v:string){
     b.subscribeTimer=window.setTimeout(()=>{
       b!.subscribeTimer=undefined;
       if(b!.socket?.readyState!==WebSocket.OPEN||!b!.symbols.size)return;
-      const params=[...b!.symbols].map(symbol=>symbol.toLowerCase()+'@ticker');
+      const params=[...b!.symbols].flatMap(symbol=>[symbol.toLowerCase()+'@ticker',symbol.toLowerCase()+'@trade']);
       b!.socket.send(JSON.stringify({method:'SUBSCRIBE',params,id:++b!.requestId}));
     },100);
   };
   ws.onopen=()=>{b!.connecting=false;queueSubscribe();};
-  ws.onmessage=e=>{try{const p=JSON.parse(String(e.data));if(p?.id||p?.result!==undefined)return;emitBusMessage(b!,p);}catch{}};
+  ws.onmessage=e=>{try{const p=JSON.parse(String(e.data));if(p?.id||p?.result!==undefined)return;const d=p?.data&&typeof p.data==='object'?p.data:p;const symbol=s(d?.s),event=s(d?.e);if(event==='trade'||event==='aggTrade'){const px=n(d?.p);if(!symbol||px===undefined)return;const prev=b!.latest.get(symbol);const t:BinanceTick={...(prev||{provider:'BINANCE',symbol,price:px,epoch:Math.floor(Date.now()/1000)}),provider:'BINANCE',symbol,price:px,epoch:Math.floor((n(d?.E)||Date.now())/1000)};b!.latest.set(symbol,t);const hs=b!.handlers.get(symbol);if(hs)for(const h of hs)h(t);return;}const t=parse(p);if(!t)return;b!.latest.set(t.symbol,t);const hs=b!.handlers.get(t.symbol);if(hs)for(const h of hs)h(t);}catch{}};
   ws.onerror=()=>{};
   ws.onclose=()=>{
     b!.connecting=false;
@@ -146,13 +147,16 @@ export function subscribeBinanceTick(item:any,handler:Handler){
   const v=venue(item),symbol=s(item?.symbol);if(!symbol)return()=>{};
   // Binance's per-symbol 24h ticker stream is real-time and carries the
   // authoritative rolling 24h percent/volume fields as well as last price.
-  // Use it for visible Spot/UM/CM rows; keep Alpha on its venue-wide stream.
-  if(v==='SPOT'||v==='UM'||v==='COIN'){
+  // Use one persistent exchange-native stream per venue. Ticker supplies the
+  // authoritative 24h fields; trade supplies the immediate last-price path.
+  // This mirrors the common exchange-client pattern of merging fast trades
+  // into a cached ticker snapshot instead of waiting for the slower ticker tick.
+  if(v==='SPOT'||v==='UM'||v==='COIN'||v==='ALPHA'){
     const b=fastBus(v);let set=b.handlers.get(symbol);
     if(!set){set=new Set();b.handlers.set(symbol,set);b.symbols.add(symbol);}
     set.add(handler);
     if(b.socket?.readyState===WebSocket.OPEN){
-      const params=[symbol.toLowerCase()+'@ticker'];
+      const params=[symbol.toLowerCase()+'@ticker',symbol.toLowerCase()+'@trade'];
       try{b.socket.send(JSON.stringify({method:'SUBSCRIBE',params,id:++b.requestId}));}catch{}
     }
     return()=>{
@@ -161,7 +165,7 @@ export function subscribeBinanceTick(item:any,handler:Handler){
         b!.handlers.delete(symbol);
         b!.symbols.delete(symbol);
         if(b!.socket?.readyState===WebSocket.OPEN){
-          try{b!.socket.send(JSON.stringify({method:'UNSUBSCRIBE',params:[symbol.toLowerCase()+'@ticker'],id:++b!.requestId}));}catch{}
+          try{b!.socket.send(JSON.stringify({method:'UNSUBSCRIBE',params:[symbol.toLowerCase()+'@ticker',symbol.toLowerCase()+'@trade'],id:++b!.requestId}));}catch{}
         }
       }
     };
