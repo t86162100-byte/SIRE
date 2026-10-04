@@ -368,7 +368,10 @@ export default function App() {
     return()=>{cancelled=true;window.clearInterval(timer);};
   }, [instruments.some(item => item.provider === 'BINANCE'), instruments.filter(item => item.provider === 'BINANCE').map(item=>item.id).join('|')]);
   useEffect(() => {
-    const binance = instruments.filter(item=>item.provider==='BINANCE');
+    // Match Binance-style virtualized market views: only rows currently on
+    // screen get high-frequency trade streams. The snapshot keeps off-screen
+    // rows synchronized without opening thousands of live subscriptions.
+    const binance = quoteWindow.items.filter(item=>item.provider==='BINANCE');
     if (!binance.length) return;
     const pending = new Map<string, any>();
     let frame = 0;
@@ -398,7 +401,7 @@ export default function App() {
       unsubscribers.forEach(fn=>fn());
       pending.clear();
     };
-  }, [instruments.length, instruments.map(item=>item.provider==='BINANCE' ? item.id : '').filter(Boolean).join('|')]);
+  }, [quoteWindow.items.map(item=>item.provider==='BINANCE' ? item.id : '').filter(Boolean).join('|')]);
 
   useEffect(() => {
     if (!instruments.length) return;
