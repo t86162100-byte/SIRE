@@ -14,7 +14,7 @@ export type BinanceTick = {
   bid?: number; ask?: number; percent?: number; marketCap?: number;
 };
 const SPOT='https://api.binance.com', UM='https://fapi.binance.com', CM='https://dapi.binance.com';
-const ALPHA='https://www.binance.com', ALPHA_WS='wss://nbstream.binance.com/w3w/wsa/stream';
+const ALPHA='https://www.binance.com', ALPHA_WS='wss://nbstream.binance.com/w3w/wsa/stream/stream';
 const n=(v:unknown)=>{const x=Number(v);return Number.isFinite(x)?x:undefined;};
 const s=(v:unknown)=>String(v??'').trim();
 const uniq=(a:string[])=>[...new Set(a.map(s).filter(Boolean))];
@@ -87,7 +87,7 @@ function fastUrl(v:string){
 function parse(raw:any):BinanceTick|null{
   const d=raw?.data&&typeof raw.data==='object'?raw.data:raw;
   const symbol=s(d?.s), event=s(d?.e);
-  const tradePrice=event==='aggTrade'?n(d?.p):n(d?.c);
+  const tradePrice=(event==='trade'||event==='aggTrade')?n(d?.p):n(d?.c);
   if(!symbol||tradePrice===undefined)return null;
   const open=n(d?.o),epoch=n(d?.E)||Date.now();
   const percent=n(d?.P) ?? (open && open!==0 ? ((tradePrice-open)/open)*100 : undefined);
