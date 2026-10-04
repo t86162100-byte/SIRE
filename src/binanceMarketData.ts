@@ -394,6 +394,7 @@ function createSocketFeed(instrument:any, symbol:string, interval:string, onQuot
     reconnectTimer = window.setTimeout(() => { reconnectTimer = undefined; connect(); }, delay);
   };
 
+  void pollLivePrice();
   connect();
 
   return {
