@@ -340,6 +340,80 @@ export default function App() {
     return () => { cancelled = true; window.clearInterval(timer); };
   }, [instruments.length]);
 
+  // Live Binance ticker streams for the Market tab. REST remains the
+  // authoritative fallback for venues without a public market stream.
+  useEffect(() => {
+    if (!instruments.some(item => item.provider === 'BINANCE')) return;
+    let stopped = false;
+    let raf = 0;
+    const pending = new Map<string, any>();
+
+    const flush = () => {
+      raf = 0;
+      if (stopped || pending.size === 0) return;
+      const updates = new Map(pending);
+      pending.clear();
+      setInstruments(current => current.map(item => {
+        if (item.provider !== 'BINANCE') return item;
+        const update = updates.get(String(item.symbol || '').toUpperCase());
+        return update ? { ...item, ...update } : item;
+      }));
+    };
+
+    const queue = (symbol: string, update: any) => {
+      pending.set(String(symbol || '').toUpperCase(), update);
+      if (!raf) raf = window.requestAnimationFrame(flush);
+    };
+
+    const sockets: WebSocket[] = [];
+    const connect = (url: string, mapper: (data: any) => { symbol?: string; update?: any } | null) => {
+      try {
+        const socket = new WebSocket(url);
+        sockets.push(socket);
+        socket.onmessage = event => {
+          if (stopped) return;
+          try {
+            const raw = JSON.parse(String(event.data));
+            const messages = Array.isArray(raw) ? raw : [raw?.data || raw];
+            for (const data of messages) {
+              const mapped = mapper(data);
+              if (mapped?.symbol && mapped.update) queue(mapped.symbol, mapped.update);
+            }
+          } catch {}
+        };
+        socket.onclose = () => {
+          if (!stopped) window.setTimeout(() => connect(url, mapper), 1500);
+        };
+      } catch {}
+    };
+
+    const cryptoTicker = (data: any) => {
+      const symbol = String(data?.s || '').toUpperCase();
+      if (!symbol) return null;
+      return { symbol, update: {
+        ...(Number.isFinite(Number(data?.c)) ? { price:Number(data.c) } : {}),
+        ...(Number.isFinite(Number(data?.P)) ? { priceChangePercent:Number(data.P), change24h:Number(data.P) } : {}),
+        ...(Number.isFinite(Number(data?.v)) ? { volume24h:Number(data.v) } : {}),
+        ...(Number.isFinite(Number(data?.q)) ? { quoteVolume:Number(data.q) } : {}),
+        ...(Number.isFinite(Number(data?.h)) ? { high24h:Number(data.h) } : {}),
+        ...(Number.isFinite(Number(data?.l)) ? { low24h:Number(data.l) } : {}),
+        ...(Number.isFinite(Number(data?.o)) ? { open24h:Number(data.o) } : {})
+      }};
+    };
+
+    const alphaTicker = cryptoTicker;
+    connect('wss://stream.binance.com:9443/ws/!ticker@arr', cryptoTicker);
+    connect('wss://fstream.binance.com/ws/!ticker@arr', cryptoTicker);
+    connect('wss://dstream.binance.com/ws/!ticker@arr', cryptoTicker);
+    connect('wss://nbstream.binance.com/w3w/wsa/stream/ws/!ticker@arr', alphaTicker);
+
+    return () => {
+      stopped = true;
+      if (raf) window.cancelAnimationFrame(raf);
+      for (const socket of sockets) { try { socket.close(); } catch {} }
+    };
+  }, [instruments.length]);
+
   useEffect(() => {
     let cancelled = false;
     const load = async () => {
