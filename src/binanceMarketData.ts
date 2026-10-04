@@ -111,47 +111,12 @@ async function bars(item:any,interval:string,from?:number,to?:number,count=500){
   return aggregate(rows.map((r:any)=>({time:Math.floor(Number(r[0])/1000),open:Number(r[1]),high:Number(r[2]),low:Number(r[3]),close:Number(r[4]),volume:Number(r[5])||0})).filter((x:DerivBar)=>Number.isFinite(x.time)&&[x.open,x.high,x.low,x.close].every(Number.isFinite)),sec).sort((a,b)=>a.time-b.time);
 }
 export async function fetchBinancePriceSnapshot(): Promise<BinanceTick[]> {
-  const requests = [
-    ['SPOT', SPOT + '/api/v3/ticker/24hr'],
-    ['UM', UM + '/fapi/v1/ticker/24hr'],
-    ['COIN', CM + '/dapi/v1/ticker/24hr'],
-  ] as const;
-  const out: BinanceTick[] = [];
-  for (const [venueName, endpoint] of requests) {
-    try {
-      const rows = await json(endpoint);
-      for (const row of (Array.isArray(rows) ? rows : [])) {
-        const symbol = s(row?.symbol), price = n(row?.lastPrice);
-        if (!symbol || price === undefined) continue;
-        const open = n(row?.openPrice);
-        out.push({ provider:'BINANCE', symbol, price, epoch:Math.floor((n(row?.closeTime)||Date.now())/1000),
-          open, high:n(row?.highPrice), low:n(row?.lowPrice), volume:n(row?.volume), quoteVolume:n(row?.quoteVolume ?? row?.baseVolume),
-          percent:n(row?.priceChangePercent) });
-      }
-    } catch (error) {
-      console.warn('[BINANCE SNAPSHOT]', venueName, error);
-    }
+  const response = await fetch('/api/sire/binance/quotes', { cache:'no-store' });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok || !payload?.ok || !Array.isArray(payload.ticks)) {
+    throw new Error(payload?.error || 'Binance live quote snapshot is unavailable.');
   }
-
-  // Binance's dedicated equity universe is not part of the Spot ticker feed.
-  // The SIRE server proxies the public equity ticker endpoint so Stocks/ETFs
-  // can receive the same live card fields without exposing credentials.
-  try {
-    const response = await fetch('/api/sire/binance/equity-ticker', { cache:'no-store' });
-    const payload = await response.json().catch(() => ({}));
-    const rows = Array.isArray(payload?.rows) ? payload.rows : [];
-    for (const row of rows) {
-      const symbol = s(row?.symbol || row?.ticker || row?.code), price = n(row?.lastPrice ?? row?.price ?? row?.last);
-      if (!symbol || price === undefined) continue;
-      const open = n(row?.openPrice ?? row?.open);
-      out.push({ provider:'BINANCE', symbol, price, epoch:Math.floor((n(row?.closeTime ?? row?.timestamp ?? row?.time)||Date.now())/1000),
-        open, high:n(row?.highPrice ?? row?.high), low:n(row?.lowPrice ?? row?.low),
-        volume:n(row?.volume ?? row?.volume24h), quoteVolume:n(row?.quoteVolume), percent:n(row?.priceChangePercent ?? row?.changePercent ?? row?.change24h) });
-    }
-  } catch (error) {
-    console.warn('[BINANCE EQUITY SNAPSHOT]', error);
-  }
-  return out;
+  return payload.ticks as BinanceTick[];
 }
 
 export function createBinanceDataFeed(instrument:any,onQuote?:(q:BinanceTick)=>void,onDiagnostic?:(e:DerivFeedDiagnostic)=>void){
