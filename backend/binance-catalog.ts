@@ -425,8 +425,47 @@ export async function fetchBinanceCatalogServer() {
     }
   }
 
+  // If every exchangeInfo edge is unavailable/partial, Binance's public 24h
+  // ticker still exposes the complete currently-traded Spot symbol universe.
+  // Reconstruct the catalogue rows from those symbols as a last-resort public
+  // fallback. ExchangeInfo remains authoritative whenever it is available.
+  let spotRows=Array.isArray(raw.spot?.symbols)?raw.spot.symbols:[];
+  if (spotRows.length < 1000) {
+    const tickerAttempts = await Promise.allSettled(SPOT_HOSTS.map(async host => {
+      const data = await getJson(host + '/ticker/24hr');
+      const rows = Array.isArray(data) ? data : [];
+      if (rows.length < 1000) throw new Error('partial Spot ticker catalogue: ' + rows.length);
+      return { rows, host };
+    }));
+    let bestTicker: { rows: Json[]; host: string } | undefined;
+    for (const attempt of tickerAttempts) {
+      if (attempt.status === 'fulfilled' && (!bestTicker || attempt.value.rows.length > bestTicker.rows.length)) bestTicker = attempt.value;
+    }
+    if (bestTicker && bestTicker.rows.length > spotRows.length) {
+      const quoteAssets = ['USDT','USDC','FDUSD','TUSD','USDP','DAI','BUSD','U','USD','BNB','BTC','ETH','BTCC','EUR','GBP','AUD','BRL','TRY','RUB','ZAR','NGN','JPY','PLN','RON','UAH','CHF','CAD','HKD','SGD','MXN','ARS','IDR','THB'];
+      const suffixes = [...quoteAssets].sort((a,b)=>b.length-a.length);
+      const reconstructed = bestTicker.rows.map(ticker => {
+        const symbol=s(ticker?.symbol).toUpperCase();
+        const quote=suffixes.find(q=>symbol.endsWith(q));
+        const base=quote ? symbol.slice(0,-quote.length) : '';
+        return quote && base ? {symbol,status:'TRADING',baseAsset:base,quoteAsset:quote,permissions:['SPOT']} : null;
+      }).filter(Boolean) as Json[];
+      if (reconstructed.length > spotRows.length) {
+        spotRows = reconstructed;
+        raw.spot = { ...(raw.spot || {}), symbols: spotRows };
+        diagnostics.sources.spot = {
+          ...(diagnostics.sources.spot || {}),
+          ok: true,
+          selectedTickerFallback: true,
+          tickerHost: bestTicker.host,
+          initialRowCount: spotRows.length,
+          reconstructedRowCount: reconstructed.length
+        };
+      }
+    }
+  }
+
   const out: Json[]=[];
-  const spotRows=Array.isArray(raw.spot?.symbols)?raw.spot.symbols:[];
   diagnostics.sources.spot = diagnostics.sources.spot || {ok:Boolean(raw.spot)};
   diagnostics.sources.spot.rawSymbolRows = spotRows.length;
   diagnostics.sources.spot.acceptedSymbolRows = 0;
