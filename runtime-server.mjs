@@ -983,4 +983,19 @@ server.on('upgrade',(req,socket,head)=>{
   });
 });
 
-server.listen(PORT,HOST,async()=>{ console.log(`SIRE server listening on ${HOST}:${PORT}`); console.log('[DERIV HISTORY STORE]', JSON.stringify(await historyStoreStatus())); });
+server.listen(PORT,HOST,async()=>{ 
+  console.log(`SIRE server listening on ${HOST}:${PORT}`); 
+  console.log('[DERIV HISTORY STORE]', JSON.stringify(await historyStoreStatus()));
+  // One startup smoke-test for the Binance catalog. This is deliberately
+  // non-blocking so a regional Binance outage can never prevent SIRE startup.
+  void fetchBinanceCatalogServer().then(catalog=>{
+    console.log('[BINANCE STARTUP CATALOG]', JSON.stringify({
+      count: catalog.instruments.length,
+      counts: catalog.diagnostics?.counts,
+      stocksSource: catalog.diagnostics?.sources?.stocks,
+      tokenizedSource: catalog.diagnostics?.sources?.tokenized,
+      usdtm: catalog.diagnostics?.sources?.usdtm?.audit?.acceptedByNormalizer,
+      coinm: catalog.diagnostics?.sources?.coinm?.audit?.acceptedByNormalizer
+    }));
+  }).catch(error=>console.error('[BINANCE STARTUP CATALOG FAILED]', error instanceof Error ? error.message : String(error)));
+});
