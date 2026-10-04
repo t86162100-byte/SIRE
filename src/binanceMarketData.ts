@@ -126,11 +126,23 @@ function fastBus(v:string){
     b.subscribeTimer=window.setTimeout(()=>{
       b!.subscribeTimer=undefined;
       if(b!.socket?.readyState!==WebSocket.OPEN||!b!.symbols.size)return;
-      const bootstrap=v==='ALPHA' ? ['!ticker@arr'] : ['!miniTicker@arr'];
-      const params=bootstrap.concat([...b!.symbols].flatMap(symbol=>v==='COIN' ? [symbol.toLowerCase()+'@ticker',symbol.toLowerCase()+'@trade',symbol.toLowerCase()+'@markPrice@1s'] : [symbol.toLowerCase()+'@ticker',symbol.toLowerCase()+'@trade']));
-      b!.socket.send(JSON.stringify({method:'SUBSCRIBE',params,id:++b!.requestId}));
+      const params:string[]=[];
+      if(!b!.bootstrapSubscribed){
+        params.push(v==='ALPHA' ? '!ticker@arr' : '!miniTicker@arr');
+        b!.bootstrapSubscribed=true;
+      }
+      for(const symbol of b!.symbols){
+        if(b!.subscribed.has(symbol))continue;
+        const lower=symbol.toLowerCase();
+        params.push(...(v==='COIN' ? [lower+'@ticker',lower+'@trade',lower+'@markPrice@1s'] : [lower+'@ticker',lower+'@trade']));
+        b!.subscribed.add(symbol);
+      }
+      if(!params.length)return;
+      try{b!.socket.send(JSON.stringify({method:'SUBSCRIBE',params,id:++b!.requestId}));}
+      catch{for(const symbol of b!.symbols)b!.subscribed.delete(symbol);b!.bootstrapSubscribed=false;}
     },100);
   };
+  b.queueSubscribe=queueSubscribe;
   ws.onopen=()=>{b!.connecting=false;queueSubscribe();};
   ws.onmessage=e=>{try{const p=JSON.parse(String(e.data));if(p?.id||p?.result!==undefined)return;const payload=p?.data&&typeof p.data==='object'?p.data:p;const messages=Array.isArray(payload)?payload:[payload];for(const d of messages){const symbol=s(d?.s),event=s(d?.e);if(!symbol)continue;if(event==='24hrMiniTicker'){const px=n(d?.c);if(px===undefined)continue;const now=Date.now();const prev=b!.latest.get(symbol);const recentTrade=now-(b!.lastTradeAt.get(symbol)||0)<5000;const recentMark=v==='COIN'&&now-(b!.lastMarkAt.get(symbol)||0)<2000;const t:BinanceTick={...(prev||{provider:'BINANCE',symbol,price:px,epoch:Math.floor(now/1000)}),provider:'BINANCE',symbol,price:(recentTrade||recentMark)&&prev?prev.price:px,epoch:Math.floor((n(d?.E)||now)/1000),high:n(d?.h),low:n(d?.l),volume:n(d?.v),quoteVolume:n(d?.q)};b!.latest.set(symbol,t);const hs=b!.handlers.get(symbol);if(hs)for(const h of hs)h(t);continue;}if(event==='trade'||event==='aggTrade'){const px=n(d?.p);if(px===undefined)continue;const now=Date.now();b!.lastTradeAt.set(symbol,now);const prev=b!.latest.get(symbol);const t:BinanceTick={...(prev||{provider:'BINANCE',symbol,price:px,epoch:Math.floor(now/1000)}),provider:'BINANCE',symbol,price:px,epoch:Math.floor((n(d?.E)||now)/1000)};b!.latest.set(symbol,t);const hs=b!.handlers.get(symbol);if(hs)for(const h of hs)h(t);continue;}if(event==='markPriceUpdate'&&v==='COIN'){const px=n(d?.p);if(px===undefined)continue;const now=Date.now();if(now-(b!.lastTradeAt.get(symbol)||0)<5000)continue;const prev=b!.latest.get(symbol);const t:BinanceTick={...(prev||{provider:'BINANCE',symbol,price:px,epoch:Math.floor(now/1000)}),provider:'BINANCE',symbol,price:px,epoch:Math.floor((n(d?.E)||now)/1000)};b!.lastMarkAt.set(symbol,now);b!.latest.set(symbol,t);const hs=b!.handlers.get(symbol);if(hs)for(const h of hs)h(t);continue;}const t=parse(d);if(!t)continue;const prev=b!.latest.get(t.symbol);const recentTrade=Date.now()-(b!.lastTradeAt.get(t.symbol)||0)<5000;const recentMark=v==='COIN'&&Date.now()-(b!.lastMarkAt.get(t.symbol)||0)<2000;if((recentTrade||recentMark)&&prev)t.price=prev.price;b!.latest.set(t.symbol,t);const hs=b!.handlers.get(t.symbol);if(hs)for(const h of hs)h(t);}}catch{}};
   ws.onerror=()=>{};
