@@ -89,7 +89,7 @@ function parse(raw:any):BinanceTick|null{
   const tradePrice=event==='aggTrade'?n(d?.p):n(d?.c);
   if(!symbol||tradePrice===undefined)return null;
   const open=n(d?.o),epoch=n(d?.E)||Date.now();
-  const percent=n(d?.P) ?? (open ? ((tradePrice-open)/open)*100 : undefined);
+  const percent=n(d?.P) ?? (open && open!==0 ? ((tradePrice-open)/open)*100 : undefined);
   return {
     provider:'BINANCE', symbol, price:tradePrice, epoch:Math.floor(epoch/1000), open,
     high:n(d?.h), low:n(d?.l), volume:n(d?.v), quoteVolume:n(d?.q), percent,
