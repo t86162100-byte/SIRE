@@ -70,10 +70,10 @@ function url(v:string){
   // receives last price, rolling 24h percent, and 24h volume from the same event.
   // Raw streams are intentionally used here: one connection per venue carries
   // the all-market stream and the client fans updates out to visible rows.
-  if(v==='SPOT') return 'wss://stream.binance.com:9443/ws/!ticker@arr';
-  if(v==='UM') return 'wss://fstream.binance.com/ws/!ticker@arr';
-  if(v==='COIN') return 'wss://dstream.binance.com/ws/!ticker@arr';
-  return ALPHA_WS+'?streams=!ticker@arr';
+  if(v==='SPOT') return 'wss://stream.binance.com:9443/ws/!miniTicker@arr';
+  if(v==='UM') return 'wss://fstream.binance.com/market/stream?streams=!miniTicker@arr';
+  if(v==='COIN') return 'wss://dstream.binance.com/stream?streams=!miniTicker@arr';
+  return ALPHA_WS+'?streams=!miniTicker@arr';
 }
 function parse(raw:any):BinanceTick|null{
   const d=raw?.data&&typeof raw.data==='object'?raw.data:raw;
@@ -131,6 +131,25 @@ export async function fetchBinancePriceSnapshot(): Promise<BinanceTick[]> {
     } catch (error) {
       console.warn('[BINANCE SNAPSHOT]', venueName, error);
     }
+  }
+
+  // Binance's dedicated equity universe is not part of the Spot ticker feed.
+  // The SIRE server proxies the public equity ticker endpoint so Stocks/ETFs
+  // can receive the same live card fields without exposing credentials.
+  try {
+    const response = await fetch('/api/sire/binance/equity-ticker', { cache:'no-store' });
+    const payload = await response.json().catch(() => ({}));
+    const rows = Array.isArray(payload?.rows) ? payload.rows : [];
+    for (const row of rows) {
+      const symbol = s(row?.symbol || row?.ticker || row?.code), price = n(row?.lastPrice ?? row?.price ?? row?.last);
+      if (!symbol || price === undefined) continue;
+      const open = n(row?.openPrice ?? row?.open);
+      out.push({ provider:'BINANCE', symbol, price, epoch:Math.floor((n(row?.closeTime ?? row?.timestamp ?? row?.time)||Date.now())/1000),
+        open, high:n(row?.highPrice ?? row?.high), low:n(row?.lowPrice ?? row?.low),
+        volume:n(row?.volume ?? row?.volume24h), quoteVolume:n(row?.quoteVolume), percent:n(row?.priceChangePercent ?? row?.changePercent ?? row?.change24h) });
+    }
+  } catch (error) {
+    console.warn('[BINANCE EQUITY SNAPSHOT]', error);
   }
   return out;
 }
