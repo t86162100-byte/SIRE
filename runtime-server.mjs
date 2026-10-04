@@ -75,6 +75,17 @@ function connectBinanceFuturesQuoteHub() {
       symbols: binanceFuturesQuoteHub.symbols.size,
       streams: ['!ticker@arr','!markPrice@arr@1s']
     }));
+    setTimeout(() => {
+      console.info('[BINANCE FUTURES WS] coverage', JSON.stringify({
+        catalog: binanceFuturesQuoteHub.symbols.size,
+        lastTradeTicks: binanceFuturesQuoteHub.ticks.size,
+        markPriceTicks: binanceFuturesQuoteHub.markTicks.size,
+        usdtmTrade: [...binanceFuturesQuoteHub.ticks.values()].filter(t => t.venue === 'USDT-M').length,
+        coinmTrade: [...binanceFuturesQuoteHub.ticks.values()].filter(t => t.venue === 'COIN-M').length,
+        usdtmMark: [...binanceFuturesQuoteHub.markTicks.values()].filter(t => t.venue === 'USDT-M').length,
+        coinmMark: [...binanceFuturesQuoteHub.markTicks.values()].filter(t => t.venue === 'COIN-M').length
+      }));
+    }, 7000);
   });
 
   socket.on('message', raw => {
