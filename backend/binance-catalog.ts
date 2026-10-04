@@ -7,6 +7,11 @@ const OPTIONS_HOSTS = ['https://eapi.binance.com/eapi/v1'];
 const MARGIN_HOSTS = ['https://api.binance.com/sapi/v1/margin','https://api-gcp.binance.com/sapi/v1/margin'];
 const MARGIN_ISOLATED_HOSTS = ['https://api.binance.com/sapi/v1/margin/isolated','https://api-gcp.binance.com/sapi/v1/margin/isolated'];
 const EQUITY_HOSTS = ['https://api.binance.com/sapi/v1/equity/market','https://www.binance.com/sapi/v1/equity/market'];
+// Binance's public Equity BAPI exposes the same tradable-stock universe without
+// the authenticated SAPI path. Use it as the primary catalog source so the
+// catalog still works from Render regions where the SAPI equity endpoint is
+// geo-restricted (HTTP 451).
+const EQUITY_PUBLIC_HOSTS = ['https://www.binance.com/bapi/equity/v2/public/equity/symbol','https://www.binance.com/bapi/equity/v1/public/equity/symbol'];
 const ALPHA = 'https://www.binance.com/bapi/defi/v1/public';
 
 const s = (v: unknown) => String(v ?? '').trim();
@@ -294,8 +299,8 @@ export async function fetchBinanceCatalogServer() {
     {name:'options', urls:OPTIONS_HOSTS.map(host=>host+'/exchangeInfo'), apiKey:false},
     {name:'margin', urls:MARGIN_HOSTS.map(host=>host+'/allPairs'), apiKey:true},
     {name:'marginIsolated', urls:MARGIN_ISOLATED_HOSTS.map(host=>host+'/allPairs'), apiKey:true},
-    {name:'stocks', urls:EQUITY_HOSTS.map(host=>host+'/exchangeInfo'), apiKey:true},
-    {name:'tokenized', urls:EQUITY_HOSTS.map(host=>host+'/tokenized-assets'), apiKey:true},
+    {name:'stocks', urls:[...EQUITY_PUBLIC_HOSTS.map(host=>host+'/get-exchange-info'), ...EQUITY_PUBLIC_HOSTS.map(host=>host+'/get-symbols'), ...EQUITY_HOSTS.map(host=>host+'/exchangeInfo')], apiKey:false},
+    {name:'tokenized', urls:[...EQUITY_HOSTS.map(host=>host+'/tokenized-assets'), 'https://www.binance.com/bapi/defi/v1/public/wallet-direct/buw/wallet/market/token/rwa/stock/detail/list/ai'], apiKey:true},
     {name:'alphaExchange', urls:[ALPHA+'/alpha-trade/get-exchange-info'], apiKey:false},
     {name:'alphaTokens', urls:[ALPHA+'/wallet-direct/buw/wallet/cex/alpha/all/token/list'], apiKey:false}
   ];
@@ -314,8 +319,8 @@ export async function fetchBinanceCatalogServer() {
         if ((source.name==='margin' || source.name==='marginIsolated') && !Array.isArray(data)) {
           throw new Error('Binance returned no Margin pair array from '+url);
         }
-        if ((source.name==='stocks' || source.name==='tokenized') && !Array.isArray(data?.symbols) && !Array.isArray(data?.data)) {
-          throw new Error('Binance returned no symbol data from authenticated '+source.name+' endpoint '+url);
+        if ((source.name==='stocks' || source.name==='tokenized') && !Array.isArray(data?.symbols) && !Array.isArray(data?.data) && !Array.isArray(data?.data?.symbols)) {
+          throw new Error('Binance returned no symbol data from '+source.name+' endpoint '+url);
         }
         return {data,url};
       }
@@ -376,11 +381,18 @@ export async function fetchBinanceCatalogServer() {
     const item=marginInstrument(row); if(item) out.push(item);
   }
 
-  for(const row of (Array.isArray(raw.stocks?.symbols)?raw.stocks.symbols:[])) {
+  const stockRows = Array.isArray(raw.stocks?.symbols)
+    ? raw.stocks.symbols
+    : Array.isArray(raw.stocks?.data?.symbols)
+      ? raw.stocks.data.symbols
+      : Array.isArray(raw.stocks?.data)
+        ? raw.stocks.data
+        : [];
+  for(const row of stockRows) {
     const item=equityInstrument(row); if(item) out.push(item);
   }
 
-  const tokenRows=Array.isArray(raw.tokenized?.symbols)?raw.tokenized.symbols:Array.isArray(raw.tokenized?.data)?raw.tokenized.data:Array.isArray(raw.tokenized)?raw.tokenized:[];
+  const tokenRows=Array.isArray(raw.tokenized?.symbols)?raw.tokenized.symbols:Array.isArray(raw.tokenized?.data?.symbols)?raw.tokenized.data.symbols:Array.isArray(raw.tokenized?.data)?raw.tokenized.data:Array.isArray(raw.tokenized)?raw.tokenized:[];
   for(const row of tokenRows) {
     const item=tokenizedInstrument(row); if(item) out.push(item);
   }
