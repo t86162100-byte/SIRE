@@ -463,23 +463,6 @@ export async function fetchBinanceCatalogServer() {
     const item=equityInstrument(row); if(item) out.push(item);
   }
 
-  for(const row of bStockRows) {
-    const symbol=s(row?.symbol).toUpperCase();
-    if(!symbol) continue;
-    const underlying=s(row?.ticker).toUpperCase();
-    out.push({
-      symbol, name:underlying ? underlying+' bStock' : symbol,
-      provider:'BINANCE', exchange:'BINANCE',
-      marketGroup:'TRADE FI', marketType:'Spot', category:'Spot',
-      marketSubcategory:'Spot', marketSubSubcategory:'bStocks',
-      marketFilters:['bStocks','Spot'], marketFilter:'bStocks',
-      instrumentType:'bStock', instrumentSubtype:'Tokenized Securities',
-      baseAsset:symbol, quote:'USDT', underlyingEquitySymbol:underlying,
-      status:'TRADING', chainId:s(row?.chainId), contractAddress:s(row?.contractAddress),
-      multiplier:s(row?.multiplier)
-    });
-  }
-
   for(const row of tokenRows) {
     const item=tokenizedInstrument(row); if(item) out.push(item);
   }
