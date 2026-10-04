@@ -63,7 +63,7 @@ const dateField = (v: unknown) => {
 };
 
 const volumeField = (item: Instrument) =>
-  metric(item, 'VOL', compact(item.volume24h ?? raw(item).volume ?? raw(item).quoteVolume));
+  metric(item, 'VOL', compact(raw(item).quoteVolume ?? item.volume24h ?? raw(item).volume));
 
 const marketCapField = (item: Instrument) =>
   metric(item, 'MC', compact(item.marketCap ?? raw(item).market_cap));
@@ -175,7 +175,7 @@ const Logo = ({ item, providerLogo = false }: { item: Instrument; providerLogo?:
 const BinanceShell = ({
   item, active, onSelect, fields, className, children,
 }: CardProps & { fields: Field[]; className: string; children: ReactNode }) => {
-  const volume = compact(item.volume24h ?? raw(item).volume ?? raw(item).quoteVolume);
+  const volume = compact(raw(item).quoteVolume ?? item.volume24h ?? raw(item).volume);
   const visibleFields = fields.filter(f => str(f.value));
 
   return (
