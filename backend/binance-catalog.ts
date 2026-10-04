@@ -3,6 +3,8 @@ type Json = Record<string, any>;
 const SPOT_HOSTS = ['https://data-api.binance.vision/api/v3','https://api.binance.com/api/v3','https://api-gcp.binance.com/api/v3','https://api1.binance.com/api/v3','https://api2.binance.com/api/v3','https://api3.binance.com/api/v3','https://api4.binance.com/api/v3'];
 const UM_HOSTS = ['https://fapi.binance.com/fapi/v1','https://fapi1.binance.com/fapi/v1','https://fapi2.binance.com/fapi/v1','https://fapi3.binance.com/fapi/v1','https://fapi4.binance.com/fapi/v1','https://www.binance.com/fapi/v1'];
 const CM_HOSTS = ['https://dapi.binance.com/dapi/v1','https://www.binance.com/dapi/v1'];
+const OPTIONS_HOSTS = ['https://eapi.binance.com/eapi/v1'];
+const MARGIN_HOSTS = ['https://api.binance.com/sapi/v1/margin','https://api-gcp.binance.com/sapi/v1/margin'];
 const EQUITY = 'https://api.binance.com/sapi/v1/equity/market';
 const ALPHA = 'https://www.binance.com/bapi/defi/v1/public';
 
@@ -13,7 +15,6 @@ const norm = (v: unknown) => s(v).toLowerCase().replace(/[\s_-]+/g, '');
 
 const SPOT_QUOTES = new Set(['USDT','USDC','U','USD','BNB','BTC','BTCC','ETH']);
 const FIAT_QUOTES = new Set(['EUR','GBP','AUD','BRL','TRY','RUB','ZAR','NGN','JPY','PLN','RON','UAH','CHF','CAD','HKD','SGD','MXN','ARS']);
-const MARGIN_ASSETS = new Set(['ETH','XAU','BTC','XAG','SOL','XRP','DOGE']);
 
 const FUTURE_LABELS: Record<string,string> = {
   crypto:'Crypto', defi:'DeFi', metavers:'Metavers', metaverse:'Metavers',
@@ -57,6 +58,50 @@ function spotInstrument(raw: Json, margin = false): Json | null {
     quote, baseAsset:base, status:s(raw?.status), pipSize:tickSize(raw),
     margin, marginEnabled:Boolean(raw?.isMarginTradingAllowed || raw?.permissions?.includes?.('MARGIN')),
     onboardDate:n(raw?.onboardDate), newListing:false
+  };
+}
+
+function marginInstrument(raw: Json): Json | null {
+  const symbol=s(raw?.symbol).toUpperCase();
+  if(!symbol) return null;
+  const base=s(raw?.base).toUpperCase();
+  const quote=s(raw?.quote).toUpperCase();
+  const status=s(raw?.status || (raw?.isMarginTrade === true ? 'TRADING' : ''));
+  if(raw?.isMarginTrade === false) return null;
+  return {
+    symbol, name:base && quote ? base+'/'+quote : symbol,
+    provider:'BINANCE', exchange:'BINANCE',
+    marketGroup:'CRYPTO', marketType:'Margin', category:'Margin',
+    marketSubcategory:'Margin', marketSubSubcategory:'All',
+    marketFilters:uniq(['Margin','All',base,quote].filter(Boolean)),
+    marketFilter:base || quote || 'Margin',
+    instrumentType:'Crypto Margin', instrumentSubtype:'Margin',
+    quote, baseAsset:base, status:status || 'TRADING',
+    margin:true, marginEnabled:true
+  };
+}
+
+function optionInstrument(raw: Json): Json | null {
+  const symbol=s(raw?.symbol).toUpperCase();
+  if(!symbol || s(raw?.status) !== 'TRADING') return null;
+  const underlying=s(raw?.underlying).toUpperCase();
+  const quote=s(raw?.quoteAsset).toUpperCase();
+  const side=s(raw?.side).toUpperCase();
+  const underlyingType=s(raw?.underlyingType).toUpperCase();
+  const contractType=s(raw?.contractType).toUpperCase();
+  const expiry=n(raw?.expiryDate);
+  return {
+    symbol, name:symbol, provider:'BINANCE', exchange:'BINANCE',
+    marketGroup:'CRYPTO', marketType:'Options', category:'Options',
+    marketSubcategory:'Options', marketSubSubcategory:underlyingType || 'Crypto',
+    marketFilters:uniq(['Options',underlyingType || 'Crypto',side,contractType].filter(Boolean)),
+    marketFilter:side || 'Options', instrumentType:'Crypto Options',
+    instrumentSubtype:[contractType,side].filter(Boolean).join(', '),
+    underlying, quote, baseAsset:underlying.replace(/USDT$|USDC$|BUSD$/,''),
+    settleAsset:s(raw?.settleAsset || quote), side,
+    contractType, underlyingType, strikePrice:s(raw?.strikePrice),
+    expiryDate:expiry, expiry, status:s(raw?.status),
+    onboardDate:undefined, newListing:false
   };
 }
 
@@ -210,6 +255,8 @@ export async function fetchBinanceCatalogServer() {
     {name:'spot', urls:SPOT_HOSTS.map(host=>host+'/exchangeInfo'), apiKey:false},
     {name:'usdtm', urls:UM_HOSTS.map(host=>host+'/exchangeInfo'), apiKey:false},
     {name:'coinm', urls:CM_HOSTS.map(host=>host+'/exchangeInfo'), apiKey:false},
+    {name:'options', urls:OPTIONS_HOSTS.map(host=>host+'/exchangeInfo'), apiKey:false},
+    {name:'margin', urls:MARGIN_HOSTS.map(host=>host+'/allPairs'), apiKey:true},
     {name:'stocks', urls:[EQUITY+'/exchangeInfo'], apiKey:true},
     {name:'tokenized', urls:[EQUITY+'/tokenized-assets'], apiKey:true},
     {name:'alphaExchange', urls:[ALPHA+'/alpha-trade/get-exchange-info'], apiKey:false},
@@ -222,6 +269,13 @@ export async function fetchBinanceCatalogServer() {
       try {
         const data=await getJson(url, source.apiKey ? apiKey : '');
         if ((source.name==='usdtm' || source.name==='coinm' || source.name==='spot') && !Array.isArray(data?.symbols)) {
+          throw new Error('Binance returned no symbols array from '+url);
+        }
+        if (source.name==='options' && !Array.isArray(data?.optionSymbols)) {
+          throw new Error('Binance returned no optionSymbols array from '+url);
+        }
+        if (source.name==='margin' && !Array.isArray(data)) {
+          throw new Error('Binance returned no Margin pair array from '+url);
           throw new Error('Binance returned no symbols array from '+url);
         }
         return {data,url};
@@ -255,13 +309,6 @@ export async function fetchBinanceCatalogServer() {
   for(const row of spotRows) {
     const spotItem=spotInstrument(row,false);
     if(spotItem) out.push(spotItem);
-    if(Boolean(row?.isMarginTradingAllowed || row?.permissions?.includes?.('MARGIN'))) {
-      const base=s(row?.baseAsset).toUpperCase(), quote=s(row?.quoteAsset).toUpperCase();
-      if(MARGIN_ASSETS.has(base) || MARGIN_ASSETS.has(quote)) {
-        const marginItem=spotInstrument(row,true);
-        if(marginItem) out.push(marginItem);
-      }
-    }
   }
 
   for(const row of (Array.isArray(raw.usdtm?.symbols)?raw.usdtm.symbols:[])) {
@@ -269,6 +316,14 @@ export async function fetchBinanceCatalogServer() {
   }
   for(const row of (Array.isArray(raw.coinm?.symbols)?raw.coinm.symbols:[])) {
     const item=futureInstrument(row,'COIN-M',now); if(item) out.push(item);
+  }
+
+  for(const row of (Array.isArray(raw.options?.optionSymbols)?raw.options.optionSymbols:[])) {
+    const item=optionInstrument(row); if(item) out.push(item);
+  }
+
+  for(const row of (Array.isArray(raw.margin)?raw.margin:[])) {
+    const item=marginInstrument(row); if(item) out.push(item);
   }
 
   for(const row of (Array.isArray(raw.stocks?.symbols)?raw.stocks.symbols:[])) {
@@ -311,6 +366,7 @@ export async function fetchBinanceCatalogServer() {
     margin:instruments.filter(x=>x.marketType==='Margin').length,
     usdtm:instruments.filter(x=>x.marketSubcategory==='USDT-M').length,
     coinm:instruments.filter(x=>x.marketSubcategory==='COIN-M').length,
+    options:instruments.filter(x=>x.marketType==='Options').length,
     stocks:instruments.filter(x=>x.marketGroup==='TRADE FI' && x.marketType==='Stocks').length,
     tokenized:instruments.filter(x=>x.instrumentSubtype==='Tokenized Securities').length,
     alpha:instruments.filter(x=>x.marketGroup==='ALPHA').length
