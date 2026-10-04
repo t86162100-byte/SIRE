@@ -5,6 +5,7 @@ const UM_HOSTS = ['https://fapi.binance.com/fapi/v1','https://fapi1.binance.com/
 const CM_HOSTS = ['https://dapi.binance.com/dapi/v1','https://www.binance.com/dapi/v1'];
 const OPTIONS_HOSTS = ['https://eapi.binance.com/eapi/v1'];
 const MARGIN_HOSTS = ['https://api.binance.com/sapi/v1/margin','https://api-gcp.binance.com/sapi/v1/margin'];
+const MARGIN_ISOLATED_HOSTS = ['https://api.binance.com/sapi/v1/margin/isolated','https://api-gcp.binance.com/sapi/v1/margin/isolated'];
 const EQUITY = 'https://api.binance.com/sapi/v1/equity/market';
 const ALPHA = 'https://www.binance.com/bapi/defi/v1/public';
 
@@ -257,6 +258,7 @@ export async function fetchBinanceCatalogServer() {
     {name:'coinm', urls:CM_HOSTS.map(host=>host+'/exchangeInfo'), apiKey:false},
     {name:'options', urls:OPTIONS_HOSTS.map(host=>host+'/exchangeInfo'), apiKey:false},
     {name:'margin', urls:MARGIN_HOSTS.map(host=>host+'/allPairs'), apiKey:true},
+    {name:'marginIsolated', urls:MARGIN_ISOLATED_HOSTS.map(host=>host+'/allPairs'), apiKey:true},
     {name:'stocks', urls:[EQUITY+'/exchangeInfo'], apiKey:true},
     {name:'tokenized', urls:[EQUITY+'/tokenized-assets'], apiKey:true},
     {name:'alphaExchange', urls:[ALPHA+'/alpha-trade/get-exchange-info'], apiKey:false},
@@ -274,9 +276,8 @@ export async function fetchBinanceCatalogServer() {
         if (source.name==='options' && !Array.isArray(data?.optionSymbols)) {
           throw new Error('Binance returned no optionSymbols array from '+url);
         }
-        if (source.name==='margin' && !Array.isArray(data)) {
+        if ((source.name==='margin' || source.name==='marginIsolated') && !Array.isArray(data)) {
           throw new Error('Binance returned no Margin pair array from '+url);
-          throw new Error('Binance returned no symbols array from '+url);
         }
         return {data,url};
       }
@@ -322,7 +323,10 @@ export async function fetchBinanceCatalogServer() {
     const item=optionInstrument(row); if(item) out.push(item);
   }
 
-  for(const row of (Array.isArray(raw.margin)?raw.margin:[])) {
+  for(const row of [
+    ...(Array.isArray(raw.margin)?raw.margin:[]),
+    ...(Array.isArray(raw.marginIsolated)?raw.marginIsolated:[])
+  ]) {
     const item=marginInstrument(row); if(item) out.push(item);
   }
 
