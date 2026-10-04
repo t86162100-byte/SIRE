@@ -396,13 +396,6 @@ export async function fetchBinanceCatalogServer() {
     const item=marginInstrument(row); if(item) out.push(item);
   }
 
-  const stockRows = Array.isArray(raw.stocks?.symbols)
-    ? raw.stocks.symbols
-    : Array.isArray(raw.stocks?.data?.symbols)
-      ? raw.stocks.data.symbols
-      : Array.isArray(raw.stocks?.data)
-        ? raw.stocks.data
-        : [];
   for(const row of stockRows) {
     const item=equityInstrument(row); if(item) out.push(item);
   }
