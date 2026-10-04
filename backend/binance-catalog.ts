@@ -426,19 +426,37 @@ export async function fetchBinanceHistoryServer(input:{market:string;symbol:stri
   const q=new URLSearchParams({symbol,interval,limit:String(limit)});
   if(input.from!==undefined) q.set('startTime',String(Math.floor(input.from*1000)));
   if(input.to!==undefined) q.set('endTime',String(Math.floor(input.to*1000)));
-  let url='';
-  if(market==='SPOT' || market==='MARGIN' || market==='TRADE FI SPOT') url='https://data-api.binance.vision/api/v3/klines?'+q;
-  else if(market==='USDT-M' || market==='TRADE FI FUTURES') url='https://fapi.binance.com/fapi/v1/klines?'+q;
-  else if(market==='COIN-M') url='https://dapi.binance.com/dapi/v1/klines?'+q;
-  else if(market==='OPTIONS') url='https://eapi.binance.com/eapi/v1/klines?'+q;
-  else if(market==='ALPHA') url='https://www.binance.com/bapi/defi/v1/public/alpha-trade/klines?'+q;
-  else if(market==='EQUITY') {
+  let urls:string[]=[];
+  if(market==='SPOT' || market==='MARGIN' || market==='TRADE FI SPOT') {
+    urls=SPOT_HOSTS.map(host=>host+'/klines?'+q);
+  } else if(market==='USDT-M' || market==='TRADE FI FUTURES') {
+    urls=UM_HOSTS.map(host=>host+'/klines?'+q);
+  } else if(market==='COIN-M') {
+    urls=CM_HOSTS.map(host=>host+'/klines?'+q);
+  } else if(market==='OPTIONS') {
+    urls=OPTIONS_HOSTS.map(host=>host+'/klines?'+q);
+  } else if(market==='ALPHA') {
+    urls=['https://www.binance.com/bapi/defi/v1/public/alpha-trade/klines?'+q];
+  } else if(market==='EQUITY') {
     const eq=new URLSearchParams({symbol,interval,limit:String(Math.min(500,limit))});
     if(input.from!==undefined) eq.set('startTime',String(Math.floor(input.from*1000)));
     if(input.to!==undefined) eq.set('endTime',String(Math.floor(input.to*1000)));
-    url='https://www.binance.com/bapi/equity/v1/public/equity/kline/query?'+eq;
+    urls=['https://www.binance.com/bapi/equity/v1/public/equity/kline/query?'+eq];
   } else throw new Error('Unsupported Binance market history venue: '+market);
-  const data=await getJson(url);
+
+  let data:any=null;
+  const errors:string[]=[];
+  for (const url of urls) {
+    try {
+      data=await getJson(url);
+      break;
+    } catch (error) {
+      errors.push(error instanceof Error ? error.message : String(error));
+    }
+  }
+  if (!data) {
+    throw new Error('All Binance '+market+' history hosts failed for '+symbol+': '+errors.join(' | '));
+  }
   const rows=snapshotRows(data);
   const bars=rows.map((r:any)=>({time:Math.floor(Number(r?.[0] ?? r?.openTime ?? r?.t)/1000),open:Number(r?.[1] ?? r?.open ?? r?.o),high:Number(r?.[2] ?? r?.high ?? r?.h),low:Number(r?.[3] ?? r?.low ?? r?.l),close:Number(r?.[4] ?? r?.close ?? r?.c),volume:Number(r?.[5] ?? r?.volume ?? r?.v)||0})).filter((b:any)=>Number.isFinite(b.time)&&[b.open,b.high,b.low,b.close].every(Number.isFinite));
   if(!bars.length) throw new Error('Binance returned no historical candles for '+symbol+' on '+market+'.');
