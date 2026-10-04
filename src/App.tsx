@@ -114,7 +114,7 @@ const sourceDisplayName = (value: string) => value === 'DERIV' ? 'Deriv' : value
 const sourceLogoUrl = (value: string) => value === 'BINANCE' ? 'https://www.binance.com/favicon.ico' : 'https://deriv.com/favicon.ico';
 
 const normalizeMarketLabel = (value: unknown) =>
-  String(value || '').trim().toLowerCase().replace(/[\\s_-]+/g, ' ');
+  String(value || '').trim().toLowerCase().replace(/[\s_-]+/g, ' ');
 
 const quoteBucketForFilter = (quote: unknown) => { const q = String(quote || '').toUpperCase(); if (['EUR','GBP','AUD','BRL','TRY','RUB','ZAR','NGN','JPY','PLN','RON','UAH','CHF','CAD','HKD','SGD','MXN','ARS'].includes(q)) return 'fiat'; if (['USDT','USDC','U','USD','BNB','BTC','BTCC','ETH'].includes(q)) return q.toLowerCase(); return 'alts'; };
 
@@ -143,7 +143,9 @@ const matchesMarketTopGroup = (item: Instrument, group: string) => {
   const marketGroup = normalizeMarketLabel((item as any).marketGroup);
   const category = normalizeMarketLabel(item.category);
   const instrumentType = normalizeMarketLabel((item as any).instrumentType);
-  if (group === 'CRYPTO') return isBinance(item) ? marketGroup === 'crypto' : (marketGroup === 'crypto' || category === 'crypto' || instrumentType.includes('crypto'));
+  if (group === 'CRYPTO') return isBinance(item)
+    ? ['spot', 'futures', 'margin'].includes(normalizeMarketLabel(item.marketType)) || marketGroup === 'crypto'
+    : (marketGroup === 'crypto' || category === 'crypto' || instrumentType.includes('crypto'));
   if (group === 'TRADE FI') return marketGroup === 'tradfi' || marketGroup === 'trade fi' || category === 'tradfi' || category === 'stocks' || category === 'forex' || category === 'commodities';
   if (group === 'ALPHA') return category === 'alpha' || marketGroup === 'alpha' || instrumentType === 'alpha';
   return false;
@@ -152,11 +154,11 @@ const matchesMarketTopGroup = (item: Instrument, group: string) => {
 const matchesMarketSubgroup = (item: Instrument, group: string, subgroup: string) => {
   const target = normalizeMarketLabel(subgroup);
   if (group === 'CRYPTO' && subgroup === 'Spot') {
-    if (isBinance(item)) return normalizeMarketLabel(item.marketType) === 'spot' && normalizeMarketLabel((item as any).marketGroup) === 'crypto';
+    if (isBinance(item)) return normalizeMarketLabel(item.marketType) === 'spot';
     return normalizeMarketLabel(item.marketType) === 'spot';
   }
   if (group === 'CRYPTO' && subgroup === 'Futures') {
-    if (isBinance(item)) return ['futures','margin'].includes(normalizeMarketLabel(item.marketType)) && normalizeMarketLabel((item as any).marketGroup) === 'crypto';
+    if (isBinance(item)) return ['futures','margin'].includes(normalizeMarketLabel(item.marketType));
     return ['futures','margin'].includes(normalizeMarketLabel(item.marketType));
   }
   if (group === 'TRADE FI' && subgroup === 'Stocks') return normalizeMarketLabel((item as any).marketType) === 'stocks' || normalizeMarketLabel(item.category) === 'stocks';
