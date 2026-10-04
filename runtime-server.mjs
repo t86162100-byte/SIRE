@@ -25,6 +25,7 @@ const binanceFuturesQuoteHub = {
   sockets: [],
   symbols: new Map(),
   ticks: new Map(),
+  markTicks: new Map(),
   retryTimer: null,
   connecting: false,
   readyPromise: null,
@@ -57,84 +58,68 @@ function closeBinanceFuturesSockets() {
 function connectBinanceFuturesQuoteHub() {
   if (binanceFuturesQuoteHub.connecting || binanceFuturesQuoteHub.sockets.some(s => s.readyState === WebSocket.OPEN)) return;
   binanceFuturesQuoteHub.connecting = true;
-  const socket = new WebSocket('wss://fstream.binance.com/market/stream');
+  const socket = new WebSocket(
+    'wss://fstream.binance.com/market/stream?streams=!ticker@arr/!markPrice@arr@1s'
+  );
   binanceFuturesQuoteHub.sockets = [socket];
 
-  socket.on('open', async () => {
-    try {
-      const symbols = binanceFuturesQuoteHub.symbols.size
-        ? binanceFuturesQuoteHub.symbols
-        : await loadBinanceFuturesQuoteSymbols();
-      const params = [...symbols.keys()].map(symbol => symbol.toLowerCase() + '@ticker');
-      // Binance rejects an oversized SUBSCRIBE frame. Keep each control
-      // payload small and pace the requests below the futures WS control limit.
-      const chunkSize = 50;
-      for (let offset = 0, requestId = 1; offset < params.length; offset += chunkSize, requestId += 1) {
-        if (socket.readyState !== WebSocket.OPEN) return;
-        const chunk = params.slice(offset, offset + chunkSize);
-        socket.send(JSON.stringify({ method:'SUBSCRIBE', params:chunk, id:requestId }));
-        if (offset + chunkSize < params.length) {
-          await new Promise(resolve => setTimeout(resolve, 250));
-        }
-      }
-      binanceFuturesQuoteHub.connecting = false;
-      setTimeout(() => {
-        console.info('[BINANCE FUTURES WS] subscription snapshot', JSON.stringify({
-          symbols: binanceFuturesQuoteHub.symbols.size,
-          total: binanceFuturesQuoteHub.ticks.size,
-          usdtm: [...binanceFuturesQuoteHub.ticks.values()].filter(t => t.venue === 'USDT-M').length,
-          coinm: [...binanceFuturesQuoteHub.ticks.values()].filter(t => t.venue === 'COIN-M').length
-        }));
-      }, 8000);
-      if (binanceFuturesQuoteHub.readyResolve) {
-        binanceFuturesQuoteHub.readyResolve();
-        binanceFuturesQuoteHub.readyResolve = null;
-        binanceFuturesQuoteHub.readyPromise = null;
-      }
-      console.info('[BINANCE FUTURES WS] connected', JSON.stringify({ symbols: params.length }));
-    } catch (error) {
-      binanceFuturesQuoteHub.connecting = false;
-      console.error('[BINANCE FUTURES WS] subscribe failed', error instanceof Error ? error.message : String(error));
-      try { socket.close(); } catch {}
+  socket.on('open', () => {
+    binanceFuturesQuoteHub.connecting = false;
+    if (binanceFuturesQuoteHub.readyResolve) {
+      binanceFuturesQuoteHub.readyResolve();
+      binanceFuturesQuoteHub.readyResolve = null;
+      binanceFuturesQuoteHub.readyPromise = null;
     }
+    console.info('[BINANCE FUTURES WS] connected', JSON.stringify({
+      symbols: binanceFuturesQuoteHub.symbols.size,
+      streams: ['!ticker@arr','!markPrice@arr@1s']
+    }));
   });
 
   socket.on('message', raw => {
     try {
       const parsed = JSON.parse(String(raw));
-      if (parsed?.id !== undefined && parsed?.result === null) return;
-      if (parsed?.code !== undefined || parsed?.msg) {
-        console.warn('[BINANCE FUTURES WS] subscription response', JSON.stringify({ id:parsed?.id, code:parsed?.code, msg:parsed?.msg }));
-        return;
-      }
-      const data = parsed?.data && typeof parsed.data === 'object' ? parsed.data : parsed;
-      if (!data || typeof data !== 'object' || !data?.s) return;
-      const symbol = String(data.s).trim().toUpperCase();
-      const mappedVenue = binanceFuturesQuoteHub.symbols.get(symbol);
-      const venue = Number(data?.st) === 2 ? 'COIN-M' : Number(data?.st) === 1 ? 'USDT-M' : mappedVenue;
-      if (!venue) return;
-      const price = Number(data?.c);
-      if (!Number.isFinite(price)) return;
-      binanceFuturesQuoteHub.ticks.set(venue + ':' + symbol, {
-        provider:'BINANCE',
-        symbol,
-        price,
-        venue,
-        epoch:Math.floor((Number(data?.E) || Date.now()) / 1000),
-        open:Number.isFinite(Number(data?.o)) ? Number(data.o) : undefined,
-        high:Number.isFinite(Number(data?.h)) ? Number(data.h) : undefined,
-        low:Number.isFinite(Number(data?.l)) ? Number(data.l) : undefined,
-        volume:Number.isFinite(Number(data?.v)) ? Number(data.v) : undefined,
-        quoteVolume:Number.isFinite(Number(data?.q)) ? Number(data.q) : undefined,
-        percent:Number.isFinite(Number(data?.P)) ? Number(data.P) : undefined
-      });
-      if (!binanceFuturesQuoteHub.firstTickLogged) {
-        binanceFuturesQuoteHub.firstTickLogged = true;
-        console.info('[BINANCE FUTURES WS] first tick', JSON.stringify({
-          total: binanceFuturesQuoteHub.ticks.size,
-          usdtm: [...binanceFuturesQuoteHub.ticks.values()].filter(t => t.venue === 'USDT-M').length,
-          coinm: [...binanceFuturesQuoteHub.ticks.values()].filter(t => t.venue === 'COIN-M').length
-        }));
+      const payload = Array.isArray(parsed?.data) ? parsed.data : (Array.isArray(parsed) ? parsed : [parsed?.data ?? parsed]);
+      for (const data of payload) {
+        if (!data || typeof data !== 'object' || !data?.s) continue;
+        const symbol = String(data.s).trim().toUpperCase();
+        const mappedVenue = binanceFuturesQuoteHub.symbols.get(symbol);
+        const venue = Number(data?.st) === 2 ? 'COIN-M' : Number(data?.st) === 1 ? 'USDT-M' : mappedVenue;
+        if (!venue) continue;
+
+        if (data?.e === 'markPriceUpdate') {
+          const markPrice = Number(data?.p);
+          if (!Number.isFinite(markPrice)) continue;
+          binanceFuturesQuoteHub.markTicks.set(venue + ':' + symbol, {
+            provider:'BINANCE', symbol, price:markPrice, venue,
+            epoch:Math.floor((Number(data?.E) || Date.now()) / 1000)
+          });
+          continue;
+        }
+
+        const price = Number(data?.c);
+        if (!Number.isFinite(price)) continue;
+        binanceFuturesQuoteHub.ticks.set(venue + ':' + symbol, {
+          provider:'BINANCE',
+          symbol,
+          price,
+          venue,
+          epoch:Math.floor((Number(data?.E) || Date.now()) / 1000),
+          open:Number.isFinite(Number(data?.o)) ? Number(data.o) : undefined,
+          high:Number.isFinite(Number(data?.h)) ? Number(data.h) : undefined,
+          low:Number.isFinite(Number(data?.l)) ? Number(data.l) : undefined,
+          volume:Number.isFinite(Number(data?.v)) ? Number(data.v) : undefined,
+          quoteVolume:Number.isFinite(Number(data?.q)) ? Number(data.q) : undefined,
+          percent:Number.isFinite(Number(data?.P)) ? Number(data.P) : undefined
+        });
+        if (!binanceFuturesQuoteHub.firstTickLogged) {
+          binanceFuturesQuoteHub.firstTickLogged = true;
+          console.info('[BINANCE FUTURES WS] first tick', JSON.stringify({
+            total: binanceFuturesQuoteHub.ticks.size,
+            usdtm: [...binanceFuturesQuoteHub.ticks.values()].filter(t => t.venue === 'USDT-M').length,
+            coinm: [...binanceFuturesQuoteHub.ticks.values()].filter(t => t.venue === 'COIN-M').length
+          }));
+        }
       }
     } catch {}
   });
@@ -1089,7 +1074,9 @@ const server = http.createServer(async (req,res) => {
             }
           };
           add24h(spot, 'SPOT');
-          for (const tick of binanceFuturesQuoteHub.ticks.values()) ticks.push(tick);
+          const futuresTicks = new Map(binanceFuturesQuoteHub.markTicks);
+          for (const [key, tick] of binanceFuturesQuoteHub.ticks) futuresTicks.set(key, tick);
+          for (const tick of futuresTicks.values()) ticks.push(tick);
 
           if (stocks.status === 'fulfilled') {
             const rows = Array.isArray(stocks.value?.data) ? stocks.value.data : [];
@@ -1140,7 +1127,9 @@ const server = http.createServer(async (req,res) => {
               'FUTURES-WS': {
                 status: binanceFuturesQuoteHub.sockets.some(s => s.readyState === WebSocket.OPEN) ? 'connected' : 'disconnected',
                 symbols: binanceFuturesQuoteHub.symbols.size,
-                ticks: binanceFuturesQuoteHub.ticks.size
+                lastTradeTicks: binanceFuturesQuoteHub.ticks.size,
+                markPriceTicks: binanceFuturesQuoteHub.markTicks.size,
+                effectiveTicks: new Set([...binanceFuturesQuoteHub.markTicks.keys(), ...binanceFuturesQuoteHub.ticks.keys()]).size
               }
             },
             totalTicks: ticks.length,
