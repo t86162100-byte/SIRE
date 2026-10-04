@@ -204,6 +204,29 @@ const matchesMarketLeaf = (item: Instrument, group: string, subgroup: string, su
 
 const makeProviderLogoFallback = (_item: Instrument) => 'https://deriv.com/favicon.ico';
 
+const loadBinanceCatalog = async (reason: string): Promise<BinanceInstrument[]> => {
+  const url = '/api/sire/binance/catalog?source=' + encodeURIComponent(reason) + '&t=' + Date.now();
+  console.info('[SIRE BINANCE] catalog request starting', { reason, url });
+  const response = await fetch(url, { cache: 'no-store', headers: { Accept: 'application/json' } });
+  const payload = await response.json().catch(() => ({}));
+  const instruments = Array.isArray(payload?.instruments) ? payload.instruments as BinanceInstrument[] : [];
+  console.info('[SIRE BINANCE] catalog response', {
+    reason,
+    ok: response.ok && payload?.ok === true,
+    status: response.status,
+    count: instruments.length,
+    source: payload?.source,
+    diagnostics: payload?.diagnostics,
+  });
+  if (!response.ok || !payload?.ok) {
+    throw new Error(payload?.error || 'Binance native catalog is unavailable.');
+  }
+  if (!instruments.length) {
+    throw new Error('Binance native catalog returned zero instruments.');
+  }
+  return instruments;
+};
+
 const chooseInitialMarketInstrument = (items: Instrument[]) =>
   items.find(item => item.provider === 'BINANCE' && item.symbol === 'BTCUSDT') ||
   items.find(item => item.provider === 'BINANCE' && item.marketType === 'Spot') ||
@@ -243,13 +266,7 @@ export default function App() {
   useEffect(() => {
     let cancelled = false;
     const load = async () => {
-      const binanceCatalog = fetch('/api/sire/binance/catalog', { cache:'no-store' })
-        .then(async response => {
-          const payload = await response.json().catch(() => ({}));
-          if (!response.ok || !payload?.ok) throw new Error(payload?.error || 'Binance catalog request failed.');
-          return Array.isArray(payload.instruments) ? payload.instruments as BinanceInstrument[] : [];
-        })
-        .catch(() => fetchBinanceInstruments());
+      const binanceCatalog = loadBinanceCatalog('startup');
       const [derivResult, binanceResult] = await Promise.allSettled([fetchDerivInstruments(), binanceCatalog]);
       if (cancelled) return;
       const normalized: Instrument[] = [];
@@ -641,28 +658,26 @@ export default function App() {
                           setMarketSubcategoryFilter('Spot');
                           setMarketSubSubcategoryFilter('ALL');
                           setMarketLeafFilter('ALL');
-                          void fetch('/api/sire/binance/catalog?uiSource=market-source', { cache: 'no-store' })
-                            .then(async response => {
-                              const payload = await response.json().catch(() => ({}));
-                              if (!response.ok || !payload?.ok || !Array.isArray(payload.instruments)) {
-                                throw new Error(payload?.error || 'Binance catalog request failed.');
-                              }
-                              const binanceItems = payload.instruments as BinanceInstrument[];
-                              setInstruments(current => {
-                                const deriv = current.filter(item => item.provider !== 'BINANCE');
-                                const normalized = binanceItems.map(item => ({
-                                  ...item,
-                                  id: 'BINANCE:' + item.marketType + ':' + item.symbol,
-                                  provider: 'BINANCE' as MarketProvider,
-                                  providerLabel: 'Binance',
-                                  displaySymbol: item.symbol,
-                                  logoUrl: makeLogoFallback(item.baseAsset || item.symbol),
-                                  providerLogoUrl: 'https://www.binance.com/favicon.ico',
-                                })) as Instrument[];
-                                return [...deriv, ...normalized];
-                              });
-                            })
-                            .catch(error => setDerivError(error instanceof Error ? error.message : String(error)));
+                          void loadBinanceCatalog('source-selector').then(binanceItems => {
+                          setInstruments(current => {
+                            const deriv = current.filter(item => item.provider !== 'BINANCE');
+                            const normalized = binanceItems.map(item => ({
+                              ...item,
+                              id: 'BINANCE:' + item.marketType + ':' + item.symbol,
+                              provider: 'BINANCE' as MarketProvider,
+                              providerLabel: 'Binance',
+                              displaySymbol: item.symbol,
+                              logoUrl: makeLogoFallback(item.baseAsset || item.symbol),
+                              providerLogoUrl: 'https://www.binance.com/favicon.ico',
+                            })) as Instrument[];
+                            return [...deriv, ...normalized];
+                          });
+                          setDerivError('');
+                        }).catch(error => {
+                          const message = error instanceof Error ? error.message : String(error);
+                          console.error('[SIRE BINANCE] source selector failed', message);
+                          setDerivError(message);
+                        });
                         } else if (provider === 'DERIV') {
                           setCategoryFilter('ALL');
                           setMarketSubcategoryFilter('ALL');
