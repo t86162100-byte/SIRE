@@ -935,28 +935,25 @@ const server = http.createServer(async (req,res) => {
       }
     }
     if (req.method === 'GET' && pathname === '/api/sire/binance/history') {
+      const u=new URL(req.url||'/', 'http://'+(req.headers.host||'localhost'));
+      const market=u.searchParams.get('market')||'';
+      const symbol=u.searchParams.get('symbol')||'';
+      const interval=u.searchParams.get('interval')||'1m';
+      const fromParam=u.searchParams.get('from'); const toParam=u.searchParams.get('to');
+      const limit=Number(u.searchParams.get('limit')||500);
       try {
-        const u=new URL(req.url||'/', 'http://'+(req.headers.host||'localhost'));
-        const fromParam=u.searchParams.get('from'); const toParam=u.searchParams.get('to');
         const bars=await fetchBinanceHistoryServer({
-          market:u.searchParams.get('market')||'',
-          symbol:u.searchParams.get('symbol')||'',
-          interval:u.searchParams.get('interval')||'1m',
+          market, symbol, interval,
           from:fromParam!==null && fromParam!=='' && Number.isFinite(Number(fromParam)) ? Number(fromParam) : undefined,
           to:toParam!==null && toParam!=='' && Number.isFinite(Number(toParam)) ? Number(toParam) : undefined,
-          limit:Number(u.searchParams.get('limit')||500)
+          limit
         });
         return res.writeHead(200,{'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify({ok:true,bars}));
       } catch(cause) {
         const message=cause instanceof Error?cause.message:String(cause);
-        console.error('[BINANCE HISTORY ROUTE] Failed', {
-          market:u.searchParams.get('market')||'',
-          symbol:u.searchParams.get('symbol')||'',
-          interval:u.searchParams.get('interval')||'1m',
-          limit:Number(u.searchParams.get('limit')||500),
-          error:message
-        });
-        return res.writeHead(502,{'Access-Control-Allow-Origin':'*','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify({ok:false,error:message,bars:[]}));
+        const retryAfter=/Binance (?:429|418)/.test(message) ? (message.match(/(?:retry after|banned until)\\s+(\\d+)/i)?.[1] || undefined) : undefined;
+        console.error('[BINANCE HISTORY ROUTE] Failed', {market,symbol,interval,limit,error:message,retryAfter});
+        return res.writeHead(/Binance 429/.test(message)?429:/Binance 418/.test(message)?418:502,{'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8',...(retryAfter?{'Retry-After':retryAfter}: {})}).end(JSON.stringify({ok:false,error:message,bars:[]}));
       }
     }
     if (req.method === 'GET' && pathname === '/api/sire/binance/catalog') {
