@@ -87,6 +87,7 @@ const makeAssetLogoFallback = (item: Instrument) => makeLogoFallback(item.displa
 
 const MARKET_TOP_GROUPS = ['CRYPTO', 'TRADE FI', 'ALPHA'] as const;
 const BINANCE_TOP_GROUPS = MARKET_TOP_GROUPS;
+const MARKET_SOURCES: readonly MarketProvider[] = ['DERIV', 'BINANCE'];
 
 const MARKET_SUBGROUPS: Record<string, readonly string[]> = {
   CRYPTO: ['Spot', 'Futures'],
