@@ -110,13 +110,41 @@ function optionInstrument(raw: Json): Json | null {
   };
 }
 
+function classifyFutureTradeFi(raw: Json, tags: string[]) {
+  const normalized = tags.map(norm);
+  const contractType = norm(raw?.contractType);
+  const underlyingType = norm(raw?.underlyingType);
+
+  // Binance's exchangeInfo explicitly identifies TradFi perpetuals with
+  // contractType=TRADIFI_PERPETUAL. Do not depend on a subtype tag to detect them.
+  const isTradFiContract = contractType === 'tradifiperpetual' || normalized.includes('tradfi');
+  if (!isTradFiContract) return undefined;
+
+  // Binance's underlyingType is the authoritative family for these contracts.
+  if (underlyingType === 'commodity' || underlyingType === 'commodities' ||
+      normalized.includes('commodity') || normalized.includes('commodities')) return 'Commodities';
+  if (underlyingType === 'fx' || underlyingType === 'forex' ||
+      normalized.includes('fx') || normalized.includes('forex') ||
+      normalized.includes('foreignexchange') || normalized.includes('currency')) return 'Fx';
+  if (underlyingType === 'premarket' || underlyingType === 'preipo' ||
+      normalized.includes('preipo')) return 'Pre-IPO';
+  if (normalized.includes('etf') || normalized.includes('etfs')) return 'ETFs';
+  if (underlyingType === 'equity' || underlyingType === 'hkequity' ||
+      underlyingType === 'krequity' || underlyingType === 'stock' ||
+      normalized.includes('stock') || normalized.includes('stocks') ||
+      normalized.includes('equity') || normalized.includes('equities')) return 'Stocks';
+
+  return 'TradFi';
+}
+
 function futureInstrument(raw: Json, kind: 'USDT-M'|'COIN-M', now:number): Json | null {
   const symbol=s(raw?.symbol);
   if(!symbol || !['TRADING','PENDING_TRADING'].includes(s(raw?.status || raw?.contractStatus))) return null;
   const base=s(raw?.baseAsset).toUpperCase();
   const quote=s(raw?.quoteAsset).toUpperCase();
   const tags=normalizeFutureTags(raw?.underlyingSubType);
-  const tradfi=tags.includes('TradFi');
+  const tradeFiSubtype=classifyFutureTradeFi(raw, tags);
+  const tradfi=Boolean(tradeFiSubtype);
   const onboard=n(raw?.onboardDate);
   const isNew=Number.isFinite(onboard) ? now-Number(onboard)<30*86400000 : false;
   const ct=s(raw?.contractType);
@@ -124,16 +152,18 @@ function futureInstrument(raw: Json, kind: 'USDT-M'|'COIN-M', now:number): Json 
   if (!tradfi) derived.unshift('Crypto');
   if (isNew) derived.unshift('New');
   if (quote==='USDC') derived.push('USDC');
+  if (tradeFiSubtype) derived.push(tradeFiSubtype);
   return {
     symbol,
     name:base+(quote?'/'+quote:'')+(ct==='PERPETUAL'?' Perpetual':' '+ct),
     provider:'BINANCE', exchange:'BINANCE',
     marketGroup:tradfi?'TRADE FI':'CRYPTO', marketType:'Futures',
     category:tradfi?'TradFi Futures':'Futures', marketSubcategory:kind,
-    marketSubSubcategory:tradfi ? (tags[0] || 'Stocks') : kind,
+    marketSubSubcategory:tradfi ? tradeFiSubtype : kind,
     marketFilters:uniq([...derived, kind, ct==='PERPETUAL'?'Perpetual':'Expiring', quote]),
-    marketFilter:tags[0] || kind, instrumentType:tradfi?'TradFi Futures':'Crypto Futures',
+    marketFilter:tradeFiSubtype || tags[0] || kind, instrumentType:tradfi?'TradFi Futures':'Crypto Futures',
     instrumentSubtype:tags.join(', '), quote, baseAsset:base, settlement:kind,
+    contractType:ct, underlyingType:s(raw?.underlyingType), underlyingSubType:raw?.underlyingSubType,
     status:s(raw?.status || raw?.contractStatus), pipSize:tickSize(raw),
     onboardDate:onboard, expiry:n(raw?.deliveryDate), newListing:isNew
   };
