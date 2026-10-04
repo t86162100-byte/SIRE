@@ -992,6 +992,10 @@ server.listen(PORT,HOST,async()=>{
     console.log('[BINANCE STARTUP CATALOG]', JSON.stringify({
       count: catalog.instruments.length,
       counts: catalog.diagnostics?.counts,
+      tradeFi: {
+        futures: Object.fromEntries(['Stocks','ETFs','Commodities','Fx','Pre-IPO'].map(k=>[k,catalog.instruments.filter(x=>x.marketGroup==='TRADE FI'&&x.marketType==='Futures'&&x.marketSubSubcategory===k).length])),
+        spot: Object.fromEntries(['bStocks','tCommodities'].map(k=>[k,catalog.instruments.filter(x=>x.marketGroup==='TRADE FI'&&x.marketType==='Spot'&&x.marketSubSubcategory===k).length]))
+      },
       stocksSource: catalog.diagnostics?.sources?.stocks,
       tokenizedSource: catalog.diagnostics?.sources?.tokenized,
       usdtm: catalog.diagnostics?.sources?.usdtm?.audit?.acceptedByNormalizer,
