@@ -409,7 +409,7 @@ export async function fetchBinanceCatalogServer() {
     if(symbol && (row?.etf===true || row?.isETF===true || row?.isEtf===true || row?.et===true || /(^|\W)etf($|\W)|exchange[ ._-]?traded[ ._-]?fund/.test(text))) etfSymbols.add(symbol);
   }
   for(const row of [...tokenRows, ...rwaRows]) {
-    const commodityText=[row?.assetName,row?.tokenName,row?.name,row?.description,row?.type,row?.assetType,row?.category,row?.subtype,row?.tags,row?.tokenName,row?.underlyingName].map(s).join(' ').toLowerCase();
+    const commodityText=([row?.assetName,row?.tokenName,row?.name,row?.description,row?.type,row?.assetType,row?.category,row?.subtype,row?.tags,row?.tokenName,row?.underlyingName].map(s).join(' ')+' '+JSON.stringify(row)).toLowerCase();
     const commoditySymbol=s(row?.symbol || row?.ticker || row?.assetCode || row?.tokenCode || row?.tokenSymbol || row?.underlyingTicker).toUpperCase();
     if(commoditySymbol && /gold|silver|oil|commodity|commodit|copper|platinum|palladium/.test(commodityText)) commoditySymbols.add(commoditySymbol);
   }
