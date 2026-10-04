@@ -530,3 +530,67 @@ export async function fetchBinanceCatalogServer() {
 
   return {instruments, diagnostics};
 }
+
+
+type BinancePriceSnapshot = {
+  symbol: string;
+  price: number;
+};
+
+let priceSnapshotCache: { at: number; prices: Record<string, number> } | null = null;
+let priceSnapshotPromise: Promise<Record<string, number>> | null = null;
+
+async function fetchTickerPrices(hosts: string[]): Promise<BinancePriceSnapshot[]> {
+  let lastError = '';
+  for (const host of hosts) {
+    try {
+      const data = await getJson(host + '/ticker/price');
+      if (!Array.isArray(data)) {
+        lastError = 'Binance price endpoint returned a non-array response.';
+        continue;
+      }
+      const rows = data
+        .map((row: any) => ({ symbol: s(row?.symbol).toUpperCase(), price: n(row?.price) }))
+        .filter((row: BinancePriceSnapshot) => row.symbol && Number.isFinite(row.price)) as BinancePriceSnapshot[];
+      if (rows.length) return rows;
+      lastError = 'Binance price endpoint returned no usable prices.';
+    } catch (error) {
+      lastError = error instanceof Error ? error.message : String(error);
+    }
+  }
+  throw new Error(lastError || 'Binance public price endpoint is unavailable.');
+}
+
+async function refreshBinancePriceSnapshot() {
+  const now = Date.now();
+  if (priceSnapshotCache && now - priceSnapshotCache.at < 2500) return priceSnapshotCache.prices;
+  if (priceSnapshotPromise) return priceSnapshotPromise;
+
+  priceSnapshotPromise = (async () => {
+    const [spot, usdtm, coinm] = await Promise.all([
+      fetchTickerPrices(SPOT_HOSTS),
+      fetchTickerPrices(UM_HOSTS),
+      fetchTickerPrices(CM_HOSTS),
+    ]);
+    const prices: Record<string, number> = {};
+    for (const row of [...spot, ...usdtm, ...coinm]) prices[row.symbol] = row.price;
+    priceSnapshotCache = { at: Date.now(), prices };
+    return prices;
+  })();
+
+  try {
+    return await priceSnapshotPromise;
+  } finally {
+    priceSnapshotPromise = null;
+  }
+}
+
+export async function fetchBinancePricesServer() {
+  const prices = await refreshBinancePriceSnapshot();
+  return {
+    prices,
+    updatedAt: priceSnapshotCache?.at ?? Date.now(),
+    count: Object.keys(prices).length,
+    source: 'binance-native-public-ticker',
+  };
+}
