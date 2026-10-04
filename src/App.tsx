@@ -27,6 +27,7 @@ export type Instrument = Partial<DerivInstrument> & Partial<BinanceInstrument> &
   change24h?: number;
   priceChangePercent?: number;
   volume24h?: number;
+  quoteVolume?: number;
   tradeCount24h?: number;
   listedAt?: number;
   onboardDate?: number;
@@ -315,34 +316,63 @@ export default function App() {
     let stopped = false;
     let timer: number | undefined;
 
-    const refreshBinancePrices = async () => {
+    const refreshBinanceMarketData = async () => {
       try {
         const response = await fetch('/api/sire/binance/prices', {
           cache: 'no-store',
           headers: { Accept: 'application/json' },
         });
         const payload = await response.json().catch(() => ({}));
-        if (stopped || !response.ok || !payload?.ok || !payload?.prices) return;
+        if (stopped || !response.ok || !payload?.ok || !payload?.markets) return;
 
-        const prices = payload.prices as Record<string, unknown>;
-        setInstruments(current => current.map(item => {
+        const markets = payload.markets as Record<string, any>;
+        const getSnapshot = (item: Instrument) => {
+          const symbol = String(item.symbol || '').toUpperCase();
+          const marketType = String(item.marketType || item.category || '');
+          const marketGroup = String((item as any).marketGroup || '');
+          let venue = 'SPOT';
+          if (marketGroup === 'ALPHA' || marketType === 'Alpha') venue = 'ALPHA';
+          else if (marketGroup === 'TRADE FI' && marketType === 'Stocks') venue = 'EQUITY';
+          else if (marketGroup === 'TRADE FI' && marketType === 'Spot') venue = 'EQUITY';
+          else if (marketType === 'Futures') {
+            venue = String((item as any).settlement || (item as any).marketSubcategory || '') === 'COIN-M' ? 'COIN-M' : 'USDT-M';
+          } else if (marketType === 'Options') venue = 'OPTIONS';
+          else if (marketType === 'Margin') venue = 'SPOT';
+          return markets[venue + ':' + symbol] || null;
+        };
+
+        const mergeSnapshot = (item: Instrument) => {
           if (item.provider !== 'BINANCE') return item;
-          const value = Number(prices[String(item.symbol || '').toUpperCase()]);
-          return Number.isFinite(value) ? { ...item, price: value } : item;
-        }));
+          const snapshot = getSnapshot(item);
+          if (!snapshot) return item;
+          const next = { ...item } as Instrument;
+          const assign = (key: keyof Instrument, value: unknown) => {
+            const numberValue = Number(value);
+            if (Number.isFinite(numberValue)) (next as any)[key] = numberValue;
+          };
+          assign('price', snapshot.price);
+          assign('priceChangePercent', snapshot.priceChangePercent);
+          assign('change24h', snapshot.change24h ?? snapshot.priceChangePercent);
+          assign('quoteVolume', snapshot.quoteVolume);
+          assign('volume24h', snapshot.quoteVolume ?? snapshot.volume24h);
+          assign('high24h', snapshot.high24h);
+          assign('low24h', snapshot.low24h);
+          assign('open24h', snapshot.open24h);
+          // Keep catalogue MC when a venue does not expose live MC; replace it
+          // when Binance supplies a live market-cap field (Alpha/TradeFi).
+          assign('marketCap', snapshot.marketCap);
+          return next;
+        };
 
-        setSelected(current => {
-          if (!current || current.provider !== 'BINANCE') return current;
-          const value = Number(prices[String(current.symbol || '').toUpperCase()]);
-          return Number.isFinite(value) ? { ...current, price: value } : current;
-        });
+        setInstruments(current => current.map(mergeSnapshot));
+        setSelected(current => current ? mergeSnapshot(current) : current);
       } catch (error) {
-        console.warn('[SIRE BINANCE] price refresh failed', error);
+        console.warn('[SIRE BINANCE] market snapshot refresh failed', error);
       }
     };
 
-    void refreshBinancePrices();
-    timer = window.setInterval(() => { void refreshBinancePrices(); }, 3000);
+    void refreshBinanceMarketData();
+    timer = window.setInterval(() => { void refreshBinanceMarketData(); }, 3000);
     return () => {
       stopped = true;
       if (timer !== undefined) window.clearInterval(timer);
