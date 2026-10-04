@@ -398,15 +398,11 @@ export async function fetchBinanceCatalogServer() {
   const tokenRows=extractRows(raw.tokenized);
   const rwaRows=extractRows(raw.rwa);
   const stockSymbols=new Set<string>();
-  const commodityPage=String(raw.tCommoditiesPage||'');
-  // The Markets page is only a classification source; intersect its discovered
-  // symbols with Binance Spot exchangeInfo below, so no synthetic symbols enter the catalog.
-  const pageSymbols=new Set<string>();
-  for(const match of commodityPage.matchAll(/(?:\\"|&quot;)(?:symbol|baseAsset)(?:\\"|&quot;)\\s*:\\s*(?:\\"|&quot;)([A-Z0-9._-]+)(?:\\"|&quot;)/g)) pageSymbols.add(match[1].toUpperCase());
-  for(const symbol of pageSymbols) commoditySymbols.add(symbol);
-  // Binance's current Markets tCommodities classification is XAUT/PAXG; keep this as a narrow fallback only when the page payload is unavailable.
+  // Use explicit Binance tCommodities assets here. The market page also contains
+  // the wider Spot catalogue, so scraping generic symbol/baseAsset fields can
+  // misclassify ordinary crypto Spot rows as commodities.
   for(const symbol of ['XAUT','PAXG']) commoditySymbols.add(symbol);
-  
+
   const etfSymbols=new Set<string>();
   for(const row of stockRows) {
     const symbol=s(row?.symbol || row?.s || row?.ticker || row?.code).toUpperCase();
