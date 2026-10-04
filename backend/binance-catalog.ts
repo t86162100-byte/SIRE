@@ -333,6 +333,16 @@ type BinanceMarketSnapshot = {
 let marketSnapshotCache:{at:number; data:Record<string,BinanceMarketSnapshot>}|null=null;
 let marketSnapshotPromise:Promise<Record<string,BinanceMarketSnapshot>>|null=null;
 
+// Historical candles are read-heavy and must not fan out into repeated Binance REST calls.
+// Coalesce identical requests and retain a short-lived server cache. Live/current-bar updates
+// come from WebSocket, so this cache never becomes the live-price authority.
+type BinanceHistoryBar = {time:number;open:number;high:number;low:number;close:number;volume:number};
+const historyCache = new Map<string,{at:number;bars:BinanceHistoryBar[]}>();
+const historyInflight = new Map<string,Promise<BinanceHistoryBar[]>>();
+const HISTORY_RECENT_TTL_MS = 15_000;
+const HISTORY_OLDER_TTL_MS = 5 * 60_000;
+
+
 function snapshotRows(value:any):any[] {
   if(Array.isArray(value)) return value;
   if(Array.isArray(value?.data)) return value.data;
@@ -423,49 +433,74 @@ export async function fetchBinanceHistoryServer(input:{market:string;symbol:stri
   const market=s(input.market).toUpperCase(), symbol=s(input.symbol).toUpperCase(), interval=s(input.interval)||'1m';
   if(!symbol) throw new Error('Binance history requires symbol.');
   const limit=Math.max(1,Math.min(1500,Math.floor(input.limit||500)));
-  const q=new URLSearchParams({symbol,interval,limit:String(limit)});
-  if(input.from!==undefined) q.set('startTime',String(Math.floor(input.from*1000)));
-  if(input.to!==undefined) q.set('endTime',String(Math.floor(input.to*1000)));
-  let urls:string[]=[];
-  if(market==='SPOT' || market==='MARGIN' || market==='TRADE FI SPOT') {
-    urls=SPOT_HOSTS.map(host=>host+'/klines?'+q);
-  } else if(market==='USDT-M' || market==='TRADE FI FUTURES') {
-    urls=UM_HOSTS.map(host=>host+'/klines?'+q);
-  } else if(market==='COIN-M') {
-    urls=CM_HOSTS.map(host=>host+'/klines?'+q);
-  } else if(market==='OPTIONS') {
-    urls=OPTIONS_HOSTS.map(host=>host+'/klines?'+q);
-  } else if(market==='ALPHA') {
-    urls=['https://www.binance.com/bapi/defi/v1/public/alpha-trade/klines?'+q];
-  } else if(market==='EQUITY') {
-    const eq=new URLSearchParams({symbol,interval,limit:String(Math.min(500,limit))});
-    if(input.from!==undefined) eq.set('startTime',String(Math.floor(input.from*1000)));
-    if(input.to!==undefined) eq.set('endTime',String(Math.floor(input.to*1000)));
-    urls=['https://www.binance.com/bapi/equity/v1/public/equity/kline/query?'+eq];
-  } else throw new Error('Unsupported Binance market history venue: '+market);
+  const key=[market,symbol,interval,input.from ?? '',input.to ?? '',limit].join('|');
+  const now=Date.now();
+  const cached=historyCache.get(key);
+  const requestedEnd=Number.isFinite(input.to) ? Number(input.to) : now/1000;
+  const ttl=requestedEnd < now/1000 - 600 ? HISTORY_OLDER_TTL_MS : HISTORY_RECENT_TTL_MS;
+  if(cached && now-cached.at<ttl) return cached.bars.map(bar=>({...bar}));
 
-  let data:any=null;
-  const errors:string[]=[];
-  for (const [index,url] of urls.entries()) {
+  const existing=historyInflight.get(key);
+  if(existing) return (await existing).map(bar=>({...bar}));
+
+  const task=(async()=>{
+    const q=new URLSearchParams({symbol,interval,limit:String(limit)});
+    if(input.from!==undefined) q.set('startTime',String(Math.floor(input.from*1000)));
+    if(input.to!==undefined) q.set('endTime',String(Math.floor(input.to*1000)));
+
+    let url:string;
+    if(market==='SPOT' || market==='MARGIN' || market==='TRADE FI SPOT') {
+      url=SPOT_HOSTS[0]+'/klines?'+q;
+    } else if(market==='USDT-M' || market==='TRADE FI FUTURES') {
+      url=UM_HOSTS[0]+'/klines?'+q;
+    } else if(market==='COIN-M') {
+      url=CM_HOSTS[0]+'/klines?'+q;
+    } else if(market==='OPTIONS') {
+      url=OPTIONS_HOSTS[0]+'/klines?'+q;
+    } else if(market==='ALPHA') {
+      url='https://www.binance.com/bapi/defi/v1/public/alpha-trade/klines?'+q;
+    } else if(market==='EQUITY') {
+      const eq=new URLSearchParams({symbol,interval,limit:String(Math.min(500,limit))});
+      if(input.from!==undefined) eq.set('startTime',String(Math.floor(input.from*1000)));
+      if(input.to!==undefined) eq.set('endTime',String(Math.floor(input.to*1000)));
+      url='https://www.binance.com/bapi/equity/v1/public/equity/kline/query?'+eq;
+    } else throw new Error('Unsupported Binance market history venue: '+market);
+
+    console.log('[BINANCE HISTORY] Upstream attempt', {market,symbol,interval,limit,url});
+    let data:any;
     try {
-      console.log('[BINANCE HISTORY] Upstream attempt', {market,symbol,interval,attempt:index+1,total:urls.length,url});
       data=await getJson(url);
-      console.log('[BINANCE HISTORY] Upstream success', {market,symbol,interval,attempt:index+1,url});
-      break;
-    } catch (error) {
+      console.log('[BINANCE HISTORY] Upstream success', {market,symbol,interval,url});
+    } catch(error) {
       const message=error instanceof Error ? error.message : String(error);
-      errors.push(message);
-      console.warn('[BINANCE HISTORY] Upstream failed', {market,symbol,interval,attempt:index+1,url,error:message});
+      // Never rotate through multiple Binance hosts after rate limiting. Binance rate
+      // limits are IP-based, so host fan-out only amplifies the violation.
+      console.error('[BINANCE HISTORY] Upstream failed', {market,symbol,interval,url,error:message});
+      throw new Error(message);
     }
+
+    const rows=snapshotRows(data);
+    const bars=rows.map((r:any)=>({
+      time:Math.floor(Number(r?.[0] ?? r?.openTime ?? r?.t)/1000),
+      open:Number(r?.[1] ?? r?.open ?? r?.o),
+      high:Number(r?.[2] ?? r?.high ?? r?.h),
+      low:Number(r?.[3] ?? r?.low ?? r?.l),
+      close:Number(r?.[4] ?? r?.close ?? r?.c),
+      volume:Number(r?.[5] ?? r?.volume ?? r?.v)||0
+    })).filter((b:any)=>Number.isFinite(b.time)&&[b.open,b.high,b.low,b.close].every(Number.isFinite));
+
+    if(!bars.length) throw new Error('Binance returned no historical candles for '+symbol+' on '+market+'.');
+    const sorted=bars.sort((a:any,b:any)=>a.time-b.time) as BinanceHistoryBar[];
+    historyCache.set(key,{at:Date.now(),bars:sorted});
+    return sorted.map(bar=>({...bar}));
+  })();
+
+  historyInflight.set(key,task);
+  try {
+    return await task;
+  } finally {
+    historyInflight.delete(key);
   }
-  if (!data) {
-    console.error('[BINANCE HISTORY] All upstream hosts failed', {market,symbol,interval,limit,errors});
-    throw new Error('All Binance '+market+' history hosts failed for '+symbol+': '+errors.join(' | '));
-  }
-  const rows=snapshotRows(data);
-  const bars=rows.map((r:any)=>({time:Math.floor(Number(r?.[0] ?? r?.openTime ?? r?.t)/1000),open:Number(r?.[1] ?? r?.open ?? r?.o),high:Number(r?.[2] ?? r?.high ?? r?.h),low:Number(r?.[3] ?? r?.low ?? r?.l),close:Number(r?.[4] ?? r?.close ?? r?.c),volume:Number(r?.[5] ?? r?.volume ?? r?.v)||0})).filter((b:any)=>Number.isFinite(b.time)&&[b.open,b.high,b.low,b.close].every(Number.isFinite));
-  if(!bars.length) throw new Error('Binance returned no historical candles for '+symbol+' on '+market+'.');
-  return bars.sort((a:any,b:any)=>a.time-b.time);
 }
 
 export async function fetchBinanceCatalogServer() {
