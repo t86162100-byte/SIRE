@@ -1,5 +1,4 @@
 import { createDerivDataFeed, type DerivFeedDiagnostic } from './derivMarketData';
-import { createBinanceDataFeed } from './binanceMarketData';
 
 export type SireMarketProvider = string;
 export type SireMarketQuote = { symbol:string; price:number; epoch:number; bid?:number; ask?:number; };
@@ -10,7 +9,6 @@ export type MarketFeedFactory = (instrument:SireMarketInstrument,onQuote:(quote:
 
 const providers = new Map<string, MarketFeedFactory>([
   ['DERIV', (_instrument,onQuote,reportDiagnostic) => createDerivDataFeed(onQuote,reportDiagnostic)],
-  ['BINANCE', (instrument,onQuote,reportDiagnostic) => createBinanceDataFeed(instrument,onQuote,reportDiagnostic)],
 ]);
 
 export function registerMarketFeed(provider:string,factory:MarketFeedFactory){const key=String(provider||'').trim().toUpperCase();if(!key)throw new Error('SIRE market-data provider name is required.');providers.set(key,factory);}
