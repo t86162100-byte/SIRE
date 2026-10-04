@@ -59,11 +59,13 @@ function tickSize(raw: Json) {
 
 function spotInstrument(raw: Json, margin = false, bStockSymbols?: Set<string>, commoditySymbols?: Set<string>): Json | null {
   const symbol = s(raw?.symbol);
-  if (!symbol || !['TRADING','PENDING_TRADING'].includes(s(raw?.status))) return null;
+  const status=s(raw?.status).toUpperCase();
+  const permissions=Array.isArray(raw?.permissions) ? raw.permissions.map(s).map(v=>v.toUpperCase()) : [];
+  if (!symbol || !status || (permissions.length && !permissions.includes('SPOT'))) return null;
   const quote = s(raw?.quoteAsset).toUpperCase();
   const base = s(raw?.baseAsset).toUpperCase();
   const bucket = quoteBucket(quote);
-  const isBStock = !margin && base.endsWith('B') && Boolean(bStockSymbols?.has(base));
+  const isBStock = !margin && base.endsWith('B') && (Boolean(bStockSymbols?.has(base)) || /^[A-Z]{2,8}B$/.test(base));
   const isTCommodity = !margin && !isBStock && Boolean(commoditySymbols?.has(base));
   return {
     symbol, name: base + '/' + quote, provider:'BINANCE', exchange:'BINANCE',
@@ -385,6 +387,9 @@ export async function fetchBinanceCatalogServer() {
 
   const out: Json[]=[];
   const spotRows=Array.isArray(raw.spot?.symbols)?raw.spot.symbols:[];
+  diagnostics.sources.spot = diagnostics.sources.spot || {ok:Boolean(raw.spot)};
+  diagnostics.sources.spot.rawSymbolRows = spotRows.length;
+  diagnostics.sources.spot.acceptedSymbolRows = 0;
   function extractRows(value:any): Json[] {
     if (Array.isArray(value)) return value;
     if (Array.isArray(value?.symbols)) return value.symbols;
@@ -429,7 +434,7 @@ export async function fetchBinanceCatalogServer() {
   }
   for(const row of spotRows) {
     const spotItem=spotInstrument(row,false,bStockSymbols,commoditySymbols);
-    if(spotItem) out.push(spotItem);
+    if(spotItem) { out.push(spotItem); diagnostics.sources.spot.acceptedSymbolRows++; }
   }
   for(const symbol of ['XAUTUSDT','PAXGUSDT']) {
     if(!out.some(item=>item.marketType==='Spot' && item.symbol===symbol)) {
@@ -527,8 +532,6 @@ export async function fetchBinanceCatalogServer() {
   return {instruments, diagnostics};
 }
 
-
-type BinanceMarketSnapshot = {
   symbol: string;
   market: 'SPOT'|'USDT-M'|'COIN-M'|'OPTIONS'|'EQUITY'|'ALPHA';
   price?: number; priceChangePercent?: number; change24h?: number;
