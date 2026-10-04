@@ -157,7 +157,8 @@ export function subscribeBinanceTick(item:any,handler:Handler){
     if(!set){set=new Set();b.handlers.set(symbol,set);b.symbols.add(symbol);}
     set.add(handler);
     if(b.socket?.readyState===WebSocket.OPEN){
-      const params=v==='COIN' ? [symbol.toLowerCase()+'@ticker',symbol.toLowerCase()+'@trade',symbol.toLowerCase()+'@markPrice@1s'] : [symbol.toLowerCase()+'@ticker',symbol.toLowerCase()+'@trade'];
+      const bootstrap=v==='ALPHA' ? ['!ticker@arr'] : ['!miniTicker@arr'];
+      const params=bootstrap.concat(v==='COIN' ? [symbol.toLowerCase()+'@ticker',symbol.toLowerCase()+'@trade',symbol.toLowerCase()+'@markPrice@1s'] : [symbol.toLowerCase()+'@ticker',symbol.toLowerCase()+'@trade']);
       try{b.socket.send(JSON.stringify({method:'SUBSCRIBE',params,id:++b.requestId}));}catch{}
     }
     return()=>{
