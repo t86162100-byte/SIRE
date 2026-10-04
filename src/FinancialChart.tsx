@@ -1007,6 +1007,26 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
           message: 'Chart did not accept instrument change to ' + symbol + '.',
           detail: 'The SIRE instrument selector changed state, but the OpenAlgo chart widget did not switch its primary market-data symbol.',
         });
+      } else {
+        // OpenAlgo normally reloads on setSymbol(), but explicitly reload the
+        // newly selected context as well. This closes a lifecycle hole where
+        // switching away and back could leave the primary series empty without
+        // issuing a fresh getBars request.
+        const requestedSymbol = symbol;
+        window.setTimeout(() => {
+          const currentWidget = widgetRef.current;
+          if (!currentWidget || currentWidget.isDestroyed || currentWidget !== widget) return;
+          if (currentWidget.symbol() !== requestedSymbol || symbolRef.current !== requestedSymbol) return;
+          void currentWidget.reload().catch((error: unknown) => {
+            const message = error instanceof Error ? error.message : String(error);
+            reportDiagnostic({
+              level: 'error',
+              code: 'BINANCE_HISTORY_RELOAD_FAILED',
+              message: 'Binance history reload failed after instrument change: ' + message,
+              detail: 'The chart accepted the new instrument, but the explicit post-switch history reload failed.',
+            });
+          });
+        }, 0);
       }
     } catch (error) {
       reportDiagnostic({
