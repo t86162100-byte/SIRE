@@ -18,6 +18,12 @@ const EQUITY_PUBLIC_HOSTS = [
   'https://www.binance.com/bapi/equity/v1/public/equity/symbol/get-symbols-dynamic'
 ];
 const ALPHA = 'https://www.binance.com/bapi/defi/v1/public';
+// Binance's public asset service exposes tokenised-asset metadata used by the
+// Markets UI. This is distinct from the Web3 RWA feed (which can contain Ondo
+// and other on-chain assets that are not Binance bStocks/tCommodities).
+const TOKENIZED_PUBLIC_HOSTS = [
+  'https://www.binance.com/bapi/asset/v2/public/asset/asset/get-tokenised-asset'
+];
 
 const s = (v: unknown) => String(v ?? '').trim();
 const n = (v: unknown) => { const x = Number(v); return Number.isFinite(x) ? x : undefined; };
@@ -213,12 +219,15 @@ function equityInstrument(raw: Json): Json | null {
 }
 
 function tokenizedInstrument(raw: Json): Json | null {
-  // The official SAPI tokenized-assets endpoint uses assetCode/assetName.
-  // Do not misclassify Binance Web3 Ondo/RWA rows (symbol/ticker schema) as bStocks.
-  const symbol=s(raw?.assetCode).toUpperCase();
+  // Official SAPI rows use assetCode/assetName. Binance's public asset service
+  // may expose the same assets with tokenCode/tokenName or symbol/name fields.
+  // Only accept rows that carry tokenised-asset semantics; never treat a generic
+  // Web3 RWA row as a bStock merely because it has a ticker.
+  const symbol=s(raw?.assetCode || raw?.tokenCode || raw?.tokenSymbol).toUpperCase();
   if(!symbol) return null;
-  const name=s(raw?.assetName || raw?.name || symbol);
-  const commodity=/gold|silver|oil|commodity|copper|platinum|palladium/i.test(name);
+  const name=s(raw?.assetName || raw?.tokenName || raw?.name || symbol);
+  const kind=s(raw?.assetType || raw?.type || raw?.category || raw?.subtype).toLowerCase();
+  const commodity=/gold|silver|oil|commodity|copper|platinum|palladium|tcommodit/.test((name+' '+kind).toLowerCase());
   return {
     symbol, name, provider:'BINANCE', exchange:'BINANCE',
     marketGroup:'TRADE FI', marketType:'Spot', category:'Spot',
@@ -314,7 +323,7 @@ export async function fetchBinanceCatalogServer() {
     {name:'margin', urls:MARGIN_HOSTS.map(host=>host+'/allPairs'), apiKey:true},
     {name:'marginIsolated', urls:MARGIN_ISOLATED_HOSTS.map(host=>host+'/allPairs'), apiKey:true},
     {name:'stocks', urls:[...EQUITY_PUBLIC_HOSTS, ...EQUITY_HOSTS.map(host=>host+'/exchangeInfo')], apiKey:false},
-    {name:'tokenized', urls:[...EQUITY_HOSTS.map(host=>host+'/tokenized-assets'), 'https://www.binance.com/bapi/defi/v1/public/wallet-direct/buw/wallet/market/token/rwa/stock/detail/list/ai'], apiKey:true},
+    {name:'tokenized', urls:[...EQUITY_HOSTS.map(host=>host+'/tokenized-assets'), ...TOKENIZED_PUBLIC_HOSTS, 'https://www.binance.com/bapi/defi/v1/public/wallet-direct/buw/wallet/market/token/rwa/stock/detail/list/ai'], apiKey:true},
     {name:'alphaExchange', urls:[ALPHA+'/alpha-trade/get-exchange-info'], apiKey:false},
     {name:'alphaTokens', urls:[ALPHA+'/wallet-direct/buw/wallet/cex/alpha/all/token/list'], apiKey:false}
   ];
@@ -373,6 +382,7 @@ export async function fetchBinanceCatalogServer() {
     return [];
   }
   const stockRows = extractRows(raw.stocks);
+  const tokenRows=extractRows(raw.tokenized);
   const stockSymbols=new Set<string>();
   const etfSymbols=new Set<string>();
   for(const row of stockRows) {
@@ -416,7 +426,6 @@ export async function fetchBinanceCatalogServer() {
     const item=equityInstrument(row); if(item) out.push(item);
   }
 
-  const tokenRows=extractRows(raw.tokenized);
   for(const row of tokenRows) {
     const item=tokenizedInstrument(row); if(item) out.push(item);
   }
@@ -455,7 +464,18 @@ export async function fetchBinanceCatalogServer() {
     options:instruments.filter(x=>x.marketType==='Options').length,
     stocks:instruments.filter(x=>x.marketGroup==='TRADE FI' && x.marketType==='Stocks').length,
     tokenized:instruments.filter(x=>x.instrumentSubtype==='Tokenized Securities').length,
-    alpha:instruments.filter(x=>x.marketGroup==='ALPHA').length
+    alpha:instruments.filter(x=>x.marketGroup==='ALPHA').length,
+    tradeFiFutures:{
+      Stocks:instruments.filter(x=>x.marketGroup==='TRADE FI' && x.marketType==='Futures' && x.marketSubSubcategory==='Stocks').length,
+      ETFs:instruments.filter(x=>x.marketGroup==='TRADE FI' && x.marketType==='Futures' && x.marketSubSubcategory==='ETFs').length,
+      Commodities:instruments.filter(x=>x.marketGroup==='TRADE FI' && x.marketType==='Futures' && x.marketSubSubcategory==='Commodities').length,
+      Fx:instruments.filter(x=>x.marketGroup==='TRADE FI' && x.marketType==='Futures' && x.marketSubSubcategory==='Fx').length,
+      'Pre-IPO':instruments.filter(x=>x.marketGroup==='TRADE FI' && x.marketType==='Futures' && x.marketSubSubcategory==='Pre-IPO').length
+    },
+    tradeFiSpot:{
+      bStocks:instruments.filter(x=>x.marketGroup==='TRADE FI' && x.marketType==='Spot' && x.marketSubSubcategory==='bStocks').length,
+      tCommodities:instruments.filter(x=>x.marketGroup==='TRADE FI' && x.marketType==='Spot' && x.marketSubSubcategory==='tCommodities').length
+    }
   };
 
   return {instruments, diagnostics};
