@@ -909,7 +909,15 @@ const server = http.createServer(async (req,res) => {
     if (req.method === 'GET' && pathname === '/api/sire/binance/history') {
       try {
         const u=new URL(req.url||'/', 'http://'+(req.headers.host||'localhost'));
-        const bars=await fetchBinanceHistoryServer({market:u.searchParams.get('market')||'',symbol:u.searchParams.get('symbol')||'',interval:u.searchParams.get('interval')||'1m',from:Number(u.searchParams.get('from')),to:Number(u.searchParams.get('to')),limit:Number(u.searchParams.get('limit')||500)});
+        const fromParam=u.searchParams.get('from'); const toParam=u.searchParams.get('to');
+        const bars=await fetchBinanceHistoryServer({
+          market:u.searchParams.get('market')||'',
+          symbol:u.searchParams.get('symbol')||'',
+          interval:u.searchParams.get('interval')||'1m',
+          from:fromParam!==null && fromParam!=='' && Number.isFinite(Number(fromParam)) ? Number(fromParam) : undefined,
+          to:toParam!==null && toParam!=='' && Number.isFinite(Number(toParam)) ? Number(toParam) : undefined,
+          limit:Number(u.searchParams.get('limit')||500)
+        });
         return res.writeHead(200,{'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify({ok:true,bars}));
       } catch(cause) {
         const message=cause instanceof Error?cause.message:String(cause);
