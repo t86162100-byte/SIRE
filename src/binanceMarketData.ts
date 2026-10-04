@@ -202,6 +202,7 @@ async function requestKlines(instrument: any, symbol: string, interval: string, 
   // market-data host directly, while preserving the direct-host fallback.
   try {
     const kindForProxy = marketKind(instrument);
+    diagnostic(onDiagnostic,{level:'info',code:'BINANCE_HISTORY_PROXY_PREPARED',message:'Preparing Render Binance history proxy request.',detail:`${symbol} ${interval}`});
     const proxyParams = new URLSearchParams({
       market: kindForProxy === 'um' ? 'USDT-M'
         : kindForProxy === 'cm' ? 'COIN-M'
@@ -221,6 +222,7 @@ async function requestKlines(instrument: any, symbol: string, interval: string, 
     const proxyTimer = window.setTimeout(() => proxyController.abort(), 6000);
     let proxy: Response;
     try {
+      diagnostic(onDiagnostic,{level:'info',code:'BINANCE_HISTORY_PROXY_HTTP_START',message:'Render Binance history proxy HTTP request started.',detail:'/api/sire/binance/history?' + proxyParams.toString()});
       proxy = await fetch('/api/sire/binance/history?' + proxyParams.toString(), {
         cache: 'no-store',
         signal: proxyController.signal,
@@ -229,6 +231,7 @@ async function requestKlines(instrument: any, symbol: string, interval: string, 
     } finally {
       window.clearTimeout(proxyTimer);
     }
+    diagnostic(onDiagnostic,{level:'info',code:'BINANCE_HISTORY_PROXY_HTTP_RESPONSE',message:'Render Binance history proxy response received.',detail:`status=${proxy.status}`});
     const payload = await proxy.json().catch(() => ({}));
     if (proxy.ok && payload?.ok && Array.isArray(payload?.bars) && payload.bars.length) {
       return payload.bars as Bar[];
@@ -424,11 +427,16 @@ export function createBinanceDataFeed(
   return {
     async getBars({symbol,interval,from,to,countBack}:{symbol:string;interval:string;from?:number;to?:number;countBack?:number}) {
       diagnostic(onDiagnostic,{level:'info',code:'BINANCE_HISTORY_REQUEST_STARTED',message:'Binance history requested for '+symbol+' '+interval+'.',detail:'Using Binance public market-data klines; no API key is required for this chart data path.'});
-      const bars = await fetchHistory(currentInstrument,symbol,interval,from,to,countBack,onDiagnostic);
-      diagnostic(onDiagnostic,{level:'info',code:'BINANCE_HISTORY_GETBARS_RESOLVED',message:'Binance getBars received its history result.',detail:`bars=${bars.length}`});
-      if (!bars.length) throw new Error('Binance returned no historical candles for '+symbol+' '+interval+'.');
-      diagnostic(onDiagnostic,{level:'info',code:'BINANCE_HISTORY_LOADED',message:'Loaded '+bars.length+' Binance candles for '+symbol+' '+interval+'.'});
-      return bars;
+      try {
+        const bars = await fetchHistory(currentInstrument,symbol,interval,from,to,countBack,onDiagnostic);
+        diagnostic(onDiagnostic,{level:'info',code:'BINANCE_HISTORY_GETBARS_RESOLVED',message:'Binance getBars received its history result.',detail:`bars=${bars.length}`});
+        if (!bars.length) throw new Error('Binance returned no historical candles for '+symbol+' '+interval+'.');
+        diagnostic(onDiagnostic,{level:'info',code:'BINANCE_HISTORY_LOADED',message:'Loaded '+bars.length+' Binance candles for '+symbol+' '+interval+'.'});
+        return bars;
+      } catch (error) {
+        diagnostic(onDiagnostic,{level:'error',code:'BINANCE_HISTORY_GETBARS_FAILED',message:'Binance getBars failed: '+(error instanceof Error ? error.message : String(error)),detail:'The failure occurred inside the SIRE Binance feed before OpenAlgo could receive historical bars.'});
+        throw error;
+      }
     },
     async getBarsPage({symbol,interval,before,countBack}:{symbol:string;interval:string;before:number;countBack:number}) {
       const seconds = INTERVAL_SECONDS[interval];
