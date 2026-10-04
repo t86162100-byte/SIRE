@@ -469,6 +469,10 @@ export async function fetchBinanceCatalogServer() {
     const item=tokenizedInstrument(row); if(item) out.push(item);
   }
 
+  diagnostics.sources.rwa = diagnostics.sources.rwa || {ok:Boolean(raw.rwa)};
+  diagnostics.sources.rwa.recordCount = rwaRows.length;
+  diagnostics.sources.rwa.commodityMatches = rwaRows.filter(row => /gold|silver|oil|commodity|commodit|copper|platinum|palladium/i.test(JSON.stringify(row))).slice(0,10);
+
   const alphaSymbols=Array.isArray(raw.alphaExchange?.data?.symbols)?raw.alphaExchange.data.symbols:Array.isArray(raw.alphaExchange?.symbols)?raw.alphaExchange.symbols:[];
   const alphaTokens=Array.isArray(raw.alphaTokens?.data)?raw.alphaTokens.data:[];
   const tokenByAlphaId=new Map<string,Json>();
