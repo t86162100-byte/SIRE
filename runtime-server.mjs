@@ -32,6 +32,7 @@ const binanceFuturesQuoteHub = {
   readyResolve: null,
   readyReject: null,
   firstTickLogged: false,
+  firstMarkTickLogged: false,
 };
 
 async function loadBinanceFuturesQuoteSymbols() {
@@ -94,6 +95,14 @@ function connectBinanceFuturesQuoteHub() {
             provider:'BINANCE', symbol, price:markPrice, venue,
             epoch:Math.floor((Number(data?.E) || Date.now()) / 1000)
           });
+          if (!binanceFuturesQuoteHub.firstMarkTickLogged) {
+            binanceFuturesQuoteHub.firstMarkTickLogged = true;
+            console.info('[BINANCE FUTURES WS] first mark tick', JSON.stringify({
+              total: binanceFuturesQuoteHub.markTicks.size,
+              usdtm: [...binanceFuturesQuoteHub.markTicks.values()].filter(t => t.venue === 'USDT-M').length,
+              coinm: [...binanceFuturesQuoteHub.markTicks.values()].filter(t => t.venue === 'COIN-M').length
+            }));
+          }
           continue;
         }
 
