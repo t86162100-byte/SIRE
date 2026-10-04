@@ -11,7 +11,7 @@ export type BinanceInstrument = {
 export type BinanceTick = {
   provider: 'BINANCE'; symbol: string; price: number; epoch: number;
   open?: number; high?: number; low?: number; volume?: number; quoteVolume?: number;
-  bid?: number; ask?: number; percent?: number;
+  bid?: number; ask?: number; percent?: number; marketCap?: number;
 };
 const SPOT='https://api.binance.com', UM='https://fapi.binance.com', CM='https://dapi.binance.com';
 const ALPHA='https://www.binance.com', ALPHA_WS='wss://nbstream.binance.com/w3w/wsa/stream/stream';
