@@ -125,7 +125,7 @@ function fastBus(v:string){
     b.subscribeTimer=window.setTimeout(()=>{
       b!.subscribeTimer=undefined;
       if(b!.socket?.readyState!==WebSocket.OPEN||!b!.symbols.size)return;
-      const params=[...b!.symbols].map(symbol=>symbol.toLowerCase()+'@aggTrade');
+      const params=[...b!.symbols].map(symbol=>symbol.toLowerCase()+'@ticker');
       b!.socket.send(JSON.stringify({method:'SUBSCRIBE',params,id:++b!.requestId}));
     },100);
   };
@@ -144,14 +144,15 @@ function fastBus(v:string){
 
 export function subscribeBinanceTick(item:any,handler:Handler){
   const v=venue(item),symbol=s(item?.symbol);if(!symbol)return()=>{};
-  // Binance's per-symbol aggTrade stream is real-time. Use it for visible
-  // Spot/UM/CM rows; keep Alpha on its venue-wide stream.
+  // Binance's per-symbol 24h ticker stream is real-time and carries the
+  // authoritative rolling 24h percent/volume fields as well as last price.
+  // Use it for visible Spot/UM/CM rows; keep Alpha on its venue-wide stream.
   if(v==='SPOT'||v==='UM'||v==='COIN'){
     const b=fastBus(v);let set=b.handlers.get(symbol);
     if(!set){set=new Set();b.handlers.set(symbol,set);b.symbols.add(symbol);}
     set.add(handler);
     if(b.socket?.readyState===WebSocket.OPEN){
-      const params=[symbol.toLowerCase()+'@aggTrade'];
+      const params=[symbol.toLowerCase()+'@ticker'];
       try{b.socket.send(JSON.stringify({method:'SUBSCRIBE',params,id:++b.requestId}));}catch{}
     }
     return()=>{
@@ -160,7 +161,7 @@ export function subscribeBinanceTick(item:any,handler:Handler){
         b!.handlers.delete(symbol);
         b!.symbols.delete(symbol);
         if(b!.socket?.readyState===WebSocket.OPEN){
-          try{b!.socket.send(JSON.stringify({method:'UNSUBSCRIBE',params:[symbol.toLowerCase()+'@aggTrade'],id:++b!.requestId}));}catch{}
+          try{b!.socket.send(JSON.stringify({method:'UNSUBSCRIBE',params:[symbol.toLowerCase()+'@ticker'],id:++b!.requestId}));}catch{}
         }
       }
     };
