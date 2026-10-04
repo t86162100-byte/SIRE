@@ -949,6 +949,13 @@ const server = http.createServer(async (req,res) => {
         return res.writeHead(200,{'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify({ok:true,bars}));
       } catch(cause) {
         const message=cause instanceof Error?cause.message:String(cause);
+        console.error('[BINANCE HISTORY ROUTE] Failed', {
+          market:u.searchParams.get('market')||'',
+          symbol:u.searchParams.get('symbol')||'',
+          interval:u.searchParams.get('interval')||'1m',
+          limit:Number(u.searchParams.get('limit')||500),
+          error:message
+        });
         return res.writeHead(502,{'Access-Control-Allow-Origin':'*','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify({ok:false,error:message,bars:[]}));
       }
     }
