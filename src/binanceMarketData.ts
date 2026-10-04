@@ -115,9 +115,13 @@ const asNumber = (value: unknown) => {
 
 const diagnostic = (sink: ((event: Diagnostic) => void)|undefined, event: Diagnostic) => sink?.(event);
 
-function marketKind(instrument: any): 'spot'|'um'|'cm' {
+function marketKind(instrument: any): 'spot'|'um'|'cm'|'options'|'alpha'|'equity' {
   const type = String(instrument?.marketType || '').toLowerCase();
+  const group = String(instrument?.marketGroup || '').toLowerCase();
   const sub = String(instrument?.marketSubcategory || instrument?.settlement || '').toLowerCase();
+  if (type.includes('option')) return 'options';
+  if (type.includes('alpha') || group === 'alpha') return 'alpha';
+  if (type.includes('stock') || group.includes('trade fi') && type.includes('stock')) return 'equity';
   if (type.includes('coin') || sub.includes('coin-m') || sub.includes('coin m')) return 'cm';
   if (type.includes('future') || sub.includes('usdt-m') || sub.includes('usdt m')) return 'um';
   return 'spot';
@@ -125,11 +129,13 @@ function marketKind(instrument: any): 'spot'|'um'|'cm' {
 
 function restHosts(instrument: any) {
   const kind = marketKind(instrument);
-  return kind === 'um' ? UM_REST : kind === 'cm' ? CM_REST : SPOT_REST;
+  return kind === 'um' ? UM_REST : kind === 'cm' ? CM_REST : kind === 'options' ? ['https://eapi.binance.com/eapi/v1'] : SPOT_REST;
 }
 
 function wsHosts(instrument: any) {
   const kind = marketKind(instrument);
+  if (kind === 'alpha') return ['wss://nbstream.binance.com/w3w/wsa/stream/ws/'];
+  if (kind === 'options') return ['wss://nbstream.binance.com/eoptions/ws/'];
   return kind === 'um'
     ? ['wss://fstream.binance.com/ws/','wss://fstream1.binance.com/ws/']
     : kind === 'cm'
@@ -266,6 +272,22 @@ function createSocketFeed(instrument:any, symbol:string, interval:string, onQuot
 
   const connect = () => {
     if (stopped) return;
+    const kind = marketKind(instrument);
+    if (kind === 'equity') {
+      const poll = async () => {
+        if (stopped) return;
+        try {
+          const response = await fetch('/api/sire/binance/market-snapshot?t=' + Date.now(), {cache:'no-store'});
+          const payload = await response.json().catch(() => ({}));
+          const snap = payload?.snapshots?.['EQUITY:' + String(symbol).toUpperCase()];
+          const price = asNumber(snap?.price);
+          if (Number.isFinite(price)) onQuote({provider:'BINANCE',symbol:String(symbol).toUpperCase(),price,epoch:Date.now()/1000,bid:asNumber(snap?.bid),ask:asNumber(snap?.ask)});
+        } catch {}
+        if (!stopped) reconnectTimer = window.setTimeout(() => { reconnectTimer=undefined; void poll(); }, 3000);
+      };
+      void poll();
+      return;
+    }
     const hosts = wsHosts(instrument);
     const stream = String(symbol).toLowerCase() + '@kline_' + intervalForStream(interval);
     const url = hosts[Math.min(openedHost, hosts.length - 1)] + stream;
