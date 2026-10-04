@@ -907,22 +907,25 @@ const server = http.createServer(async (req,res) => {
             return text ? JSON.parse(text) : {};
           };
           const [spot, usdtm, coinm, stocks, alpha] = await Promise.allSettled([
-            get('https://api.binance.com/api/v3/ticker/24hr'),
+            get('https://data-api.binance.vision/api/v3/ticker/24hr').catch(() => get('https://api.binance.com/api/v3/ticker/24hr')),
             get('https://fapi.binance.com/fapi/v1/ticker/24hr'),
             get('https://dapi.binance.com/dapi/v1/ticker/24hr'),
             get('https://www.binance.com/bapi/equity/v1/public/equity/symbol/get-symbols'),
             get('https://www.binance.com/bapi/defi/v1/public/wallet-direct/buw/wallet/cex/alpha/all/token/list')
           ]);
           const ticks = [];
-          const add24h = (result) => {
+          const sourceStats = {};
+          const add24h = (result, venue) => {
+            sourceStats[venue] = { status: result.status, rows: 0, ticks: 0, error: result.status === 'rejected' ? String(result.reason?.message || result.reason) : '' };
             if (result.status !== 'fulfilled') return;
             const rows = Array.isArray(result.value) ? result.value : [];
+            sourceStats[venue].rows = rows.length;
             for (const row of rows) {
               const symbol = String(row?.symbol || '').trim().toUpperCase();
               const price = Number(row?.lastPrice);
               if (!symbol || !Number.isFinite(price)) continue;
               ticks.push({
-                provider:'BINANCE', symbol, price,
+                provider:'BINANCE', symbol, price, venue,
                 epoch:Math.floor((Number(row?.closeTime)||now)/1000),
                 open:Number.isFinite(Number(row?.openPrice)) ? Number(row.openPrice) : undefined,
                 high:Number.isFinite(Number(row?.highPrice)) ? Number(row.highPrice) : undefined,
@@ -931,9 +934,10 @@ const server = http.createServer(async (req,res) => {
                 quoteVolume:Number.isFinite(Number(row?.quoteVolume)) ? Number(row.quoteVolume) : undefined,
                 percent:Number.isFinite(Number(row?.priceChangePercent)) ? Number(row.priceChangePercent) : undefined
               });
+              sourceStats[venue].ticks++;
             }
           };
-          add24h(spot); add24h(usdtm); add24h(coinm);
+          add24h(spot, 'SPOT'); add24h(usdtm, 'USDT-M'); add24h(coinm, 'COIN-M');
 
           if (stocks.status === 'fulfilled') {
             const rows = Array.isArray(stocks.value?.data) ? stocks.value.data : [];
@@ -942,7 +946,7 @@ const server = http.createServer(async (req,res) => {
               const price = Number(row?.c ?? row?.price ?? row?.lastPrice);
               if (!symbol || !Number.isFinite(price)) continue;
               ticks.push({
-                provider:'BINANCE', symbol, price, epoch:Math.floor(now/1000),
+                provider:'BINANCE', symbol, price, venue:'STOCKS', epoch:Math.floor(now/1000),
                 open:Number.isFinite(Number(row?.op ?? row?.openPrice)) ? Number(row.op ?? row.openPrice) : undefined,
                 high:Number.isFinite(Number(row?.h ?? row?.highPrice)) ? Number(row.h ?? row.highPrice) : undefined,
                 low:Number.isFinite(Number(row?.l ?? row?.lowPrice)) ? Number(row.l ?? row.lowPrice) : undefined,
@@ -969,7 +973,7 @@ const server = http.createServer(async (req,res) => {
               const price = Number(row?.price);
               if (!symbol || !Number.isFinite(price)) continue;
               ticks.push({
-                provider:'BINANCE', symbol, price, epoch:Math.floor(now/1000),
+                provider:'BINANCE', symbol, price, venue:'ALPHA', epoch:Math.floor(now/1000),
                 high:Number.isFinite(Number(row?.priceHigh24h)) ? Number(row.priceHigh24h) : undefined,
                 low:Number.isFinite(Number(row?.priceLow24h)) ? Number(row.priceLow24h) : undefined,
                 volume:Number.isFinite(Number(row?.volume24h)) ? Number(row.volume24h) : undefined,
@@ -978,6 +982,15 @@ const server = http.createServer(async (req,res) => {
               });
             }
           }
+          console.info('[BINANCE QUOTES]', JSON.stringify({
+            sources: sourceStats,
+            totalTicks: ticks.length,
+            spot: ticks.filter(t => t.venue === 'SPOT').length,
+            usdtm: ticks.filter(t => t.venue === 'USDT-M').length,
+            coinm: ticks.filter(t => t.venue === 'COIN-M').length,
+            stocks: ticks.filter(t => t.venue === 'STOCKS').length,
+            alpha: ticks.filter(t => t.venue === 'ALPHA').length
+          }));
           globalThis.__sireBinanceQuoteCache = ticks;
           globalThis.__sireBinanceQuoteCacheAt = now;
         }
