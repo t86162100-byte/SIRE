@@ -155,10 +155,10 @@ const matchesMarketTopGroup = (item: Instrument, group: string) => {
 const matchesMarketSubgroup = (item: Instrument, group: string, subgroup: string) => {
   const target = normalizeMarketLabel(subgroup);
   if (group === 'CRYPTO' && subgroup === 'Spot') {
-    return marketGroup === 'crypto' && normalizeMarketLabel(item.marketType) === 'spot';
+    return normalizeMarketLabel((item as any).marketGroup) === 'crypto' && normalizeMarketLabel(item.marketType) === 'spot';
   }
   if (group === 'CRYPTO' && subgroup === 'Futures') {
-    return marketGroup === 'crypto' && ['futures','margin'].includes(normalizeMarketLabel(item.marketType));
+    return normalizeMarketLabel((item as any).marketGroup) === 'crypto' && ['futures','margin'].includes(normalizeMarketLabel(item.marketType));
   }
   if (group === 'TRADE FI' && subgroup === 'Stocks') return normalizeMarketLabel((item as any).marketType) === 'stocks' || normalizeMarketLabel(item.category) === 'stocks';
   if (group === 'TRADE FI' && subgroup === 'Futures') return normalizeMarketLabel((item as any).marketType) === 'futures' && matchesMarketTopGroup(item, 'TRADE FI');
