@@ -51,7 +51,7 @@ function spotInstrument(raw: Json, margin = false): Json | null {
     symbol, name: base + '/' + quote, provider:'BINANCE', exchange:'BINANCE',
     marketGroup:'CRYPTO', marketType:margin?'Margin':'Spot', category:margin?'Margin':'Spot',
     marketSubcategory:margin?'Margin':'Spot',
-    marketSubSubcategory:margin ? (MARGIN_ASSETS.has(base) ? base : 'All') : bucket,
+    marketSubSubcategory:margin ? base || 'All' : bucket,
     marketFilters:uniq([bucket, 'Spot', ...(margin ? ['Margin'] : [])]),
     marketFilter:margin ? base : bucket,
     instrumentType:margin?'Crypto Margin':'Crypto Spot',
@@ -65,10 +65,14 @@ function spotInstrument(raw: Json, margin = false): Json | null {
 function marginInstrument(raw: Json): Json | null {
   const symbol=s(raw?.symbol).toUpperCase();
   if(!symbol) return null;
-  const base=s(raw?.base).toUpperCase();
-  const quote=s(raw?.quote).toUpperCase();
+  const base=s(raw?.base || raw?.baseAsset).toUpperCase();
+  const quote=s(raw?.quote || raw?.quoteAsset).toUpperCase();
   const status=s(raw?.status || (raw?.isMarginTrade === true ? 'TRADING' : ''));
   if(raw?.isMarginTrade === false) return null;
+  const explicitlyMargin = raw?.isMarginTradingAllowed === true ||
+    (Array.isArray(raw?.permissions) && raw.permissions.some((x:any) => /MARGIN/i.test(s(x)))) ||
+    (Array.isArray(raw?.permissionSets) && raw.permissionSets.some((set:any) => Array.isArray(set) && set.some((x:any) => /MARGIN/i.test(s(x)))));
+  if (raw?.isMarginTrade !== true && raw?.isMarginTradingAllowed !== true && !explicitlyMargin) return null;
   return {
     symbol, name:base && quote ? base+'/'+quote : symbol,
     provider:'BINANCE', exchange:'BINANCE',
@@ -310,6 +314,14 @@ export async function fetchBinanceCatalogServer() {
   for(const row of spotRows) {
     const spotItem=spotInstrument(row,false);
     if(spotItem) out.push(spotItem);
+  }
+
+  // Binance's Spot exchangeInfo carries the authoritative per-symbol Margin permission.
+  // Use it as a public fallback when /sapi/v1/margin/allPairs or isolated/allPairs is unavailable.
+  // This keeps the Margin filter populated even when the API key lacks Margin account access.
+  for(const row of spotRows) {
+    const marginItem=marginInstrument(row);
+    if(marginItem) out.push(marginItem);
   }
 
   for(const row of (Array.isArray(raw.usdtm?.symbols)?raw.usdtm.symbols:[])) {
