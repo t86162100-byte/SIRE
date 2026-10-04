@@ -286,6 +286,48 @@ export default function App() {
   const liveInstruments = instruments;
 
   useEffect(() => {
+    if (!instruments.some(item => item.provider === 'BINANCE')) return;
+    let cancelled = false;
+    const applySnapshot = async () => {
+      try {
+        const response = await fetch('/api/sire/binance/market-snapshot?t=' + Date.now(), { cache:'no-store', headers:{Accept:'application/json'} });
+        const payload = await response.json().catch(() => ({}));
+        if (cancelled || !response.ok || !payload?.ok || !payload?.snapshots) return;
+        const snapshots = payload.snapshots as Record<string, any>;
+        const venueFor = (item: Instrument) => {
+          if (item.marketType === 'Stocks') return 'EQUITY';
+          if (item.marketType === 'Options') return 'OPTIONS';
+          if (item.marketGroup === 'ALPHA' || item.marketType === 'Alpha') return 'ALPHA';
+          const sub = String(item.marketSubcategory || item.settlement || '').toUpperCase();
+          if (sub.includes('COIN-M')) return 'COIN-M';
+          if (sub.includes('USDT-M')) return 'USDT-M';
+          return 'SPOT';
+        };
+        setInstruments(current => current.map(item => {
+          if (item.provider !== 'BINANCE') return item;
+          const snap = snapshots[venueFor(item) + ':' + String(item.symbol || '').toUpperCase()];
+          if (!snap) return item;
+          return { ...item,
+            ...(Number.isFinite(Number(snap.price)) ? {price:Number(snap.price)} : {}),
+            ...(Number.isFinite(Number(snap.bid)) ? {bid:Number(snap.bid)} : {}),
+            ...(Number.isFinite(Number(snap.ask)) ? {ask:Number(snap.ask)} : {}),
+            ...(Number.isFinite(Number(snap.priceChangePercent)) ? {priceChangePercent:Number(snap.priceChangePercent),change24h:Number(snap.priceChangePercent)} : {}),
+            ...(Number.isFinite(Number(snap.volume24h)) ? {volume24h:Number(snap.volume24h)} : {}),
+            ...(Number.isFinite(Number(snap.quoteVolume)) ? {quoteVolume:Number(snap.quoteVolume)} : {}),
+            ...(Number.isFinite(Number(snap.high24h)) ? {high24h:Number(snap.high24h)} : {}),
+            ...(Number.isFinite(Number(snap.low24h)) ? {low24h:Number(snap.low24h)} : {}),
+            ...(Number.isFinite(Number(snap.open24h)) ? {open24h:Number(snap.open24h)} : {}),
+            ...(Number.isFinite(Number(snap.marketCap)) ? {marketCap:Number(snap.marketCap)} : {})
+          };
+        }));
+      } catch {}
+    };
+    void applySnapshot();
+    const timer = window.setInterval(() => { void applySnapshot(); }, 3000);
+    return () => { cancelled = true; window.clearInterval(timer); };
+  }, [instruments.length]);
+
+  useEffect(() => {
     let cancelled = false;
     const load = async () => {
       const binanceCatalog = loadBinanceCatalog('startup');
