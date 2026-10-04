@@ -896,6 +896,47 @@ const server = http.createServer(async (req,res) => {
       return;
     }
     if (req.method === 'POST' && pathname === '/api/sire/agent/gpt') { const parsed = body ? JSON.parse(body) : {}; if (!String(parsed.query || '').trim()) return res.writeHead(400,{ 'Access-Control-Allow-Origin':'*','Content-Type':'application/json; charset=utf-8' }).end(JSON.stringify({ error:'query is required' })); try { const response = await handleDirectGptRequest(parsed); return res.writeHead(200,{ 'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8' }).end(JSON.stringify(response)); } catch (cause) { const message = cause instanceof Error ? cause.message : String(cause); console.error('[DIRECT GPT]', message); return res.writeHead(502,{ 'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8' }).end(JSON.stringify({ error:`Direct GPT test failed: ${message}` })); } }
+    if (req.method === 'GET' && pathname === '/api/sire/binance/equity-ticker') {
+      try {
+        const candidates = [
+          'https://www.binance.com/bapi/equity/v1/public/equity/ticker/get',
+          'https://www.binance.com/bapi/equity/v2/public/equity/market/get-latest-quote'
+        ];
+        let data = null;
+        let lastError = '';
+        for (const endpoint of candidates) {
+          try {
+            const response = await fetch(endpoint, {
+              cache:'no-store',
+              headers:{ 'Accept':'application/json', 'User-Agent':'SIRE-Binance-Equity/1.0' }
+            });
+            const raw = await response.text();
+            if (!response.ok) throw new Error('HTTP ' + response.status);
+            const parsed = raw ? JSON.parse(raw) : {};
+            data = parsed;
+            break;
+          } catch (error) {
+            lastError = error instanceof Error ? error.message : String(error);
+          }
+        }
+        if (data === null) throw new Error(lastError || 'Binance equity ticker unavailable.');
+        const extractRows = value => {
+          if (Array.isArray(value)) return value;
+          if (Array.isArray(value?.data)) return value.data;
+          if (Array.isArray(value?.data?.data)) return value.data.data;
+          if (Array.isArray(value?.data?.symbols)) return value.data.symbols;
+          if (Array.isArray(value?.symbols)) return value.symbols;
+          if (value && typeof value === 'object' && (value.symbol || value.ticker || value.code)) return [value];
+          return [];
+        };
+        const rows = extractRows(data).filter(row => row && typeof row === 'object');
+        return res.writeHead(200,{'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify({ok:true,rows}));
+      } catch (cause) {
+        const message = cause instanceof Error ? cause.message : String(cause);
+        console.warn('[BINANCE EQUITY TICKER]', message);
+        return res.writeHead(200,{'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify({ok:false,rows:[],error:message}));
+      }
+    }
     if (req.method === 'GET' && pathname === '/api/sire/binance/catalog') {
       console.info('[BINANCE CATALOG REQUEST]', req.url);
       try {
