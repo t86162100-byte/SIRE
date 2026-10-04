@@ -65,10 +65,26 @@ type Handler=(tick:BinanceTick)=>void;
 type Bus={socket:WebSocket|null;handlers:Map<string,Set<Handler>>;url:string;timer?:number;connecting?:boolean};
 const buses=new Map<string,Bus>();
 function venue(item:any){const t=s(item?.marketType).toUpperCase();if(t==='ALPHA')return 'ALPHA';if(t==='FUTURES')return s(item?.marketSubcategory).toUpperCase()==='COIN-M'?'COIN':'UM';return 'SPOT';}
-function url(v:string){return v==='SPOT'?'wss://stream.binance.com:9443/ws/!miniTicker@arr':v==='UM'?'wss://fstream.binance.com/market/ws/!miniTicker@arr':v==='COIN'?'wss://dstream.binance.com/ws/!miniTicker@arr':ALPHA_WS+'?streams=!miniTicker@arr';}
+function url(v:string){
+  // Use the full 24h ticker stream rather than miniTicker so every market row
+  // receives last price, rolling 24h percent, and 24h volume from the same event.
+  // Raw streams are intentionally used here: one connection per venue carries
+  // the all-market stream and the client fans updates out to visible rows.
+  if(v==='SPOT') return 'wss://stream.binance.com:9443/ws/!ticker@arr';
+  if(v==='UM') return 'wss://fstream.binance.com/ws/!ticker@arr';
+  if(v==='COIN') return 'wss://dstream.binance.com/ws/!ticker@arr';
+  return ALPHA_WS+'?streams=!ticker@arr';
+}
 function parse(raw:any):BinanceTick|null{
-  const d=raw?.data&&typeof raw.data==='object'?raw.data:raw,symbol=s(d?.s),price=n(d?.c);if(!symbol||price===undefined)return null;
-  const open=n(d?.o),epoch=n(d?.E)||Date.now();return {provider:'BINANCE',symbol,price,epoch:Math.floor(epoch/1000),open,high:n(d?.h),low:n(d?.l),volume:n(d?.v),quoteVolume:n(d?.q),percent:open?((price-open)/open)*100:undefined};
+  const d=raw?.data&&typeof raw.data==='object'?raw.data:raw;
+  const symbol=s(d?.s),price=n(d?.c);
+  if(!symbol||price===undefined)return null;
+  const open=n(d?.o),epoch=n(d?.E)||Date.now();
+  const percent=n(d?.P) ?? (open ? ((price-open)/open)*100 : undefined);
+  return {
+    provider:'BINANCE', symbol, price, epoch:Math.floor(epoch/1000), open,
+    high:n(d?.h), low:n(d?.l), volume:n(d?.v), quoteVolume:n(d?.q), percent,
+  };
 }
 function bus(v:string){
   let b=buses.get(v);if(b?.socket?.readyState===WebSocket.OPEN||b?.connecting)return b!;
