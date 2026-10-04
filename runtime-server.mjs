@@ -919,7 +919,7 @@ const server = http.createServer(async (req,res) => {
 const binanceMarketClients = new Set();
 const binanceUpstreams = new Map();
 const BINANCE_WS_URLS = {
-  SPOT: 'wss://stream.binance.com:9443/stream',
+  SPOT: 'wss://data-stream.binance.vision/stream',
   UM: 'wss://fstream.binance.com/market/stream',
   COIN: 'wss://dstream.binance.com/stream',
   ALPHA: 'wss://nbstream.binance.com/w3w/wsa/stream/stream',
@@ -930,11 +930,62 @@ function binanceVenue(item={}) {
   if(type==='FUTURES') return String(item.marketSubcategory||'').toUpperCase()==='COIN-M' ? 'COIN' : 'UM';
   return 'SPOT';
 }
+async function pollBinanceEquityQuotes(state) {
+  if (state.polling || !state.subscribed.size) return;
+  state.polling=true;
+  try {
+    const apiKey=String(process.env.BINANCE_API_KEY||'').trim();
+    if (!apiKey) {
+      if (!state.missingKeyLogged) {
+        console.error('[BINANCE EQUITY QUOTES] BINANCE_API_KEY is not configured.');
+        state.missingKeyLogged=true;
+      }
+      return;
+    }
+    const symbols=[...state.subscribed];
+    await Promise.all(symbols.map(async symbol=>{
+      try {
+        const url='https://api.binance.com/sapi/v1/equity/market/quote?symbol='+encodeURIComponent(symbol);
+        const response=await fetch(url,{cache:'no-store',headers:{Accept:'application/json','X-MBX-APIKEY':apiKey}});
+        if(!response.ok) throw new Error('HTTP '+response.status);
+        const raw=await response.text();
+        if(!raw.trim()) return;
+        const q=JSON.parse(raw);
+        const bid=Number(q?.bidPrice), ask=Number(q?.askPrice);
+        const price=Number.isFinite(bid)&&Number.isFinite(ask) ? (bid+ask)/2 : (Number.isFinite(bid)?bid:(Number.isFinite(ask)?ask:NaN));
+        if(!Number.isFinite(price)) return;
+        const message=JSON.stringify({
+          e:'equityQuote', E:Date.now(), s:String(q?.symbol||symbol).toUpperCase(),
+          c:String(price), bidPrice:q?.bidPrice, askPrice:q?.askPrice,
+          bidSize:q?.bidSize, askSize:q?.askSize
+        });
+        for(const client of state.clients) {
+          if(client.readyState===WebSocket.OPEN) {
+            try { client.send(message); } catch {}
+          }
+        }
+      } catch(error) {
+        console.error('[BINANCE EQUITY QUOTE]',symbol,error instanceof Error?error.message:String(error));
+      }
+    }));
+  } finally {
+    state.polling=false;
+    if(state.subscribed.size) {
+      if(state.pollTimer) clearTimeout(state.pollTimer);
+      state.pollTimer=setTimeout(()=>void pollBinanceEquityQuotes(state),5000);
+    }
+  }
+}
 function ensureBinanceUpstream(venue) {
   const existing=binanceUpstreams.get(venue);
-  if(existing?.socket?.readyState===WebSocket.OPEN || existing?.connecting) return existing;
-  const state=existing||{socket:null,connecting:false,subscribed:new Set(),clients:new Set(),retry:null};
-  state.connecting=true; binanceUpstreams.set(venue,state);
+  if(existing?.socket?.readyState===WebSocket.OPEN || existing?.connecting || (venue==='EQUITY' && existing)) return existing;
+  const state=existing||{socket:null,connecting:false,subscribed:new Set(),clients:new Set(),retry:null,pollTimer:null,polling:false};
+  binanceUpstreams.set(venue,state);
+  if(venue==='EQUITY') {
+    void pollBinanceEquityQuotes(state);
+    return state;
+  }
+  state.connecting=true;
   const socket=new WebSocket(BINANCE_WS_URLS[venue]);
   state.socket=socket;
   socket.on('open',()=>{
