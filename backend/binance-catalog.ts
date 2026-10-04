@@ -187,7 +187,8 @@ function isEtfFromBinance(raw: Json) {
   if (raw?.isETF === true || raw?.isEtf === true) return true;
   const text = [
     raw?.assetType, raw?.instrumentType, raw?.securityType, raw?.productType,
-    raw?.symbolType, raw?.securityCategory, raw?.type, raw?.subtype, raw?.securityTypeName, raw?.name
+    raw?.symbolType, raw?.securityCategory, raw?.type, raw?.subtype, raw?.securityTypeName,
+    raw?.name, raw?.n, raw?.description, raw?.desc, raw?.sec, raw?.t
   ].map(s).join(' ').toLowerCase();
   return raw?.etf === true || raw?.isETF === true || raw?.isEtf === true ||
     /(^|\W)etf($|\W)|exchange[ ._-]?traded[ ._-]?fund/.test(text);
@@ -212,7 +213,9 @@ function equityInstrument(raw: Json): Json | null {
 }
 
 function tokenizedInstrument(raw: Json): Json | null {
-  const symbol=s(raw?.assetCode || raw?.symbol).toUpperCase();
+  // The official SAPI tokenized-assets endpoint uses assetCode/assetName.
+  // Do not misclassify Binance Web3 Ondo/RWA rows (symbol/ticker schema) as bStocks.
+  const symbol=s(raw?.assetCode).toUpperCase();
   if(!symbol) return null;
   const name=s(raw?.assetName || raw?.name || symbol);
   const commodity=/gold|silver|oil|commodity|copper|platinum|palladium/i.test(name);
