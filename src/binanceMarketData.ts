@@ -63,7 +63,7 @@ export async function fetchBinanceInstruments():Promise<BinanceInstrument[]> {
 
 type Handler=(tick:BinanceTick)=>void;
 type Bus={socket:WebSocket|null;handlers:Map<string,Set<Handler>>;url:string;timer?:number;connecting?:boolean};
-type FastBus=Bus&{symbols:Set<string>;subscribeTimer?:number;requestId:number;latest:Map<string,BinanceTick>;lastTradeAt:Map<string,number>};
+type FastBus=Bus&{symbols:Set<string>;subscribeTimer?:number;requestId:number;latest:Map<string,BinanceTick>;lastTradeAt:Map<string,number>;lastMarkAt:Map<string,number>};
 const buses=new Map<string,Bus>();
 const fastBuses=new Map<string,FastBus>();
 
@@ -118,7 +118,7 @@ function bus(v:string){
 function fastBus(v:string){
   let b=fastBuses.get(v);
   if(b?.socket?.readyState===WebSocket.OPEN||b?.connecting)return b!;
-  b=b||{socket:null,handlers:new Map(),url:fastUrl(v),symbols:new Set(),requestId:0,latest:new Map(),lastTradeAt:new Map()};
+  b=b||{socket:null,handlers:new Map(),url:fastUrl(v),symbols:new Set(),requestId:0,latest:new Map(),lastTradeAt:new Map(),lastMarkAt:new Map()};
   b.connecting=true;buses.delete(v);fastBuses.set(v,b);
   const ws=new WebSocket(b.url);b.socket=ws;
   const queueSubscribe=()=>{
@@ -131,7 +131,7 @@ function fastBus(v:string){
     },100);
   };
   ws.onopen=()=>{b!.connecting=false;queueSubscribe();};
-  ws.onmessage=e=>{try{const p=JSON.parse(String(e.data));if(p?.id||p?.result!==undefined)return;const d=p?.data&&typeof p.data==='object'?p.data:p;const symbol=s(d?.s),event=s(d?.e);if(event==='trade'||event==='aggTrade'){const px=n(d?.p);if(!symbol||px===undefined)return;const now=Date.now();b!.lastTradeAt.set(symbol,now);const prev=b!.latest.get(symbol);const t:BinanceTick={...(prev||{provider:'BINANCE',symbol,price:px,epoch:Math.floor(now/1000)}),provider:'BINANCE',symbol,price:px,epoch:Math.floor((n(d?.E)||now)/1000)};b!.latest.set(symbol,t);const hs=b!.handlers.get(symbol);if(hs)for(const h of hs)h(t);return;}if(event==='markPriceUpdate'&&v==='COIN'){const px=n(d?.p);if(!symbol||px===undefined)return;const now=Date.now();if(now-(b!.lastTradeAt.get(symbol)||0)<5000)return;const prev=b!.latest.get(symbol);const t:BinanceTick={...(prev||{provider:'BINANCE',symbol,price:px,epoch:Math.floor(now/1000)}),provider:'BINANCE',symbol,price:px,epoch:Math.floor((n(d?.E)||now)/1000)};b!.latest.set(symbol,t);const hs=b!.handlers.get(symbol);if(hs)for(const h of hs)h(t);return;}const t=parse(p);if(!t)return;b!.latest.set(t.symbol,t);const hs=b!.handlers.get(t.symbol);if(hs)for(const h of hs)h(t);}catch{}};
+  ws.onmessage=e=>{try{const p=JSON.parse(String(e.data));if(p?.id||p?.result!==undefined)return;const d=p?.data&&typeof p.data==='object'?p.data:p;const symbol=s(d?.s),event=s(d?.e);if(event==='trade'||event==='aggTrade'){const px=n(d?.p);if(!symbol||px===undefined)return;const now=Date.now();b!.lastTradeAt.set(symbol,now);const prev=b!.latest.get(symbol);const t:BinanceTick={...(prev||{provider:'BINANCE',symbol,price:px,epoch:Math.floor(now/1000)}),provider:'BINANCE',symbol,price:px,epoch:Math.floor((n(d?.E)||now)/1000)};b!.latest.set(symbol,t);const hs=b!.handlers.get(symbol);if(hs)for(const h of hs)h(t);return;}if(event==='markPriceUpdate'&&v==='COIN'){const px=n(d?.p);if(!symbol||px===undefined)return;const now=Date.now();if(now-(b!.lastTradeAt.get(symbol)||0)<5000)return;const prev=b!.latest.get(symbol);const t:BinanceTick={...(prev||{provider:'BINANCE',symbol,price:px,epoch:Math.floor(now/1000)}),provider:'BINANCE',symbol,price:px,epoch:Math.floor((n(d?.E)||now)/1000)};b!.lastMarkAt.set(symbol,now);b!.latest.set(symbol,t);const hs=b!.handlers.get(symbol);if(hs)for(const h of hs)h(t);return;}const t=parse(p);if(!t)return;const prev=b!.latest.get(t.symbol);const recentTrade=Date.now()-(b!.lastTradeAt.get(t.symbol)||0)<5000;const recentMark=v==='COIN'&&Date.now()-(b!.lastMarkAt.get(t.symbol)||0)<2000;if((recentTrade||recentMark)&&prev)t.price=prev.price;b!.latest.set(t.symbol,t);const hs=b!.handlers.get(t.symbol);if(hs)for(const h of hs)h(t);}catch{}};
   ws.onerror=()=>{};
   ws.onclose=()=>{
     b!.connecting=false;
