@@ -322,6 +322,124 @@ function shapeOf(data:any) {
   };
 }
 
+
+type BinanceMarketSnapshot = {
+  symbol:string; market:string; price?:number; bid?:number; ask?:number;
+  priceChangePercent?:number; change24h?:number; volume24h?:number; quoteVolume?:number;
+  high24h?:number; low24h?:number; open24h?:number; marketCap?:number;
+  updatedAt:number;
+};
+
+let marketSnapshotCache:{at:number; data:Record<string,BinanceMarketSnapshot>}|null=null;
+let marketSnapshotPromise:Promise<Record<string,BinanceMarketSnapshot>>|null=null;
+
+function snapshotRows(value:any):any[] {
+  if(Array.isArray(value)) return value;
+  if(Array.isArray(value?.data)) return value.data;
+  if(Array.isArray(value?.symbols)) return value.symbols;
+  if(Array.isArray(value?.data?.data)) return value.data.data;
+  if(Array.isArray(value?.data?.symbols)) return value.data.symbols;
+  return [];
+}
+function putSnapshot(map:Record<string,BinanceMarketSnapshot>, market:string, row:any, fallbackSymbol='') {
+  const symbol=s(row?.symbol || row?.s || row?.ticker || row?.code || fallbackSymbol).toUpperCase();
+  if(!symbol) return;
+  const price=n(row?.lastPrice ?? row?.price ?? row?.last ?? row?.c ?? row?.close ?? row?.latestPrice);
+  const change=n(row?.priceChangePercent ?? row?.percentChange24h ?? row?.changePercent ?? row?.pc);
+  const volume=n(row?.volume ?? row?.baseVolume ?? row?.volume24h ?? row?.v24 ?? row?.v);
+  const quoteVolume=n(row?.quoteVolume ?? row?.quote_volume ?? row?.volumeUSD ?? row?.qv24 ?? row?.qv);
+  const marketCap=n(row?.marketCap ?? row?.market_cap ?? row?.mktCap ?? row?.marketCapitalization ?? row?.mc);
+  const key=market+':'+symbol;
+  map[key]={symbol,market,...(price!==undefined?{price}:{}),...(n(row?.bidPrice ?? row?.bid)!==undefined?{bid:n(row?.bidPrice ?? row?.bid)}:{}),...(n(row?.askPrice ?? row?.ask)!==undefined?{ask:n(row?.askPrice ?? row?.ask)}:{}),...(change!==undefined?{priceChangePercent:change,change24h:change}:{}),...(volume!==undefined?{volume24h:volume}:{}),...(quoteVolume!==undefined?{quoteVolume}:{}),...(n(row?.highPrice ?? row?.high ?? row?.h)!==undefined?{high24h:n(row?.highPrice ?? row?.high ?? row?.h)}:{}),...(n(row?.lowPrice ?? row?.low ?? row?.l)!==undefined?{low24h:n(row?.lowPrice ?? row?.low ?? row?.l)}:{}),...(n(row?.openPrice ?? row?.open ?? row?.o)!==undefined?{open24h:n(row?.openPrice ?? row?.open ?? row?.o)}:{}),...(marketCap!==undefined?{marketCap}:{}),updatedAt:Date.now()};
+}
+
+async function fetchBinanceMarketSnapshotFresh():Promise<Record<string,BinanceMarketSnapshot>> {
+  const map:Record<string,BinanceMarketSnapshot>={};
+  const jobs:[string,string][]=[
+    ['SPOT','https://data-api.binance.vision/api/v3/ticker/24hr'],
+    ['USDT-M','https://fapi.binance.com/fapi/v1/ticker/24hr'],
+    ['COIN-M','https://dapi.binance.com/dapi/v1/ticker/24hr'],
+    ['OPTIONS','https://eapi.binance.com/eapi/v1/ticker'],
+    ['EQUITY','https://www.binance.com/bapi/equity/v1/public/equity/ticker/get']
+  ];
+  const results=await Promise.allSettled(jobs.map(async ([market,url])=>({market,data:await getJson(url)})));
+  for(const result of results) if(result.status==='fulfilled') for(const row of snapshotRows(result.value.data)) putSnapshot(map,result.value.market,row);
+
+  // Binance Alpha token list is the public bulk source for the current Alpha
+  // price, 24h change, volume and market-cap fields. Alpha-specific ticker and
+  // kline APIs remain the chart/live stream source when an instrument is opened.
+  try {
+    const alpha=await getJson(ALPHA+'/wallet-direct/buw/wallet/cex/alpha/all/token/list');
+    for(const row of snapshotRows(alpha)) {
+      const alphaId=s(row?.alphaId).toUpperCase();
+      if(!alphaId) continue;
+      putSnapshot(map,'ALPHA',{
+        symbol:alphaId+'USDT', price:row?.price, priceChangePercent:row?.percentChange24h,
+        volume24h:row?.volume24h, marketCap:row?.marketCap, highPrice:row?.priceHigh24h,
+        lowPrice:row?.priceLow24h
+      });
+    }
+  } catch {}
+
+  // Binance's public Markets product feed supplies circulating supply for many
+  // Spot assets. Derivatives can inherit the corresponding Spot asset market
+  // cap, which is the meaningful capitalization measure for the underlying.
+  try {
+    const products=await getJson('https://www.binance.com/bapi/asset/v2/public/asset-service/product/get-products?includeEtf=true');
+    const spotCapByBase=new Map<string,number>();
+    for(const row of snapshotRows(products)) {
+      const symbol=s(row?.s || row?.symbol).toUpperCase();
+      const base=s(row?.b || row?.baseAsset).toUpperCase();
+      const quote=s(row?.q || row?.quoteAsset).toUpperCase();
+      const price=n(row?.c || row?.lastPrice || row?.price);
+      const supply=n(row?.cs || row?.circulatingSupply || row?.circulating_supply);
+      if(base && price!==undefined && supply!==undefined && supply>=0) spotCapByBase.set(base,price*supply);
+      if(symbol && quote) {
+        const key='SPOT:'+symbol;
+        if(map[key] && map[key].marketCap===undefined && base && spotCapByBase.has(base)) map[key].marketCap=spotCapByBase.get(base);
+      }
+    }
+    for(const snap of Object.values(map)) if(snap.market!=='SPOT' && snap.market!=='EQUITY' && snap.market!=='ALPHA') {
+      const base=snap.symbol.replace(/USDT$|USDC$|BUSD$/,'').toUpperCase();
+      const cap=spotCapByBase.get(base); if(cap!==undefined) snap.marketCap=cap;
+    }
+  } catch {}
+  return map;
+}
+
+export async function fetchBinanceMarketSnapshotServer() {
+  const now=Date.now();
+  if(marketSnapshotCache && now-marketSnapshotCache.at<2000) return marketSnapshotCache.data;
+  if(!marketSnapshotPromise) marketSnapshotPromise=fetchBinanceMarketSnapshotFresh().then(data=>{marketSnapshotCache={at:Date.now(),data}; return data;}).finally(()=>{marketSnapshotPromise=null;});
+  return marketSnapshotPromise;
+}
+
+export async function fetchBinanceHistoryServer(input:{market:string;symbol:string;interval:string;from?:number;to?:number;limit?:number}) {
+  const market=s(input.market).toUpperCase(), symbol=s(input.symbol).toUpperCase(), interval=s(input.interval)||'1m';
+  if(!symbol) throw new Error('Binance history requires symbol.');
+  const limit=Math.max(1,Math.min(1500,Math.floor(input.limit||500)));
+  const q=new URLSearchParams({symbol,interval,limit:String(limit)});
+  if(input.from!==undefined) q.set('startTime',String(Math.floor(input.from*1000)));
+  if(input.to!==undefined) q.set('endTime',String(Math.floor(input.to*1000)));
+  let url='';
+  if(market==='SPOT' || market==='MARGIN' || market==='TRADE FI SPOT') url='https://data-api.binance.vision/api/v3/klines?'+q;
+  else if(market==='USDT-M' || market==='TRADE FI FUTURES') url='https://fapi.binance.com/fapi/v1/klines?'+q;
+  else if(market==='COIN-M') url='https://dapi.binance.com/dapi/v1/klines?'+q;
+  else if(market==='OPTIONS') url='https://eapi.binance.com/eapi/v1/klines?'+q;
+  else if(market==='ALPHA') url='https://www.binance.com/bapi/defi/v1/public/alpha-trade/klines?'+q;
+  else if(market==='EQUITY') {
+    const eq=new URLSearchParams({symbol,interval,limit:String(Math.min(500,limit))});
+    if(input.from!==undefined) eq.set('startTime',String(Math.floor(input.from*1000)));
+    if(input.to!==undefined) eq.set('endTime',String(Math.floor(input.to*1000)));
+    url='https://www.binance.com/bapi/equity/v1/public/equity/kline/query?'+eq;
+  } else throw new Error('Unsupported Binance market history venue: '+market);
+  const data=await getJson(url);
+  const rows=snapshotRows(data);
+  const bars=rows.map((r:any)=>({time:Math.floor(Number(r?.[0] ?? r?.openTime ?? r?.t)/1000),open:Number(r?.[1] ?? r?.open ?? r?.o),high:Number(r?.[2] ?? r?.high ?? r?.h),low:Number(r?.[3] ?? r?.low ?? r?.l),close:Number(r?.[4] ?? r?.close ?? r?.c),volume:Number(r?.[5] ?? r?.volume ?? r?.v)||0})).filter((b:any)=>Number.isFinite(b.time)&&[b.open,b.high,b.low,b.close].every(Number.isFinite));
+  if(!bars.length) throw new Error('Binance returned no historical candles for '+symbol+' on '+market+'.');
+  return bars.sort((a:any,b:any)=>a.time-b.time);
+}
+
 export async function fetchBinanceCatalogServer() {
   const apiKey=s(process.env.BINANCE_API_KEY);
   const apiSecretConfigured=Boolean(s(process.env.BINANCE_API_SECRET));
