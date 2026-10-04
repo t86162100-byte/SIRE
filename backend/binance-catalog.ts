@@ -339,6 +339,10 @@ function snapshotRows(value:any):any[] {
   if(Array.isArray(value?.symbols)) return value.symbols;
   if(Array.isArray(value?.data?.data)) return value.data.data;
   if(Array.isArray(value?.data?.symbols)) return value.data.symbols;
+  if(Array.isArray(value?.data?.list)) return value.data.list;
+  if(Array.isArray(value?.list)) return value.list;
+  if(Array.isArray(value?.rows)) return value.rows;
+  if(Array.isArray(value?.klines)) return value.klines;
   return [];
 }
 function putSnapshot(map:Record<string,BinanceMarketSnapshot>, market:string, row:any, fallbackSymbol='') {
