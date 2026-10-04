@@ -371,20 +371,33 @@ export default function App() {
     const binance = instruments.filter(item=>item.provider==='BINANCE');
     if (!binance.length) return;
     const pending = new Map<string, any>();
+    let frame = 0;
+    let active = true;
+    const flush = () => {
+      if (!active) return;
+      if (pending.size) {
+        const updates = new Map(pending);
+        pending.clear();
+        setInstruments(current => current.map(item => {
+          const tick=updates.get(item.id);
+          if (!tick) return item;
+          return {...item,price:tick.price,change24h:tick.percent,priceChangePercent:tick.percent,high24h:tick.high,low24h:tick.low,volume24h:tick.volume,marketCap:tick.marketCap ?? item.marketCap};
+        }));
+      }
+      frame = window.requestAnimationFrame(flush);
+    };
     const unsubscribers = binance.map(item => subscribeBinanceTick(item, tick => {
+      // Keep only the newest event per instrument; the next animation frame
+      // applies it immediately instead of waiting for a 250 ms timer.
       pending.set(item.id, tick);
     }));
-    const timer = window.setInterval(() => {
-      if (!pending.size) return;
-      const updates = new Map(pending);
+    frame = window.requestAnimationFrame(flush);
+    return () => {
+      active = false;
+      window.cancelAnimationFrame(frame);
+      unsubscribers.forEach(fn=>fn());
       pending.clear();
-      setInstruments(current => current.map(item => {
-        const tick=updates.get(item.id);
-        if (!tick) return item;
-        return {...item,price:tick.price,change24h:tick.percent,priceChangePercent:tick.percent,high24h:tick.high,low24h:tick.low,volume24h:tick.volume,marketCap:tick.marketCap ?? item.marketCap};
-      }));
-    }, 250);
-    return () => { window.clearInterval(timer); unsubscribers.forEach(fn=>fn()); };
+    };
   }, [instruments.length, instruments.map(item=>item.provider==='BINANCE' ? item.id : '').filter(Boolean).join('|')]);
 
   useEffect(() => {
