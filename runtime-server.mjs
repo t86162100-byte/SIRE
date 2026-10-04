@@ -973,7 +973,8 @@ const server = http.createServer(async (req,res) => {
                 high:Number.isFinite(Number(row?.priceHigh24h)) ? Number(row.priceHigh24h) : undefined,
                 low:Number.isFinite(Number(row?.priceLow24h)) ? Number(row.priceLow24h) : undefined,
                 volume:Number.isFinite(Number(row?.volume24h)) ? Number(row.volume24h) : undefined,
-                percent:Number.isFinite(Number(row?.percentChange24h)) ? Number(row.percentChange24h) : undefined
+                percent:Number.isFinite(Number(row?.percentChange24h)) ? Number(row.percentChange24h) : undefined,
+                marketCap:Number.isFinite(Number(row?.marketCap)) ? Number(row.marketCap) : undefined
               });
             }
           }
