@@ -5,7 +5,7 @@ import ResearchLab from './ResearchLab';
 import HomeView from './HomeView';
 import FinancialChart from './FinancialChart';
 import { fetchDerivInstruments, type DerivInstrument } from './derivMarketData';
-import { fetchBinanceInstruments, subscribeBinanceTick, type BinanceInstrument } from './binanceMarketData';
+import { fetchBinanceInstruments, type BinanceInstrument } from './binanceMarketData';
 import { SireErrorScreen } from './SireErrorBoundary';
 import './nativeTerminal.css';
 import { MarketInstrumentCard } from './marketCardDesigns';
@@ -423,42 +423,6 @@ export default function App() {
     const end = Math.min(filtered.length, Math.ceil((quoteScrollTop + window.innerHeight) / rowHeight) + buffer);
     return { start, end, items: filtered.slice(start, end), top: start * rowHeight, bottom: Math.max(0, (filtered.length - end) * rowHeight) };
   }, [filtered, quoteScrollTop]);
-
-  useEffect(() => {
-    // Match Binance-style virtualized market views: only rows currently on
-    // screen get high-frequency trade streams. The snapshot keeps off-screen
-    // rows synchronized without opening thousands of live subscriptions.
-    const binance = quoteWindow.items.filter(item=>item.provider==='BINANCE');
-    if (!binance.length) return;
-    const pending = new Map<string, any>();
-    let frame = 0;
-    let active = true;
-    const flush = () => {
-      if (!active) return;
-      if (pending.size) {
-        const updates = new Map(pending);
-        pending.clear();
-        setInstruments(current => current.map(item => {
-          const tick=updates.get(item.id);
-          if (!tick) return item;
-          return {...item,price:tick.price,change24h:tick.percent,priceChangePercent:tick.percent,high24h:tick.high,low24h:tick.low,volume24h:tick.quoteVolume ?? tick.volume,quoteVolume:tick.quoteVolume,marketCap:tick.marketCap ?? item.marketCap};
-        }));
-      }
-      frame = window.requestAnimationFrame(flush);
-    };
-    const unsubscribers = binance.map(item => subscribeBinanceTick(item, tick => {
-      // Keep only the newest event per instrument; the next animation frame
-      // applies it immediately instead of waiting for a 250 ms timer.
-      pending.set(item.id, tick);
-    }));
-    frame = window.requestAnimationFrame(flush);
-    return () => {
-      active = false;
-      window.cancelAnimationFrame(frame);
-      unsubscribers.forEach(fn=>fn());
-      pending.clear();
-    };
-  }, [quoteWindow.items.map(item=>item.provider==='BINANCE' ? item.id : '').filter(Boolean).join('|')]);
 
   const selectInstrument = (item: Instrument) => {
     setSelected(item);
