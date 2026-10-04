@@ -147,7 +147,9 @@ const matchesMarketTopGroup = (item: Instrument, group: string) => {
   if (group === 'CRYPTO') return isBinance(item)
     ? marketGroup === 'crypto'
     : (marketGroup === 'crypto' || category === 'crypto' || instrumentType.includes('crypto'));
-  if (group === 'TRADE FI') return marketGroup === 'tradfi' || marketGroup === 'trade fi' || category === 'tradfi' || category === 'stocks' || category === 'forex' || category === 'commodities';
+  if (group === 'TRADE FI') return isBinance(item)
+    ? marketGroup === 'tradfi' || marketGroup === 'trade fi'
+    : (marketGroup === 'tradfi' || marketGroup === 'trade fi' || category === 'tradfi' || category === 'stocks' || category === 'forex' || category === 'commodities');
   if (group === 'ALPHA') return category === 'alpha' || marketGroup === 'alpha' || instrumentType === 'alpha';
   return false;
 };
