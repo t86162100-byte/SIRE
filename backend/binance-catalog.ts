@@ -414,7 +414,6 @@ export async function fetchBinanceCatalogServer() {
   // symbols with Binance Spot exchangeInfo below, so no synthetic symbols enter the catalog.
   const pageSymbols=new Set<string>();
   for(const match of commodityPage.matchAll(/(?:\\"|&quot;)(?:symbol|baseAsset)(?:\\"|&quot;)\\s*:\\s*(?:\\"|&quot;)([A-Z0-9._-]+)(?:\\"|&quot;)/g)) pageSymbols.add(match[1].toUpperCase());
-  for(const match of commodityPage.matchAll(/\\b([A-Z]{2,10})\\s+(?:Tether Gold|PAX Gold|Gold|Silver|Platinum|Palladium)\\b/gi)) pageSymbols.add(match[1].toUpperCase());
   for(const symbol of pageSymbols) commoditySymbols.add(symbol);
   const etfSymbols=new Set<string>();
   for(const row of stockRows) {
