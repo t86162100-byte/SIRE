@@ -115,7 +115,7 @@ function optionInstrument(raw: Json): Json | null {
   };
 }
 
-function classifyFutureTradeFi(raw: Json, tags: string[]) {
+function classifyFutureTradeFi(raw: Json, tags: string[], etfSymbols?: Set<string>) {
   const normalized = tags.map(norm);
   const contractType = norm(raw?.contractType);
   const underlyingType = norm(raw?.underlyingType);
@@ -134,7 +134,8 @@ function classifyFutureTradeFi(raw: Json, tags: string[]) {
       normalized.includes('foreignexchange') || normalized.includes('currency')) return 'Fx';
   if (underlyingType === 'premarket' || underlyingType === 'preipo' ||
       normalized.includes('preipo')) return 'Pre-IPO';
-  if (normalized.includes('etf') || normalized.includes('etfs')) return 'ETFs';
+  const baseSymbol=s(raw?.baseAsset || raw?.pair || raw?.symbol).toUpperCase().replace(/(USDT|USDC|BUSD)$/,'');
+  if (normalized.includes('etf') || normalized.includes('etfs') || etfSymbols?.has(baseSymbol)) return 'ETFs';
   if (underlyingType === 'equity' || underlyingType === 'hkequity' ||
       underlyingType === 'krequity' || underlyingType === 'stock' ||
       normalized.includes('stock') || normalized.includes('stocks') ||
@@ -143,13 +144,13 @@ function classifyFutureTradeFi(raw: Json, tags: string[]) {
   return 'TradFi';
 }
 
-function futureInstrument(raw: Json, kind: 'USDT-M'|'COIN-M', now:number): Json | null {
+function futureInstrument(raw: Json, kind: 'USDT-M'|'COIN-M', now:number, etfSymbols?: Set<string>): Json | null {
   const symbol=s(raw?.symbol);
   if(!symbol || !['TRADING','PENDING_TRADING'].includes(s(raw?.status || raw?.contractStatus))) return null;
   const base=s(raw?.baseAsset).toUpperCase();
   const quote=s(raw?.quoteAsset).toUpperCase();
   const tags=normalizeFutureTags(raw?.underlyingSubType);
-  const tradeFiSubtype=classifyFutureTradeFi(raw, tags);
+  const tradeFiSubtype=classifyFutureTradeFi(raw, tags, etfSymbols);
   const tradfi=Boolean(tradeFiSubtype);
   const onboard=n(raw?.onboardDate);
   const isNew=Number.isFinite(onboard) ? now-Number(onboard)<30*86400000 : false;
@@ -363,11 +364,25 @@ export async function fetchBinanceCatalogServer() {
     if(marginItem) out.push(marginItem);
   }
 
+  const stockRows = Array.isArray(raw.stocks?.symbols)
+    ? raw.stocks.symbols
+    : Array.isArray(raw.stocks?.data?.symbols)
+      ? raw.stocks.data.symbols
+      : Array.isArray(raw.stocks?.data)
+        ? raw.stocks.data
+        : [];
+  const etfSymbols=new Set<string>();
+  for(const row of stockRows) {
+    const symbol=s(row?.symbol).toUpperCase();
+    const text=[row?.assetType,row?.instrumentType,row?.securityType,row?.productType,row?.symbolType,row?.securityCategory,row?.name].map(s).join(' ').toLowerCase();
+    if(symbol && /(^|\W)etf($|\W)|exchange[ .-]?traded[ .-]?fund/.test(text)) etfSymbols.add(symbol);
+  }
+
   for(const row of (Array.isArray(raw.usdtm?.symbols)?raw.usdtm.symbols:[])) {
-    const item=futureInstrument(row,'USDT-M',now); if(item) out.push(item);
+    const item=futureInstrument(row,'USDT-M',now,etfSymbols); if(item) out.push(item);
   }
   for(const row of (Array.isArray(raw.coinm?.symbols)?raw.coinm.symbols:[])) {
-    const item=futureInstrument(row,'COIN-M',now); if(item) out.push(item);
+    const item=futureInstrument(row,'COIN-M',now,etfSymbols); if(item) out.push(item);
   }
 
   for(const row of (Array.isArray(raw.options?.optionSymbols)?raw.options.optionSymbols:[])) {
@@ -422,7 +437,7 @@ export async function fetchBinanceCatalogServer() {
     String(a.symbol).localeCompare(String(b.symbol))
   );
 
-  // Futures audit: preserve raw Binance row counts/statuses so we can distinguish\n  // active-trading coverage from rows discarded by our normalizer.\n  for (const [sourceName, kind] of [['usdtm','USDT-M'], ['coinm','COIN-M']] as const) {\n    const rows = Array.isArray(raw[sourceName]?.symbols) ? raw[sourceName].symbols : [];\n    const statusField = sourceName === 'coinm' ? 'contractStatus' : 'status';\n    const statusCounts: Record<string, number> = {};\n    const rejectedSamples: Array<{symbol:string,status:string,contractType:string}> = [];\n    let accepted = 0;\n    for (const row of rows) {\n      const status = s(row?.[statusField]);\n      statusCounts[status || '(missing)'] = (statusCounts[status || '(missing)'] || 0) + 1;\n      const item = futureInstrument(row, kind, now);\n      if (item) accepted++;\n      else if (rejectedSamples.length < 100) {\n        rejectedSamples.push({ symbol:s(row?.symbol), status, contractType:s(row?.contractType) });\n      }\n    }\n    diagnostics.sources[sourceName].audit = {\n      rawSymbolRows: rows.length,\n      acceptedByNormalizer: accepted,\n      rejectedByNormalizer: rows.length - accepted,\n      statusCounts,\n      rejectedSamples\n    };\n  }\n\n  diagnostics.instrumentCount=instruments.length;
+  // Futures audit: preserve raw Binance row counts/statuses so we can distinguish\n  // active-trading coverage from rows discarded by our normalizer.\n  for (const [sourceName, kind] of [['usdtm','USDT-M'], ['coinm','COIN-M']] as const) {\n    const rows = Array.isArray(raw[sourceName]?.symbols) ? raw[sourceName].symbols : [];\n    const statusField = sourceName === 'coinm' ? 'contractStatus' : 'status';\n    const statusCounts: Record<string, number> = {};\n    const rejectedSamples: Array<{symbol:string,status:string,contractType:string}> = [];\n    let accepted = 0;\n    for (const row of rows) {\n      const status = s(row?.[statusField]);\n      statusCounts[status || '(missing)'] = (statusCounts[status || '(missing)'] || 0) + 1;\n      const item = futureInstrument(row, kind, now, etfSymbols);\n      if (item) accepted++;\n      else if (rejectedSamples.length < 100) {\n        rejectedSamples.push({ symbol:s(row?.symbol), status, contractType:s(row?.contractType) });\n      }\n    }\n    diagnostics.sources[sourceName].audit = {\n      rawSymbolRows: rows.length,\n      acceptedByNormalizer: accepted,\n      rejectedByNormalizer: rows.length - accepted,\n      statusCounts,\n      rejectedSamples\n    };\n  }\n\n  diagnostics.instrumentCount=instruments.length;
   diagnostics.counts={
     spot:instruments.filter(x=>x.marketType==='Spot' && x.marketGroup==='CRYPTO').length,
     margin:instruments.filter(x=>x.marketType==='Margin').length,
