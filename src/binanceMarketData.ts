@@ -181,6 +181,18 @@ async function requestKlines(instrument: any, symbol: string, interval: string, 
   });
   if (Number.isFinite(end)) params.set('endTime', String(Math.floor(Number(end) * 1000)));
   let lastError = '';
+  const kind = marketKind(instrument);
+  if (kind === 'alpha' || kind === 'equity') {
+    const params = new URLSearchParams({market:kind === 'alpha' ? 'ALPHA' : 'EQUITY',symbol:String(symbol).toUpperCase(),interval:nativeInterval(interval),limit:String(Math.max(1,Math.min(1500,Math.floor(limit))))});
+    if (Number.isFinite(end)) params.set('to',String(Math.floor(Number(end))));
+    try {
+      const response = await fetch('/api/sire/binance/history?' + params.toString(), {cache:'no-store',headers:{Accept:'application/json'}});
+      const payload = await response.json().catch(() => ({}));
+      if (response.ok && payload?.ok && Array.isArray(payload?.bars)) return payload.bars as Bar[];
+      lastError = String(payload?.error || 'Binance history proxy returned no bars.');
+    } catch (error) { lastError = error instanceof Error ? error.message : String(error); }
+    throw new Error(lastError);
+  }
   for (const host of restHosts(instrument)) {
     const controller = new AbortController();
     const timer = window.setTimeout(() => controller.abort(), 15000);
