@@ -915,6 +915,73 @@ const server = http.createServer(async (req,res) => {
   } catch(cause) { const message=cause instanceof Error?cause.message:String(cause); console.error('[HTTP ERROR]',req.method,req.url,message); if (!res.headersSent) res.writeHead(500,{'Content-Type':'application/json','Access-Control-Allow-Origin':'*'}); res.end(JSON.stringify({error:message})); } });
 });
 
+
+const binanceMarketClients = new Set();
+const binanceUpstreams = new Map();
+const BINANCE_WS_URLS = {
+  SPOT: 'wss://stream.binance.com:9443/stream',
+  UM: 'wss://fstream.binance.com/market/stream',
+  COIN: 'wss://dstream.binance.com/stream',
+  ALPHA: 'wss://nbstream.binance.com/w3w/wsa/stream/stream',
+};
+function binanceVenue(item={}) {
+  const type=String(item.marketType||'').toUpperCase();
+  if(type==='ALPHA') return 'ALPHA';
+  if(type==='FUTURES') return String(item.marketSubcategory||'').toUpperCase()==='COIN-M' ? 'COIN' : 'UM';
+  return 'SPOT';
+}
+function ensureBinanceUpstream(venue) {
+  const existing=binanceUpstreams.get(venue);
+  if(existing?.socket?.readyState===WebSocket.OPEN || existing?.connecting) return existing;
+  const state=existing||{socket:null,connecting:false,subscribed:new Set(),clients:new Set(),retry:null};
+  state.connecting=true; binanceUpstreams.set(venue,state);
+  const socket=new WebSocket(BINANCE_WS_URLS[venue]);
+  state.socket=socket;
+  socket.on('open',()=>{
+    state.connecting=false;
+    if(state.subscribed.size) {
+      const params=[...state.subscribed].flatMap(symbol=>{
+        const lower=symbol.toLowerCase();
+        return venue==='COIN' ? [lower+'@ticker',lower+'@trade',lower+'@markPrice@1s'] : [lower+'@ticker',lower+'@trade'];
+      });
+      try { socket.send(JSON.stringify({method:'SUBSCRIBE',params,id:Date.now()})); } catch {}
+    }
+  });
+  socket.on('message',data=>{
+    const text=String(data);
+    for(const client of state.clients) {
+      if(client.readyState===WebSocket.OPEN) {
+        try { client.send(text); } catch {}
+      }
+    }
+  });
+  socket.on('error',error=>console.error('[BINANCE MARKET PROXY]',venue,error instanceof Error?error.message:String(error)));
+  socket.on('close',()=>{
+    state.connecting=false; state.socket=null;
+    if(state.retry) clearTimeout(state.retry);
+    if(state.clients.size || state.subscribed.size) state.retry=setTimeout(()=>ensureBinanceUpstream(venue),1500);
+  });
+  return state;
+}
+function binanceProxySubscribe(client, venue, symbols) {
+  const state=ensureBinanceUpstream(venue);
+  const clean=[...new Set((Array.isArray(symbols)?symbols:[]).map(x=>String(x||'').trim().toUpperCase()).filter(Boolean))];
+  const params=[];
+  for(const symbol of clean) {
+    if(state.subscribed.has(symbol)) continue;
+    state.subscribed.add(symbol);
+    const lower=symbol.toLowerCase();
+    params.push(...(venue==='COIN' ? [lower+'@ticker',lower+'@trade',lower+'@markPrice@1s'] : [lower+'@ticker',lower+'@trade']));
+  }
+  state.clients.add(client);
+  if(params.length && state.socket?.readyState===WebSocket.OPEN) {
+    try { state.socket.send(JSON.stringify({method:'SUBSCRIBE',params,id:Date.now()})); } catch {}
+  }
+}
+function binanceProxyRemoveClient(client) {
+  for(const state of binanceUpstreams.values()) state.clients.delete(client);
+}
+
 const wss = new WebSocketServer({ noServer:true });
 
 server.on('upgrade',(req,socket,head)=>{
@@ -974,6 +1041,28 @@ server.on('upgrade',(req,socket,head)=>{
       return;
     }
   
+
+  if(url.pathname==='/binance/ws'){
+    wss.handleUpgrade(req,socket,head,client=>{
+      binanceMarketClients.add(client);
+      client.on('message',data=>{
+        try {
+          const msg=JSON.parse(String(data));
+          if(msg?.method==='SUBSCRIBE' && Array.isArray(msg?.params)) {
+            const venue=String(msg.venue||'SPOT').toUpperCase();
+            const symbols=msg.symbols || msg.params.filter(x=>typeof x==='string'&&!x.startsWith('!')).map(x=>String(x).split('@')[0]);
+            binanceProxySubscribe(client,venue,symbols);
+          } else if(msg?.type==='subscribe' && msg.venue) {
+            binanceProxySubscribe(client,String(msg.venue).toUpperCase(),msg.symbols);
+          }
+        } catch {}
+      });
+      client.on('close',()=>{binanceMarketClients.delete(client);binanceProxyRemoveClient(client);});
+      try { client.send(JSON.stringify({type:'binance.connected'})); } catch {}
+    });
+    return;
+  }
+
   if(url.pathname!=='/ws'){socket.destroy();return;}
   wss.handleUpgrade(req,socket,head,wsSocket=>{
     const connectionId=url.searchParams.get('connection_id')||randomUUID();
