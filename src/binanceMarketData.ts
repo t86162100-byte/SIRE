@@ -312,21 +312,6 @@ function createSocketFeed(instrument:any, symbol:string, interval:string, onQuot
     socket = null;
   };
 
-  const pollLivePrice = async () => {
-    if (stopped) return;
-    const kind = marketKind(instrument);
-    if (kind !== 'spot' && kind !== 'um' && kind !== 'cm') return;
-    try {
-      const response = await fetch('/api/sire/binance/live-price?market=' + encodeURIComponent(kind) + '&symbol=' + encodeURIComponent(String(symbol).toUpperCase()) + '&t=' + Date.now(), {cache:'no-store'});
-      const payload = await response.json().catch(() => ({}));
-      const price = asNumber(payload?.price), epoch = asNumber(payload?.epoch);
-      if (response.ok && Number.isFinite(price) && Number.isFinite(epoch)) {
-        onQuote({provider:'BINANCE',symbol:String(payload?.symbol || symbol).toUpperCase(),price,epoch});
-      }
-    } catch {}
-    if (!stopped) reconnectTimer = window.setTimeout(() => { reconnectTimer=undefined; void pollLivePrice(); }, 1000);
-  };
-
   const connect = () => {
     if (stopped) return;
     const kind = marketKind(instrument);
@@ -347,7 +332,7 @@ function createSocketFeed(instrument:any, symbol:string, interval:string, onQuot
     }
     const hosts = wsHosts(instrument);
     const kindForProxy = marketKind(instrument);
-    const proxyParams = new URLSearchParams({ market: kindForProxy, symbol: String(symbol).toUpperCase(), interval: intervalForStream(interval) });
+    const proxyParams = new URLSearchParams({ market: kindForProxy, symbol: String(symbol).toUpperCase(), interval: intervalForStream(interval), stream: 'combined' });
     const url = '/api/sire/binance/ws?' + proxyParams.toString();
     try { socket = new WebSocket(new URL(url, window.location.href)); } catch (error) {
       diagnostic(onDiagnostic,{level:'error',code:'BINANCE_LIVE_SOCKET_FAILED',message:'Binance WebSocket could not be created.',detail:String(error)});
@@ -360,12 +345,22 @@ function createSocketFeed(instrument:any, symbol:string, interval:string, onQuot
     };
     currentSocket.onmessage = event => {
       try {
-        const payload = JSON.parse(String(event.data));
+        const envelope = JSON.parse(String(event.data));
+        const payload = envelope?.data || envelope;
+        const eventType = String(payload?.e || '').toLowerCase();
+        const epoch = asNumber(payload?.E) / 1000;
+        if (!Number.isFinite(epoch)) return;
+        if (eventType === 'trade' || eventType === 'aggtrade') {
+          const tradePrice = asNumber(payload?.p);
+          const tradeSymbol = String(payload?.s || symbol).toUpperCase();
+          if (!Number.isFinite(tradePrice) || tradeSymbol !== String(symbol).toUpperCase()) return;
+          onQuote({provider:'BINANCE',symbol:tradeSymbol,price:tradePrice,epoch});
+          return;
+        }
         const k = payload?.k;
         if (!k) return;
         const price = asNumber(k.c);
-        const epoch = asNumber(payload.E) / 1000;
-        if (!Number.isFinite(price) || !Number.isFinite(epoch)) return;
+        if (!Number.isFinite(price)) return;
         const bar = {
           time:Math.floor(asNumber(k.t) / 1000),
           open:asNumber(k.o), high:asNumber(k.h), low:asNumber(k.l), close:price,
@@ -394,7 +389,6 @@ function createSocketFeed(instrument:any, symbol:string, interval:string, onQuot
     reconnectTimer = window.setTimeout(() => { reconnectTimer = undefined; connect(); }, delay);
   };
 
-  void pollLivePrice();
   connect();
 
   return {
@@ -409,13 +403,12 @@ export function createBinanceDataFeed(
   onDiagnostic?:(event:Diagnostic)=>void
 ) {
   let liveSocket:{close:()=>void;getCurrentBar:()=>Bar|null}|null = null;
-  let liveSymbol = String(instrument?.symbol || '');
-  let liveInterval = '1m';
+  let currentInstrument = instrument;
 
   return {
     async getBars({symbol,interval,from,to,countBack}:{symbol:string;interval:string;from?:number;to?:number;countBack?:number}) {
       diagnostic(onDiagnostic,{level:'info',code:'BINANCE_HISTORY_REQUEST_STARTED',message:'Binance history requested for '+symbol+' '+interval+'.',detail:'Using Binance public market-data klines; no API key is required for this chart data path.'});
-      const bars = await fetchHistory(instrument,symbol,interval,from,to,countBack);
+      const bars = await fetchHistory(currentInstrument,symbol,interval,from,to,countBack);
       if (!bars.length) throw new Error('Binance returned no historical candles for '+symbol+' '+interval+'.');
       diagnostic(onDiagnostic,{level:'info',code:'BINANCE_HISTORY_LOADED',message:'Loaded '+bars.length+' Binance candles for '+symbol+' '+interval+'.'});
       return bars;
@@ -423,18 +416,16 @@ export function createBinanceDataFeed(
     async getBarsPage({symbol,interval,before,countBack}:{symbol:string;interval:string;before:number;countBack:number}) {
       const seconds = INTERVAL_SECONDS[interval];
       if (!seconds) throw new Error('Unsupported Binance chart interval: '+interval);
-      const page = await fetchHistory(instrument,symbol,interval,undefined,Math.floor(before)-1,countBack);
+      const page = await fetchHistory(currentInstrument,symbol,interval,undefined,Math.floor(before)-1,countBack);
       const older = page.filter(bar=>bar.time < before);
       diagnostic(onDiagnostic,{level:older.length?'info':'warning',code:older.length?'BINANCE_HISTORY_PAGE_LOADED':'BINANCE_HISTORY_PAGE_EMPTY',message:older.length?'Loaded '+older.length+' older Binance candles for '+symbol+'.':'Binance returned no older candles for '+symbol+'.'});
       return {bars:older,hasMore:older.length>0 && older[0].time>1,nextBefore:older[0]?.time};
     },
     subscribeBars({symbol,interval}:{symbol:string;interval:string}, onBar:(bar:Bar)=>void, options?:{seedFrom?:Bar}) {
       liveSocket?.close();
-      liveSymbol = symbol;
-      liveInterval = interval;
-      let stopped = false;
+            let stopped = false;
       let current = options?.seedFrom ? {...options.seedFrom} : null;
-      const socket = createSocketFeed(instrument,symbol,interval,quote=>{
+      const socket = createSocketFeed(currentInstrument,symbol,interval,quote=>{
         if (stopped || quote.symbol.toUpperCase() !== symbol.toUpperCase()) return;
         const seconds = INTERVAL_SECONDS[interval] || 60;
         const incoming:Bar = {
@@ -461,6 +452,7 @@ export function createBinanceDataFeed(
         socket.close();
       };
     },
+    setInstrument(nextInstrument:any) { currentInstrument = nextInstrument; },
     getLiveState() {
       return { connectionStatus: liveSocket ? 'connected' : 'disconnected', subscriptionStatus:liveSocket ? 'active' : 'idle', latestTick:null, dataTimestamp:null, dataAgeMs:null, stale:false, staleThresholdMs:30000, checkedAt:Date.now() };
     },
