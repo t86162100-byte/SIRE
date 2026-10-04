@@ -282,6 +282,16 @@ function alphaInstrument(exchangeSymbol: Json, token: Json | undefined, now:numb
   };
 }
 
+async function getText(url:string, apiKey='') {
+  const headers: Record<string,string> = {Accept:'text/html,application/json','User-Agent':'SIRE-Binance-Catalog/1.0'};
+  if(apiKey) headers['X-MBX-APIKEY']=apiKey;
+  const controller=new AbortController(); const timer=setTimeout(()=>controller.abort(),15000);
+  let response:Response; try { response=await fetch(url,{cache:'no-store',headers,signal:controller.signal}); } finally { clearTimeout(timer); }
+  const text=await response.text();
+  if(!response.ok) throw new Error('Binance '+response.status+' from '+url);
+  return text;
+}
+
 async function getJson(url:string, apiKey='') {
   const headers: Record<string,string> = {Accept:'application/json','User-Agent':'SIRE-Binance-Catalog/1.0'};
   if(apiKey) headers['X-MBX-APIKEY']=apiKey;
@@ -326,6 +336,7 @@ export async function fetchBinanceCatalogServer() {
     {name:'tokenized', urls:[...EQUITY_HOSTS.map(host=>host+'/tokenized-assets'), ...TOKENIZED_PUBLIC_HOSTS, 'https://www.binance.com/bapi/defi/v1/public/wallet-direct/buw/wallet/market/token/rwa/stock/detail/list/ai'], apiKey:true},
     {name:'bstocks', urls:['https://www.binance.com/bapi/defi/v1/public/wallet-direct/buw/wallet/market/token/rwa/stock/detail/list/ai?type=3'], apiKey:false},
     {name:'rwa', urls:['https://www.binance.com/bapi/defi/v1/public/wallet-direct/buw/wallet/market/token/rwa/stock/detail/list/ai'], apiKey:false},
+    {name:'tCommoditiesPage', urls:['https://www.binance.com/en/markets/coinInfo-tCommodities'], apiKey:false},
     {name:'alphaExchange', urls:[ALPHA+'/alpha-trade/get-exchange-info'], apiKey:false},
     {name:'alphaTokens', urls:[ALPHA+'/wallet-direct/buw/wallet/cex/alpha/all/token/list'], apiKey:false}
   ];
@@ -334,7 +345,7 @@ export async function fetchBinanceCatalogServer() {
     const errors:string[]=[];
     for(const url of source.urls) {
       try {
-        const data=await getJson(url, source.apiKey ? apiKey : '');
+        const data=source.name==='tCommoditiesPage' ? await getText(url, source.apiKey ? apiKey : '') : await getJson(url, source.apiKey ? apiKey : '');
         if ((source.name==='usdtm' || source.name==='coinm' || source.name==='spot') && !Array.isArray(data?.symbols)) {
           throw new Error('Binance returned no symbols array from '+url);
         }
@@ -398,6 +409,13 @@ export async function fetchBinanceCatalogServer() {
   const rwaRows=extractRows(raw.rwa);
   const stockSymbols=new Set<string>();
   const commoditySymbols=new Set<string>();
+  const commodityPage=String(raw.tCommoditiesPage||'');
+  // The Markets page is only a classification source; intersect its discovered
+  // symbols with Binance Spot exchangeInfo below, so no synthetic symbols enter the catalog.
+  const pageSymbols=new Set<string>();
+  for(const match of commodityPage.matchAll(/(?:\\"|&quot;)(?:symbol|baseAsset)(?:\\"|&quot;)\\s*:\\s*(?:\\"|&quot;)([A-Z0-9._-]+)(?:\\"|&quot;)/g)) pageSymbols.add(match[1].toUpperCase());
+  for(const match of commodityPage.matchAll(/\\b([A-Z]{2,10})\\s+(?:Tether Gold|PAX Gold|Gold|Silver|Platinum|Palladium)\\b/gi)) pageSymbols.add(match[1].toUpperCase());
+  for(const symbol of pageSymbols) commoditySymbols.add(symbol);
   const etfSymbols=new Set<string>();
   for(const row of stockRows) {
     const symbol=s(row?.symbol || row?.s || row?.ticker || row?.code).toUpperCase();
