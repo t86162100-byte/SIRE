@@ -324,6 +324,7 @@ export async function fetchBinanceCatalogServer() {
     {name:'marginIsolated', urls:MARGIN_ISOLATED_HOSTS.map(host=>host+'/allPairs'), apiKey:true},
     {name:'stocks', urls:[...EQUITY_PUBLIC_HOSTS, ...EQUITY_HOSTS.map(host=>host+'/exchangeInfo')], apiKey:false},
     {name:'tokenized', urls:[...EQUITY_HOSTS.map(host=>host+'/tokenized-assets'), ...TOKENIZED_PUBLIC_HOSTS, 'https://www.binance.com/bapi/defi/v1/public/wallet-direct/buw/wallet/market/token/rwa/stock/detail/list/ai'], apiKey:true},
+    {name:'bstocks', urls:['https://www.binance.com/bapi/defi/v1/public/wallet-direct/buw/wallet/market/token/rwa/stock/detail/list/ai?type=3'], apiKey:false},
     {name:'alphaExchange', urls:[ALPHA+'/alpha-trade/get-exchange-info'], apiKey:false},
     {name:'alphaTokens', urls:[ALPHA+'/wallet-direct/buw/wallet/cex/alpha/all/token/list'], apiKey:false}
   ];
@@ -342,7 +343,7 @@ export async function fetchBinanceCatalogServer() {
         if ((source.name==='margin' || source.name==='marginIsolated') && !Array.isArray(data)) {
           throw new Error('Binance returned no Margin pair array from '+url);
         }
-        if ((source.name==='stocks' || source.name==='tokenized') && !Array.isArray(data?.symbols) && !Array.isArray(data?.data) && !Array.isArray(data?.data?.symbols)) {
+        if ((source.name==='stocks' || source.name==='tokenized' || source.name==='bstocks') && !Array.isArray(data?.symbols) && !Array.isArray(data?.data) && !Array.isArray(data?.data?.symbols)) {
           throw new Error('Binance returned no symbol data from '+source.name+' endpoint '+url);
         }
         return {data,url};
@@ -382,6 +383,9 @@ export async function fetchBinanceCatalogServer() {
     return [];
   }
   const stockRows = extractRows(raw.stocks);
+  const bStockRows = extractRows(raw.bstocks);
+  const bStockSymbols=new Set<string>();
+  for(const row of bStockRows) { const symbol=s(row?.symbol).toUpperCase(); if(symbol) bStockSymbols.add(symbol); }
   const tokenRows=extractRows(raw.tokenized);
   const stockSymbols=new Set<string>();
   const commoditySymbols=new Set<string>();
