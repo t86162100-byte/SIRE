@@ -444,6 +444,12 @@ export async function fetchBinanceCatalogServer() {
     const spotItem=spotInstrument(row,false,bStockSymbols,commoditySymbols);
     if(spotItem) out.push(spotItem);
   }
+  for(const symbol of ['XAUTUSDT','PAXGUSDT']) {
+    if(!out.some(item=>item.marketType==='Spot' && item.symbol===symbol)) {
+      const base=symbol.replace(/USDT$/,'');
+      out.push({symbol,name:base+'/USDT',provider:'BINANCE',exchange:'BINANCE',marketGroup:'CRYPTO',marketType:'Spot',category:'Spot',marketSubcategory:'Spot',marketSubSubcategory:'tCommodities',marketFilters:['tCommodities','Spot'],marketFilter:'tCommodities',instrumentType:'Crypto Spot',instrumentSubtype:'Tokenized Commodity',quote:'USDT',baseAsset:base,status:'TRADING',margin:false,marginEnabled:false});
+    }
+  }
 
   // Binance's Spot exchangeInfo carries the authoritative per-symbol Margin permission.
   // Use it as a public fallback when /sapi/v1/margin/allPairs or isolated/allPairs is unavailable.
