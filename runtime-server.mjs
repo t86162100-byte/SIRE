@@ -987,11 +987,13 @@ server.on('upgrade',(req,socket,head)=>{
         : market==='alpha' ? 'wss://nbstream.binance.com/w3w/wsa'
         : market==='options' ? 'wss://nbstream.binance.com/eoptions'
         : 'wss://stream.binance.com:9443';
-      const pathBase = market==='alpha' ? '/stream' : '/stream';
-      const streams = stream==='combined' && !['alpha','options'].includes(market)
+      const isStandardMarket = !['alpha','options'].includes(market);
+      const streams = stream==='combined' && isStandardMarket
         ? symbol+'@trade/'+symbol+'@kline_'+interval
         : symbol+'@kline_'+interval;
-      const upstreamUrl = upstreamBase + pathBase + '?streams=' + streams;
+      const upstreamUrl = isStandardMarket
+        ? upstreamBase + '/stream?streams=' + streams
+        : upstreamBase + '/ws/' + streams;
       console.log('[BINANCE WS PROXY] Browser client connected', upstreamUrl);
       wss.handleUpgrade(req,socket,head,clientSocket=>{
         const upstream=new WebSocket(upstreamUrl);
