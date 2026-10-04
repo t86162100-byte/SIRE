@@ -130,7 +130,7 @@ function connectBinanceFuturesQuoteHub() {
           low:Number.isFinite(Number(data?.l)) ? Number(data.l) : undefined,
           volume:Number.isFinite(Number(data?.v)) ? Number(data.v) : undefined,
           quoteVolume:Number.isFinite(Number(data?.q)) ? Number(data.q) : undefined,
-          percent:Number.isFinite(Number(data?.P)) ? Number(data.P) : undefined
+          percent:Number.isFinite(Number(data?.P)) ? Number(data.P) : (Number.isFinite(Number(data?.o)) && Number(data.o)!==0 ? ((price-Number(data.o))/Number(data.o))*100 : undefined)
         });
         if (!binanceFuturesQuoteHub.firstTickLogged) {
           binanceFuturesQuoteHub.firstTickLogged = true;
