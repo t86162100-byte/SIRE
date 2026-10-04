@@ -896,6 +896,34 @@ const server = http.createServer(async (req,res) => {
       return;
     }
     if (req.method === 'POST' && pathname === '/api/sire/agent/gpt') { const parsed = body ? JSON.parse(body) : {}; if (!String(parsed.query || '').trim()) return res.writeHead(400,{ 'Access-Control-Allow-Origin':'*','Content-Type':'application/json; charset=utf-8' }).end(JSON.stringify({ error:'query is required' })); try { const response = await handleDirectGptRequest(parsed); return res.writeHead(200,{ 'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8' }).end(JSON.stringify(response)); } catch (cause) { const message = cause instanceof Error ? cause.message : String(cause); console.error('[DIRECT GPT]', message); return res.writeHead(502,{ 'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8' }).end(JSON.stringify({ error:`Direct GPT test failed: ${message}` })); } }
+    if (req.method === 'GET' && pathname === '/api/sire/binance/live-price') {
+      const u = new URL(req.url || '/', 'http://' + (req.headers.host || 'localhost'));
+      const market = String(u.searchParams.get('market') || 'spot').toLowerCase();
+      const symbol = String(u.searchParams.get('symbol') || '').trim().toUpperCase();
+      if (!/^[A-Z0-9._-]+$/.test(symbol)) {
+        return res.writeHead(400,{'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify({ok:false,error:'Invalid Binance symbol.'}));
+      }
+      const base = market === 'um' ? 'https://fapi.binance.com/fapi/v1/ticker/price'
+        : market === 'cm' ? 'https://dapi.binance.com/dapi/v1/ticker/price'
+        : 'https://api.binance.com/api/v3/ticker/price';
+      try {
+        const upstream = await fetch(base + '?symbol=' + encodeURIComponent(symbol), {cache:'no-store'});
+        const payload = await upstream.json().catch(() => null);
+        if (!upstream.ok || !payload) {
+          console.error('[BINANCE LIVE PRICE]', market, symbol, 'upstream status', upstream.status);
+          return res.writeHead(502,{'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify({ok:false,error:'Binance live price request failed.',status:upstream.status}));
+        }
+        const price = Number(payload.price);
+        if (!Number.isFinite(price)) {
+          return res.writeHead(502,{'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify({ok:false,error:'Binance returned an invalid live price.'}));
+        }
+        return res.writeHead(200,{'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify({ok:true,symbol:String(payload.symbol || symbol).toUpperCase(),price,epoch:Date.now()/1000}));
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        console.error('[BINANCE LIVE PRICE]', market, symbol, message);
+        return res.writeHead(502,{'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify({ok:false,error:message}));
+      }
+    }
     if (req.method === 'GET' && pathname === '/api/sire/binance/market-snapshot') {
       try {
         const snapshots=await fetchBinanceMarketSnapshotServer();
@@ -948,23 +976,6 @@ const wss = new WebSocketServer({ noServer:true });
 
 server.on('upgrade',(req,socket,head)=>{
   const url=new URL(req.url||'/',`http://${req.headers.host||'localhost'}`);
-    if(url.pathname==='/api/sire/binance/live-price'){
-      const market=String(url.searchParams.get('market')||'spot').toLowerCase();
-      const symbol=String(url.searchParams.get('symbol')||'').trim().toUpperCase();
-      if(!/^[A-Z0-9._-]+$/.test(symbol)){ json(res,400,{ok:false,error:'Invalid Binance symbol.'}); return; }
-      const base=market==='um' ? 'https://fapi.binance.com/fapi/v1/ticker/price'
-        : market==='cm' ? 'https://dapi.binance.com/dapi/v1/ticker/price'
-        : 'https://api.binance.com/api/v3/ticker/price';
-      try{
-        const upstream=await fetch(base+'?symbol='+encodeURIComponent(symbol),{cache:'no-store'});
-        const payload=await upstream.json().catch(()=>null);
-        if(!upstream.ok || !payload){ json(res,502,{ok:false,error:'Binance live price request failed.',status:upstream.status}); return; }
-        const price=Number(payload.price);
-        if(!Number.isFinite(price)){ json(res,502,{ok:false,error:'Binance returned an invalid live price.'}); return; }
-        json(res,200,{ok:true,symbol:String(payload.symbol||symbol).toUpperCase(),price,epoch:Date.now()/1000});
-      }catch(error){ json(res,502,{ok:false,error:error instanceof Error?error.message:String(error)}); }
-      return;
-    }
     if(url.pathname==='/api/sire/binance/ws'){
       const market=String(url.searchParams.get('market')||'spot').toLowerCase();
       const symbol=String(url.searchParams.get('symbol')||'').trim().toLowerCase();
