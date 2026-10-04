@@ -417,13 +417,21 @@ export async function fetchBinanceCatalogServer() {
     }
     if(symbol && (row?.etf===true || row?.isETF===true || row?.isEtf===true || row?.et===true || /(^|\W)etf($|\W)|exchange[ ._-]?traded[ ._-]?fund/.test(text))) etfSymbols.add(symbol);
   }
+  const bStockSymbols=new Set<string>();
+  for(const row of tokenRows) {
+    const tokenSymbol=s(row?.assetCode || row?.tokenCode || row?.tokenSymbol || row?.symbol).toUpperCase();
+    const tokenText=([row?.assetName,row?.tokenName,row?.name,row?.description,row?.type,row?.assetType,row?.category,row?.subtype].map(s).join(' ')).toLowerCase();
+    if(tokenSymbol && !/gold|silver|oil|commodity|commodit|copper|platinum|palladium|tcommodit/.test(tokenText)) {
+      bStockSymbols.add(tokenSymbol.replace(/USDT$/,''));
+    }
+  }
   for(const row of [...tokenRows, ...rwaRows]) {
     const commodityText=([row?.assetName,row?.tokenName,row?.name,row?.description,row?.type,row?.assetType,row?.category,row?.subtype,row?.tags,row?.tokenName,row?.underlyingName].map(s).join(' ')+' '+JSON.stringify(row)).toLowerCase();
     const commoditySymbol=s(row?.symbol || row?.ticker || row?.assetCode || row?.tokenCode || row?.tokenSymbol || row?.underlyingTicker).toUpperCase();
-    if(commoditySymbol && /gold|silver|oil|commodity|commodit|copper|platinum|palladium/.test(commodityText)) commoditySymbols.add(commoditySymbol);
+    if(commoditySymbol && /gold|silver|oil|commodity|commodit|copper|platinum|palladium/.test(commodityText)) commoditySymbols.add(commoditySymbol.replace(/USDT$/,''));
   }
   for(const row of spotRows) {
-    const spotItem=spotInstrument(row,false,stockSymbols,commoditySymbols);
+    const spotItem=spotInstrument(row,false,bStockSymbols,commoditySymbols);
     if(spotItem) out.push(spotItem);
   }
   for(const symbol of ['XAUTUSDT','PAXGUSDT']) {
