@@ -63,41 +63,110 @@ export async function fetchBinanceInstruments():Promise<BinanceInstrument[]> {
 
 type Handler=(tick:BinanceTick)=>void;
 type Bus={socket:WebSocket|null;handlers:Map<string,Set<Handler>>;url:string;timer?:number;connecting?:boolean};
+type FastBus=Bus&{symbols:Set<string>;subscribeTimer?:number;requestId:number};
 const buses=new Map<string,Bus>();
+const fastBuses=new Map<string,FastBus>();
+
 function venue(item:any){const t=s(item?.marketType).toUpperCase();if(t==='ALPHA')return 'ALPHA';if(t==='FUTURES')return s(item?.marketSubcategory).toUpperCase()==='COIN-M'?'COIN':'UM';return 'SPOT';}
+
 function url(v:string){
-  // Use the full 24h ticker stream rather than miniTicker so every market row
-  // receives last price, rolling 24h percent, and 24h volume from the same event.
-  // Raw streams are intentionally used here: one connection per venue carries
-  // the all-market stream and the client fans updates out to visible rows.
   if(v==='SPOT') return 'wss://stream.binance.com:9443/ws/!miniTicker@arr';
   if(v==='UM') return 'wss://fstream.binance.com/market/stream?streams=!miniTicker@arr';
   if(v==='COIN') return 'wss://dstream.binance.com/stream?streams=!miniTicker@arr';
   return ALPHA_WS+'?streams=!miniTicker@arr';
 }
+
+function fastUrl(v:string){
+  if(v==='SPOT') return 'wss://stream.binance.com:9443/stream';
+  if(v==='UM') return 'wss://fstream.binance.com/market/stream';
+  if(v==='COIN') return 'wss://dstream.binance.com/stream';
+  return '';
+}
+
 function parse(raw:any):BinanceTick|null{
   const d=raw?.data&&typeof raw.data==='object'?raw.data:raw;
-  const symbol=s(d?.s),price=n(d?.c);
-  if(!symbol||price===undefined)return null;
+  const symbol=s(d?.s), event=s(d?.e);
+  const tradePrice=event==='aggTrade'?n(d?.p):n(d?.c);
+  if(!symbol||tradePrice===undefined)return null;
   const open=n(d?.o),epoch=n(d?.E)||Date.now();
-  const percent=n(d?.P) ?? (open ? ((price-open)/open)*100 : undefined);
+  const percent=n(d?.P) ?? (open ? ((tradePrice-open)/open)*100 : undefined);
   return {
-    provider:'BINANCE', symbol, price, epoch:Math.floor(epoch/1000), open,
+    provider:'BINANCE', symbol, price:tradePrice, epoch:Math.floor(epoch/1000), open,
     high:n(d?.h), low:n(d?.l), volume:n(d?.v), quoteVolume:n(d?.q), percent,
   };
 }
+
+function emitBusMessage(b:Bus, raw:any){
+  const p=raw?.data&&typeof raw.data==='object' ? raw.data : raw;
+  const t=parse(p);
+  if(!t)return;
+  const hs=b.handlers.get(t.symbol);
+  if(hs)for(const h of hs)h(t);
+}
+
 function bus(v:string){
   let b=buses.get(v);if(b?.socket?.readyState===WebSocket.OPEN||b?.connecting)return b!;
   b=b||{socket:null,handlers:new Map(),url:url(v)};b.connecting=true;buses.set(v,b);
   const ws=new WebSocket(b.url);b.socket=ws;
   const retry=()=>{b!.connecting=false;b!.timer=window.setTimeout(()=>bus(v),1500);};
   ws.onopen=()=>{b!.connecting=false;};
-  ws.onmessage=e=>{try{const p=JSON.parse(String(e.data));const a=Array.isArray(p)?p:Array.isArray(p?.data)?p.data:[p];for(const raw of a){const t=parse(raw);if(!t)continue;const hs=b!.handlers.get(t.symbol);if(hs)for(const h of hs)h(t);}}catch{}};
+  ws.onmessage=e=>{try{const p=JSON.parse(String(e.data));const a=Array.isArray(p)?p:Array.isArray(p?.data)?p.data:[p];for(const raw of a)emitBusMessage(b!,raw);}catch{}};
   ws.onerror=()=>{};ws.onclose=retry;return b;
 }
+
+function fastBus(v:string){
+  let b=fastBuses.get(v);
+  if(b?.socket?.readyState===WebSocket.OPEN||b?.connecting)return b!;
+  b=b||{socket:null,handlers:new Map(),url:fastUrl(v),symbols:new Set(),requestId:0};
+  b.connecting=true;buses.delete(v);fastBuses.set(v,b);
+  const ws=new WebSocket(b.url);b.socket=ws;
+  const queueSubscribe=()=>{
+    if(!b?.symbols.size||b.subscribeTimer!==undefined)return;
+    b.subscribeTimer=window.setTimeout(()=>{
+      b!.subscribeTimer=undefined;
+      if(b!.socket?.readyState!==WebSocket.OPEN||!b!.symbols.size)return;
+      const params=[...b!.symbols].map(symbol=>symbol.toLowerCase()+'@aggTrade');
+      b!.socket.send(JSON.stringify({method:'SUBSCRIBE',params,id:++b!.requestId}));
+    },100);
+  };
+  ws.onopen=()=>{b!.connecting=false;queueSubscribe();};
+  ws.onmessage=e=>{try{const p=JSON.parse(String(e.data));if(p?.id||p?.result!==undefined)return;emitBusMessage(b!,p);}catch{}};
+  ws.onerror=()=>{};
+  ws.onclose=()=>{
+    b!.connecting=false;
+    b!.socket=null;
+    if(b!.subscribeTimer!==undefined){window.clearTimeout(b!.subscribeTimer);b!.subscribeTimer=undefined;}
+    if(b!.symbols.size)b!.timer=window.setTimeout(()=>fastBus(v),1000);
+  };
+  queueSubscribe();
+  return b;
+}
+
 export function subscribeBinanceTick(item:any,handler:Handler){
-  const b=bus(venue(item)),symbol=s(item?.symbol);if(!symbol)return()=>{};
-  let set=b.handlers.get(symbol);if(!set){set=new Set();b.handlers.set(symbol,set);}set.add(handler);
+  const v=venue(item),symbol=s(item?.symbol);if(!symbol)return()=>{};
+  // Binance's per-symbol aggTrade stream is real-time. Use it for visible
+  // Spot/UM/CM rows; keep Alpha on its venue-wide stream.
+  if(v==='SPOT'||v==='UM'||v==='COIN'){
+    const b=fastBus(v);let set=b.handlers.get(symbol);
+    if(!set){set=new Set();b.handlers.set(symbol,set);b.symbols.add(symbol);}
+    set.add(handler);
+    if(b.socket?.readyState===WebSocket.OPEN){
+      const params=[symbol.toLowerCase()+'@aggTrade'];
+      try{b.socket.send(JSON.stringify({method:'SUBSCRIBE',params,id:++b.requestId}));}catch{}
+    }
+    return()=>{
+      set!.delete(handler);
+      if(!set!.size){
+        b!.handlers.delete(symbol);
+        b!.symbols.delete(symbol);
+        if(b!.socket?.readyState===WebSocket.OPEN){
+          try{b!.socket.send(JSON.stringify({method:'UNSUBSCRIBE',params:[symbol.toLowerCase()+'@aggTrade'],id:++b!.requestId}));}catch{}
+        }
+      }
+    };
+  }
+  const b=bus(v);let set=b.handlers.get(symbol);
+  if(!set){set=new Set();b.handlers.set(symbol,set);}set.add(handler);
   return()=>{set!.delete(handler);if(!set!.size)b!.handlers.delete(symbol);};
 }
 function aggregate(bars:DerivBar[],sec:number){if(sec<=60)return bars;const out:DerivBar[]=[];for(const x of bars){const t=Math.floor(x.time/sec)*sec,p=out[out.length-1];if(!p||p.time!==t)out.push({...x,time:t});else{p.high=Math.max(p.high,x.high);p.low=Math.min(p.low,x.low);p.close=x.close;p.volume+=x.volume;}}return out;}
