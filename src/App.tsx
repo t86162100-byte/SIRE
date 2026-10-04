@@ -336,7 +336,7 @@ export default function App() {
       } catch {}
     };
     void applySnapshot();
-    const timer = window.setInterval(() => { void applySnapshot(); }, 3000);
+    const timer = window.setInterval(() => { void applySnapshot(); }, 1000);
     return () => { cancelled = true; window.clearInterval(timer); };
   }, [instruments.length]);
 
