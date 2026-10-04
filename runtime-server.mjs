@@ -948,6 +948,23 @@ const wss = new WebSocketServer({ noServer:true });
 
 server.on('upgrade',(req,socket,head)=>{
   const url=new URL(req.url||'/',`http://${req.headers.host||'localhost'}`);
+    if(url.pathname==='/api/sire/binance/live-price'){
+      const market=String(url.searchParams.get('market')||'spot').toLowerCase();
+      const symbol=String(url.searchParams.get('symbol')||'').trim().toUpperCase();
+      if(!/^[A-Z0-9._-]+$/.test(symbol)){ json(res,400,{ok:false,error:'Invalid Binance symbol.'}); return; }
+      const base=market==='um' ? 'https://fapi.binance.com/fapi/v1/ticker/price'
+        : market==='cm' ? 'https://dapi.binance.com/dapi/v1/ticker/price'
+        : 'https://api.binance.com/api/v3/ticker/price';
+      try{
+        const upstream=await fetch(base+'?symbol='+encodeURIComponent(symbol),{cache:'no-store'});
+        const payload=await upstream.json().catch(()=>null);
+        if(!upstream.ok || !payload){ json(res,502,{ok:false,error:'Binance live price request failed.',status:upstream.status}); return; }
+        const price=Number(payload.price);
+        if(!Number.isFinite(price)){ json(res,502,{ok:false,error:'Binance returned an invalid live price.'}); return; }
+        json(res,200,{ok:true,symbol:String(payload.symbol||symbol).toUpperCase(),price,epoch:Date.now()/1000});
+      }catch(error){ json(res,502,{ok:false,error:error instanceof Error?error.message:String(error)}); }
+      return;
+    }
     if(url.pathname==='/api/sire/binance/ws'){
       const market=String(url.searchParams.get('market')||'spot').toLowerCase();
       const symbol=String(url.searchParams.get('symbol')||'').trim().toLowerCase();
