@@ -193,6 +193,36 @@ async function requestKlines(instrument: any, symbol: string, interval: string, 
     } catch (error) { lastError = error instanceof Error ? error.message : String(error); }
     throw new Error(lastError);
   }
+  // Prefer SIRE's Render-side Binance proxy for every venue. This keeps
+  // history reliable when a browser/network region cannot reach a Binance
+  // market-data host directly, while preserving the direct-host fallback.
+  try {
+    const kindForProxy = marketKind(instrument);
+    const proxyParams = new URLSearchParams({
+      market: kindForProxy === 'um' ? 'USDT-M'
+        : kindForProxy === 'cm' ? 'COIN-M'
+        : kindForProxy === 'options' ? 'OPTIONS'
+        : kindForProxy === 'alpha' ? 'ALPHA'
+        : kindForProxy === 'equity' ? 'EQUITY'
+        : 'SPOT',
+      symbol: String(symbol).toUpperCase(),
+      interval: nativeInterval(interval),
+      limit: String(Math.max(1, Math.min(1500, Math.floor(limit))))
+    });
+    if (Number.isFinite(end)) proxyParams.set('to', String(Math.floor(Number(end))));
+    const proxy = await fetch('/api/sire/binance/history?' + proxyParams.toString(), {
+      cache: 'no-store',
+      headers: { Accept: 'application/json' }
+    });
+    const payload = await proxy.json().catch(() => ({}));
+    if (proxy.ok && payload?.ok && Array.isArray(payload?.bars) && payload.bars.length) {
+      return payload.bars as Bar[];
+    }
+    lastError = String(payload?.error || 'SIRE Binance history proxy returned no bars.');
+  } catch (error) {
+    lastError = error instanceof Error ? error.message : String(error);
+  }
+
   for (const host of restHosts(instrument)) {
     const controller = new AbortController();
     const timer = window.setTimeout(() => controller.abort(), 15000);
