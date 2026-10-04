@@ -311,19 +311,30 @@ export default function App() {
     return () => { cancelled=true; };
   }, []);
   useEffect(() => {
+    const hasBinance = instruments.some(item => item.provider === 'BINANCE');
+    if (!hasBinance) return;
     let cancelled=false;
-    void fetchBinancePriceSnapshot().then(ticks => {
-      if(cancelled) return;
-      const byKey=new Map(ticks.map(t=>[t.symbol,t]));
-      setInstruments(current=>current.map(item=>{
-        if(item.provider!=='BINANCE') return item;
-        const tick=byKey.get(item.symbol);
-        if(!tick) return item;
-        return {...item,price:tick.price,change24h:tick.percent,priceChangePercent:tick.percent,high24h:tick.high,low24h:tick.low,volume24h:tick.volume};
-      }));
-    }).catch(()=>{});
-    return()=>{cancelled=true;};
-  }, []);
+    let busy=false;
+    const applySnapshot = async () => {
+      if (cancelled || busy) return;
+      busy=true;
+      try {
+        const ticks=await fetchBinancePriceSnapshot();
+        if(cancelled) return;
+        const byKey=new Map(ticks.map(t=>[t.symbol,t]));
+        setInstruments(current=>current.map(item=>{
+          if(item.provider!=='BINANCE') return item;
+          const tick=byKey.get(item.symbol);
+          if(!tick) return item;
+          return {...item,price:tick.price,change24h:tick.percent,priceChangePercent:tick.percent,high24h:tick.high,low24h:tick.low,volume24h:tick.volume};
+        }));
+      } catch {}
+      finally { busy=false; }
+    };
+    void applySnapshot();
+    const timer=window.setInterval(() => { void applySnapshot(); }, 10000);
+    return()=>{cancelled=true;window.clearInterval(timer);};
+  }, [instruments.some(item => item.provider === 'BINANCE'), instruments.filter(item => item.provider === 'BINANCE').map(item=>item.id).join('|')]);
   useEffect(() => {
     const binance = instruments.filter(item=>item.provider==='BINANCE');
     if (!binance.length) return;
