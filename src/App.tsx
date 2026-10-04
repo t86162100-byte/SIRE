@@ -155,15 +155,26 @@ const matchesMarketTopGroup = (item: Instrument, group: string) => {
 const matchesMarketSubgroup = (item: Instrument, group: string, subgroup: string) => {
   const target = normalizeMarketLabel(subgroup);
   if (group === 'CRYPTO' && subgroup === 'Spot') {
-    return normalizeMarketLabel((item as any).marketGroup) === 'crypto' && normalizeMarketLabel(item.marketType) === 'spot';
+    return matchesMarketTopGroup(item, 'CRYPTO') &&
+      normalizeMarketLabel(item.marketType) === 'spot';
   }
   if (group === 'CRYPTO' && subgroup === 'Futures') {
-    return normalizeMarketLabel((item as any).marketGroup) === 'crypto' && ['futures','margin'].includes(normalizeMarketLabel(item.marketType));
+    return matchesMarketTopGroup(item, 'CRYPTO') &&
+      ['futures','margin'].includes(normalizeMarketLabel(item.marketType));
   }
-  if (group === 'TRADE FI' && subgroup === 'Stocks') return normalizeMarketLabel((item as any).marketType) === 'stocks' || normalizeMarketLabel(item.category) === 'stocks';
-  if (group === 'TRADE FI' && subgroup === 'Futures') return normalizeMarketLabel((item as any).marketType) === 'futures' && matchesMarketTopGroup(item, 'TRADE FI');
-  if (group === 'TRADE FI' && subgroup === 'Spot') return normalizeMarketLabel((item as any).marketType) === 'spot' && matchesMarketTopGroup(item, 'TRADE FI');
-  return hasMarketValue(item, target);
+  if (group === 'TRADE FI' && subgroup === 'Stocks') {
+    return matchesMarketTopGroup(item, 'TRADE FI') &&
+      normalizeMarketLabel(item.marketType) === 'stocks';
+  }
+  if (group === 'TRADE FI' && subgroup === 'Futures') {
+    return matchesMarketTopGroup(item, 'TRADE FI') &&
+      normalizeMarketLabel(item.marketType) === 'futures';
+  }
+  if (group === 'TRADE FI' && subgroup === 'Spot') {
+    return matchesMarketTopGroup(item, 'TRADE FI') &&
+      normalizeMarketLabel(item.marketType) === 'spot';
+  }
+  return matchesMarketTopGroup(item, group) && hasMarketValue(item, target);
 };
 
 const matchesMarketSubSubgroup = (item: Instrument, group: string, subgroup: string, subSubgroup: string) => {
@@ -172,7 +183,7 @@ const matchesMarketSubSubgroup = (item: Instrument, group: string, subgroup: str
   if (group === 'CRYPTO' && subgroup === 'Spot') {
     const quote = normalizeMarketLabel((item as any).quote);
     if (['usdt','usdc','u','usd','bnb','btc','btcc','eth'].includes(target)) return quote === target;
-    if (target === 'fiat') return ['eur','gbp','aud','brl','try','rub','zar','ngn','jpy','pln','ron','uah'].includes(quote);
+    if (target === 'fiat') return ['eur','gbp','aud','brl','try','rub','zar','ngn','jpy','pln','ron','uah','chf','cad','hkd','sgd','mxn','ars'].includes(quote);
     if (target === 'alts') return quote === 'alts' || quoteBucketForFilter((item as any).quote) === 'alts';
     return false;
   }
