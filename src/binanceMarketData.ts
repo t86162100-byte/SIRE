@@ -76,12 +76,9 @@ function url(v:string){
   return ALPHA_WS+'?streams=!miniTicker@arr';
 }
 
-function fastUrl(v:string){
-  if(v==='SPOT') return 'wss://stream.binance.com:9443/stream';
-  if(v==='UM') return 'wss://fstream.binance.com/market/stream';
-  if(v==='COIN') return 'wss://dstream.binance.com/stream';
-  if(v==='ALPHA') return ALPHA_WS;
-  return '';
+function fastUrl(_v:string){
+  const scheme=window.location.protocol==='https:'?'wss:':'ws:';
+  return scheme+'//'+window.location.host+'/binance/ws';
 }
 
 function parse(raw:any):BinanceTick|null{
@@ -138,7 +135,7 @@ function fastBus(v:string){
         b!.subscribed.add(symbol);
       }
       if(!params.length)return;
-      try{b!.socket.send(JSON.stringify({method:'SUBSCRIBE',params,id:++b!.requestId}));}
+      try{b!.socket.send(JSON.stringify({type:'subscribe',venue:v,symbols:[...b!.symbols]}));}
       catch{for(const symbol of b!.symbols)b!.subscribed.delete(symbol);b!.bootstrapSubscribed=false;}
     },100);
   };
@@ -177,7 +174,7 @@ export function subscribeBinanceTick(item:any,handler:Handler){
         b!.handlers.delete(symbol);
         b!.symbols.delete(symbol);
         if(b!.socket?.readyState===WebSocket.OPEN){
-          try{const params=v==='COIN' ? [symbol.toLowerCase()+'@ticker',symbol.toLowerCase()+'@trade',symbol.toLowerCase()+'@markPrice@1s'] : [symbol.toLowerCase()+'@ticker',symbol.toLowerCase()+'@trade'];b!.socket.send(JSON.stringify({method:'UNSUBSCRIBE',params,id:++b!.requestId}));}catch{}
+          try{}catch{}
         }
       }
     };
