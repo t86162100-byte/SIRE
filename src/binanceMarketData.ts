@@ -184,14 +184,6 @@ async function bars(item:any,interval:string,from?:number,to?:number,count=500){
   const d=await json(base(item)+'/klines?'+q),rows=Array.isArray(d)?d:Array.isArray(d?.data)?d.data:[];
   return aggregate(rows.map((r:any)=>({time:Math.floor(Number(r[0])/1000),open:Number(r[1]),high:Number(r[2]),low:Number(r[3]),close:Number(r[4]),volume:Number(r[5])||0})).filter((x:DerivBar)=>Number.isFinite(x.time)&&[x.open,x.high,x.low,x.close].every(Number.isFinite)),sec).sort((a,b)=>a.time-b.time);
 }
-export async function fetchBinancePriceSnapshot(): Promise<BinanceTick[]> {
-  const response = await fetch('/api/sire/binance/quotes', { cache:'no-store' });
-  const payload = await response.json().catch(() => ({}));
-  if (!response.ok || !payload?.ok || !Array.isArray(payload.ticks)) {
-    throw new Error(payload?.error || 'Binance live quote snapshot is unavailable.');
-  }
-  return payload.ticks as BinanceTick[];
-}
 
 export function createBinanceDataFeed(instrument:any,onQuote?:(q:BinanceTick)=>void,onDiagnostic?:(e:DerivFeedDiagnostic)=>void){
   let stopped=false,off:(()=>void)|null=null,latest:BinanceTick|null=null;let subscriptionStatus:'idle'|'connecting'|'active'|'error'|'stopped'='idle';
