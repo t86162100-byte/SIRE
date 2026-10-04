@@ -997,7 +997,9 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
     lastLiveQuoteRef.current = null;
 
     try {
-      widget.setSymbol(symbol, 'DERIV');
+      const nextInstrument = instrumentsRef.current.find(item => item.symbol === symbol);
+      const nextProvider = String(nextInstrument?.provider || marketInstrument?.provider || 'DERIV').toUpperCase();
+      widget.setSymbol(symbol, nextProvider);
       if (widget.symbol() !== symbol) {
         reportDiagnostic({
           level: 'error',
