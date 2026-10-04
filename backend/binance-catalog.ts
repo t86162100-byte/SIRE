@@ -57,7 +57,7 @@ function tickSize(raw: Json) {
   return n(raw?.filters?.find?.((f: Json) => f?.filterType === 'PRICE_FILTER')?.tickSize);
 }
 
-function spotInstrument(raw: Json, margin = false, stockSymbols?: Set<string>): Json | null {
+function spotInstrument(raw: Json, margin = false, stockSymbols?: Set<string>, commoditySymbols?: Set<string>): Json | null {
   const symbol = s(raw?.symbol);
   if (!symbol || !['TRADING','PENDING_TRADING'].includes(s(raw?.status))) return null;
   const quote = s(raw?.quoteAsset).toUpperCase();
@@ -65,13 +65,14 @@ function spotInstrument(raw: Json, margin = false, stockSymbols?: Set<string>): 
   const bucket = quoteBucket(quote);
   const bStockUnderlying = base.endsWith('B') ? base.slice(0, -1) : '';
   const isBStock = !margin && Boolean(stockSymbols?.has(bStockUnderlying));
+  const isTCommodity = !margin && !isBStock && Boolean(commoditySymbols?.has(base));
   return {
     symbol, name: base + '/' + quote, provider:'BINANCE', exchange:'BINANCE',
     marketGroup:'CRYPTO', marketType:margin?'Margin':'Spot', category:margin?'Margin':'Spot',
     marketSubcategory:margin?'Margin':'Spot',
-    marketSubSubcategory:margin ? base || 'All' : (isBStock ? 'bStocks' : bucket),
-    marketFilters:uniq([isBStock ? 'bStocks' : bucket, 'Spot', ...(margin ? ['Margin'] : [])]),
-    marketFilter:margin ? base : (isBStock ? 'bStocks' : bucket),
+    marketSubSubcategory:margin ? base || 'All' : (isBStock ? 'bStocks' : (isTCommodity ? 'tCommodities' : bucket)),
+    marketFilters:uniq([isBStock ? 'bStocks' : (isTCommodity ? 'tCommodities' : bucket), 'Spot', ...(margin ? ['Margin'] : [])]),
+    marketFilter:margin ? base : (isBStock ? 'bStocks' : (isTCommodity ? 'tCommodities' : bucket)),
     instrumentType:margin?'Crypto Margin':'Crypto Spot',
     instrumentSubtype:margin?'Margin':'Spot',
     quote, baseAsset:base, status:s(raw?.status), pipSize:tickSize(raw),
@@ -384,11 +385,15 @@ export async function fetchBinanceCatalogServer() {
   const stockRows = extractRows(raw.stocks);
   const tokenRows=extractRows(raw.tokenized);
   const stockSymbols=new Set<string>();
+  const commoditySymbols=new Set<string>();
   const etfSymbols=new Set<string>();
   for(const row of stockRows) {
     const symbol=s(row?.symbol || row?.s || row?.ticker || row?.code).toUpperCase();
     const text=[row?.assetType,row?.instrumentType,row?.securityType,row?.productType,row?.symbolType,row?.securityCategory,row?.type,row?.subtype,row?.securityTypeName,row?.name,row?.n,row?.description,row?.desc,row?.sec,row?.t].map(s).join(' ').toLowerCase();
-    if(symbol) stockSymbols.add(symbol);
+    if(symbol) {
+      stockSymbols.add(symbol);
+      stockSymbols.add(symbol.replace(/^EQ_/,''));
+    }
     if(symbol && (row?.etf===true || row?.isETF===true || row?.isEtf===true || row?.et===true || /(^|\W)etf($|\W)|exchange[ ._-]?traded[ ._-]?fund/.test(text))) etfSymbols.add(symbol);
   }
   for(const row of spotRows) {
