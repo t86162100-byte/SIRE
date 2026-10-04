@@ -399,9 +399,10 @@ async function fetchBinanceMarketSnapshotFresh():Promise<Record<string,BinanceMa
         if(map[key] && map[key].marketCap===undefined && base && spotCapByBase.has(base)) map[key].marketCap=spotCapByBase.get(base);
       }
     }
-    for(const snap of Object.values(map)) if(snap.market!=='SPOT' && snap.market!=='EQUITY' && snap.market!=='ALPHA') {
+    for(const snap of Object.values(map)) {
       const base=snap.symbol.replace(/USDT$|USDC$|BUSD$/,'').toUpperCase();
-      const cap=spotCapByBase.get(base); if(cap!==undefined) snap.marketCap=cap;
+      const cap=spotCapByBase.get(base);
+      if(cap!==undefined && (snap.marketCap===undefined || snap.market!=='EQUITY')) snap.marketCap=cap;
     }
   } catch {}
   return map;
