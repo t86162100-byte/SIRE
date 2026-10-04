@@ -11,7 +11,12 @@ const EQUITY_HOSTS = ['https://api.binance.com/sapi/v1/equity/market','https://w
 // the authenticated SAPI path. Use it as the primary catalog source so the
 // catalog still works from Render regions where the SAPI equity endpoint is
 // geo-restricted (HTTP 451).
-const EQUITY_PUBLIC_HOSTS = ['https://www.binance.com/bapi/equity/v2/public/equity/symbol','https://www.binance.com/bapi/equity/v1/public/equity/symbol'];
+const EQUITY_PUBLIC_HOSTS = [
+  'https://www.binance.com/bapi/equity/v2/public/equity/symbol/get-exchange-info',
+  'https://www.binance.com/bapi/equity/v1/public/equity/symbol/get-symbols',
+  'https://www.binance.com/bapi/equity/v1/public/equity/symbol/get-symbols-static',
+  'https://www.binance.com/bapi/equity/v1/public/equity/symbol/get-symbols-dynamic'
+];
 const ALPHA = 'https://www.binance.com/bapi/defi/v1/public';
 
 const s = (v: unknown) => String(v ?? '').trim();
@@ -134,7 +139,7 @@ function classifyFutureTradeFi(raw: Json, tags: string[], etfSymbols?: Set<strin
       normalized.includes('foreignexchange') || normalized.includes('currency')) return 'Fx';
   if (underlyingType === 'premarket' || underlyingType === 'preipo' ||
       normalized.includes('preipo')) return 'Pre-IPO';
-  const baseSymbol=s(raw?.baseAsset || raw?.pair || raw?.symbol).toUpperCase().replace(/(USDT|USDC|BUSD)$/,'');
+  const baseSymbol=s(raw?.baseAsset || raw?.pair || raw?.symbol || raw?.ticker).toUpperCase().replace(/(USDT|USDC|BUSD)$/,'');
   if (normalized.includes('etf') || normalized.includes('etfs') || etfSymbols?.has(baseSymbol)) return 'ETFs';
   if (underlyingType === 'equity' || underlyingType === 'hkequity' ||
       underlyingType === 'krequity' || underlyingType === 'stock' ||
@@ -180,13 +185,14 @@ function isEtfFromBinance(raw: Json) {
   if (raw?.isETF === true || raw?.isEtf === true) return true;
   const text = [
     raw?.assetType, raw?.instrumentType, raw?.securityType, raw?.productType,
-    raw?.symbolType, raw?.securityCategory
+    raw?.symbolType, raw?.securityCategory, raw?.type, raw?.subtype, raw?.securityTypeName, raw?.name
   ].map(s).join(' ').toLowerCase();
-  return /(^|\W)etf($|\W)|exchange.traded.fund/.test(text);
+  return raw?.etf === true || raw?.isETF === true || raw?.isEtf === true ||
+    /(^|\W)etf($|\W)|exchange[ ._-]?traded[ ._-]?fund/.test(text);
 }
 
 function equityInstrument(raw: Json): Json | null {
-  const symbol=s(raw?.symbol).toUpperCase();
+  const symbol=s(raw?.symbol || raw?.ticker || raw?.code || raw?.assetSymbol).toUpperCase();
   if(!symbol || s(raw?.tradability)==='NONE') return null;
   const isEtf=isEtfFromBinance(raw);
   return {
@@ -300,7 +306,7 @@ export async function fetchBinanceCatalogServer() {
     {name:'options', urls:OPTIONS_HOSTS.map(host=>host+'/exchangeInfo'), apiKey:false},
     {name:'margin', urls:MARGIN_HOSTS.map(host=>host+'/allPairs'), apiKey:true},
     {name:'marginIsolated', urls:MARGIN_ISOLATED_HOSTS.map(host=>host+'/allPairs'), apiKey:true},
-    {name:'stocks', urls:[...EQUITY_PUBLIC_HOSTS.map(host=>host+'/get-exchange-info'), ...EQUITY_PUBLIC_HOSTS.map(host=>host+'/get-symbols'), ...EQUITY_HOSTS.map(host=>host+'/exchangeInfo')], apiKey:false},
+    {name:'stocks', urls:[...EQUITY_PUBLIC_HOSTS, ...EQUITY_HOSTS.map(host=>host+'/exchangeInfo')], apiKey:false},
     {name:'tokenized', urls:[...EQUITY_HOSTS.map(host=>host+'/tokenized-assets'), 'https://www.binance.com/bapi/defi/v1/public/wallet-direct/buw/wallet/market/token/rwa/stock/detail/list/ai'], apiKey:true},
     {name:'alphaExchange', urls:[ALPHA+'/alpha-trade/get-exchange-info'], apiKey:false},
     {name:'alphaTokens', urls:[ALPHA+'/wallet-direct/buw/wallet/cex/alpha/all/token/list'], apiKey:false}
@@ -364,18 +370,20 @@ export async function fetchBinanceCatalogServer() {
     if(marginItem) out.push(marginItem);
   }
 
-  const stockRows = Array.isArray(raw.stocks?.symbols)
-    ? raw.stocks.symbols
-    : Array.isArray(raw.stocks?.data?.symbols)
-      ? raw.stocks.data.symbols
-      : Array.isArray(raw.stocks?.data)
-        ? raw.stocks.data
-        : [];
+  function extractRows(value:any): Json[] {
+  if (Array.isArray(value)) return value;
+  if (Array.isArray(value?.symbols)) return value.symbols;
+  if (Array.isArray(value?.data)) return value.data;
+  if (Array.isArray(value?.data?.symbols)) return value.data.symbols;
+  if (Array.isArray(value?.data?.data)) return value.data.data;
+  return [];
+}
+const stockRows = extractRows(raw.stocks);
   const etfSymbols=new Set<string>();
   for(const row of stockRows) {
     const symbol=s(row?.symbol).toUpperCase();
-    const text=[row?.assetType,row?.instrumentType,row?.securityType,row?.productType,row?.symbolType,row?.securityCategory,row?.name].map(s).join(' ').toLowerCase();
-    if(symbol && /(^|\W)etf($|\W)|exchange[ .-]?traded[ .-]?fund/.test(text)) etfSymbols.add(symbol);
+    const text=[row?.assetType,row?.instrumentType,row?.securityType,row?.productType,row?.symbolType,row?.securityCategory,row?.type,row?.subtype,row?.securityTypeName,row?.name].map(s).join(' ').toLowerCase();
+    if(symbol && (row?.etf===true || row?.isETF===true || row?.isEtf===true || /(^|\W)etf($|\W)|exchange[ ._-]?traded[ ._-]?fund/.test(text))) etfSymbols.add(symbol);
   }
 
   for(const row of (Array.isArray(raw.usdtm?.symbols)?raw.usdtm.symbols:[])) {
@@ -400,7 +408,7 @@ export async function fetchBinanceCatalogServer() {
     const item=equityInstrument(row); if(item) out.push(item);
   }
 
-  const tokenRows=Array.isArray(raw.tokenized?.symbols)?raw.tokenized.symbols:Array.isArray(raw.tokenized?.data?.symbols)?raw.tokenized.data.symbols:Array.isArray(raw.tokenized?.data)?raw.tokenized.data:Array.isArray(raw.tokenized)?raw.tokenized:[];
+  const tokenRows=extractRows(raw.tokenized);
   for(const row of tokenRows) {
     const item=tokenizedInstrument(row); if(item) out.push(item);
   }
