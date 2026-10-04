@@ -948,6 +948,33 @@ const wss = new WebSocketServer({ noServer:true });
 
 server.on('upgrade',(req,socket,head)=>{
   const url=new URL(req.url||'/',`http://${req.headers.host||'localhost'}`);
+    if(url.pathname==='/api/sire/binance/ws'){
+      const market=String(url.searchParams.get('market')||'spot').toLowerCase();
+      const symbol=String(url.searchParams.get('symbol')||'').trim().toLowerCase();
+      const interval=String(url.searchParams.get('interval')||'1m').trim();
+      if(!symbol || !/^[a-z0-9._-]+$/.test(symbol) || !/^[0-9]+[mhdw]$/.test(interval)){ socket.destroy(); return; }
+      const upstreamBase = market==='um' ? 'wss://fstream.binance.com/ws/'
+        : market==='cm' ? 'wss://dstream.binance.com/ws/'
+        : market==='alpha' ? 'wss://nbstream.binance.com/w3w/wsa/stream/ws/'
+        : market==='options' ? 'wss://nbstream.binance.com/eoptions/ws/'
+        : 'wss://stream.binance.com:9443/ws/';
+      const upstreamUrl = upstreamBase + symbol + '@kline_' + interval;
+      console.log('[BINANCE WS PROXY] Browser client connected', upstreamUrl);
+      wss.handleUpgrade(req,socket,head,clientSocket=>{
+        const upstream=new WebSocket(upstreamUrl);
+        const timer=setTimeout(()=>{ if(upstream.readyState===WebSocket.CONNECTING) upstream.close(); },10000);
+        const closeClient=(code=1011,reason='Binance upstream unavailable.')=>{
+          if(clientSocket.readyState===WebSocket.OPEN) clientSocket.close(code,reason.slice(0,120));
+        };
+        upstream.on('open',()=>{ clearTimeout(timer); if(clientSocket.readyState===WebSocket.OPEN) clientSocket.send(JSON.stringify({type:'sire.binance.connected',symbol:symbol.toUpperCase()})); });
+        upstream.on('message',data=>{ if(clientSocket.readyState===WebSocket.OPEN) clientSocket.send(data); });
+        upstream.on('error',error=>{ console.error('[BINANCE WS PROXY]', error instanceof Error ? error.message : String(error)); closeClient(); });
+        upstream.on('close',(code,reason)=>{ clearTimeout(timer); if(clientSocket.readyState===WebSocket.OPEN) clientSocket.close(code && code!==1000 ? 1011 : 1000, String(reason||'').slice(0,120)); });
+        clientSocket.on('message',data=>{ if(upstream.readyState===WebSocket.OPEN) upstream.send(data); });
+        clientSocket.on('close',()=>{ clearTimeout(timer); if(upstream.readyState===WebSocket.OPEN || upstream.readyState===WebSocket.CONNECTING) upstream.close(); });
+      });
+      return;
+    }
     if(url.pathname==='/deriv/ws'){
       console.log('[DERIV PROXY] Browser market-data client connected');
       wss.handleUpgrade(req,socket,head,clientSocket=>{
