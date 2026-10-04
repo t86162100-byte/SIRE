@@ -924,11 +924,47 @@ const BINANCE_WS_URLS = {
   COIN: 'wss://dstream.binance.com/stream',
   ALPHA: 'wss://nbstream.binance.com/w3w/wsa/stream/stream',
 };
+const BINANCE_ALL_MARKET_STREAM = {
+  SPOT: '!miniTicker@arr',
+  UM: '!miniTicker@arr',
+  COIN: '!miniTicker@arr',
+  ALPHA: '!miniTicker@arr',
+};
 function binanceVenue(item={}) {
   const type=String(item.marketType||'').toUpperCase();
   if(type==='ALPHA') return 'ALPHA';
+  if(type==='STOCKS') return 'EQUITY';
   if(type==='FUTURES') return String(item.marketSubcategory||'').toUpperCase()==='COIN-M' ? 'COIN' : 'UM';
   return 'SPOT';
+}
+function binanceSendSubscribe(state, params) {
+  const clean=[...new Set((Array.isArray(params)?params:[]).map(x=>String(x||'').trim()).filter(Boolean))];
+  if(!clean.length || state.socket?.readyState!==WebSocket.OPEN) return;
+  try { state.socket.send(JSON.stringify({method:'SUBSCRIBE',params:clean,id:Date.now()})); } catch {}
+}
+function binanceEmitToSubscribed(state, raw) {
+  const data=raw?.data&&typeof raw.data==='object' ? raw.data : raw;
+  const items=Array.isArray(data) ? data : [data];
+  for(const item of items) {
+    const symbol=String(item?.s||'').trim().toUpperCase();
+    if(!symbol) continue;
+    state.latest.set(symbol, item);
+    if(!state.subscribed.has(symbol)) continue;
+    const payload=JSON.stringify(item);
+    for(const client of state.clients) {
+      if(client.readyState===WebSocket.OPEN) {
+        try { client.send(payload); } catch {}
+      }
+    }
+  }
+}
+function binanceSendCached(state, client, symbols) {
+  for(const symbol of symbols) {
+    const cached=state.latest.get(String(symbol||'').trim().toUpperCase());
+    if(cached && client.readyState===WebSocket.OPEN) {
+      try { client.send(JSON.stringify(cached)); } catch {}
+    }
+  }
 }
 async function pollBinanceEquityQuotes(state) {
   if (state.polling || !state.subscribed.size) return;
@@ -979,7 +1015,7 @@ async function pollBinanceEquityQuotes(state) {
 function ensureBinanceUpstream(venue) {
   const existing=binanceUpstreams.get(venue);
   if(existing?.socket?.readyState===WebSocket.OPEN || existing?.connecting || (venue==='EQUITY' && existing)) return existing;
-  const state=existing||{socket:null,connecting:false,subscribed:new Set(),clients:new Set(),retry:null,pollTimer:null,polling:false};
+  const state=existing||{socket:null,connecting:false,subscribed:new Set(),clients:new Set(),latest:new Map(),retry:null,pollTimer:null,polling:false,allMarketSubscribed:false};
   binanceUpstreams.set(venue,state);
   if(venue==='EQUITY') {
     void pollBinanceEquityQuotes(state);
@@ -990,21 +1026,23 @@ function ensureBinanceUpstream(venue) {
   state.socket=socket;
   socket.on('open',()=>{
     state.connecting=false;
+    state.allMarketSubscribed=false;
+    const allMarket=BINANCE_ALL_MARKET_STREAM[venue];
+    if(allMarket) {
+      binanceSendSubscribe(state,[allMarket]);
+      state.allMarketSubscribed=true;
+    }
     if(state.subscribed.size) {
       const params=[...state.subscribed].flatMap(symbol=>{
         const lower=symbol.toLowerCase();
-        return venue==='COIN' ? [lower+'@ticker',lower+'@trade',lower+'@markPrice@1s'] : [lower+'@ticker',lower+'@trade'];
+        return venue==='COIN' ? [lower+'@trade',lower+'@markPrice@1s'] : [lower+'@trade'];
       });
-      try { socket.send(JSON.stringify({method:'SUBSCRIBE',params,id:Date.now()})); } catch {}
+      binanceSendSubscribe(state,params);
     }
   });
   socket.on('message',data=>{
-    const text=String(data);
-    for(const client of state.clients) {
-      if(client.readyState===WebSocket.OPEN) {
-        try { client.send(text); } catch {}
-      }
-    }
+    try { binanceEmitToSubscribed(state,JSON.parse(String(data))); }
+    catch {}
   });
   socket.on('error',error=>console.error('[BINANCE MARKET PROXY]',venue,error instanceof Error?error.message:String(error)));
   socket.on('close',()=>{
@@ -1019,16 +1057,20 @@ function binanceProxySubscribe(client, venue, symbols) {
   const clean=[...new Set((Array.isArray(symbols)?symbols:[]).map(x=>String(x||'').trim().toUpperCase()).filter(Boolean))];
   const params=[];
   for(const symbol of clean) {
-    if(state.subscribed.has(symbol)) continue;
-    state.subscribed.add(symbol);
-    const lower=symbol.toLowerCase();
-    params.push(...(venue==='COIN' ? [lower+'@ticker',lower+'@trade',lower+'@markPrice@1s'] : [lower+'@ticker',lower+'@trade']));
+    if(!state.subscribed.has(symbol)) {
+      state.subscribed.add(symbol);
+      if(venue!=='EQUITY') {
+        const lower=symbol.toLowerCase();
+        params.push(...(venue==='COIN' ? [lower+'@trade',lower+'@markPrice@1s'] : [lower+'@trade']));
+      }
+    }
   }
   state.clients.add(client);
   if(venue==='EQUITY') {
     void pollBinanceEquityQuotes(state);
-  } else if(params.length && state.socket?.readyState===WebSocket.OPEN) {
-    try { state.socket.send(JSON.stringify({method:'SUBSCRIBE',params,id:Date.now()})); } catch {}
+  } else {
+    binanceSendCached(state,client,clean);
+    binanceSendSubscribe(state,params);
   }
 }
 function binanceProxyRemoveClient(client) {
