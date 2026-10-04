@@ -338,7 +338,26 @@ export default function App() {
             venue = String((item as any).settlement || (item as any).marketSubcategory || '') === 'COIN-M' ? 'COIN-M' : 'USDT-M';
           } else if (marketType === 'Options') venue = 'OPTIONS';
           else if (marketType === 'Margin') venue = 'SPOT';
-          return markets[venue + ':' + symbol] || null;
+          const direct = markets[venue + ':' + symbol];
+          if (direct) return direct;
+
+          // Tokenized bStocks/tCommodities are catalogued as TradeFi Spot
+          // assets, but their live trading market is Binance Spot (for example
+          // AAPLB/USDT). Fall back to the actual Spot pair without changing
+          // the catalogue classification.
+          if (marketGroup === 'TRADE FI' && marketType === 'Spot') {
+            const quote = String((item as any).quote || 'USDT').toUpperCase();
+            const pairCandidates = [
+              symbol + quote,
+              symbol + 'USDT',
+              symbol + 'USDC',
+            ];
+            for (const pair of pairCandidates) {
+              const snapshot = markets['SPOT:' + pair];
+              if (snapshot) return snapshot;
+            }
+          }
+          return null;
         };
 
         const mergeSnapshot = (item: Instrument) => {
