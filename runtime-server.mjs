@@ -65,8 +65,16 @@ function connectBinanceFuturesQuoteHub() {
         ? binanceFuturesQuoteHub.symbols
         : await loadBinanceFuturesQuoteSymbols();
       const params = [...symbols.keys()].map(symbol => symbol.toLowerCase() + '@ticker');
-      if (params.length) {
-        socket.send(JSON.stringify({ method:'SUBSCRIBE', params, id:1 }));
+      // Binance rejects an oversized SUBSCRIBE frame. Keep each control
+      // payload small and pace the requests below the futures WS control limit.
+      const chunkSize = 50;
+      for (let offset = 0, requestId = 1; offset < params.length; offset += chunkSize, requestId += 1) {
+        if (socket.readyState !== WebSocket.OPEN) return;
+        const chunk = params.slice(offset, offset + chunkSize);
+        socket.send(JSON.stringify({ method:'SUBSCRIBE', params:chunk, id:requestId }));
+        if (offset + chunkSize < params.length) {
+          await new Promise(resolve => setTimeout(resolve, 250));
+        }
       }
       binanceFuturesQuoteHub.connecting = false;
       if (binanceFuturesQuoteHub.readyResolve) {
