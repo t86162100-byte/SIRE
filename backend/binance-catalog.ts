@@ -549,12 +549,14 @@ function parseTickerRows(value:any, market:BinanceMarketSnapshot['market']):Bina
     Array.isArray(value?.data?.data)?value.data.data:Array.isArray(value?.data?.symbols)?value.data.symbols:
     Array.isArray(value?.symbols)?value.symbols:value&&typeof value==='object'?[value]:[];
   return rows.map((row:any)=>{
-    const symbol=s(row?.symbol||row?.ticker||row?.assetCode||row?.tokenCode||row?.s).toUpperCase();
-    const price=n(row?.lastPrice??row?.price??row?.last??row?.close??row?.lastTradedPrice??row?.latestPrice);
-    const change=n(row?.priceChangePercent??row?.percentChange24h??row?.change24h??row?.changePercent);
-    const quoteVolume=n(row?.quoteVolume??row?.volume24h??row?.quote_volume??row?.volumeUSD);
-    const volume=n(row?.volume??row?.baseVolume??row?.volume24h);
-    const marketCap=n(row?.marketCap??row?.market_cap??row?.mktCap??row?.marketCapitalization);
+    const alphaId=s(row?.alphaId).toUpperCase();
+    const rawSymbol=s(row?.symbol||row?.ticker||row?.assetCode||row?.tokenCode||row?.s).toUpperCase();
+    const symbol=(market==='ALPHA'&&alphaId ? alphaId+'USDT' : rawSymbol).toUpperCase();
+    const price=n(row?.lastPrice??row?.price??row?.last??row?.close??row?.lastTradedPrice??row?.latestPrice??row?.c);
+    const change=n(row?.priceChangePercent??row?.percentChange24h??row?.change24h??row?.changePercent??row?.pc);
+    const quoteVolume=n(row?.quoteVolume??row?.volume24h??row?.quote_volume??row?.volumeUSD??row?.qv24??row?.v24);
+    const volume=n(row?.volume??row?.baseVolume??row?.volume24h??row?.v24);
+    const marketCap=n(row?.marketCap??row?.market_cap??row?.mktCap??row?.marketCapitalization??row?.mc);
     const high=n(row?.highPrice??row?.high24h??row?.priceHigh24h);
     const low=n(row?.lowPrice??row?.low24h??row?.priceLow24h);
     const open=n(row?.openPrice??row?.open24h??row?.open);
@@ -580,6 +582,7 @@ async function fetch24hTickers(hosts:string[],market:BinanceMarketSnapshot['mark
 }
 async function fetchEquityMarketSnapshots():Promise<BinanceMarketSnapshot[]> {
   const urls=[
+    'https://www.binance.com/bapi/equity/v1/public/equity/symbol/get-symbols',
     'https://www.binance.com/bapi/equity/v1/public/equity/ticker/get',
     'https://www.binance.com/bapi/equity/v2/public/equity/market/get-latest-quote',
     'https://www.binance.com/bapi/equity/v1/public/equity/market/get-latest-quote'
