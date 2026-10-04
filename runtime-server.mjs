@@ -1063,10 +1063,38 @@ const server = http.createServer(async (req,res) => {
             if (!response.ok) throw new Error('HTTP '+response.status+' from '+url);
             return text ? JSON.parse(text) : {};
           };
-          const [spot, stocks, alpha] = await Promise.allSettled([
+          const [spot, stocks, alpha, marketMeta] = await Promise.allSettled([
             get('https://data-api.binance.vision/api/v3/ticker/24hr').catch(() => get('https://api.binance.com/api/v3/ticker/24hr')),
             get('https://www.binance.com/bapi/equity/v1/public/equity/symbol/get-symbols'),
-            get('https://www.binance.com/bapi/defi/v1/public/wallet-direct/buw/wallet/cex/alpha/all/token/list')
+            get('https://www.binance.com/bapi/defi/v1/public/wallet-direct/buw/wallet/cex/alpha/all/token/list'),
+            (async () => {
+              const metaNow = Date.now();
+              if (globalThis.__sireBinanceMarketMeta && metaNow - (globalThis.__sireBinanceMarketMetaAt || 0) < 300000) {
+                return globalThis.__sireBinanceMarketMeta;
+              }
+              const urls = [
+                'https://www.binance.com/bapi/apex/v1/friendly/apex/marketing/complianceSymbolList',
+                'https://www.binance.com/bapi/asset/v2/public/asset-service/product/get-products?includeEtf=true'
+              ];
+              let lastError = null;
+              for (const url of urls) {
+                try {
+                  const response = await fetch(url, { cache:'no-store', headers:{Accept:'application/json','User-Agent':'SIRE-Binance-Market-Meta/1.0'} });
+                  const text = await response.text();
+                  if (!response.ok) throw new Error('HTTP '+response.status+' from '+url);
+                  const data = text ? JSON.parse(text) : {};
+                  const rows = Array.isArray(data?.data) ? data.data : Array.isArray(data) ? data : [];
+                  if (rows.length) {
+                    globalThis.__sireBinanceMarketMeta = rows;
+                    globalThis.__sireBinanceMarketMetaAt = metaNow;
+                    return rows;
+                  }
+                } catch (error) {
+                  lastError = error;
+                }
+              }
+              throw lastError || new Error('Binance market metadata unavailable.');
+            })()
           ]);
           await startBinanceFuturesQuoteHub(true);
           const ticks = [];
@@ -1088,12 +1116,64 @@ const server = http.createServer(async (req,res) => {
                 low:Number.isFinite(Number(row?.lowPrice)) ? Number(row.lowPrice) : undefined,
                 volume:Number.isFinite(Number(row?.volume)) ? Number(row.volume) : undefined,
                 quoteVolume:Number.isFinite(Number(row?.quoteVolume)) ? Number(row.quoteVolume) : undefined,
-                percent:Number.isFinite(Number(row?.priceChangePercent)) ? Number(row.priceChangePercent) : undefined
+                percent:Number.isFinite(Number(row?.priceChangePercent)) ? Number(row.priceChangePercent) : undefined,
+                marketCap:undefined,
+                fdv:undefined
               });
               sourceStats[venue].ticks++;
             }
           };
           add24h(spot, 'SPOT');
+
+          // Binance's market-cap methodology is current price × circulating supply.
+          // Build that value from Binance's own token metadata and the live 24h ticker,
+          // converting non-USD quote pairs through their live USD/USDT spot price.
+          const spotRows = spot.status === 'fulfilled' && Array.isArray(spot.value) ? spot.value : [];
+          const usdPriceByAsset = new Map();
+          for (const row of spotRows) {
+            const symbol = String(row?.symbol || '').trim().toUpperCase();
+            const price = Number(row?.lastPrice);
+            if (!symbol || !Number.isFinite(price)) continue;
+            const quote = String(row?.quoteAsset || '').trim().toUpperCase();
+            const base = String(row?.baseAsset || '').trim().toUpperCase();
+            if (['USDT','USDC','U','USD1','USD'].includes(quote) && base && !usdPriceByAsset.has(base)) {
+              usdPriceByAsset.set(base, price);
+            }
+          }
+          const marketMetaRows = marketMeta.status === 'fulfilled'
+            ? (Array.isArray(marketMeta.value) ? marketMeta.value : [])
+            : [];
+          const metaByBase = new Map();
+          for (const row of marketMetaRows) {
+            const rawSymbol = String(row?.symbol || row?.s || '').trim().toUpperCase();
+            const base = String(row?.name || row?.baseAsset || row?.asset || rawSymbol.replace(/USDT$|USDC$|BUSD$|USD$/,'')).trim().toUpperCase();
+            if (!base) continue;
+            const supply = Number(row?.circulatingSupply ?? row?.cs ?? row?.circulating_supply);
+            const directMarketCap = Number(row?.marketCap ?? row?.market_cap);
+            const fdv = Number(row?.fullyDilutedMarketCap ?? row?.fdv);
+            metaByBase.set(base, {
+              circulatingSupply: Number.isFinite(supply) && supply > 0 ? supply : undefined,
+              marketCap: Number.isFinite(directMarketCap) && directMarketCap > 0 ? directMarketCap : undefined,
+              fdv: Number.isFinite(fdv) && fdv > 0 ? fdv : undefined
+            });
+          }
+          for (const tick of ticks) {
+            if (tick.venue !== 'SPOT') continue;
+            const row = spotRows.find(item => String(item?.symbol || '').toUpperCase() === String(tick.symbol || '').toUpperCase());
+            const base = String(row?.baseAsset || '').trim().toUpperCase();
+            const quote = String(row?.quoteAsset || '').trim().toUpperCase();
+            const meta = metaByBase.get(base);
+            if (!meta) continue;
+            const quoteUsd = ['USDT','USDC','U','USD1','USD'].includes(quote) ? 1 : usdPriceByAsset.get(quote);
+            const direct = meta.marketCap;
+            const calculated = Number.isFinite(meta.circulatingSupply) && Number.isFinite(Number(tick.price)) && Number.isFinite(Number(quoteUsd))
+              ? meta.circulatingSupply * Number(tick.price) * Number(quoteUsd)
+              : undefined;
+            if (Number.isFinite(calculated) && calculated > 0) tick.marketCap = calculated;
+            else if (Number.isFinite(direct) && direct > 0) tick.marketCap = direct;
+            if (Number.isFinite(meta.fdv)) tick.fdv = meta.fdv;
+          }
+
           const futuresTicks = new Map(binanceFuturesQuoteHub.markTicks);
           for (const [key, tick] of binanceFuturesQuoteHub.ticks) futuresTicks.set(key, tick);
           for (const tick of futuresTicks.values()) ticks.push(tick);
