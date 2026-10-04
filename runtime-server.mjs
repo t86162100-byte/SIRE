@@ -21,6 +21,129 @@ const HOST = '0.0.0.0';
 const DIST = join(process.cwd(), 'dist');
 const pendingChartControls = new Map();
 
+const binanceFuturesQuoteHub = {
+  sockets: [],
+  symbols: new Map(),
+  ticks: new Map(),
+  retryTimer: null,
+  connecting: false,
+  readyPromise: null,
+  readyResolve: null,
+  readyReject: null,
+};
+
+async function loadBinanceFuturesQuoteSymbols() {
+  const catalog = await fetchBinanceCatalogServer();
+  const symbols = new Map();
+  for (const item of Array.isArray(catalog) ? catalog : []) {
+    if (String(item?.marketType || '').toUpperCase() !== 'FUTURES') continue;
+    const symbol = String(item?.symbol || '').trim().toUpperCase();
+    const venue = String(item?.marketSubcategory || '').trim().toUpperCase();
+    if (!symbol || !['USDT-M','COIN-M'].includes(venue)) continue;
+    symbols.set(symbol, venue);
+  }
+  binanceFuturesQuoteHub.symbols = symbols;
+  return symbols;
+}
+
+function closeBinanceFuturesSockets() {
+  for (const socket of binanceFuturesQuoteHub.sockets) {
+    try { socket.close(); } catch {}
+  }
+  binanceFuturesQuoteHub.sockets = [];
+}
+
+function connectBinanceFuturesQuoteHub() {
+  if (binanceFuturesQuoteHub.connecting || binanceFuturesQuoteHub.sockets.some(s => s.readyState === WebSocket.OPEN)) return;
+  binanceFuturesQuoteHub.connecting = true;
+  const socket = new WebSocket('wss://fstream.binance.com/market/stream');
+  binanceFuturesQuoteHub.sockets = [socket];
+
+  socket.on('open', async () => {
+    try {
+      const symbols = binanceFuturesQuoteHub.symbols.size
+        ? binanceFuturesQuoteHub.symbols
+        : await loadBinanceFuturesQuoteSymbols();
+      const params = [...symbols.keys()].map(symbol => symbol.toLowerCase() + '@ticker');
+      if (params.length) {
+        socket.send(JSON.stringify({ method:'SUBSCRIBE', params, id:1 }));
+      }
+      binanceFuturesQuoteHub.connecting = false;
+      if (binanceFuturesQuoteHub.readyResolve) {
+        binanceFuturesQuoteHub.readyResolve();
+        binanceFuturesQuoteHub.readyResolve = null;
+        binanceFuturesQuoteHub.readyPromise = null;
+      }
+      console.info('[BINANCE FUTURES WS] connected', JSON.stringify({ symbols: params.length }));
+    } catch (error) {
+      binanceFuturesQuoteHub.connecting = false;
+      console.error('[BINANCE FUTURES WS] subscribe failed', error instanceof Error ? error.message : String(error));
+      try { socket.close(); } catch {}
+    }
+  });
+
+  socket.on('message', raw => {
+    try {
+      const parsed = JSON.parse(String(raw));
+      if (parsed?.id === 1 && parsed?.result === null) return;
+      const data = parsed?.data && typeof parsed.data === 'object' ? parsed.data : parsed;
+      if (!data || typeof data !== 'object' || !data?.s) return;
+      const symbol = String(data.s).trim().toUpperCase();
+      const mappedVenue = binanceFuturesQuoteHub.symbols.get(symbol);
+      const venue = Number(data?.st) === 2 ? 'COIN-M' : Number(data?.st) === 1 ? 'USDT-M' : mappedVenue;
+      if (!venue) return;
+      const price = Number(data?.c);
+      if (!Number.isFinite(price)) return;
+      binanceFuturesQuoteHub.ticks.set(venue + ':' + symbol, {
+        provider:'BINANCE',
+        symbol,
+        price,
+        venue,
+        epoch:Math.floor((Number(data?.E) || Date.now()) / 1000),
+        open:Number.isFinite(Number(data?.o)) ? Number(data.o) : undefined,
+        high:Number.isFinite(Number(data?.h)) ? Number(data.h) : undefined,
+        low:Number.isFinite(Number(data?.l)) ? Number(data.l) : undefined,
+        volume:Number.isFinite(Number(data?.v)) ? Number(data.v) : undefined,
+        quoteVolume:Number.isFinite(Number(data?.q)) ? Number(data.q) : undefined,
+        percent:Number.isFinite(Number(data?.P)) ? Number(data.P) : undefined
+      });
+    } catch {}
+  });
+
+  socket.on('error', error => {
+    console.error('[BINANCE FUTURES WS] error', error instanceof Error ? error.message : String(error));
+  });
+
+  socket.on('close', (code, reason) => {
+    binanceFuturesQuoteHub.connecting = false;
+    console.warn('[BINANCE FUTURES WS] closed', JSON.stringify({ code, reason:String(reason || '') }));
+    if (!binanceFuturesQuoteHub.retryTimer) {
+      binanceFuturesQuoteHub.retryTimer = setTimeout(() => {
+        binanceFuturesQuoteHub.retryTimer = null;
+        void startBinanceFuturesQuoteHub();
+      }, 2000);
+    }
+  });
+}
+
+async function startBinanceFuturesQuoteHub(waitForFirstConnection = false) {
+  if (!binanceFuturesQuoteHub.symbols.size) await loadBinanceFuturesQuoteSymbols();
+  if (!binanceFuturesQuoteHub.sockets.some(s => s.readyState === WebSocket.OPEN) && !binanceFuturesQuoteHub.connecting) {
+    binanceFuturesQuoteHub.readyPromise = new Promise((resolve, reject) => {
+      binanceFuturesQuoteHub.readyResolve = resolve;
+      binanceFuturesQuoteHub.readyReject = reject;
+    });
+    connectBinanceFuturesQuoteHub();
+  }
+  if (waitForFirstConnection && binanceFuturesQuoteHub.readyPromise) {
+    await Promise.race([
+      binanceFuturesQuoteHub.readyPromise,
+      new Promise(resolve => setTimeout(resolve, 5000))
+    ]);
+  }
+}
+
+
 const gptJobs = new Map();
 const GPT_JOB_RETENTION_MS = 2 * 60 * 60 * 1000;
 function pruneGptJobs() {
@@ -906,15 +1029,12 @@ const server = http.createServer(async (req,res) => {
             if (!response.ok) throw new Error('HTTP '+response.status+' from '+url);
             return text ? JSON.parse(text) : {};
           };
-          const [spot, usdtm, coinm, usdtmPrice, coinmPrice, stocks, alpha] = await Promise.allSettled([
+          const [spot, stocks, alpha] = await Promise.allSettled([
             get('https://data-api.binance.vision/api/v3/ticker/24hr').catch(() => get('https://api.binance.com/api/v3/ticker/24hr')),
-            get('https://fapi.binance.com/fapi/v1/ticker/24hr'),
-            get('https://dapi.binance.com/dapi/v1/ticker/24hr'),
-            get('https://fapi.binance.com/fapi/v1/ticker/price'),
-            get('https://dapi.binance.com/dapi/v1/ticker/price'),
             get('https://www.binance.com/bapi/equity/v1/public/equity/symbol/get-symbols'),
             get('https://www.binance.com/bapi/defi/v1/public/wallet-direct/buw/wallet/cex/alpha/all/token/list')
           ]);
+          await startBinanceFuturesQuoteHub(true);
           const ticks = [];
           const sourceStats = {};
           const add24h = (result, venue) => {
@@ -939,30 +1059,8 @@ const server = http.createServer(async (req,res) => {
               sourceStats[venue].ticks++;
             }
           };
-          add24h(spot, 'SPOT'); add24h(usdtm, 'USDT-M'); add24h(coinm, 'COIN-M');
-
-          // Binance exposes a dedicated latest-price endpoint for both futures
-          // venues. Merge it after the 24h snapshot so every listed contract
-          // still receives a price even if the 24h ticker omits a contract.
-          const mergePriceOnly = (result, venue) => {
-            if (result.status !== 'fulfilled') return;
-            const rows = Array.isArray(result.value) ? result.value : [];
-            const bySymbol = new Map(ticks.filter(t => t.venue === venue).map(t => [t.symbol, t]));
-            for (const row of rows) {
-              const symbol = String(row?.symbol || '').trim().toUpperCase();
-              const price = Number(row?.price);
-              if (!symbol || !Number.isFinite(price)) continue;
-              const existing = bySymbol.get(symbol);
-              if (existing) existing.price = price;
-              else {
-                const tick = { provider:'BINANCE', symbol, price, venue, epoch:Math.floor((Number(row?.time)||now)/1000) };
-                ticks.push(tick);
-                bySymbol.set(symbol, tick);
-              }
-            }
-          };
-          mergePriceOnly(usdtmPrice, 'USDT-M');
-          mergePriceOnly(coinmPrice, 'COIN-M');
+          add24h(spot, 'SPOT');
+          for (const tick of binanceFuturesQuoteHub.ticks.values()) ticks.push(tick);
 
           if (stocks.status === 'fulfilled') {
             const rows = Array.isArray(stocks.value?.data) ? stocks.value.data : [];
@@ -1008,7 +1106,14 @@ const server = http.createServer(async (req,res) => {
             }
           }
           console.info('[BINANCE QUOTES]', JSON.stringify({
-            sources: sourceStats,
+            sources: {
+              ...sourceStats,
+              'FUTURES-WS': {
+                status: binanceFuturesQuoteHub.sockets.some(s => s.readyState === WebSocket.OPEN) ? 'connected' : 'disconnected',
+                symbols: binanceFuturesQuoteHub.symbols.size,
+                ticks: binanceFuturesQuoteHub.ticks.size
+              }
+            },
             totalTicks: ticks.length,
             spot: ticks.filter(t => t.venue === 'SPOT').length,
             usdtm: ticks.filter(t => t.venue === 'USDT-M').length,
