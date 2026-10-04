@@ -325,6 +325,7 @@ export async function fetchBinanceCatalogServer() {
     {name:'stocks', urls:[...EQUITY_PUBLIC_HOSTS, ...EQUITY_HOSTS.map(host=>host+'/exchangeInfo')], apiKey:false},
     {name:'tokenized', urls:[...EQUITY_HOSTS.map(host=>host+'/tokenized-assets'), ...TOKENIZED_PUBLIC_HOSTS, 'https://www.binance.com/bapi/defi/v1/public/wallet-direct/buw/wallet/market/token/rwa/stock/detail/list/ai'], apiKey:true},
     {name:'bstocks', urls:['https://www.binance.com/bapi/defi/v1/public/wallet-direct/buw/wallet/market/token/rwa/stock/detail/list/ai?type=3'], apiKey:false},
+    {name:'rwa', urls:['https://www.binance.com/bapi/defi/v1/public/wallet-direct/buw/wallet/market/token/rwa/stock/detail/list/ai'], apiKey:false},
     {name:'alphaExchange', urls:[ALPHA+'/alpha-trade/get-exchange-info'], apiKey:false},
     {name:'alphaTokens', urls:[ALPHA+'/wallet-direct/buw/wallet/cex/alpha/all/token/list'], apiKey:false}
   ];
@@ -343,7 +344,7 @@ export async function fetchBinanceCatalogServer() {
         if ((source.name==='margin' || source.name==='marginIsolated') && !Array.isArray(data)) {
           throw new Error('Binance returned no Margin pair array from '+url);
         }
-        if ((source.name==='stocks' || source.name==='tokenized' || source.name==='bstocks') && !Array.isArray(data?.symbols) && !Array.isArray(data?.data) && !Array.isArray(data?.data?.symbols)) {
+        if ((source.name==='stocks' || source.name==='tokenized' || source.name==='bstocks' || source.name==='rwa') && !Array.isArray(data?.symbols) && !Array.isArray(data?.data) && !Array.isArray(data?.data?.symbols)) {
           throw new Error('Binance returned no symbol data from '+source.name+' endpoint '+url);
         }
         return {data,url};
@@ -394,6 +395,7 @@ export async function fetchBinanceCatalogServer() {
     }
   }
   const tokenRows=extractRows(raw.tokenized);
+  const rwaRows=extractRows(raw.rwa);
   const stockSymbols=new Set<string>();
   const commoditySymbols=new Set<string>();
   const etfSymbols=new Set<string>();
@@ -406,9 +408,9 @@ export async function fetchBinanceCatalogServer() {
     }
     if(symbol && (row?.etf===true || row?.isETF===true || row?.isEtf===true || row?.et===true || /(^|\W)etf($|\W)|exchange[ ._-]?traded[ ._-]?fund/.test(text))) etfSymbols.add(symbol);
   }
-  for(const row of tokenRows) {
-    const commodityText=[row?.assetName,row?.tokenName,row?.name,row?.description,row?.type,row?.assetType,row?.category,row?.subtype,row?.tags].map(s).join(' ').toLowerCase();
-    const commoditySymbol=s(row?.symbol || row?.ticker || row?.assetCode || row?.tokenCode || row?.tokenSymbol).toUpperCase();
+  for(const row of [...tokenRows, ...rwaRows]) {
+    const commodityText=[row?.assetName,row?.tokenName,row?.name,row?.description,row?.type,row?.assetType,row?.category,row?.subtype,row?.tags,row?.tokenName,row?.underlyingName].map(s).join(' ').toLowerCase();
+    const commoditySymbol=s(row?.symbol || row?.ticker || row?.assetCode || row?.tokenCode || row?.tokenSymbol || row?.underlyingTicker).toUpperCase();
     if(commoditySymbol && /gold|silver|oil|commodity|commodit|copper|platinum|palladium/.test(commodityText)) commoditySymbols.add(commoditySymbol);
   }
   for(const row of spotRows) {
