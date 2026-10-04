@@ -397,12 +397,20 @@ export async function fetchBinanceCatalogServer() {
   const stockRows = extractRows(raw.stocks);
   const bStockRows = extractRows(raw.bstocks);
   const bStockSymbols=new Set<string>();
+  const commoditySymbols=new Set<string>();
   for(const row of bStockRows) {
     const rawSymbols=[row?.symbol,row?.baseAsset,row?.assetCode,row?.tokenCode,row?.tokenSymbol,row?.ticker,row?.s].map(v=>s(v).toUpperCase()).filter(Boolean);
+    const commodityText=(JSON.stringify(row)+' '+[row?.assetName,row?.tokenName,row?.name,row?.type,row?.assetType,row?.category,row?.subtype].map(s).join(' ')).toLowerCase();
+    const isCommodity=/gold|silver|oil|commodity|commodit|copper|platinum|palladium/.test(commodityText);
     for(const value of rawSymbols) {
-      bStockSymbols.add(value);
       const base=value.replace(/(USDT|USDC|BUSD|BTC|ETH|BNB|U|USD|EUR|TRY)$/,'');
-      if(base) bStockSymbols.add(base);
+      if(isCommodity) {
+        commoditySymbols.add(value);
+        if(base) commoditySymbols.add(base);
+      } else {
+        bStockSymbols.add(value);
+        if(base) bStockSymbols.add(base);
+      }
     }
   }
   const tokenRows=extractRows(raw.tokenized);
