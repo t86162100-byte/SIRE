@@ -63,7 +63,7 @@ function spotInstrument(raw: Json, margin = false, bStockSymbols?: Set<string>, 
   const quote = s(raw?.quoteAsset).toUpperCase();
   const base = s(raw?.baseAsset).toUpperCase();
   const bucket = quoteBucket(quote);
-  const isBStock = !margin && Boolean(bStockSymbols?.has(base));
+  const isBStock = !margin && base.endsWith('B') && Boolean(bStockSymbols?.has(base));
   const isTCommodity = !margin && !isBStock && Boolean(commoditySymbols?.has(base));
   return {
     symbol, name: base + '/' + quote, provider:'BINANCE', exchange:'BINANCE',
