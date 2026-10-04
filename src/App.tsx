@@ -303,9 +303,22 @@ export default function App() {
           if (sub.includes('USDT-M')) return 'USDT-M';
           return 'SPOT';
         };
+        const findSnapshot = (item: Instrument) => {
+          const symbol = String(item.symbol || '').toUpperCase();
+          const primary = venueFor(item) + ':' + symbol;
+          if (snapshots[primary]) return snapshots[primary];
+          // Preserve exact venue matching first, then tolerate Binance
+          // catalogue/market-family labels that expose the same symbol through
+          // another public ticker venue.
+          for (const venue of ['SPOT', 'USDT-M', 'COIN-M', 'OPTIONS', 'EQUITY', 'ALPHA']) {
+            const candidate = snapshots[venue + ':' + symbol];
+            if (candidate) return candidate;
+          }
+          return null;
+        };
         setInstruments(current => current.map(item => {
           if (item.provider !== 'BINANCE') return item;
-          const snap = snapshots[venueFor(item) + ':' + String(item.symbol || '').toUpperCase()];
+          const snap = findSnapshot(item);
           if (!snap) return item;
           return { ...item,
             ...(Number.isFinite(Number(snap.price)) ? {price:Number(snap.price)} : {}),
