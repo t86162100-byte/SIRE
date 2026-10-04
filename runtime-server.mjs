@@ -976,66 +976,11 @@ async function pollBinanceEquityQuotes(state) {
     }
   }
 }
-async function pollBinancePublicPrices(state, venue) {
-  if (state.pricePolling || !state.subscribed.size) return;
-  state.pricePolling = true;
-  try {
-    const endpoints = {
-      SPOT: 'https://data-api.binance.vision/api/v3/ticker/price',
-      UM: 'https://fapi.binance.com/fapi/v1/ticker/price',
-      COIN: 'https://dapi.binance.com/dapi/v1/ticker/price',
-    };
-    const endpoint = endpoints[venue];
-    if (!endpoint) return;
-    const response = await fetch(endpoint, { cache:'no-store', headers:{Accept:'application/json'} });
-    if (!response.ok) throw new Error('HTTP '+response.status);
-    const rows = await response.json();
-    const wanted = state.subscribed;
-    const now = Date.now();
-    const values = Array.isArray(rows) ? rows : [rows];
-    let emitted = 0;
-    for (const row of values) {
-      const symbol = String(row?.symbol || '').trim().toUpperCase();
-      if (!symbol || !wanted.has(symbol)) continue;
-      const price = Number(row?.price);
-      if (!Number.isFinite(price)) continue;
-      const message = JSON.stringify({
-        e:'fallbackPrice', E:now, s:symbol, c:String(price)
-      });
-      for (const client of state.clients) {
-        if (client.readyState === WebSocket.OPEN) {
-          try { client.send(message); } catch {}
-        }
-      }
-      emitted++;
-    }
-    if (emitted) {
-      state.lastPricePollAt = now;
-      state.lastPricePollCount = emitted;
-    }
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    if (state.lastPricePollError !== message) {
-      state.lastPricePollError = message;
-      console.error('[BINANCE PRICE FALLBACK]', venue, message);
-    }
-  } finally {
-    state.pricePolling = false;
-    if (state.subscribed.size) {
-      if (state.pricePollTimer) clearTimeout(state.pricePollTimer);
-      state.pricePollTimer = setTimeout(() => void pollBinancePublicPrices(state, venue), 1500);
-    }
-  }
-}
-
 function ensureBinanceUpstream(venue) {
   const existing=binanceUpstreams.get(venue);
   if(existing?.socket?.readyState===WebSocket.OPEN || existing?.connecting || (venue==='EQUITY' && existing)) return existing;
-  const state=existing||{socket:null,connecting:false,subscribed:new Set(),clients:new Set(),retry:null,pollTimer:null,polling:false,pricePollTimer:null,pricePolling:false};
+  const state=existing||{socket:null,connecting:false,subscribed:new Set(),clients:new Set(),retry:null,pollTimer:null,polling:false};
   binanceUpstreams.set(venue,state);
-  if(venue==='SPOT'||venue==='UM'||venue==='COIN') {
-    void pollBinancePublicPrices(state, venue);
-  }
   if(venue==='EQUITY') {
     void pollBinanceEquityQuotes(state);
     return state;
@@ -1080,9 +1025,6 @@ function binanceProxySubscribe(client, venue, symbols) {
     params.push(...(venue==='COIN' ? [lower+'@ticker',lower+'@trade',lower+'@markPrice@1s'] : [lower+'@ticker',lower+'@trade']));
   }
   state.clients.add(client);
-  if(venue==='SPOT'||venue==='UM'||venue==='COIN') {
-    void pollBinancePublicPrices(state, venue);
-  }
   if(venue==='EQUITY') {
     void pollBinanceEquityQuotes(state);
   } else if(params.length && state.socket?.readyState===WebSocket.OPEN) {
