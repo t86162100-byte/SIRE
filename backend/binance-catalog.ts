@@ -532,130 +532,91 @@ export async function fetchBinanceCatalogServer() {
 }
 
 
-type BinancePriceSnapshot = {
+type BinanceMarketSnapshot = {
   symbol: string;
-  price: number;
+  market: 'SPOT'|'USDT-M'|'COIN-M'|'OPTIONS'|'EQUITY'|'ALPHA';
+  price?: number; priceChangePercent?: number; change24h?: number;
+  volume24h?: number; quoteVolume?: number; marketCap?: number;
+  high24h?: number; low24h?: number; open24h?: number; updatedAt?: number;
 };
+type BinanceSnapshotMap = Record<string, BinanceMarketSnapshot>;
+let priceSnapshotCache: { at:number; markets:BinanceSnapshotMap } | null = null;
+let priceSnapshotPromise: Promise<BinanceSnapshotMap> | null = null;
+const snapshotKey=(market:BinanceMarketSnapshot['market'],symbol:string)=>market+':'+symbol.toUpperCase();
 
-let priceSnapshotCache: { at: number; prices: Record<string, number> } | null = null;
-let priceSnapshotPromise: Promise<Record<string, number>> | null = null;
-
-async function fetchTickerPrices(hosts: string[]): Promise<BinancePriceSnapshot[]> {
-  let lastError = '';
-  for (const host of hosts) {
-    try {
-      const data = await getJson(host + '/ticker/price');
-      if (!Array.isArray(data)) {
-        lastError = 'Binance price endpoint returned a non-array response.';
-        continue;
-      }
-      const rows = data
-        .map((row: any) => ({ symbol: s(row?.symbol).toUpperCase(), price: n(row?.price) }))
-        .filter((row: BinancePriceSnapshot) => row.symbol && Number.isFinite(row.price)) as BinancePriceSnapshot[];
-      if (rows.length) return rows;
-      lastError = 'Binance price endpoint returned no usable prices.';
-    } catch (error) {
-      lastError = error instanceof Error ? error.message : String(error);
-    }
-  }
-  throw new Error(lastError || 'Binance public price endpoint is unavailable.');
+function parseTickerRows(value:any, market:BinanceMarketSnapshot['market']):BinanceMarketSnapshot[] {
+  const rows=Array.isArray(value)?value:Array.isArray(value?.data)?value.data:
+    Array.isArray(value?.data?.data)?value.data.data:Array.isArray(value?.data?.symbols)?value.data.symbols:
+    Array.isArray(value?.symbols)?value.symbols:value&&typeof value==='object'?[value]:[];
+  return rows.map((row:any)=>{
+    const symbol=s(row?.symbol||row?.ticker||row?.assetCode||row?.tokenCode||row?.s).toUpperCase();
+    const price=n(row?.lastPrice??row?.price??row?.last??row?.close??row?.lastTradedPrice??row?.latestPrice);
+    const change=n(row?.priceChangePercent??row?.percentChange24h??row?.change24h??row?.changePercent);
+    const quoteVolume=n(row?.quoteVolume??row?.volume24h??row?.quote_volume??row?.volumeUSD);
+    const volume=n(row?.volume??row?.baseVolume??row?.volume24h);
+    const marketCap=n(row?.marketCap??row?.market_cap??row?.mktCap??row?.marketCapitalization);
+    const high=n(row?.highPrice??row?.high24h??row?.priceHigh24h);
+    const low=n(row?.lowPrice??row?.low24h??row?.priceLow24h);
+    const open=n(row?.openPrice??row?.open24h??row?.open);
+    if(!symbol||!Number.isFinite(price)) return null;
+    return {symbol,market,price,
+      priceChangePercent:Number.isFinite(change)?change:undefined,
+      change24h:Number.isFinite(change)?change:undefined,
+      quoteVolume:Number.isFinite(quoteVolume)?quoteVolume:(Number.isFinite(volume)?volume:undefined),
+      volume24h:Number.isFinite(volume)?volume:(Number.isFinite(quoteVolume)?quoteVolume:undefined),
+      marketCap:Number.isFinite(marketCap)?marketCap:undefined,
+      high24h:Number.isFinite(high)?high:undefined, low24h:Number.isFinite(low)?low:undefined,
+      open24h:Number.isFinite(open)?open:undefined, updatedAt:Date.now()
+    } as BinanceMarketSnapshot;
+  }).filter(Boolean) as BinanceMarketSnapshot[];
 }
-
-function collectPriceRows(value: any): BinancePriceSnapshot[] {
-  const rows = Array.isArray(value) ? value
-    : Array.isArray(value?.data) ? value.data
-    : Array.isArray(value?.data?.data) ? value.data.data
-    : Array.isArray(value?.data?.symbols) ? value.data.symbols
-    : Array.isArray(value?.symbols) ? value.symbols
-    : value && typeof value === 'object' ? [value]
-    : [];
-  return rows.map((row:any) => ({
-    symbol:s(row?.symbol || row?.ticker || row?.assetCode || row?.tokenCode || row?.s).toUpperCase(),
-    price:n(row?.price ?? row?.lastPrice ?? row?.last ?? row?.close ?? row?.lastTradedPrice ?? row?.latestPrice)
-  })).filter((row:BinancePriceSnapshot) => row.symbol && Number.isFinite(row.price));
+async function fetch24hTickers(hosts:string[],market:BinanceMarketSnapshot['market']):Promise<BinanceMarketSnapshot[]> {
+  let lastError='';
+  for(const host of hosts){ try {
+    const rows=parseTickerRows(await getJson(host+'/ticker/24hr'),market);
+    if(rows.length) return rows; lastError='Binance 24h ticker returned no usable rows.';
+  } catch(error){ lastError=error instanceof Error?error.message:String(error); } }
+  throw new Error(lastError||'Binance public 24h ticker endpoint is unavailable.');
 }
-
-async function fetchEquityPublicPrices(): Promise<BinancePriceSnapshot[]> {
-  const urls = [
+async function fetchEquityMarketSnapshots():Promise<BinanceMarketSnapshot[]> {
+  const urls=[
     'https://www.binance.com/bapi/equity/v1/public/equity/ticker/get',
-    'https://www.binance.com/bapi/equity/v2/public/equity/market/get-latest-quote'
+    'https://www.binance.com/bapi/equity/v2/public/equity/market/get-latest-quote',
+    'https://www.binance.com/bapi/equity/v1/public/equity/market/get-latest-quote'
   ];
-  let lastError = '';
-  for (const url of urls) {
-    try {
-      const data = await getJson(url);
-      const rows = collectPriceRows(data);
-      if (rows.length) return rows;
-      lastError = 'Binance public equity ticker returned no usable prices.';
-    } catch (error) {
-      lastError = error instanceof Error ? error.message : String(error);
-    }
-  }
+  for(const url of urls){ try { const rows=parseTickerRows(await getJson(url),'EQUITY'); if(rows.length) return rows; } catch {} }
   return [];
 }
-
-async function fetchAlphaPrices(): Promise<BinancePriceSnapshot[]> {
-  try {
-    const exchange = await getJson(ALPHA + '/alpha-trade/get-exchange-info');
-    const symbols = Array.isArray(exchange?.data?.symbols) ? exchange.data.symbols
-      : Array.isArray(exchange?.symbols) ? exchange.symbols : [];
-    const active = symbols.map((row:any) => s(row?.symbol)).filter(Boolean);
-    if (!active.length) return [];
-
-    const results: BinancePriceSnapshot[] = [];
-    const concurrency = 12;
-    for (let i = 0; i < active.length; i += concurrency) {
-      const batch = active.slice(i, i + concurrency);
-      const rows = await Promise.all(batch.map(async symbol => {
-        try {
-          const data = await getJson(ALPHA + '/alpha-trade/ticker?symbol=' + encodeURIComponent(symbol));
-          const parsed = collectPriceRows(data);
-          const row = parsed[0];
-          return row ? { symbol, price: row.price } : null;
-        } catch {
-          return null;
-        }
-      }));
-      for (const row of rows) if (row) results.push(row);
-    }
-    return results;
-  } catch {
-    return [];
-  }
+async function fetchAlphaMarketSnapshots():Promise<BinanceMarketSnapshot[]> {
+  const urls=[
+    ALPHA+'/wallet-direct/buw/wallet/cex/alpha/all/token/list',
+    ALPHA+'/alpha-trade/aggTicker24?dataType=aggregate'
+  ];
+  for(const url of urls){ try { const rows=parseTickerRows(await getJson(url),'ALPHA'); if(rows.length) return rows; } catch {} }
+  return [];
 }
-
-async function refreshBinancePriceSnapshot() {
-  const now = Date.now();
-  if (priceSnapshotCache && now - priceSnapshotCache.at < 2500) return priceSnapshotCache.prices;
-  if (priceSnapshotPromise) return priceSnapshotPromise;
-
-  priceSnapshotPromise = (async () => {
-    const [spot, usdtm, coinm, equity, alpha] = await Promise.all([
-      fetchTickerPrices(SPOT_HOSTS),
-      fetchTickerPrices(UM_HOSTS),
-      fetchTickerPrices(CM_HOSTS),
-      fetchEquityPublicPrices(),
-      fetchAlphaPrices(),
+async function refreshBinancePriceSnapshot():Promise<BinanceSnapshotMap> {
+  const now=Date.now();
+  if(priceSnapshotCache&&now-priceSnapshotCache.at<2500) return priceSnapshotCache.markets;
+  if(priceSnapshotPromise) return priceSnapshotPromise;
+  priceSnapshotPromise=(async()=>{
+    const results=await Promise.allSettled([
+      fetch24hTickers(SPOT_HOSTS,'SPOT'),fetch24hTickers(UM_HOSTS,'USDT-M'),
+      fetch24hTickers(CM_HOSTS,'COIN-M'),fetch24hTickers(OPTIONS_HOSTS,'OPTIONS'),
+      fetchEquityMarketSnapshots(),fetchAlphaMarketSnapshots()
     ]);
-    const prices: Record<string, number> = {};
-    for (const row of [...spot, ...usdtm, ...coinm, ...equity, ...alpha]) prices[row.symbol] = row.price;
-    priceSnapshotCache = { at: Date.now(), prices };
-    return prices;
+    const markets:BinanceSnapshotMap={};
+    for(const result of results) if(result.status==='fulfilled')
+      for(const row of result.value) markets[snapshotKey(row.market,row.symbol)]=row;
+    priceSnapshotCache={at:Date.now(),markets}; return markets;
   })();
-
-  try {
-    return await priceSnapshotPromise;
-  } finally {
-    priceSnapshotPromise = null;
-  }
+  try{return await priceSnapshotPromise;}finally{priceSnapshotPromise=null;}
 }
-
-export async function fetchBinancePricesServer() {
-  const prices = await refreshBinancePriceSnapshot();
-  return {
-    prices,
-    updatedAt: priceSnapshotCache?.at ?? Date.now(),
-    count: Object.keys(prices).length,
-    source: 'binance-native-public-ticker-plus-equity-alpha',
-  };
+export async function fetchBinancePricesServer(){
+  const markets=await refreshBinancePriceSnapshot();
+  const prices:Record<string,number>={};
+  for(const row of Object.values(markets)) if(Number.isFinite(row.price))
+    prices[snapshotKey(row.market,row.symbol)]=row.price as number;
+  return {prices,markets,updatedAt:priceSnapshotCache?.at??Date.now(),count:Object.keys(markets).length,
+    source:'binance-native-public-24h-ticker-plus-equity-alpha'};
 }
