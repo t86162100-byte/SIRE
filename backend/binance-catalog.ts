@@ -57,7 +57,7 @@ function tickSize(raw: Json) {
   return n(raw?.filters?.find?.((f: Json) => f?.filterType === 'PRICE_FILTER')?.tickSize);
 }
 
-function spotInstrument(raw: Json, margin = false, stockSymbols?: Set<string>, commoditySymbols?: Set<string>): Json | null {
+function spotInstrument(raw: Json, margin = false, bStockSymbols?: Set<string>, commoditySymbols?: Set<string>): Json | null {
   const symbol = s(raw?.symbol);
   if (!symbol || !['TRADING','PENDING_TRADING'].includes(s(raw?.status))) return null;
   const quote = s(raw?.quoteAsset).toUpperCase();
