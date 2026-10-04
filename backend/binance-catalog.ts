@@ -414,7 +414,7 @@ async function fetchBinanceMarketSnapshotFresh():Promise<Record<string,BinanceMa
 
 export async function fetchBinanceMarketSnapshotServer() {
   const now=Date.now();
-  if(marketSnapshotCache && now-marketSnapshotCache.at<2000) return marketSnapshotCache.data;
+  if(marketSnapshotCache && now-marketSnapshotCache.at<1000) return marketSnapshotCache.data;
   if(!marketSnapshotPromise) marketSnapshotPromise=fetchBinanceMarketSnapshotFresh().then(data=>{marketSnapshotCache={at:Date.now(),data}; return data;}).finally(()=>{marketSnapshotPromise=null;});
   return marketSnapshotPromise;
 }
