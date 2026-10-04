@@ -331,9 +331,10 @@ function createSocketFeed(instrument:any, symbol:string, interval:string, onQuot
       return;
     }
     const hosts = wsHosts(instrument);
-    const stream = String(symbol).toLowerCase() + '@kline_' + intervalForStream(interval);
-    const url = hosts[Math.min(openedHost, hosts.length - 1)] + stream;
-    try { socket = new WebSocket(url); } catch (error) {
+    const kindForProxy = marketKind(instrument);
+    const proxyParams = new URLSearchParams({ market: kindForProxy, symbol: String(symbol).toUpperCase(), interval: intervalForStream(interval) });
+    const url = '/api/sire/binance/ws?' + proxyParams.toString();
+    try { socket = new WebSocket(new URL(url, window.location.href)); } catch (error) {
       diagnostic(onDiagnostic,{level:'error',code:'BINANCE_LIVE_SOCKET_FAILED',message:'Binance WebSocket could not be created.',detail:String(error)});
       scheduleReconnect(); return;
     }
