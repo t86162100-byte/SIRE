@@ -219,7 +219,13 @@ export async function fetchBinanceCatalogServer() {
   const settled = await Promise.allSettled(sources.map(async source => {
     const errors:string[]=[];
     for(const url of source.urls) {
-      try { return {data:await getJson(url, source.apiKey ? apiKey : ''), url}; }
+      try {
+        const data=await getJson(url, source.apiKey ? apiKey : '');
+        if ((source.name==='usdtm' || source.name==='coinm' || source.name==='spot') && !Array.isArray(data?.symbols)) {
+          throw new Error('Binance returned no symbols array from '+url);
+        }
+        return {data,url};
+      }
       catch(error) { errors.push(error instanceof Error ? error.message : String(error)); }
     }
     throw new Error(errors.join(' | '));
