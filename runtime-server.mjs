@@ -30,6 +30,7 @@ const binanceFuturesQuoteHub = {
   readyPromise: null,
   readyResolve: null,
   readyReject: null,
+  firstTickLogged: false,
 };
 
 async function loadBinanceFuturesQuoteSymbols() {
@@ -115,6 +116,14 @@ function connectBinanceFuturesQuoteHub() {
         quoteVolume:Number.isFinite(Number(data?.q)) ? Number(data.q) : undefined,
         percent:Number.isFinite(Number(data?.P)) ? Number(data.P) : undefined
       });
+      if (!binanceFuturesQuoteHub.firstTickLogged) {
+        binanceFuturesQuoteHub.firstTickLogged = true;
+        console.info('[BINANCE FUTURES WS] first tick', JSON.stringify({
+          total: binanceFuturesQuoteHub.ticks.size,
+          usdtm: [...binanceFuturesQuoteHub.ticks.values()].filter(t => t.venue === 'USDT-M').length,
+          coinm: [...binanceFuturesQuoteHub.ticks.values()].filter(t => t.venue === 'COIN-M').length
+        }));
+      }
     } catch {}
   });
 
