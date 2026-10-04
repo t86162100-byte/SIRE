@@ -1025,7 +1025,9 @@ function binanceProxySubscribe(client, venue, symbols) {
     params.push(...(venue==='COIN' ? [lower+'@ticker',lower+'@trade',lower+'@markPrice@1s'] : [lower+'@ticker',lower+'@trade']));
   }
   state.clients.add(client);
-  if(params.length && state.socket?.readyState===WebSocket.OPEN) {
+  if(venue==='EQUITY') {
+    void pollBinanceEquityQuotes(state);
+  } else if(params.length && state.socket?.readyState===WebSocket.OPEN) {
     try { state.socket.send(JSON.stringify({method:'SUBSCRIBE',params,id:Date.now()})); } catch {}
   }
 }
