@@ -35,7 +35,7 @@ const binanceFuturesQuoteHub = {
 async function loadBinanceFuturesQuoteSymbols() {
   const catalog = await fetchBinanceCatalogServer();
   const symbols = new Map();
-  for (const item of Array.isArray(catalog) ? catalog : []) {
+  for (const item of Array.isArray(catalog?.instruments) ? catalog.instruments : []) {
     if (String(item?.marketType || '').toUpperCase() !== 'FUTURES') continue;
     const symbol = String(item?.symbol || '').trim().toUpperCase();
     const venue = String(item?.marketSubcategory || '').trim().toUpperCase();
@@ -1262,6 +1262,7 @@ server.on('upgrade',(req,socket,head)=>{
 server.listen(PORT,HOST,async()=>{ 
   console.log(`SIRE server listening on ${HOST}:${PORT}`); 
   console.log('[DERIV HISTORY STORE]', JSON.stringify(await historyStoreStatus()));
+  void startBinanceFuturesQuoteHub(true);
   // One startup smoke-test for the Binance catalog. This is deliberately
   // non-blocking so a regional Binance outage can never prevent SIRE startup.
   void fetchBinanceCatalogServer().then(catalog=>{
