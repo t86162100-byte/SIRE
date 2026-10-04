@@ -385,7 +385,14 @@ export async function fetchBinanceCatalogServer() {
   const stockRows = extractRows(raw.stocks);
   const bStockRows = extractRows(raw.bstocks);
   const bStockSymbols=new Set<string>();
-  for(const row of bStockRows) { const symbol=s(row?.symbol).toUpperCase(); if(symbol) bStockSymbols.add(symbol); }
+  for(const row of bStockRows) {
+    const rawSymbols=[row?.symbol,row?.baseAsset,row?.assetCode,row?.tokenCode,row?.tokenSymbol,row?.ticker,row?.s].map(v=>s(v).toUpperCase()).filter(Boolean);
+    for(const value of rawSymbols) {
+      bStockSymbols.add(value);
+      const base=value.replace(/(USDT|USDC|BUSD|BTC|ETH|BNB|U|USD|EUR|TRY)$/,'');
+      if(base) bStockSymbols.add(base);
+    }
+  }
   const tokenRows=extractRows(raw.tokenized);
   const stockSymbols=new Set<string>();
   const commoditySymbols=new Set<string>();
@@ -399,8 +406,13 @@ export async function fetchBinanceCatalogServer() {
     }
     if(symbol && (row?.etf===true || row?.isETF===true || row?.isEtf===true || row?.et===true || /(^|\W)etf($|\W)|exchange[ ._-]?traded[ ._-]?fund/.test(text))) etfSymbols.add(symbol);
   }
+  for(const row of tokenRows) {
+    const commodityText=[row?.assetName,row?.tokenName,row?.name,row?.description,row?.type,row?.assetType,row?.category,row?.subtype,row?.tags].map(s).join(' ').toLowerCase();
+    const commoditySymbol=s(row?.symbol || row?.ticker || row?.assetCode || row?.tokenCode || row?.tokenSymbol).toUpperCase();
+    if(commoditySymbol && /gold|silver|oil|commodity|commodit|copper|platinum|palladium/.test(commodityText)) commoditySymbols.add(commoditySymbol);
+  }
   for(const row of spotRows) {
-    const spotItem=spotInstrument(row,false,bStockSymbols);
+    const spotItem=spotInstrument(row,false,bStockSymbols,commoditySymbols);
     if(spotItem) out.push(spotItem);
   }
 
