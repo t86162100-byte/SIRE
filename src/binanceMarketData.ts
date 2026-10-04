@@ -14,7 +14,7 @@ export type BinanceTick = {
   bid?: number; ask?: number; percent?: number; marketCap?: number;
 };
 const SPOT='https://api.binance.com', UM='https://fapi.binance.com', CM='https://dapi.binance.com';
-const ALPHA='https://www.binance.com', ALPHA_WS='wss://nbstream.binance.com/w3w/wsa/stream/stream';
+const ALPHA='https://www.binance.com', ALPHA_WS='wss://nbstream.binance.com/w3w/wsa/stream';
 const n=(v:unknown)=>{const x=Number(v);return Number.isFinite(x)?x:undefined;};
 const s=(v:unknown)=>String(v??'').trim();
 const uniq=(a:string[])=>[...new Set(a.map(s).filter(Boolean))];
@@ -63,7 +63,7 @@ export async function fetchBinanceInstruments():Promise<BinanceInstrument[]> {
 
 type Handler=(tick:BinanceTick)=>void;
 type Bus={socket:WebSocket|null;handlers:Map<string,Set<Handler>>;url:string;timer?:number;connecting?:boolean};
-type FastBus=Bus&{symbols:Set<string>;subscribeTimer?:number;requestId:number;latest:Map<string,BinanceTick>};
+type FastBus=Bus&{symbols:Set<string>;subscribeTimer?:number;requestId:number;latest:Map<string,BinanceTick>;lastTradeAt:Map<string,number>};
 const buses=new Map<string,Bus>();
 const fastBuses=new Map<string,FastBus>();
 
@@ -118,7 +118,7 @@ function bus(v:string){
 function fastBus(v:string){
   let b=fastBuses.get(v);
   if(b?.socket?.readyState===WebSocket.OPEN||b?.connecting)return b!;
-  b=b||{socket:null,handlers:new Map(),url:fastUrl(v),symbols:new Set(),requestId:0,latest:new Map()};
+  b=b||{socket:null,handlers:new Map(),url:fastUrl(v),symbols:new Set(),requestId:0,latest:new Map(),lastTradeAt:new Map()};
   b.connecting=true;buses.delete(v);fastBuses.set(v,b);
   const ws=new WebSocket(b.url);b.socket=ws;
   const queueSubscribe=()=>{
@@ -126,12 +126,12 @@ function fastBus(v:string){
     b.subscribeTimer=window.setTimeout(()=>{
       b!.subscribeTimer=undefined;
       if(b!.socket?.readyState!==WebSocket.OPEN||!b!.symbols.size)return;
-      const params=[...b!.symbols].flatMap(symbol=>[symbol.toLowerCase()+'@ticker',symbol.toLowerCase()+'@trade']);
+      const params=[...b!.symbols].flatMap(symbol=>v==='COIN' ? [symbol.toLowerCase()+'@ticker',symbol.toLowerCase()+'@trade',symbol.toLowerCase()+'@markPrice@1s'] : [symbol.toLowerCase()+'@ticker',symbol.toLowerCase()+'@trade']);
       b!.socket.send(JSON.stringify({method:'SUBSCRIBE',params,id:++b!.requestId}));
     },100);
   };
   ws.onopen=()=>{b!.connecting=false;queueSubscribe();};
-  ws.onmessage=e=>{try{const p=JSON.parse(String(e.data));if(p?.id||p?.result!==undefined)return;const d=p?.data&&typeof p.data==='object'?p.data:p;const symbol=s(d?.s),event=s(d?.e);if(event==='trade'||event==='aggTrade'){const px=n(d?.p);if(!symbol||px===undefined)return;const prev=b!.latest.get(symbol);const t:BinanceTick={...(prev||{provider:'BINANCE',symbol,price:px,epoch:Math.floor(Date.now()/1000)}),provider:'BINANCE',symbol,price:px,epoch:Math.floor((n(d?.E)||Date.now())/1000)};b!.latest.set(symbol,t);const hs=b!.handlers.get(symbol);if(hs)for(const h of hs)h(t);return;}const t=parse(p);if(!t)return;b!.latest.set(t.symbol,t);const hs=b!.handlers.get(t.symbol);if(hs)for(const h of hs)h(t);}catch{}};
+  ws.onmessage=e=>{try{const p=JSON.parse(String(e.data));if(p?.id||p?.result!==undefined)return;const d=p?.data&&typeof p.data==='object'?p.data:p;const symbol=s(d?.s),event=s(d?.e);if(event==='trade'||event==='aggTrade'){const px=n(d?.p);if(!symbol||px===undefined)return;const now=Date.now();b!.lastTradeAt.set(symbol,now);const prev=b!.latest.get(symbol);const t:BinanceTick={...(prev||{provider:'BINANCE',symbol,price:px,epoch:Math.floor(now/1000)}),provider:'BINANCE',symbol,price:px,epoch:Math.floor((n(d?.E)||now)/1000)};b!.latest.set(symbol,t);const hs=b!.handlers.get(symbol);if(hs)for(const h of hs)h(t);return;}if(event==='markPriceUpdate'&&v==='COIN'){const px=n(d?.p);if(!symbol||px===undefined)return;const now=Date.now();if(now-(b!.lastTradeAt.get(symbol)||0)<5000)return;const prev=b!.latest.get(symbol);const t:BinanceTick={...(prev||{provider:'BINANCE',symbol,price:px,epoch:Math.floor(now/1000)}),provider:'BINANCE',symbol,price:px,epoch:Math.floor((n(d?.E)||now)/1000)};b!.latest.set(symbol,t);const hs=b!.handlers.get(symbol);if(hs)for(const h of hs)h(t);return;}const t=parse(p);if(!t)return;b!.latest.set(t.symbol,t);const hs=b!.handlers.get(t.symbol);if(hs)for(const h of hs)h(t);}catch{}};
   ws.onerror=()=>{};
   ws.onclose=()=>{
     b!.connecting=false;
@@ -156,7 +156,7 @@ export function subscribeBinanceTick(item:any,handler:Handler){
     if(!set){set=new Set();b.handlers.set(symbol,set);b.symbols.add(symbol);}
     set.add(handler);
     if(b.socket?.readyState===WebSocket.OPEN){
-      const params=[symbol.toLowerCase()+'@ticker',symbol.toLowerCase()+'@trade'];
+      const params=v==='COIN' ? [symbol.toLowerCase()+'@ticker',symbol.toLowerCase()+'@trade',symbol.toLowerCase()+'@markPrice@1s'] : [symbol.toLowerCase()+'@ticker',symbol.toLowerCase()+'@trade'];
       try{b.socket.send(JSON.stringify({method:'SUBSCRIBE',params,id:++b.requestId}));}catch{}
     }
     return()=>{
@@ -165,7 +165,7 @@ export function subscribeBinanceTick(item:any,handler:Handler){
         b!.handlers.delete(symbol);
         b!.symbols.delete(symbol);
         if(b!.socket?.readyState===WebSocket.OPEN){
-          try{b!.socket.send(JSON.stringify({method:'UNSUBSCRIBE',params:[symbol.toLowerCase()+'@ticker',symbol.toLowerCase()+'@trade'],id:++b!.requestId}));}catch{}
+          try{const params=v==='COIN' ? [symbol.toLowerCase()+'@ticker',symbol.toLowerCase()+'@trade',symbol.toLowerCase()+'@markPrice@1s'] : [symbol.toLowerCase()+'@ticker',symbol.toLowerCase()+'@trade'];b!.socket.send(JSON.stringify({method:'UNSUBSCRIBE',params,id:++b!.requestId}));}catch{}
         }
       }
     };
