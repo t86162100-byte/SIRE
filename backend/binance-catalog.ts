@@ -422,7 +422,8 @@ export async function fetchBinanceCatalogServer() {
     const tokenSymbol=s(row?.assetCode || row?.tokenCode || row?.tokenSymbol || row?.symbol).toUpperCase();
     const tokenText=([row?.assetName,row?.tokenName,row?.name,row?.description,row?.type,row?.assetType,row?.category,row?.subtype].map(s).join(' ')).toLowerCase();
     if(tokenSymbol && !/gold|silver|oil|commodity|commodit|copper|platinum|palladium|tcommodit/.test(tokenText)) {
-      bStockSymbols.add(tokenSymbol.replace(/USDT$/,''));
+      const base=tokenSymbol.replace(/USDT$/,'');
+      bStockSymbols.add(base.endsWith('B') ? base : base+'B');
     }
   }
   for(const row of [...tokenRows, ...rwaRows]) {
