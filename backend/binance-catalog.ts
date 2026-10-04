@@ -334,7 +334,6 @@ export async function fetchBinanceCatalogServer() {
     {name:'marginIsolated', urls:MARGIN_ISOLATED_HOSTS.map(host=>host+'/allPairs'), apiKey:true},
     {name:'stocks', urls:[...EQUITY_PUBLIC_HOSTS, ...EQUITY_HOSTS.map(host=>host+'/exchangeInfo')], apiKey:false},
     {name:'tokenized', urls:[...EQUITY_HOSTS.map(host=>host+'/tokenized-assets'), ...TOKENIZED_PUBLIC_HOSTS, 'https://www.binance.com/bapi/defi/v1/public/wallet-direct/buw/wallet/market/token/rwa/stock/detail/list/ai'], apiKey:true},
-    {name:'bstocks', urls:['https://www.binance.com/bapi/defi/v1/public/wallet-direct/buw/wallet/market/token/rwa/stock/detail/list/ai?type=3'], apiKey:false},
     {name:'rwa', urls:['https://www.binance.com/bapi/defi/v1/public/wallet-direct/buw/wallet/market/token/rwa/stock/detail/list/ai'], apiKey:false},
     {name:'tCommoditiesPage', urls:['https://www.binance.com/en/markets/coinInfo-tCommodities'], apiKey:false},
     {name:'alphaExchange', urls:[ALPHA+'/alpha-trade/get-exchange-info'], apiKey:false},
@@ -355,7 +354,7 @@ export async function fetchBinanceCatalogServer() {
         if ((source.name==='margin' || source.name==='marginIsolated') && !Array.isArray(data)) {
           throw new Error('Binance returned no Margin pair array from '+url);
         }
-        if ((source.name==='stocks' || source.name==='tokenized' || source.name==='bstocks' || source.name==='rwa') && !Array.isArray(data?.symbols) && !Array.isArray(data?.data) && !Array.isArray(data?.data?.symbols)) {
+        if ((source.name==='stocks' || source.name==='tokenized' || source.name==='rwa') && !Array.isArray(data?.symbols) && !Array.isArray(data?.data) && !Array.isArray(data?.data?.symbols)) {
           throw new Error('Binance returned no symbol data from '+source.name+' endpoint '+url);
         }
         return {data,url};
@@ -395,24 +394,7 @@ export async function fetchBinanceCatalogServer() {
     return [];
   }
   const stockRows = extractRows(raw.stocks);
-  const bStockRows = extractRows(raw.bstocks);
-  const bStockSymbols=new Set<string>();
   const commoditySymbols=new Set<string>();
-  for(const row of bStockRows) {
-    const rawSymbols=[row?.symbol,row?.baseAsset,row?.assetCode,row?.tokenCode,row?.tokenSymbol,row?.ticker,row?.s].map(v=>s(v).toUpperCase()).filter(Boolean);
-    const commodityText=(JSON.stringify(row)+' '+[row?.assetName,row?.tokenName,row?.name,row?.type,row?.assetType,row?.category,row?.subtype].map(s).join(' ')).toLowerCase();
-    const isCommodity=/gold|silver|oil|commodity|commodit|copper|platinum|palladium/.test(commodityText);
-    for(const value of rawSymbols) {
-      const base=value.replace(/(USDT|USDC|BUSD|BTC|ETH|BNB|U|USD|EUR|TRY)$/,'');
-      if(isCommodity) {
-        commoditySymbols.add(value);
-        if(base) commoditySymbols.add(base);
-      } else {
-        bStockSymbols.add(value);
-        if(base) bStockSymbols.add(base);
-      }
-    }
-  }
   const tokenRows=extractRows(raw.tokenized);
   const rwaRows=extractRows(raw.rwa);
   const stockSymbols=new Set<string>();
@@ -424,7 +406,7 @@ export async function fetchBinanceCatalogServer() {
   for(const symbol of pageSymbols) commoditySymbols.add(symbol);
   // Binance's current Markets tCommodities classification is XAUT/PAXG; keep this as a narrow fallback only when the page payload is unavailable.
   for(const symbol of ['XAUT','PAXG']) commoditySymbols.add(symbol);
-  for(const symbol of commoditySymbols) bStockSymbols.delete(symbol);
+  
   const etfSymbols=new Set<string>();
   for(const row of stockRows) {
     const symbol=s(row?.symbol || row?.s || row?.ticker || row?.code).toUpperCase();
@@ -441,7 +423,7 @@ export async function fetchBinanceCatalogServer() {
     if(commoditySymbol && /gold|silver|oil|commodity|commodit|copper|platinum|palladium/.test(commodityText)) commoditySymbols.add(commoditySymbol);
   }
   for(const row of spotRows) {
-    const spotItem=spotInstrument(row,false,bStockSymbols,commoditySymbols);
+    const spotItem=spotInstrument(row,false,stockSymbols,commoditySymbols);
     if(spotItem) out.push(spotItem);
   }
   for(const symbol of ['XAUTUSDT','PAXGUSDT']) {
