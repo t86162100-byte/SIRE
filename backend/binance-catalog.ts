@@ -376,7 +376,7 @@ export async function fetchBinanceCatalogServer() {
     String(a.symbol).localeCompare(String(b.symbol))
   );
 
-  diagnostics.instrumentCount=instruments.length;
+  // Futures audit: preserve raw Binance row counts/statuses so we can distinguish\n  // active-trading coverage from rows discarded by our normalizer.\n  for (const [sourceName, kind] of [['usdtm','USDT-M'], ['coinm','COIN-M']] as const) {\n    const rows = Array.isArray(raw[sourceName]?.symbols) ? raw[sourceName].symbols : [];\n    const statusField = sourceName === 'coinm' ? 'contractStatus' : 'status';\n    const statusCounts: Record<string, number> = {};\n    const rejectedSamples: Array<{symbol:string,status:string,contractType:string}> = [];\n    let accepted = 0;\n    for (const row of rows) {\n      const status = s(row?.[statusField]);\n      statusCounts[status || '(missing)'] = (statusCounts[status || '(missing)'] || 0) + 1;\n      const item = futureInstrument(row, kind, now);\n      if (item) accepted++;\n      else if (rejectedSamples.length < 100) {\n        rejectedSamples.push({ symbol:s(row?.symbol), status, contractType:s(row?.contractType) });\n      }\n    }\n    diagnostics.sources[sourceName].audit = {\n      rawSymbolRows: rows.length,\n      acceptedByNormalizer: accepted,\n      rejectedByNormalizer: rows.length - accepted,\n      statusCounts,\n      rejectedSamples\n    };\n  }\n\n  diagnostics.instrumentCount=instruments.length;
   diagnostics.counts={
     spot:instruments.filter(x=>x.marketType==='Spot' && x.marketGroup==='CRYPTO').length,
     margin:instruments.filter(x=>x.marketType==='Margin').length,
