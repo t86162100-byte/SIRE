@@ -241,30 +241,10 @@ async function requestKlines(instrument: any, symbol: string, interval: string, 
     lastError = error instanceof Error ? error.message : String(error);
   }
 
-  for (const host of restHosts(instrument)) {
-    const controller = new AbortController();
-    const timer = window.setTimeout(() => controller.abort(), 15000);
-    try {
-      const response = await fetch(host + '/klines?' + params.toString(), { cache:'no-store', signal:controller.signal, headers:{Accept:'application/json'} });
-      const text = await response.text();
-      if (!response.ok) {
-        lastError = 'Binance HTTP ' + response.status;
-        continue;
-      }
-      let rows:any;
-      try { rows = JSON.parse(text); } catch { lastError = 'Binance returned invalid JSON.'; continue; }
-      if (!Array.isArray(rows)) {
-        lastError = String(rows?.msg || 'Binance returned no kline array.');
-        continue;
-      }
-      return rows.map(parseKline).filter(Boolean) as Bar[];
-    } catch (error) {
-      lastError = error instanceof Error ? error.message : String(error);
-    } finally {
-      window.clearTimeout(timer);
-    }
-  }
-  throw new Error(lastError || 'Binance public kline endpoint is unavailable.');
+  // The Render proxy is the single authoritative Binance history path. Do not
+  // fall through to browser-side REST hosts: that creates duplicate requests,
+  // bypasses server-side caching, and can amplify Binance IP rate-limit bans.
+  throw new Error(lastError || 'SIRE Binance history proxy is unavailable.');
 }
 
 async function fetchHistory(instrument:any, symbol:string, interval:string, from?:number, to?:number, countBack?:number, onDiagnostic?: (event: Diagnostic) => void):Promise<Bar[]> {
