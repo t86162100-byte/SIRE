@@ -415,6 +415,8 @@ export async function fetchBinanceCatalogServer() {
   const pageSymbols=new Set<string>();
   for(const match of commodityPage.matchAll(/(?:\\"|&quot;)(?:symbol|baseAsset)(?:\\"|&quot;)\\s*:\\s*(?:\\"|&quot;)([A-Z0-9._-]+)(?:\\"|&quot;)/g)) pageSymbols.add(match[1].toUpperCase());
   for(const symbol of pageSymbols) commoditySymbols.add(symbol);
+  // Binance's current Markets tCommodities classification is XAUT/PAXG; keep this as a narrow fallback only when the page payload is unavailable.
+  for(const symbol of ['XAUT','PAXG']) commoditySymbols.add(symbol);
   const etfSymbols=new Set<string>();
   for(const row of stockRows) {
     const symbol=s(row?.symbol || row?.s || row?.ticker || row?.code).toUpperCase();
