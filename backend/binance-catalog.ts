@@ -6,7 +6,7 @@ const CM_HOSTS = ['https://dapi.binance.com/dapi/v1','https://www.binance.com/da
 const OPTIONS_HOSTS = ['https://eapi.binance.com/eapi/v1'];
 const MARGIN_HOSTS = ['https://api.binance.com/sapi/v1/margin','https://api-gcp.binance.com/sapi/v1/margin'];
 const MARGIN_ISOLATED_HOSTS = ['https://api.binance.com/sapi/v1/margin/isolated','https://api-gcp.binance.com/sapi/v1/margin/isolated'];
-const EQUITY = 'https://api.binance.com/sapi/v1/equity/market';
+const EQUITY_HOSTS = ['https://api.binance.com/sapi/v1/equity/market','https://www.binance.com/sapi/v1/equity/market'];
 const ALPHA = 'https://www.binance.com/bapi/defi/v1/public';
 
 const s = (v: unknown) => String(v ?? '').trim();
@@ -294,8 +294,8 @@ export async function fetchBinanceCatalogServer() {
     {name:'options', urls:OPTIONS_HOSTS.map(host=>host+'/exchangeInfo'), apiKey:false},
     {name:'margin', urls:MARGIN_HOSTS.map(host=>host+'/allPairs'), apiKey:true},
     {name:'marginIsolated', urls:MARGIN_ISOLATED_HOSTS.map(host=>host+'/allPairs'), apiKey:true},
-    {name:'stocks', urls:[EQUITY+'/exchangeInfo'], apiKey:true},
-    {name:'tokenized', urls:[EQUITY+'/tokenized-assets'], apiKey:true},
+    {name:'stocks', urls:EQUITY_HOSTS.map(host=>host+'/exchangeInfo'), apiKey:true},
+    {name:'tokenized', urls:EQUITY_HOSTS.map(host=>host+'/tokenized-assets'), apiKey:true},
     {name:'alphaExchange', urls:[ALPHA+'/alpha-trade/get-exchange-info'], apiKey:false},
     {name:'alphaTokens', urls:[ALPHA+'/wallet-direct/buw/wallet/cex/alpha/all/token/list'], apiKey:false}
   ];
