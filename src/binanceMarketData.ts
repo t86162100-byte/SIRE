@@ -210,10 +210,21 @@ async function requestKlines(instrument: any, symbol: string, interval: string, 
       limit: String(Math.max(1, Math.min(1500, Math.floor(limit))))
     });
     if (Number.isFinite(end)) proxyParams.set('to', String(Math.floor(Number(end))));
-    const proxy = await fetch('/api/sire/binance/history?' + proxyParams.toString(), {
-      cache: 'no-store',
-      headers: { Accept: 'application/json' }
-    });
+    // Do not let a slow Render→Binance edge consume OpenAlgo's whole
+    // history-request timeout. If the proxy is slow, fall through quickly to
+    // Binance's public market-data hosts instead.
+    const proxyController = new AbortController();
+    const proxyTimer = window.setTimeout(() => proxyController.abort(), 6000);
+    let proxy: Response;
+    try {
+      proxy = await fetch('/api/sire/binance/history?' + proxyParams.toString(), {
+        cache: 'no-store',
+        signal: proxyController.signal,
+        headers: { Accept: 'application/json' }
+      });
+    } finally {
+      window.clearTimeout(proxyTimer);
+    }
     const payload = await proxy.json().catch(() => ({}));
     if (proxy.ok && payload?.ok && Array.isArray(payload?.bars) && payload.bars.length) {
       return payload.bars as Bar[];
