@@ -896,6 +896,97 @@ const server = http.createServer(async (req,res) => {
       return;
     }
     if (req.method === 'POST' && pathname === '/api/sire/agent/gpt') { const parsed = body ? JSON.parse(body) : {}; if (!String(parsed.query || '').trim()) return res.writeHead(400,{ 'Access-Control-Allow-Origin':'*','Content-Type':'application/json; charset=utf-8' }).end(JSON.stringify({ error:'query is required' })); try { const response = await handleDirectGptRequest(parsed); return res.writeHead(200,{ 'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8' }).end(JSON.stringify(response)); } catch (cause) { const message = cause instanceof Error ? cause.message : String(cause); console.error('[DIRECT GPT]', message); return res.writeHead(502,{ 'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8' }).end(JSON.stringify({ error:`Direct GPT test failed: ${message}` })); } }
+    if (req.method === 'GET' && pathname === '/api/sire/binance/quotes') {
+      try {
+        const now = Date.now();
+        if (!globalThis.__sireBinanceQuoteCache || now - globalThis.__sireBinanceQuoteCacheAt > 2000) {
+          const get = async (url) => {
+            const response = await fetch(url, { cache:'no-store', headers:{Accept:'application/json','User-Agent':'SIRE-Binance-Quotes/1.0'} });
+            const text = await response.text();
+            if (!response.ok) throw new Error('HTTP '+response.status+' from '+url);
+            return text ? JSON.parse(text) : {};
+          };
+          const [spot, usdtm, coinm, stocks, alpha] = await Promise.allSettled([
+            get('https://api.binance.com/api/v3/ticker/24hr'),
+            get('https://fapi.binance.com/fapi/v1/ticker/24hr'),
+            get('https://dapi.binance.com/dapi/v1/ticker/24hr'),
+            get('https://www.binance.com/bapi/equity/v1/public/equity/symbol/get-symbols'),
+            get('https://www.binance.com/bapi/defi/v1/public/wallet-direct/buw/wallet/cex/alpha/all/token/list')
+          ]);
+          const ticks = [];
+          const add24h = (result) => {
+            if (result.status !== 'fulfilled') return;
+            const rows = Array.isArray(result.value) ? result.value : [];
+            for (const row of rows) {
+              const symbol = String(row?.symbol || '').trim().toUpperCase();
+              const price = Number(row?.lastPrice);
+              if (!symbol || !Number.isFinite(price)) continue;
+              ticks.push({
+                provider:'BINANCE', symbol, price,
+                epoch:Math.floor((Number(row?.closeTime)||now)/1000),
+                open:Number.isFinite(Number(row?.openPrice)) ? Number(row.openPrice) : undefined,
+                high:Number.isFinite(Number(row?.highPrice)) ? Number(row.highPrice) : undefined,
+                low:Number.isFinite(Number(row?.lowPrice)) ? Number(row.lowPrice) : undefined,
+                volume:Number.isFinite(Number(row?.volume)) ? Number(row.volume) : undefined,
+                quoteVolume:Number.isFinite(Number(row?.quoteVolume)) ? Number(row.quoteVolume) : undefined,
+                percent:Number.isFinite(Number(row?.priceChangePercent)) ? Number(row.priceChangePercent) : undefined
+              });
+            }
+          };
+          add24h(spot); add24h(usdtm); add24h(coinm);
+
+          if (stocks.status === 'fulfilled') {
+            const rows = Array.isArray(stocks.value?.data) ? stocks.value.data : [];
+            for (const row of rows) {
+              const symbol = String(row?.s || row?.symbol || row?.ticker || '').trim().toUpperCase();
+              const price = Number(row?.c ?? row?.price ?? row?.lastPrice);
+              if (!symbol || !Number.isFinite(price)) continue;
+              ticks.push({
+                provider:'BINANCE', symbol, price, epoch:Math.floor(now/1000),
+                open:Number.isFinite(Number(row?.op ?? row?.openPrice)) ? Number(row.op ?? row.openPrice) : undefined,
+                high:Number.isFinite(Number(row?.h ?? row?.highPrice)) ? Number(row.h ?? row.highPrice) : undefined,
+                low:Number.isFinite(Number(row?.l ?? row?.lowPrice)) ? Number(row.l ?? row.lowPrice) : undefined,
+                volume:Number.isFinite(Number(row?.v24 ?? row?.volume)) ? Number(row.v24 ?? row.volume) : undefined,
+                percent:Number.isFinite(Number(row?.pc ?? row?.priceChangePercent)) ? Number(row.pc ?? row.priceChangePercent) : undefined,
+                marketCap:Number.isFinite(Number(row?.mc ?? row?.marketCap)) ? Number(row.mc ?? row.marketCap) : undefined
+              });
+            }
+          }
+
+          if (alpha.status === 'fulfilled') {
+            const rows = Array.isArray(alpha.value?.data) ? alpha.value.data : [];
+            for (const row of rows) {
+              const alphaId = String(row?.alphaId || '').trim().toUpperCase();
+              const symbolBase = String(row?.symbol || row?.tokenSymbol || row?.tokenCode || '').trim().toUpperCase();
+              const quote = String(row?.quoteAsset || 'USDT').trim().toUpperCase();
+              const candidates = [
+                String(row?.symbol || '').trim().toUpperCase(),
+                alphaId && quote ? alphaId+quote : '',
+                symbolBase && quote ? symbolBase+quote : '',
+                symbolBase
+              ].filter(Boolean);
+              const symbol = candidates[0];
+              const price = Number(row?.price);
+              if (!symbol || !Number.isFinite(price)) continue;
+              ticks.push({
+                provider:'BINANCE', symbol, price, epoch:Math.floor(now/1000),
+                high:Number.isFinite(Number(row?.priceHigh24h)) ? Number(row.priceHigh24h) : undefined,
+                low:Number.isFinite(Number(row?.priceLow24h)) ? Number(row.priceLow24h) : undefined,
+                volume:Number.isFinite(Number(row?.volume24h)) ? Number(row.volume24h) : undefined,
+                percent:Number.isFinite(Number(row?.percentChange24h)) ? Number(row.percentChange24h) : undefined
+              });
+            }
+          }
+          globalThis.__sireBinanceQuoteCache = ticks;
+          globalThis.__sireBinanceQuoteCacheAt = now;
+        }
+        return res.writeHead(200,{'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify({ok:true,ticks:globalThis.__sireBinanceQuoteCache||[],cachedAt:globalThis.__sireBinanceQuoteCacheAt||Date.now()}));
+      } catch (cause) {
+        const message = cause instanceof Error ? cause.message : String(cause);
+        console.error('[BINANCE QUOTES]', message);
+        return res.writeHead(502,{'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify({ok:false,ticks:[],error:message}));
+      }
+    }
     if (req.method === 'GET' && pathname === '/api/sire/binance/equity-ticker') {
       try {
         const candidates = [
