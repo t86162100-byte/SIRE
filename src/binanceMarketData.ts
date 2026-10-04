@@ -63,7 +63,7 @@ export async function fetchBinanceInstruments():Promise<BinanceInstrument[]> {
 
 type Handler=(tick:BinanceTick)=>void;
 type Bus={socket:WebSocket|null;handlers:Map<string,Set<Handler>>;url:string;timer?:number;connecting?:boolean};
-type FastBus=Bus&{symbols:Set<string>;subscribeTimer?:number;requestId:number;latest:Map<string,BinanceTick>;lastTradeAt:Map<string,number>;lastMarkAt:Map<string,number>};
+type FastBus=Bus&{symbols:Set<string>;subscribed:Set<string>;subscribeTimer?:number;requestId:number;latest:Map<string,BinanceTick>;lastTradeAt:Map<string,number>;lastMarkAt:Map<string,number>;bootstrapSubscribed?:boolean;queueSubscribe?:()=>void};
 const buses=new Map<string,Bus>();
 const fastBuses=new Map<string,FastBus>();
 
@@ -118,7 +118,7 @@ function bus(v:string){
 function fastBus(v:string){
   let b=fastBuses.get(v);
   if(b?.socket?.readyState===WebSocket.OPEN||b?.connecting)return b!;
-  b=b||{socket:null,handlers:new Map(),url:fastUrl(v),symbols:new Set(),requestId:0,latest:new Map(),lastTradeAt:new Map(),lastMarkAt:new Map()};
+  b=b||{socket:null,handlers:new Map(),url:fastUrl(v),symbols:new Set(),subscribed:new Set(),requestId:0,latest:new Map(),lastTradeAt:new Map(),lastMarkAt:new Map(),bootstrapSubscribed:false};
   b.connecting=true;buses.delete(v);fastBuses.set(v,b);
   const ws=new WebSocket(b.url);b.socket=ws;
   const queueSubscribe=()=>{
@@ -150,6 +150,8 @@ function fastBus(v:string){
     b!.connecting=false;
     b!.socket=null;
     if(b!.subscribeTimer!==undefined){window.clearTimeout(b!.subscribeTimer);b!.subscribeTimer=undefined;}
+    b!.subscribed.clear();
+    b!.bootstrapSubscribed=false;
     if(b!.symbols.size)b!.timer=window.setTimeout(()=>fastBus(v),1000);
   };
   queueSubscribe();
@@ -168,11 +170,7 @@ export function subscribeBinanceTick(item:any,handler:Handler){
     const b=fastBus(v);let set=b.handlers.get(symbol);
     if(!set){set=new Set();b.handlers.set(symbol,set);b.symbols.add(symbol);}
     set.add(handler);
-    if(b.socket?.readyState===WebSocket.OPEN){
-      const bootstrap=v==='ALPHA' ? ['!ticker@arr'] : ['!miniTicker@arr'];
-      const params=bootstrap.concat(v==='COIN' ? [symbol.toLowerCase()+'@ticker',symbol.toLowerCase()+'@trade',symbol.toLowerCase()+'@markPrice@1s'] : [symbol.toLowerCase()+'@ticker',symbol.toLowerCase()+'@trade']);
-      try{b.socket.send(JSON.stringify({method:'SUBSCRIBE',params,id:++b.requestId}));}catch{}
-    }
+    if(b.socket?.readyState===WebSocket.OPEN) b.queueSubscribe?.();
     return()=>{
       set!.delete(handler);
       if(!set!.size){
