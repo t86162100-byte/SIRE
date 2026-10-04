@@ -67,7 +67,7 @@ function spotInstrument(raw: Json, margin = false, bStockSymbols?: Set<string>, 
   const isTCommodity = !margin && !isBStock && Boolean(commoditySymbols?.has(base));
   return {
     symbol, name: base + '/' + quote, provider:'BINANCE', exchange:'BINANCE',
-    marketGroup:'CRYPTO', marketType:margin?'Margin':'Spot', category:margin?'Margin':'Spot',
+    marketGroup:margin ? 'CRYPTO' : ((isBStock || isTCommodity) ? 'TRADE FI' : 'CRYPTO'), marketType:margin?'Margin':'Spot', category:margin?'Margin':'Spot',
     marketSubcategory:margin?'Margin':'Spot',
     marketSubSubcategory:margin ? base || 'All' : (isBStock ? 'bStocks' : (isTCommodity ? 'tCommodities' : bucket)),
     marketFilters:uniq([isBStock ? 'bStocks' : (isTCommodity ? 'tCommodities' : bucket), 'Spot', ...(margin ? ['Margin'] : [])]),
