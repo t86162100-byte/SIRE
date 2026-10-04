@@ -906,10 +906,12 @@ const server = http.createServer(async (req,res) => {
             if (!response.ok) throw new Error('HTTP '+response.status+' from '+url);
             return text ? JSON.parse(text) : {};
           };
-          const [spot, usdtm, coinm, stocks, alpha] = await Promise.allSettled([
+          const [spot, usdtm, coinm, usdtmPrice, coinmPrice, stocks, alpha] = await Promise.allSettled([
             get('https://data-api.binance.vision/api/v3/ticker/24hr').catch(() => get('https://api.binance.com/api/v3/ticker/24hr')),
             get('https://fapi.binance.com/fapi/v1/ticker/24hr'),
             get('https://dapi.binance.com/dapi/v1/ticker/24hr'),
+            get('https://fapi.binance.com/fapi/v1/ticker/price'),
+            get('https://dapi.binance.com/dapi/v1/ticker/price'),
             get('https://www.binance.com/bapi/equity/v1/public/equity/symbol/get-symbols'),
             get('https://www.binance.com/bapi/defi/v1/public/wallet-direct/buw/wallet/cex/alpha/all/token/list')
           ]);
@@ -938,6 +940,29 @@ const server = http.createServer(async (req,res) => {
             }
           };
           add24h(spot, 'SPOT'); add24h(usdtm, 'USDT-M'); add24h(coinm, 'COIN-M');
+
+          // Binance exposes a dedicated latest-price endpoint for both futures
+          // venues. Merge it after the 24h snapshot so every listed contract
+          // still receives a price even if the 24h ticker omits a contract.
+          const mergePriceOnly = (result, venue) => {
+            if (result.status !== 'fulfilled') return;
+            const rows = Array.isArray(result.value) ? result.value : [];
+            const bySymbol = new Map(ticks.filter(t => t.venue === venue).map(t => [t.symbol, t]));
+            for (const row of rows) {
+              const symbol = String(row?.symbol || '').trim().toUpperCase();
+              const price = Number(row?.price);
+              if (!symbol || !Number.isFinite(price)) continue;
+              const existing = bySymbol.get(symbol);
+              if (existing) existing.price = price;
+              else {
+                const tick = { provider:'BINANCE', symbol, price, venue, epoch:Math.floor((Number(row?.time)||now)/1000) };
+                ticks.push(tick);
+                bySymbol.set(symbol, tick);
+              }
+            }
+          };
+          mergePriceOnly(usdtmPrice, 'USDT-M');
+          mergePriceOnly(coinmPrice, 'COIN-M');
 
           if (stocks.status === 'fulfilled') {
             const rows = Array.isArray(stocks.value?.data) ? stocks.value.data : [];
