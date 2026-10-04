@@ -498,7 +498,7 @@ export default function App() {
         setInstruments(current => current.map(item => {
           const tick=updates.get(item.id);
           if (!tick) return item;
-          return {...item,price:tick.price,change24h:tick.percent,priceChangePercent:tick.percent,high24h:tick.high,low24h:tick.low,volume24h:tick.volume,marketCap:tick.marketCap ?? item.marketCap};
+          return {...item,price:tick.price,change24h:tick.percent,priceChangePercent:tick.percent,high24h:tick.high,low24h:tick.low,volume24h:tick.quoteVolume ?? tick.volume,quoteVolume:tick.quoteVolume,marketCap:tick.marketCap ?? item.marketCap};
         }));
       }
       frame = window.requestAnimationFrame(flush);
