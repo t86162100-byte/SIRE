@@ -78,6 +78,14 @@ function connectBinanceFuturesQuoteHub() {
         }
       }
       binanceFuturesQuoteHub.connecting = false;
+      setTimeout(() => {
+        console.info('[BINANCE FUTURES WS] subscription snapshot', JSON.stringify({
+          symbols: binanceFuturesQuoteHub.symbols.size,
+          total: binanceFuturesQuoteHub.ticks.size,
+          usdtm: [...binanceFuturesQuoteHub.ticks.values()].filter(t => t.venue === 'USDT-M').length,
+          coinm: [...binanceFuturesQuoteHub.ticks.values()].filter(t => t.venue === 'COIN-M').length
+        }));
+      }, 8000);
       if (binanceFuturesQuoteHub.readyResolve) {
         binanceFuturesQuoteHub.readyResolve();
         binanceFuturesQuoteHub.readyResolve = null;
@@ -94,7 +102,11 @@ function connectBinanceFuturesQuoteHub() {
   socket.on('message', raw => {
     try {
       const parsed = JSON.parse(String(raw));
-      if (parsed?.id === 1 && parsed?.result === null) return;
+      if (parsed?.id !== undefined && parsed?.result === null) return;
+      if (parsed?.code !== undefined || parsed?.msg) {
+        console.warn('[BINANCE FUTURES WS] subscription response', JSON.stringify({ id:parsed?.id, code:parsed?.code, msg:parsed?.msg }));
+        return;
+      }
       const data = parsed?.data && typeof parsed.data === 'object' ? parsed.data : parsed;
       if (!data || typeof data !== 'object' || !data?.s) return;
       const symbol = String(data.s).trim().toUpperCase();
