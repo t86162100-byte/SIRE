@@ -999,6 +999,11 @@ export default function FinancialChart({ symbol, isActive = false, instruments, 
     try {
       const nextInstrument = instrumentsRef.current.find(item => item.symbol === symbol);
       const nextProvider = String(nextInstrument?.provider || marketInstrument?.provider || 'DERIV').toUpperCase();
+      // Keep the already-created market feed aligned with the newly selected
+      // instrument. The widget can reuse the feed when the provider stays the
+      // same; without this, history/live subscriptions could keep the previous
+      // venue metadata even though the chart symbol changed.
+      dataFeedRef.current?.setInstrument?.(nextInstrument);
       widget.setSymbol(symbol, nextProvider);
       if (widget.symbol() !== symbol) {
         reportDiagnostic({
