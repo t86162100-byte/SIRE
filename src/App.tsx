@@ -326,7 +326,7 @@ export default function App() {
           if(item.provider!=='BINANCE') return item;
           const tick=byKey.get(item.symbol);
           if(!tick) return item;
-          return {...item,price:tick.price,change24h:tick.percent,priceChangePercent:tick.percent,high24h:tick.high,low24h:tick.low,volume24h:tick.volume};
+          return {...item,price:tick.price,change24h:tick.percent,priceChangePercent:tick.percent,high24h:tick.high,low24h:tick.low,volume24h:tick.volume,marketCap:tick.marketCap ?? item.marketCap};
         }));
       } catch {}
       finally { busy=false; }
@@ -349,7 +349,7 @@ export default function App() {
       setInstruments(current => current.map(item => {
         const tick=updates.get(item.id);
         if (!tick) return item;
-        return {...item,price:tick.price,change24h:tick.percent,priceChangePercent:tick.percent,high24h:tick.high,low24h:tick.low,volume24h:tick.volume};
+        return {...item,price:tick.price,change24h:tick.percent,priceChangePercent:tick.percent,high24h:tick.high,low24h:tick.low,volume24h:tick.volume,marketCap:tick.marketCap ?? item.marketCap};
       }));
     }, 250);
     return () => { window.clearInterval(timer); unsubscribers.forEach(fn=>fn()); };
