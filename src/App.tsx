@@ -321,10 +321,42 @@ export default function App() {
       try {
         const ticks=await fetchBinancePriceSnapshot();
         if(cancelled) return;
-        const byKey=new Map(ticks.map(t=>[t.symbol,t]));
+        const byKey=new Map<string, any>();
+        for (const tick of ticks) {
+          const key = String(tick.symbol || '').trim().toUpperCase();
+          if (!key) continue;
+          // Keep venue-specific quotes separate; the same symbol can exist on
+          // Spot, USDⓈ-M, COIN-M, Stocks and Alpha.
+          const venue = String(tick.venue || '').toUpperCase();
+          byKey.set((venue ? venue + ':' : '') + key, tick);
+          if (!byKey.has(key)) byKey.set(key, tick);
+        }
+        const findTick = (item: Instrument) => {
+          const symbol = String(item.symbol || '').trim().toUpperCase();
+          const marketType = String(item.marketType || '').trim().toUpperCase();
+          const sub = String((item as any).marketSubcategory || '').trim().toUpperCase();
+          const exactVenue =
+            marketType === 'STOCKS' ? 'STOCKS' :
+            marketType === 'ALPHA' ? 'ALPHA' :
+            marketType === 'FUTURES' ? (sub === 'COIN-M' ? 'COIN-M' : 'USDT-M') :
+            marketType === 'SPOT' ? 'SPOT' : '';
+          const keys = exactVenue ? [exactVenue + ':' + symbol] : [];
+          // Trade-FI Spot catalogue rows use the base token (e.g. AAPLB/XAUT)
+          // while Binance Spot ticker rows use the actual trading pair
+          // (e.g. AAPLBUSDT/XAUTUSDT).
+          if (marketType === 'SPOT' && String((item as any).marketGroup || '').toUpperCase() === 'TRADE FI') {
+            for (const suffix of ['USDT','USDC','USD','U']) keys.push('SPOT:' + symbol + suffix);
+          }
+          keys.push(symbol);
+          for (const key of keys) {
+            const tick = byKey.get(key);
+            if (tick) return tick;
+          }
+          return undefined;
+        };
         setInstruments(current=>current.map(item=>{
           if(item.provider!=='BINANCE') return item;
-          const tick=byKey.get(item.symbol);
+          const tick=findTick(item);
           if(!tick) return item;
           return {...item,price:tick.price,change24h:tick.percent,priceChangePercent:tick.percent,high24h:tick.high,low24h:tick.low,volume24h:tick.volume,marketCap:tick.marketCap ?? item.marketCap};
         }));
@@ -332,7 +364,7 @@ export default function App() {
       finally { busy=false; }
     };
     void applySnapshot();
-    const timer=window.setInterval(() => { void applySnapshot(); }, 10000);
+    const timer=window.setInterval(() => { void applySnapshot(); }, 3000);
     return()=>{cancelled=true;window.clearInterval(timer);};
   }, [instruments.some(item => item.provider === 'BINANCE'), instruments.filter(item => item.provider === 'BINANCE').map(item=>item.id).join('|')]);
   useEffect(() => {
