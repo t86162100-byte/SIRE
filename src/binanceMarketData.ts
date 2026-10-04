@@ -312,6 +312,21 @@ function createSocketFeed(instrument:any, symbol:string, interval:string, onQuot
     socket = null;
   };
 
+  const pollLivePrice = async () => {
+    if (stopped) return;
+    const kind = marketKind(instrument);
+    if (kind !== 'spot' && kind !== 'um' && kind !== 'cm') return;
+    try {
+      const response = await fetch('/api/sire/binance/live-price?market=' + encodeURIComponent(kind) + '&symbol=' + encodeURIComponent(String(symbol).toUpperCase()) + '&t=' + Date.now(), {cache:'no-store'});
+      const payload = await response.json().catch(() => ({}));
+      const price = asNumber(payload?.price), epoch = asNumber(payload?.epoch);
+      if (response.ok && Number.isFinite(price) && Number.isFinite(epoch)) {
+        onQuote({provider:'BINANCE',symbol:String(payload?.symbol || symbol).toUpperCase(),price,epoch});
+      }
+    } catch {}
+    if (!stopped) reconnectTimer = window.setTimeout(() => { reconnectTimer=undefined; void pollLivePrice(); }, 1000);
+  };
+
   const connect = () => {
     if (stopped) return;
     const kind = marketKind(instrument);
