@@ -994,7 +994,8 @@ server.listen(PORT,HOST,async()=>{
       counts: catalog.diagnostics?.counts,
       tradeFi: {
         futures: Object.fromEntries(['Stocks','ETFs','Commodities','Fx','Pre-IPO'].map(k=>[k,catalog.instruments.filter(x=>x.marketGroup==='TRADE FI'&&x.marketType==='Futures'&&x.marketSubSubcategory===k).length])),
-        spot: Object.fromEntries(['bStocks','tCommodities'].map(k=>[k,catalog.instruments.filter(x=>x.marketGroup==='TRADE FI'&&x.marketType==='Spot'&&x.marketSubSubcategory===k).length]))
+        spot: Object.fromEntries(['bStocks','tCommodities'].map(k=>[k,catalog.instruments.filter(x=>x.marketGroup==='TRADE FI'&&x.marketType==='Spot'&&x.marketSubSubcategory===k).length])),
+        spotBStockCandidates: catalog.instruments.filter(x=>x.marketType==='Spot' && x.marketGroup==='CRYPTO' && String(x.baseAsset||'').endsWith('B')).slice(0,20).map(x=>({symbol:x.symbol,base:x.baseAsset}))
       },
       stocksSource: catalog.diagnostics?.sources?.stocks,
       tokenizedSource: catalog.diagnostics?.sources?.tokenized,
