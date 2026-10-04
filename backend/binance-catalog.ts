@@ -394,6 +394,37 @@ export async function fetchBinanceCatalogServer() {
     }
   });
 
+  // Spot exchangeInfo is public, but Binance can return a partial/truncated
+  // symbol list from an individual edge. The first successful edge is therefore
+  // not necessarily the complete catalogue. Probe every public Spot edge and
+  // retain the largest valid symbol set; this prevents a 2-row/partial response
+  // from replacing the full Spot universe.
+  const initialSpotRows = Array.isArray(raw.spot?.symbols) ? raw.spot.symbols : [];
+  if (initialSpotRows.length < 2500) {
+    const spotAttempts = await Promise.allSettled(SPOT_HOSTS.map(async host => {
+      const data = await getJson(host + '/exchangeInfo');
+      const rows = Array.isArray(data?.symbols) ? data.symbols : [];
+      if (rows.length < 1000) throw new Error('partial Spot catalogue: ' + rows.length);
+      return { data, rows, host };
+    }));
+    let best: { data: any; rows: Json[]; host: string } | undefined;
+    for (const attempt of spotAttempts) {
+      if (attempt.status === 'fulfilled' && (!best || attempt.value.rows.length > best.rows.length)) best = attempt.value;
+    }
+    if (best && best.rows.length > initialSpotRows.length) {
+      raw.spot = best.data;
+      diagnostics.sources.spot = {
+        ...(diagnostics.sources.spot || {}),
+        ok: true,
+        url: best.host + '/exchangeInfo',
+        shape: shapeOf(best.data),
+        selectedLargestSpotEdge: true,
+        initialRowCount: initialSpotRows.length,
+        selectedRowCount: best.rows.length
+      };
+    }
+  }
+
   const out: Json[]=[];
   const spotRows=Array.isArray(raw.spot?.symbols)?raw.spot.symbols:[];
   diagnostics.sources.spot = diagnostics.sources.spot || {ok:Boolean(raw.spot)};
