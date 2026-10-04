@@ -22,9 +22,10 @@ const upper = (v: unknown) => str(v).toUpperCase();
 
 const price = (item: Instrument) => {
   const v = num(item.price);
-  return Number.isFinite(v)
-    ? v.toLocaleString(undefined, { maximumFractionDigits: v >= 1 ? 2 : 8 })
-    : '';
+  if (!Number.isFinite(v)) return '';
+  // Preserve the existing card/layout, but show enough significant precision
+  // for small live ticks to be visible instead of rounding them away.
+  return v.toLocaleString(undefined, { maximumSignificantDigits: 10 });
 };
 const compact = (v: unknown) => {
   const n = num(v);
