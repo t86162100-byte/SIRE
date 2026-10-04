@@ -350,6 +350,15 @@ export async function fetchBinanceCatalogServer() {
         if ((source.name==='usdtm' || source.name==='coinm' || source.name==='spot') && !Array.isArray(data?.symbols)) {
           throw new Error('Binance returned no symbols array from '+url);
         }
+        // Binance can occasionally return a truncated/abnormal public exchangeInfo
+        // response from one edge. Never accept that as the catalogue: try the next
+        // Binance edge instead. A real Spot catalogue is far larger than this.
+        if (source.name === 'spot' && Array.isArray(data?.symbols) && data.symbols.length < 1000) {
+          throw new Error('Binance returned an unexpectedly small Spot catalogue ('+data.symbols.length+') from '+url);
+        }
+        if (source.name === 'usdtm' && Array.isArray(data?.symbols) && data.symbols.length < 100) {
+          throw new Error('Binance returned an unexpectedly small USDT-M catalogue ('+data.symbols.length+') from '+url);
+        }
         if (source.name==='options' && !Array.isArray(data?.optionSymbols)) {
           throw new Error('Binance returned no optionSymbols array from '+url);
         }
