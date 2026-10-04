@@ -446,15 +446,20 @@ export async function fetchBinanceHistoryServer(input:{market:string;symbol:stri
 
   let data:any=null;
   const errors:string[]=[];
-  for (const url of urls) {
+  for (const [index,url] of urls.entries()) {
     try {
+      console.log('[BINANCE HISTORY] Upstream attempt', {market,symbol,interval,attempt:index+1,total:urls.length,url});
       data=await getJson(url);
+      console.log('[BINANCE HISTORY] Upstream success', {market,symbol,interval,attempt:index+1,url});
       break;
     } catch (error) {
-      errors.push(error instanceof Error ? error.message : String(error));
+      const message=error instanceof Error ? error.message : String(error);
+      errors.push(message);
+      console.warn('[BINANCE HISTORY] Upstream failed', {market,symbol,interval,attempt:index+1,url,error:message});
     }
   }
   if (!data) {
+    console.error('[BINANCE HISTORY] All upstream hosts failed', {market,symbol,interval,limit,errors});
     throw new Error('All Binance '+market+' history hosts failed for '+symbol+': '+errors.join(' | '));
   }
   const rows=snapshotRows(data);
