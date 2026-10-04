@@ -117,7 +117,8 @@ function classifyFutureTradeFi(raw: Json, tags: string[]) {
 
   // Binance's exchangeInfo explicitly identifies TradFi perpetuals with
   // contractType=TRADIFI_PERPETUAL. Do not depend on a subtype tag to detect them.
-  const isTradFiContract = contractType === 'tradifiperpetual' || normalized.includes('tradfi');
+  const isTradFiContract = contractType === 'tradifiperpetual' || normalized.includes('tradfi') ||
+    ['equity','hkequity','krequity','commodity','commodities','fx','forex','premarket','preipo','stock','stocks'].includes(underlyingType);
   if (!isTradFiContract) return undefined;
 
   // Binance's underlyingType is the authoritative family for these contracts.
@@ -313,6 +314,9 @@ export async function fetchBinanceCatalogServer() {
         if ((source.name==='margin' || source.name==='marginIsolated') && !Array.isArray(data)) {
           throw new Error('Binance returned no Margin pair array from '+url);
         }
+        if ((source.name==='stocks' || source.name==='tokenized') && !Array.isArray(data?.symbols) && !Array.isArray(data?.data)) {
+          throw new Error('Binance returned no symbol data from authenticated '+source.name+' endpoint '+url);
+        }
         return {data,url};
       }
       catch(error) { errors.push(error instanceof Error ? error.message : String(error)); }
@@ -376,12 +380,12 @@ export async function fetchBinanceCatalogServer() {
     const item=equityInstrument(row); if(item) out.push(item);
   }
 
-  const tokenRows=Array.isArray(raw.tokenized)?raw.tokenized:Array.isArray(raw.tokenized?.data)?raw.tokenized.data:[];
+  const tokenRows=Array.isArray(raw.tokenized?.symbols)?raw.tokenized.symbols:Array.isArray(raw.tokenized?.data)?raw.tokenized.data:Array.isArray(raw.tokenized)?raw.tokenized:[];
   for(const row of tokenRows) {
     const item=tokenizedInstrument(row); if(item) out.push(item);
   }
 
-  const alphaSymbols=Array.isArray(raw.alphaExchange?.data?.symbols)?raw.alphaExchange.data.symbols:[];
+  const alphaSymbols=Array.isArray(raw.alphaExchange?.data?.symbols)?raw.alphaExchange.data.symbols:Array.isArray(raw.alphaExchange?.symbols)?raw.alphaExchange.symbols:[];
   const alphaTokens=Array.isArray(raw.alphaTokens?.data)?raw.alphaTokens.data:[];
   const tokenByAlphaId=new Map<string,Json>();
   for(const token of alphaTokens) {
