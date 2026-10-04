@@ -980,13 +980,18 @@ server.on('upgrade',(req,socket,head)=>{
       const market=String(url.searchParams.get('market')||'spot').toLowerCase();
       const symbol=String(url.searchParams.get('symbol')||'').trim().toLowerCase();
       const interval=String(url.searchParams.get('interval')||'1m').trim();
+      const stream=String(url.searchParams.get('stream')||'combined').toLowerCase();
       if(!symbol || !/^[a-z0-9._-]+$/.test(symbol) || !/^[0-9]+[mhdw]$/.test(interval)){ socket.destroy(); return; }
-      const upstreamBase = market==='um' ? 'wss://fstream.binance.com/ws/'
-        : market==='cm' ? 'wss://dstream.binance.com/ws/'
-        : market==='alpha' ? 'wss://nbstream.binance.com/w3w/wsa/stream/ws/'
-        : market==='options' ? 'wss://nbstream.binance.com/eoptions/ws/'
-        : 'wss://stream.binance.com:9443/ws/';
-      const upstreamUrl = upstreamBase + symbol + '@kline_' + interval;
+      const upstreamBase = market==='um' ? 'wss://fstream.binance.com'
+        : market==='cm' ? 'wss://dstream.binance.com'
+        : market==='alpha' ? 'wss://nbstream.binance.com/w3w/wsa'
+        : market==='options' ? 'wss://nbstream.binance.com/eoptions'
+        : 'wss://stream.binance.com:9443';
+      const pathBase = market==='alpha' ? '/stream' : '/stream';
+      const streams = stream==='combined' && !['alpha','options'].includes(market)
+        ? symbol+'@trade/'+symbol+'@kline_'+interval
+        : symbol+'@kline_'+interval;
+      const upstreamUrl = upstreamBase + pathBase + '?streams=' + streams;
       console.log('[BINANCE WS PROXY] Browser client connected', upstreamUrl);
       wss.handleUpgrade(req,socket,head,clientSocket=>{
         const upstream=new WebSocket(upstreamUrl);
@@ -994,7 +999,7 @@ server.on('upgrade',(req,socket,head)=>{
         const closeClient=(code=1011,reason='Binance upstream unavailable.')=>{
           if(clientSocket.readyState===WebSocket.OPEN) clientSocket.close(code,reason.slice(0,120));
         };
-        upstream.on('open',()=>{ clearTimeout(timer); if(clientSocket.readyState===WebSocket.OPEN) clientSocket.send(JSON.stringify({type:'sire.binance.connected',symbol:symbol.toUpperCase()})); });
+        upstream.on('open',()=>{ clearTimeout(timer); if(clientSocket.readyState===WebSocket.OPEN) clientSocket.send(JSON.stringify({type:'sire.binance.connected',symbol:symbol.toUpperCase(),streams})); });
         upstream.on('message',data=>{ if(clientSocket.readyState===WebSocket.OPEN) clientSocket.send(data); });
         upstream.on('error',error=>{ console.error('[BINANCE WS PROXY]', error instanceof Error ? error.message : String(error)); closeClient(); });
         upstream.on('close',(code,reason)=>{ clearTimeout(timer); if(clientSocket.readyState===WebSocket.OPEN) clientSocket.close(code && code!==1000 ? 1011 : 1000, String(reason||'').slice(0,120)); });
