@@ -416,7 +416,6 @@ export async function fetchBinanceCatalogServer() {
   const tokenRows=extractRows(raw.tokenized);
   const rwaRows=extractRows(raw.rwa);
   const stockSymbols=new Set<string>();
-  const commoditySymbols=new Set<string>();
   const commodityPage=String(raw.tCommoditiesPage||'');
   // The Markets page is only a classification source; intersect its discovered
   // symbols with Binance Spot exchangeInfo below, so no synthetic symbols enter the catalog.
