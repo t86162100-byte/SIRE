@@ -173,7 +173,8 @@ function aggregateBars(source: Bar[], seconds: number) {
   return [...map.values()].sort((a,b) => a.time - b.time);
 }
 
-async function requestKlines(instrument: any, symbol: string, interval: string, end?: number, limit = 1000): Promise<Bar[]> {
+async function requestKlines(instrument: any, symbol: string, interval: string, end?: number, limit = 1000, onDiagnostic?: (event: Diagnostic) => void): Promise<Bar[]> {
+  diagnostic(onDiagnostic,{level:'info',code:'BINANCE_HISTORY_KLINES_ENTER',message:'Binance kline request entered.',detail:`${symbol} ${interval} limit=${limit}`});
   const params = new URLSearchParams({
     symbol: String(symbol).toUpperCase(),
     interval: nativeInterval(interval),
@@ -182,11 +183,14 @@ async function requestKlines(instrument: any, symbol: string, interval: string, 
   if (Number.isFinite(end)) params.set('endTime', String(Math.floor(Number(end) * 1000)));
   let lastError = '';
   const kind = marketKind(instrument);
+  diagnostic(onDiagnostic,{level:'info',code:'BINANCE_HISTORY_KLINES_KIND',message:'Binance history venue resolved.',detail:`${kind} for ${symbol}`});
   if (kind === 'alpha' || kind === 'equity') {
     const params = new URLSearchParams({market:kind === 'alpha' ? 'ALPHA' : 'EQUITY',symbol:String(symbol).toUpperCase(),interval:nativeInterval(interval),limit:String(Math.max(1,Math.min(1500,Math.floor(limit))))});
     if (Number.isFinite(end)) params.set('to',String(Math.floor(Number(end))));
     try {
+      diagnostic(onDiagnostic,{level:'info',code:'BINANCE_HISTORY_HTTP_START',message:'Binance history HTTP request started.',detail:'/api/sire/binance/history?' + params.toString()});
       const response = await fetch('/api/sire/binance/history?' + params.toString(), {cache:'no-store',headers:{Accept:'application/json'}});
+      diagnostic(onDiagnostic,{level:'info',code:'BINANCE_HISTORY_HTTP_RESPONSE',message:'Binance history HTTP response received.',detail:`status=${response.status}`});
       const payload = await response.json().catch(() => ({}));
       if (response.ok && payload?.ok && Array.isArray(payload?.bars)) return payload.bars as Bar[];
       lastError = String(payload?.error || 'Binance history proxy returned no bars.');
@@ -260,7 +264,8 @@ async function requestKlines(instrument: any, symbol: string, interval: string, 
   throw new Error(lastError || 'Binance public kline endpoint is unavailable.');
 }
 
-async function fetchHistory(instrument:any, symbol:string, interval:string, from?:number, to?:number, countBack?:number):Promise<Bar[]> {
+async function fetchHistory(instrument:any, symbol:string, interval:string, from?:number, to?:number, countBack?:number, onDiagnostic?: (event: Diagnostic) => void):Promise<Bar[]> {
+  diagnostic(onDiagnostic,{level:'info',code:'BINANCE_HISTORY_FETCH_ENTER',message:'Binance history fetch pipeline entered.',detail:`${symbol} ${interval}`});
   const seconds = INTERVAL_SECONDS[interval];
   if (!seconds) throw new Error('Unsupported Binance chart interval: ' + interval);
 
@@ -272,7 +277,7 @@ async function fetchHistory(instrument:any, symbol:string, interval:string, from
     let end = targetEnd;
     const pages:Bar[] = [];
     while (pages.length < wanted) {
-      const page = await requestKlines(instrument, symbol, interval, end, Math.min(1000, wanted - pages.length));
+      const page = await requestKlines(instrument, symbol, interval, end, Math.min(1000, wanted - pages.length), onDiagnostic);
       if (!page.length) break;
       pages.unshift(...page);
       const oldest = page[0].time;
@@ -291,7 +296,7 @@ async function fetchHistory(instrument:any, symbol:string, interval:string, from
   const raw:Bar[] = [];
   let end = targetEnd;
   while (raw.length < rawNeeded) {
-    const page = await requestKlines(instrument, symbol, '1m', end, Math.min(1000, rawNeeded - raw.length));
+    const page = await requestKlines(instrument, symbol, '1m', end, Math.min(1000, rawNeeded - raw.length), onDiagnostic);
     if (!page.length) break;
     raw.unshift(...page);
     const oldest = page[0].time;
@@ -419,7 +424,8 @@ export function createBinanceDataFeed(
   return {
     async getBars({symbol,interval,from,to,countBack}:{symbol:string;interval:string;from?:number;to?:number;countBack?:number}) {
       diagnostic(onDiagnostic,{level:'info',code:'BINANCE_HISTORY_REQUEST_STARTED',message:'Binance history requested for '+symbol+' '+interval+'.',detail:'Using Binance public market-data klines; no API key is required for this chart data path.'});
-      const bars = await fetchHistory(currentInstrument,symbol,interval,from,to,countBack);
+      const bars = await fetchHistory(currentInstrument,symbol,interval,from,to,countBack,onDiagnostic);
+      diagnostic(onDiagnostic,{level:'info',code:'BINANCE_HISTORY_GETBARS_RESOLVED',message:'Binance getBars received its history result.',detail:`bars=${bars.length}`});
       if (!bars.length) throw new Error('Binance returned no historical candles for '+symbol+' '+interval+'.');
       diagnostic(onDiagnostic,{level:'info',code:'BINANCE_HISTORY_LOADED',message:'Loaded '+bars.length+' Binance candles for '+symbol+' '+interval+'.'});
       return bars;
