@@ -311,6 +311,45 @@ export default function App() {
     return () => { cancelled=true; };
   }, []);
   useEffect(() => {
+    if (!instruments.some(item => item.provider === 'BINANCE')) return;
+    let stopped = false;
+    let timer: number | undefined;
+
+    const refreshBinancePrices = async () => {
+      try {
+        const response = await fetch('/api/sire/binance/prices', {
+          cache: 'no-store',
+          headers: { Accept: 'application/json' },
+        });
+        const payload = await response.json().catch(() => ({}));
+        if (stopped || !response.ok || !payload?.ok || !payload?.prices) return;
+
+        const prices = payload.prices as Record<string, unknown>;
+        setInstruments(current => current.map(item => {
+          if (item.provider !== 'BINANCE') return item;
+          const value = Number(prices[String(item.symbol || '').toUpperCase()]);
+          return Number.isFinite(value) ? { ...item, price: value } : item;
+        }));
+
+        setSelected(current => {
+          if (!current || current.provider !== 'BINANCE') return current;
+          const value = Number(prices[String(current.symbol || '').toUpperCase()]);
+          return Number.isFinite(value) ? { ...current, price: value } : current;
+        });
+      } catch (error) {
+        console.warn('[SIRE BINANCE] price refresh failed', error);
+      }
+    };
+
+    void refreshBinancePrices();
+    timer = window.setInterval(() => { void refreshBinancePrices(); }, 3000);
+    return () => {
+      stopped = true;
+      if (timer !== undefined) window.clearInterval(timer);
+    };
+  }, [instruments.some(item => item.provider === 'BINANCE')]);
+
+  useEffect(() => {
     if (!instruments.length) return;
     setChartSymbols(current => Array.from(
       { length: chartLayout },
