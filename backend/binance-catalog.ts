@@ -465,6 +465,48 @@ export async function fetchBinanceCatalogServer() {
     }
   }
 
+  // Binance's web Markets UI exposes a public product catalogue. Use it as the
+  // next public fallback when every API exchangeInfo/ticker edge is incomplete.
+  // This is still Binance-owned catalogue data; it prevents a transient Render
+  // edge response containing only a couple of Spot symbols from becoming the
+  // application's complete catalogue.
+  if (spotRows.length < 1000) {
+    try {
+      const productData = await getJson('https://www.binance.com/bapi/asset/v2/public/asset-service/product/get-products?includeEtf=true');
+      const products = extractRows(productData);
+      const reconstructed = products.map((product:any) => {
+        const symbol=s(product?.s || product?.symbol).toUpperCase();
+        const base=s(product?.b || product?.baseAsset).toUpperCase();
+        const quote=s(product?.q || product?.quoteAsset).toUpperCase();
+        const status=s(product?.st || product?.status || 'TRADING').toUpperCase();
+        return symbol && base && quote ? {
+          symbol, status, baseAsset:base, quoteAsset:quote,
+          permissions:['SPOT'], filters:[],
+          // Preserve Binance product metadata for downstream classification.
+          tags:product?.tags, etf:product?.etf,
+          productType:product?.productType, assetType:product?.assetType,
+          name:product?.n, description:product?.description
+        } : null;
+      }).filter((row:any) => row && row.symbol && row.baseAsset && row.quoteAsset &&
+        !['DELISTED','BREAK','HALT'].includes(row.status));
+      if (reconstructed.length > spotRows.length) {
+        spotRows = reconstructed;
+        raw.spot = { ...(raw.spot || {}), symbols: spotRows };
+        diagnostics.sources.spot = {
+          ...(diagnostics.sources.spot || {}),
+          ok:true,
+          selectedWebsiteProductFallback:true,
+          websiteProductRowCount:reconstructed.length
+        };
+      }
+    } catch (error) {
+      diagnostics.sources.spot = {
+        ...(diagnostics.sources.spot || {}),
+        websiteProductFallbackError:error instanceof Error ? error.message : String(error)
+      };
+    }
+  }
+
   const out: Json[]=[];
   diagnostics.sources.spot = diagnostics.sources.spot || {ok:Boolean(raw.spot)};
   diagnostics.sources.spot.rawSymbolRows = spotRows.length;
