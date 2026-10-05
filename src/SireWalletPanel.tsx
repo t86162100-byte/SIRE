@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
   ArrowDownToLine, ArrowUpFromLine, ChevronDown, Copy, ExternalLink, Eye, EyeOff,
-  History, KeyRound, LockKeyhole, Plus, Search, Send, Settings2,
+  Globe2, History, KeyRound, LockKeyhole, Plus, Search, Send, Settings2,
   ShieldCheck, WalletCards, X
 } from 'lucide-react';
 import {
@@ -191,6 +191,16 @@ export default function SireWalletPanel() {
           >Exchange</button>
         </div>
 
+        <div className="sire-wallet-search-row">
+          <label className="sire-wallet-global-search">
+            <Search size={15}/>
+            <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search assets or tokens" aria-label="Search assets or tokens"/>
+          </label>
+          <button className="sire-wallet-network-globe" type="button" onClick={() => setNetworkOpen(v => !v)} aria-label="Choose network" title="Networks">
+            <Globe2 size={17}/>
+          </button>
+        </div>
+
         <div className="sire-wallet-scroll">
           <section className="sire-wallet-hero">
             <div className="sire-wallet-hero-row">
@@ -220,7 +230,6 @@ export default function SireWalletPanel() {
               <div><span>YOUR ASSETS</span><h3>{network}</h3></div>
               <button onClick={() => setTokenOpen(true)}><Plus size={14}/> Manage</button>
             </div>
-            <div className="sire-wallet-search"><Search size={14}/><input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search assets"/></div>
             <div className="sire-wallet-assets-list">
               {visibleAssets.length ? visibleAssets.map(asset => (
                 <button className="sire-wallet-asset-row" key={asset.id} onClick={() => { setSendAssetId(asset.id); setSendOpen(true); }}>
