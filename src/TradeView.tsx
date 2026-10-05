@@ -11,7 +11,7 @@ const TOKENS: Token[] = [
   { symbol: 'USDT', name: 'Tether', network: 'Ethereum', balance: 0, price: 1 },
   { symbol: 'USDC', name: 'USD Coin', network: 'Ethereum', balance: 0, price: 1 },
   { symbol: 'BTC', name: 'Bitcoin', network: 'Ethereum', balance: 0 },
-  { symbol: 'SOL', name: 'Solana', balance: 0 },
+  { symbol: 'SOL', name: 'Solana', network: 'Solana', balance: 0 },
   { symbol: 'BNB', name: 'BNB', network: 'BNB Chain', balance: 0 },
 ];
 const PRODUCTS = ['Spot', 'Margin', 'Futures', 'Options', 'Swap', 'Alpha', 'Tokenized', 'TradFi'];
