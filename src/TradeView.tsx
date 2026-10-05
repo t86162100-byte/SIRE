@@ -14,6 +14,7 @@ import {
   formatUnits,
   getInjectedProvider,
   getSwapQuote,
+  amountToBaseUnits,
   readTokenBalance,
   switchToNetwork,
 } from './swapEngine';
@@ -242,6 +243,19 @@ export default function TradeView({ referencePrice = 0 }: Props) {
       if (requestId !== quoteRequestId.current) return;
       setQuoteLoading(true);
       try {
+        // Give the user a deterministic balance error before asking LI.FI for a
+        // route. LI.FI can legitimately return 404/no-route when the sender
+        // address cannot fund the requested input amount, which otherwise looks
+        // like a liquidity failure in the Swap UI.
+        const requestedAmount = amountToBaseUnits(amount, from);
+        const availableBalance = BigInt(fromBalance || '0');
+        if (availableBalance < BigInt(requestedAmount)) {
+          throw new Error(
+            'Insufficient ' + from.symbol + ' balance. You have ' +
+            formatUnits(fromBalance || '0', from.decimals, 6) + ' ' + from.symbol +
+            ' but entered ' + amount + ' ' + from.symbol + '.'
+          );
+        }
         const next = await getSwapQuote({ fromToken: from, toToken: to, amount, wallet, slippage });
         if (!cancelled && requestId === quoteRequestId.current) {
           setQuote(next);
