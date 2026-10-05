@@ -135,3 +135,56 @@ html:has(.sire-wallet-shell-backdrop) { background:#050505 !important; }
 
 /* The old wallet header is removed; the portfolio content now occupies the full shell. */
 .sire-wallet-scroll{height:100% !important}
+
+
+/* TOP WALLET SEARCH + NETWORK CONTROL */
+.sire-wallet-search-row{
+  width:calc(100% - 40px);
+  margin:10px auto 12px;
+  display:flex;
+  align-items:center;
+  gap:10px;
+}
+.sire-wallet-global-search{
+  flex:1;
+  min-width:0;
+  height:42px;
+  display:flex;
+  align-items:center;
+  gap:9px;
+  padding:0 15px;
+  border:1px solid #29292e;
+  border-radius:999px;
+  background:#0b0b0d;
+  color:#9b9ba2;
+  box-shadow:0 0 0 1px rgba(255,255,255,.015);
+}
+.sire-wallet-global-search input{
+  width:100%;
+  min-width:0;
+  border:0;
+  outline:0;
+  background:transparent;
+  color:#fff;
+  font-size:10px;
+}
+.sire-wallet-global-search input::placeholder{color:#77777f}
+.sire-wallet-network-globe{
+  flex:0 0 42px;
+  width:42px;
+  height:42px;
+  display:grid;
+  place-items:center;
+  border:1px solid #29292e;
+  border-radius:50%;
+  background:#0b0b0d;
+  color:#fff;
+  cursor:pointer;
+  box-shadow:0 0 8px rgba(255,255,255,.045);
+}
+.sire-wallet-network-globe:active{transform:scale(.97)}
+@media(max-width:520px){
+  .sire-wallet-search-row{width:calc(100% - 24px);margin:9px auto 11px;gap:8px}
+  .sire-wallet-global-search{height:40px;padding:0 14px}
+  .sire-wallet-network-globe{flex-basis:40px;width:40px;height:40px}
+}
