@@ -21,7 +21,7 @@ import {
   switchToNetwork,
 } from './swapEngine';
 import { cancelPreparedNativeWallet, finalizePreparedNativeWallet, getNativeWalletAddress, hasNativeWallet, isNativeWalletUnlocked, prepareNativeWallet, unlockNativeWallet } from './sireWalletCore';
-import { buildLimitOrder, limitTakingAmount, signLimitOrder, submitLimitOrder, fetchLimitOrders, approveLimitOrderIfNeeded, cancelLimitOrder } from './limitOrderEngine';
+const loadLimitOrderEngine = () => import('./limitOrderEngine');
 
 type Props = { referencePrice?: number; referenceChange?: number };
 
@@ -490,6 +490,7 @@ export default function TradeView({ referencePrice = 0 }: Props) {
   const refreshLimitOrders = async () => {
     if (!wallet || !network) return;
     try {
+      const { fetchLimitOrders } = await loadLimitOrderEngine();
       const orders = await fetchLimitOrders(SWAP_NETWORKS[network]?.chainId || from.chainId, wallet);
       setLimitOrders(orders);
       setLimitError('');
@@ -522,6 +523,7 @@ export default function TradeView({ referencePrice = 0 }: Props) {
     try {
       const makingAmount = amountToBaseUnits(amount, from);
       if (BigInt(fromBalance || '0') < BigInt(makingAmount)) throw new Error('Insufficient ' + from.symbol + ' balance.');
+      const { buildLimitOrder, limitTakingAmount, signLimitOrder, submitLimitOrder, approveLimitOrderIfNeeded } = await loadLimitOrderEngine();
       const takingAmount = limitTakingAmount(makingAmount, from.decimals, to.decimals, limitPrice);
       const networkInfo = SWAP_NETWORKS[network];
       if (!networkInfo) throw new Error('Unsupported limit-order network.');
@@ -585,6 +587,7 @@ export default function TradeView({ referencePrice = 0 }: Props) {
       const networkInfo = supportedNetworks.find(item => item.chainId === Number(order.chainId)) || SWAP_NETWORKS[network];
       if (!networkInfo) throw new Error('Unsupported cancellation network.');
       setStatus('Canceling limit order');
+      const { cancelLimitOrder } = await loadLimitOrderEngine();
       const hash = await cancelLimitOrder({
         network: networkInfo,
         owner: wallet,
