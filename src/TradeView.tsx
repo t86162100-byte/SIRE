@@ -781,9 +781,7 @@ export default function TradeView({ referencePrice = 0 }: Props) {
               {routeOpen && <div className="sire-route-panel">
                 <div className="sire-route-state">
                   <b>{routeOrder === 'CHEAPEST' ? 'Best price' : 'Fastest execution'}</b>
-                  <small>{routeOrder === 'CHEAPEST'
-                    ? 'The live router prioritizes the most economical executable route.'
-                    : 'The live router prioritizes the shortest estimated execution time.'}</small>
+                  <small>{routeOrder === 'CHEAPEST' ? 'The live router prioritizes the most economical executable route.' : 'The live router prioritizes the shortest estimated execution time.'}</small>
                 </div>
                 <div className="sire-route-choice-row">
                   {(['CHEAPEST','FASTEST'] as const).map(value => (
@@ -795,7 +793,12 @@ export default function TradeView({ referencePrice = 0 }: Props) {
                 {quote && <div className="sire-route-metrics">
                   <span><b>{quote.toolName || quote.tool || 'Aggregator'}</b><small>Route provider</small></span>
                   <span><b>{quote.executionDuration ? '~' + Math.max(1, Math.round(quote.executionDuration)) + 's' : '—'}</b><small>Estimated time</small></span>
-                  <span><b>{quote.gasUSD ? '
+                  <span><b>{quote.gasUSD ? '$' + Number(quote.gasUSD).toFixed(2) : '—'}</b><small>Network fee</small></span>
+                </div>}
+              </div>}
+            </div>
+
+            {tradeMode === 'Swap' && <div className="sire-swap-confirm-wrap">
               {!wallet ? (
                 <button type="button" className="sire-review-button sire-connect-button" onClick={() => void connect()}>
                   <WalletCards size={15}/> {hasNativeWallet() ? 'Unlock SIRE Wallet' : 'Create SIRE Wallet'}
@@ -808,7 +811,7 @@ export default function TradeView({ referencePrice = 0 }: Props) {
                 </button>
               )}
             </div>}
-
+ 
             <div className="sire-slippage">
               <span>Slippage</span>
               <div>
