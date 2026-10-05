@@ -188,3 +188,17 @@ html:has(.sire-wallet-shell-backdrop) { background:#050505 !important; }
   .sire-wallet-global-search{height:40px;padding:0 14px}
   .sire-wallet-network-globe{flex-basis:40px;width:40px;height:40px}
 }
+
+
+/* Remove the portfolio summary card shell; keep its contents floating on the page. */
+.sire-wallet-hero{
+  margin:12px 20px 12px !important;
+  padding:8px 0 4px !important;
+  border:0 !important;
+  border-radius:0 !important;
+  background:transparent !important;
+  box-shadow:none !important;
+}
+@media(max-width:520px){
+  .sire-wallet-hero{margin:10px 12px 10px !important;padding:8px 0 4px !important}
+}
