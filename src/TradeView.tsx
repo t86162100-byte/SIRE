@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { ArrowDownUp, ChevronDown, CircleHelp, Fuel, Info, LockKeyhole, Search, Settings2, ShieldCheck, Wallet, X } from 'lucide-react';
+import { ArrowDownUp, ChevronDown, CircleHelp, Fuel, Info, LockKeyhole, Search, Settings2, ShieldCheck, X } from 'lucide-react';
 import './tradeSwap.css';
 
 type Token = { symbol: string; name: string; network: string; balance?: number; price?: number };
@@ -14,7 +14,7 @@ const TOKENS: Token[] = [
   { symbol: 'SOL', name: 'Solana', network: 'Solana', balance: 0 },
   { symbol: 'BNB', name: 'BNB', network: 'BNB Chain', balance: 0 },
 ];
-const PRODUCTS = ['Spot', 'Margin', 'Futures', 'Options', 'Swap', 'Alpha', 'Tokenized', 'TradFi'];
+const PRODUCTS = ['Swap', 'Spot', 'Margin', 'Futures', 'Options', 'Alpha', 'Tokenized', 'TradFi'];
 
 const money = (value: number, digits = 2) => Number.isFinite(value) ? value.toLocaleString(undefined, { maximumFractionDigits: digits }) : '—';
 
@@ -27,7 +27,6 @@ export default function TradeView({ referencePrice = 0, referenceChange = 0 }: P
   const [customSlippage, setCustomSlippage] = useState('0.5');
   const [tokenPicker, setTokenPicker] = useState<'from' | 'to' | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [walletConnected, setWalletConnected] = useState(false);
   const [routeOpen, setRouteOpen] = useState(true);
   const [reviewOpen, setReviewOpen] = useState(false);
   const [search, setSearch] = useState('');
@@ -72,9 +71,8 @@ export default function TradeView({ referencePrice = 0, referenceChange = 0 }: P
 
       <main className="sire-swap-main">
         <div className="sire-swap-main-head">
-          <div><span>TRADE / SWAP</span><h1>Swap</h1><p>Route across available liquidity and settle on the selected network.</p></div>
+          <div><h1>Swap</h1></div>
           <div className="sire-swap-head-actions">
-            <button type="button" onClick={() => setWalletConnected(v => !v)}><Wallet size={15}/>{walletConnected ? 'Wallet connected' : 'Connect wallet'}</button>
             <button type="button" aria-label="Swap settings" onClick={() => setSettingsOpen(v => !v)}><Settings2 size={16}/></button>
           </div>
         </div>
@@ -84,7 +82,7 @@ export default function TradeView({ referencePrice = 0, referenceChange = 0 }: P
             <div className="sire-swap-mode"><button className="active" type="button">Swap</button><button type="button" disabled>Limit</button><span>Exact input</span></div>
 
             <div className="sire-swap-token-box">
-              <div className="sire-swap-token-label"><span>From</span><span>Balance {walletConnected ? '—' : 'Connect wallet'}</span></div>
+              <div className="sire-swap-token-label"><span>From</span><span>Balance —</span></div>
               <div className="sire-swap-token-row">
                 <button type="button" className="sire-token-select" onClick={() => setTokenPicker('from')}><span className="sire-token-mark large">{from.symbol.slice(0,1)}</span><span><b>{from.symbol}</b><small>{from.name}</small></span><ChevronDown size={15}/></button>
                 <input inputMode="decimal" value={amount} onChange={e => setAmount(e.target.value.replace(/[^0-9.]/g, ''))} placeholder="0.00"/>
@@ -124,7 +122,7 @@ export default function TradeView({ referencePrice = 0, referenceChange = 0 }: P
               <button className={slippage === 'Custom' ? 'active' : ''} type="button" onClick={() => setSlippage('Custom')}>Custom</button>
             </div></div>
             {slippage === 'Custom' && <div className="sire-custom-slippage"><input value={customSlippage} onChange={e => setCustomSlippage(e.target.value.replace(/[^0-9.]/g,''))}/><span>%</span></div>}
-            <button className="sire-review-button" type="button" disabled={!walletConnected || !indicative} onClick={() => setReviewOpen(true)}>{walletConnected ? 'Review Swap' : 'Connect wallet to continue'}</button>
+            <button className="sire-review-button" type="button" disabled={!indicative} onClick={() => setReviewOpen(true)}>Review Swap</button>
             <div className="sire-swap-safety"><LockKeyhole size={13}/> Quotes expire quickly and are revalidated before signing.</div>
           </section>
 
