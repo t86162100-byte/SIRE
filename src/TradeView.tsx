@@ -9,6 +9,7 @@ import {
   type SwapQuote,
   
   executeSwap,
+  simulateSwap,
   fetchNetworkTokens,
   formatUnits,
   getInjectedProvider,
@@ -47,6 +48,8 @@ export default function TradeView({ referencePrice = 0 }: Props) {
   const [status, setStatus] = useState('');
   const [executionError, setExecutionError] = useState('');
   const [txHash, setTxHash] = useState('');
+  const [simulationBusy, setSimulationBusy] = useState(false);
+  const [simulationResult, setSimulationResult] = useState('');
   const [busy, setBusy] = useState(false);
   const [nativeWallet, setNativeWallet] = useState('');
   const [nativeUnlocked, setNativeUnlocked] = useState(false);
@@ -307,6 +310,25 @@ export default function TradeView({ referencePrice = 0 }: Props) {
   const balanceDisplay = formatUnits(fromBalance, from.decimals, 6);
   const canExecute = Boolean(nativeUnlocked && nativeWallet && quote?.transactionRequest && !busy && EVM_SWAP_NETWORKS.some(item => item.name === network));
 
+  const simulate = async () => {
+    if (!quote || !wallet || !nativeUnlocked) return;
+    setSimulationBusy(true);
+    setSimulationResult('');
+    setExecutionError('');
+    try {
+      const freshQuote = await getSwapQuote({ fromToken: from, toToken: to, amount, wallet, slippage });
+      setQuote(freshQuote);
+      const result = await simulateSwap(freshQuote, wallet);
+      const gas = result.gasEstimate ? formatUnits(result.gasEstimate, 0, 0) : '—';
+      setSimulationResult('No-money test passed · gas estimate ' + gas + ' · nothing was signed or sent.');
+    } catch (error) {
+      setSimulationResult('');
+      setExecutionError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setSimulationBusy(false);
+    }
+  };
+
   const execute = async () => {
     if (!quote || !wallet || !nativeUnlocked) return;
     setBusy(true);
@@ -437,7 +459,11 @@ export default function TradeView({ referencePrice = 0 }: Props) {
               </button>
             )}
 
+            {quote && wallet && nativeUnlocked && !busy && !simulationBusy && <button type="button" className="sire-wallet-secondary sire-test-swap-button" onClick={() => void simulate()}>
+              Run no-money test
+            </button>}
             {(quoteError || executionError) && <div className="sire-swap-error"><CircleAlert size={14}/><span>{quoteError || executionError}</span></div>}
+            {simulationResult && <div className="sire-swap-status sire-swap-simulation-result"><span>{simulationResult}</span></div>}
             {status && !executionError && <div className="sire-swap-status">{status}{txHash && <a href={'https://etherscan.io/tx/' + txHash} target="_blank" rel="noreferrer">View transaction</a>}</div>}
 
             <div className="sire-swap-safety"><LockKeyhole size={13}/> Quotes expire quickly and are revalidated before signing.</div>
