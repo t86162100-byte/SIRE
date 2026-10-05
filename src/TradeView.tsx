@@ -453,7 +453,7 @@ export default function TradeView({ referencePrice = 0 }: Props) {
         <div className="sire-swap-network-list">
           {supportedNetworks.map(item => (
             <button key={item} type="button" className={item === network ? 'active' : ''} onClick={() => void selectNetwork(item)}>
-              <span className="sire-network-icon">{item.slice(0, 1)}</span><span>{item}</span>{item === network && <i>✓</i>}
+              <LogoMark src={item.logoURI} fallback={item.name.slice(0, 1)} className="sire-network-icon" /><span>{item.name}</span>{item === network && <i>✓</i>}
             </button>
           ))}
         </div>
@@ -461,7 +461,7 @@ export default function TradeView({ referencePrice = 0 }: Props) {
         <div className="sire-swap-rail-label">POPULAR TOKENS</div>
         {tokens.filter(token => tokenIdentity(token) !== tokenIdentity(from)).slice(0, 6).map(token => (
           <button key={tokenIdentity(token)} className="sire-popular-token" type="button" onClick={() => setTo(token)}>
-            <span className="sire-token-mark">{token.symbol.slice(0, 1)}</span>
+            <LogoMark src={token.logoURI} fallback={token.symbol.slice(0, 1)} className="sire-token-mark" />
             <span><b>{token.symbol}</b><small>{token.name}</small></span>
           </button>
         ))}
@@ -474,7 +474,7 @@ export default function TradeView({ referencePrice = 0 }: Props) {
               <div className="sire-swap-token-label"><span>From</span><span>Balance {wallet ? balanceDisplay + ' ' + from.symbol : '—'}</span></div>
               <div className="sire-swap-token-row">
                 <button type="button" className="sire-token-select" onClick={() => setTokenPicker('from')}>
-                  <span className="sire-token-mark large">{from.symbol.slice(0,1)}</span>
+                  <LogoMark src={from.logoURI} fallback={from.symbol.slice(0,1)} className="sire-token-mark large" />
                   <span><b>{from.symbol}</b><small>{from.name}</small></span><ChevronDown size={15}/>
                 </button>
                 <input inputMode="decimal" value={amount} onChange={e => setAmount(e.target.value.replace(/[^0-9.]/g, ''))} placeholder="0.00"/>
@@ -493,7 +493,7 @@ export default function TradeView({ referencePrice = 0 }: Props) {
               <div className="sire-swap-token-label"><span>To</span><span>Minimum received {quote ? minimum + ' ' + to.symbol : '—'}</span></div>
               <div className="sire-swap-token-row">
                 <button type="button" className="sire-token-select" onClick={() => setTokenPicker('to')}>
-                  <span className="sire-token-mark large">{to.symbol.slice(0,1)}</span>
+                  <LogoMark src={to.logoURI} fallback={to.symbol.slice(0,1)} className="sire-token-mark large" />
                   <span><b>{to.symbol}</b><small>{to.name}</small></span><ChevronDown size={15}/>
                 </button>
                 <div className="sire-output-value">{quoteLoading ? <LoaderCircle className="sire-spin" size={21}/> : output || '—'}</div>
@@ -604,17 +604,17 @@ export default function TradeView({ referencePrice = 0 }: Props) {
         </div>
         <div className="sire-token-search"><Search size={15}/><input autoFocus value={search} onChange={e => setSearch(e.target.value)} placeholder="Search symbol, name or address"/></div>
         <div className="sire-token-network-strip" aria-label="Networks">
-          {NETWORKS.map(item => (
-            <button key={item} type="button" className={item === network ? 'active' : ''} onClick={() => void selectNetwork(item)}>
-              <span className="sire-token-network-icon">{item.slice(0, 1)}</span>
-              <span>{item}</span>
+          {supportedNetworks.map(item => (
+            <button key={item.name} type="button" className={item.name === network ? 'active' : ''} onClick={() => void selectNetwork(item.name)}>
+              <LogoMark src={item.logoURI} fallback={item.name.slice(0, 1)} className="sire-token-network-icon" />
+              <span>{item.name}</span>
             </button>
           ))}
         </div>
         <div className="sire-token-list" aria-label="Instruments">
           {filteredTokens.map(token => (
             <button key={token.address} type="button" onClick={() => chooseToken(token)}>
-              <span className="sire-token-mark">{token.symbol.slice(0,1)}</span>
+              <LogoMark src={token.logoURI} fallback={token.symbol.slice(0,1)} className="sire-token-mark" />
               <span><b>{token.symbol}</b><small>{token.name}</small></span>
               <span className="sire-token-address">{token.address.slice(0,6) + '…' + token.address.slice(-4)}</span>
             </button>
