@@ -202,3 +202,89 @@ html:has(.sire-wallet-shell-backdrop) { background:#050505 !important; }
 @media(max-width:520px){
   .sire-wallet-hero{margin:10px 12px 10px !important;padding:8px 0 4px !important}
 }
+
+
+/* FINAL PORTFOLIO SUMMARY LAYOUT */
+.sire-wallet-account-row{
+  width:calc(100% - 40px);
+  margin:0 auto 4px;
+  display:flex;
+  justify-content:center;
+}
+.sire-wallet-account-row .sire-wallet-account{
+  position:relative;
+  width:min(180px,100%);
+  max-width:none;
+  align-self:auto;
+  padding:8px 34px 8px 11px;
+  border:0;
+  border-radius:0;
+  background:transparent !important;
+  color:#fff;
+  text-align:center;
+}
+.sire-wallet-account-row .sire-wallet-account span,
+.sire-wallet-account-row .sire-wallet-account b{
+  display:block;
+}
+.sire-wallet-account-row .sire-wallet-account span{
+  font-size:7px;
+  color:#9b9ba2;
+  text-transform:uppercase;
+  letter-spacing:.1em;
+}
+.sire-wallet-account-row .sire-wallet-account b{
+  font:9px ui-monospace,monospace;
+  margin-top:4px;
+}
+.sire-wallet-account-row .sire-wallet-account svg{
+  position:absolute;
+  right:9px;
+  top:50%;
+  margin:0;
+  transform:translateY(-50%);
+}
+.sire-wallet-hero{
+  margin:0 20px 12px !important;
+  padding:4px 0 4px !important;
+}
+.sire-wallet-hero-row{
+  justify-content:center;
+  text-align:center;
+}
+.sire-wallet-hero-row > div{
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+}
+.sire-wallet-hero .sire-wallet-eye{
+  order:2;
+  margin:5px 0 0;
+}
+.sire-wallet-hero strong{
+  order:1;
+  display:block;
+  margin-top:0;
+  line-height:1;
+  font-size:34px;
+  font-weight:700;
+  letter-spacing:-.045em;
+}
+.sire-wallet-currency,
+.sire-wallet-leading-digit{
+  font-size:34px;
+  font-weight:900;
+}
+.sire-wallet-decimal{
+  font-size:20px;
+  font-weight:500;
+  letter-spacing:-.02em;
+}
+@media(max-width:520px){
+  .sire-wallet-account-row{width:calc(100% - 24px);margin-bottom:4px}
+  .sire-wallet-account-row .sire-wallet-account{padding:7px 32px 7px 9px}
+  .sire-wallet-hero{margin:0 12px 10px !important;padding:4px 0 4px !important}
+  .sire-wallet-hero strong{font-size:31px}
+  .sire-wallet-currency,.sire-wallet-leading-digit{font-size:31px}
+  .sire-wallet-decimal{font-size:18px}
+}
