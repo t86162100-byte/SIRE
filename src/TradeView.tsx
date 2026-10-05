@@ -16,7 +16,7 @@ import {
   readTokenBalance,
   switchToNetwork,
 } from './swapEngine';
-import { openEvmWalletModal, reownConfigured } from './reownWallet';
+import { getNativeWalletAddress, hasNativeWallet, isNativeWalletUnlocked, lockNativeWallet } from './sireWalletCore';
 
 type Props = { referencePrice?: number; referenceChange?: number };
 
@@ -48,6 +48,18 @@ export default function TradeView({ referencePrice = 0 }: Props) {
   const [executionError, setExecutionError] = useState('');
   const [txHash, setTxHash] = useState('');
   const [busy, setBusy] = useState(false);
+  const [nativeWallet, setNativeWallet] = useState('');
+  const [nativeUnlocked, setNativeUnlocked] = useState(false);
+
+  useEffect(() => {
+    const syncNativeWallet = () => {
+      setNativeWallet(getNativeWalletAddress());
+      setNativeUnlocked(isNativeWalletUnlocked());
+    };
+    syncNativeWallet();
+    window.addEventListener('sire:native-wallet-state', syncNativeWallet);
+    return () => window.removeEventListener('sire:native-wallet-state', syncNativeWallet);
+  }, []);
 
   useEffect(() => {
     const onWalletState = (event: Event) => {
@@ -85,6 +97,11 @@ export default function TradeView({ referencePrice = 0 }: Props) {
   }, [wallet, from, network]);
 
   useEffect(() => {
+    if (nativeUnlocked && nativeWallet) {
+      setWallet(nativeWallet);
+      setWalletChain(SWAP_NETWORKS[network]?.chainId ?? null);
+      return;
+    }
     const provider = getInjectedProvider();
     if (!provider) return;
     const onAccounts = (accounts: string[]) => setWallet(String(accounts?.[0] || ''));
@@ -97,7 +114,7 @@ export default function TradeView({ referencePrice = 0 }: Props) {
       provider.removeListener?.('accountsChanged', onAccounts);
       provider.removeListener?.('chainChanged', onChain);
     };
-  }, []);
+  }, [nativeUnlocked, nativeWallet, network]);
 
   useEffect(() => {
     setQuote(null);
@@ -131,22 +148,18 @@ export default function TradeView({ referencePrice = 0 }: Props) {
 
   const connect = async () => {
     setExecutionError('');
-    try {
-      if (reownConfigured) {
-        openEvmWalletModal();
-        return;
-      }
-      const provider = getInjectedProvider();
-      if (!provider) throw new Error('Wallet connection is not configured. Add VITE_REOWN_PROJECT_ID in Render, or open SIRE in a browser wallet with an injected EVM provider.');
-      const accounts = await provider.request({ method: 'eth_requestAccounts' });
-      const address = String(accounts?.[0] || '');
-      if (!address) throw new Error('Wallet did not return an account.');
-      const chainHex = await provider.request({ method: 'eth_chainId' });
-      setWallet(address);
-      setWalletChain(Number.parseInt(String(chainHex), 16));
-    } catch (error) {
-      setExecutionError(error instanceof Error ? error.message : String(error));
+    if (isNativeWalletUnlocked() && getNativeWalletAddress()) {
+      setWallet(getNativeWalletAddress());
+      setWalletChain(SWAP_NETWORKS[network]?.chainId ?? null);
+      return;
     }
+    if (hasNativeWallet()) {
+      setExecutionError('Unlock your SIRE Wallet to use Swap. No external wallet is required.');
+      window.dispatchEvent(new CustomEvent('sire:open-native-wallet'));
+      return;
+    }
+    setExecutionError('Create your SIRE Wallet first. Swap uses your native SIRE Wallet and does not require an external wallet.');
+    window.dispatchEvent(new CustomEvent('sire:open-native-wallet'));
   };
 
   const selectNetwork = async (value: string) => {
@@ -157,12 +170,12 @@ export default function TradeView({ referencePrice = 0 }: Props) {
     setQuote(null);
 
     if (!EVM_SWAP_NETWORKS.some(item => item.chainId === selectedNetwork.chainId)) {
-      setExecutionError(value + ' needs its native wallet/router adapter; it is not routed through the EVM transaction path.');
+      setExecutionError(value + ' is not yet connected to the native SIRE signing adapter.');
       return;
     }
 
     try {
-      if (wallet) {
+      if (wallet && !nativeUnlocked) {
         await switchToNetwork(selectedNetwork);
         const nextTokens = await fetchNetworkTokens(selectedNetwork);
         setTokens(nextTokens);
@@ -190,10 +203,10 @@ export default function TradeView({ referencePrice = 0 }: Props) {
   const output = quote ? formatUnits(quote.toAmount, quote.toToken.decimals, 6) : '';
   const minimum = quote ? formatUnits(quote.toAmountMin, quote.toToken.decimals, 6) : '';
   const balanceDisplay = formatUnits(fromBalance, from.decimals, 6);
-  const canExecute = Boolean(wallet && quote?.transactionRequest && !busy && EVM_SWAP_NETWORKS.some(item => item.name === network));
+  const canExecute = Boolean(nativeUnlocked && nativeWallet && quote?.transactionRequest && !busy && EVM_SWAP_NETWORKS.some(item => item.name === network));
 
   const execute = async () => {
-    if (!quote || !wallet) return;
+    if (!quote || !wallet || !nativeUnlocked) return;
     setBusy(true);
     setExecutionError('');
     setTxHash('');
@@ -312,10 +325,10 @@ export default function TradeView({ referencePrice = 0 }: Props) {
 
             {!wallet ? (
               <button type="button" className="sire-review-button sire-connect-button" onClick={() => void connect()}>
-                <WalletCards size={15}/> Connect Wallet
+                <WalletCards size={15}/> {hasNativeWallet() ? 'Unlock SIRE Wallet' : 'Create SIRE Wallet'}
               </button>
             ) : walletChain !== (SWAP_NETWORKS[network]?.chainId ?? 1) ? (
-              <button type="button" className="sire-review-button" onClick={() => void selectNetwork(network)}>Switch to Ethereum</button>
+              <button type="button" className="sire-review-button" onClick={() => void selectNetwork(network)}>Switch to ${network}</button>
             ) : (
               <button type="button" className="sire-review-button" disabled={!canExecute} onClick={() => void execute()}>
                 {busy ? <><LoaderCircle className="sire-spin" size={15}/> {status || 'Executing'}</> : quote ? 'Confirm Swap' : quoteLoading ? 'Getting live quote…' : 'Waiting for executable quote'}
