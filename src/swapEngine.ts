@@ -166,8 +166,8 @@ export async function readTokenBalance(token: SwapToken, owner: string): Promise
   }
   const provider = getInjectedProvider();
   const network = Object.values(SWAP_NETWORKS).find(n => n.chainId === token.chainId);
+  const data = ERC20_BALANCE_OF + padAddress(owner);
   if (provider) {
-    const data = ERC20_BALANCE_OF + padAddress(owner);
     const result = await provider.request({method:'eth_call', params:[{to:token.address,data},'latest']});
     return BigInt(result || '0x0').toString();
   }
