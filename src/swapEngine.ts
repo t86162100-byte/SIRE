@@ -297,7 +297,20 @@ export async function getSwapQuote(args:{
   url.searchParams.set('slippage',String(args.slippage));
   url.searchParams.set('order','CHEAPEST');
   url.searchParams.set('integrator','sire');
-  const response = await fetch(url.toString(), {headers:{accept:'application/json'}});
+  // Keep the interactive quote responsive. We validate the executable transaction
+  // separately in Test Mode; LI.FI documents skipSimulation as the faster quote path.
+  url.searchParams.set('skipSimulation','true');
+  const controller = new AbortController();
+  const timeout = window.setTimeout(() => controller.abort(), 12_000);
+  let response: Response;
+  try {
+    response = await fetch(url.toString(), {headers:{accept:'application/json'}, signal:controller.signal});
+  } catch (error) {
+    if ((error as any)?.name === 'AbortError') throw new Error('Swap quote timed out. Please try again.');
+    throw error;
+  } finally {
+    window.clearTimeout(timeout);
+  }
   const rawText = await response.text();
   if (!response.ok) {
     let message = rawText;
