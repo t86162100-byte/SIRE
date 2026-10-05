@@ -1,159 +1,41 @@
 .sire-wallet-shell-backdrop{position:fixed;inset:0;z-index:12000;background:rgba(3,5,8,.76);backdrop-filter:blur(18px);display:flex;align-items:flex-end;justify-content:center;padding:0}.sire-wallet-shell{position:relative;width:min(620px,100%);height:min(94dvh,900px);overflow:hidden;background:#090b0f;color:#edf2f5;border:1px solid #252d35;border-bottom:0;border-radius:26px 26px 0 0;box-shadow:0 -30px 100px rgba(0,0,0,.55);font-family:inherit}.sire-wallet-scroll{height:calc(100% - 67px);overflow:auto;padding-bottom:30px}.sire-wallet-topbar{height:67px;display:flex;align-items:center;justify-content:space-between;padding:0 17px;border-bottom:1px solid #202830;background:rgba(9,11,15,.94);backdrop-filter:blur(18px);position:relative;z-index:4}.sire-wallet-brand{display:flex;align-items:center;gap:10px}.sire-wallet-mark{width:34px;height:34px;border-radius:11px;background:linear-gradient(145deg,#171d25,#0d1116);border:1px solid #2a333c;display:grid;place-items:center;overflow:hidden}.sire-wallet-mark img{width:22px;height:22px}.sire-wallet-brand b{display:block;font-size:13px;letter-spacing:-.02em}.sire-wallet-brand span{display:block;font-size:8px;color:#77838d;margin-top:3px}.sire-wallet-top-actions{display:flex;gap:6px}.sire-wallet-top-actions button,.sire-wallet-close{width:34px;height:34px;border:1px solid #28313a;border-radius:10px;background:#10151a;color:#cdd5db;display:grid;place-items:center}.sire-wallet-hero{margin:12px;border:1px solid #252f38;border-radius:20px;background:radial-gradient(circle at 78% 0%,rgba(123,76,190,.23),transparent 40%),linear-gradient(145deg,#11161c,#0b0f14);padding:18px}.sire-wallet-hero-row{display:flex;justify-content:space-between;gap:12px}.sire-wallet-kicker{font-size:8px;letter-spacing:.14em;color:#77838d;font-weight:800}.sire-wallet-hero strong{display:block;font-size:31px;letter-spacing:-.04em;margin-top:7px}.sire-wallet-hero small{font-size:8px;color:#68747e}.sire-wallet-eye{border:0;background:transparent;color:#84909a;font-size:8px;margin-left:7px;padding:0;display:inline-flex;align-items:center;gap:4px}.sire-wallet-account{align-self:flex-start;max-width:145px;border:1px solid #29343e;border-radius:12px;background:#0c1116;color:#dce3e8;padding:9px 10px;text-align:left}.sire-wallet-account span,.sire-wallet-account b{display:block}.sire-wallet-account span{font-size:7px;color:#68747e;text-transform:uppercase;letter-spacing:.1em}.sire-wallet-account b{font:9px ui-monospace,monospace;margin-top:5px}.sire-wallet-account svg{float:right;margin-top:-15px}.sire-wallet-quick-actions{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:17px}.sire-wallet-quick-actions button{border:0;background:transparent;color:#dfe5e9;font-size:8px}.sire-wallet-quick-actions span{width:40px;height:40px;border-radius:13px;background:#171d23;border:1px solid #2a333b;display:grid;place-items:center;margin:0 auto 7px}.sire-wallet-quick-actions b{font-size:8px;font-weight:700}.sire-wallet-network-bar{position:relative;padding:0 12px;margin-bottom:8px}.sire-wallet-network-title{display:flex;align-items:center;justify-content:space-between;padding:10px 12px;border:1px solid #222b33;border-radius:13px;background:#0d1217}.sire-wallet-network-title span{font-size:8px;letter-spacing:.12em;color:#6f7b85;font-weight:800}.sire-wallet-network-title button{border:0;background:transparent;color:#e5eaee;font-size:10px;font-weight:800;display:flex;align-items:center;gap:5px}.sire-wallet-network-menu{position:absolute;left:12px;right:12px;top:52px;z-index:5;padding:6px;background:#11161c;border:1px solid #2c3640;border-radius:14px;box-shadow:0 20px 60px #000;display:grid;grid-template-columns:1fr 1fr}.sire-wallet-network-menu button{border:0;background:transparent;color:#aab4bc;text-align:left;padding:10px;border-radius:9px;font-size:9px;display:flex;justify-content:space-between}.sire-wallet-network-menu button.active{background:#1a2027;color:#fff}.sire-wallet-assets-section,.sire-wallet-activity,.sire-wallet-tools,.sire-wallet-multichain{margin:0 12px}.sire-wallet-section-head{display:flex;justify-content:space-between;align-items:center;margin:16px 2px 9px}.sire-wallet-section-head span{font-size:7px;color:#697580;letter-spacing:.14em;font-weight:800}.sire-wallet-section-head h3{font-size:15px;margin:3px 0 0}.sire-wallet-section-head button{border:0;background:transparent;color:#aeb8bf;font-size:8px;display:flex;align-items:center;gap:4px}.sire-wallet-search{height:38px;display:flex;align-items:center;gap:7px;padding:0 11px;background:#0d1217;border:1px solid #222c34;border-radius:11px;color:#68747e;margin-bottom:7px}.sire-wallet-search input{border:0;outline:0;background:transparent;color:#e9eef1;width:100%;font-size:9px}.sire-wallet-assets-list{display:grid;gap:5px}.sire-wallet-asset-row{width:100%;display:flex;align-items:center;gap:10px;padding:11px;border:1px solid #1f2830;border-radius:13px;background:#0c1116;color:#edf2f5;text-align:left}.sire-wallet-asset-row:active{transform:scale(.995)}.sire-wallet-asset-icon{width:34px;height:34px;border-radius:50%;display:grid;place-items:center;background:#171e25;border:1px solid #2b343d;overflow:hidden;font-size:8px;font-weight:900}.sire-wallet-asset-icon img{width:100%;height:100%;object-fit:cover}.sire-wallet-asset-copy{flex:1}.sire-wallet-asset-copy b,.sire-wallet-asset-copy small,.sire-wallet-asset-balance b,.sire-wallet-asset-balance small{display:block}.sire-wallet-asset-copy b{font-size:10px}.sire-wallet-asset-copy small,.sire-wallet-asset-balance small{font-size:7px;color:#697680;margin-top:3px}.sire-wallet-asset-balance{text-align:right}.sire-wallet-asset-balance b{font-size:10px}.sire-wallet-row-chevron{color:#46515a;transform:rotate(-90deg)}.sire-wallet-empty{padding:28px 18px;border:1px dashed #2a333b;border-radius:13px;text-align:center;color:#69757e;display:grid;place-items:center;gap:6px}.sire-wallet-empty b{font-size:10px;color:#b7c0c6}.sire-wallet-empty span{font-size:8px;line-height:1.5;max-width:260px}.sire-wallet-tools{margin-top:15px;border:1px solid #202931;border-radius:14px;overflow:hidden}.sire-wallet-tools button{width:100%;display:flex;align-items:center;gap:11px;padding:13px;border:0;border-bottom:1px solid #1c242b;background:#0c1116;color:#cbd3d8;text-align:left}.sire-wallet-tools button:last-child{border-bottom:0}.sire-wallet-tools span{flex:1}.sire-wallet-tools b,.sire-wallet-tools small{display:block}.sire-wallet-tools b{font-size:9px}.sire-wallet-tools small{font-size:7px;color:#697680;margin-top:3px}.sire-wallet-tools svg:last-child{color:#4e5962}.sire-wallet-multichain{margin-top:14px;padding:13px;border:1px solid #2a2837;border-radius:14px;background:linear-gradient(145deg,#13111b,#0d1117);display:flex;align-items:center;justify-content:space-between;gap:12px}.sire-wallet-multichain span,.sire-wallet-multichain b,.sire-wallet-multichain small{display:block}.sire-wallet-multichain span{font-size:7px;color:#82778f;letter-spacing:.12em}.sire-wallet-multichain b{font-size:10px;margin-top:3px}.sire-wallet-multichain small{font-size:7px;color:#697580;margin-top:3px}.sire-wallet-multichain button{border:1px solid #8b62c3;border-radius:9px;background:#633b8e;color:#fff;padding:9px 10px;font-size:8px;font-weight:800}.sire-wallet-toast{position:absolute;left:14px;right:14px;bottom:14px;padding:11px 13px;border:1px solid #4c3d26;background:#18140e;color:#d9c695;border-radius:12px;display:flex;align-items:center;gap:7px;font-size:8px;z-index:20}.sire-wallet-modal-backdrop{position:absolute;inset:0;z-index:30;background:#0009;display:grid;place-items:center;padding:18px}.sire-wallet-modal{width:min(430px,100%);background:#0d1217;border:1px solid #2a343d;border-radius:19px;padding:16px;box-shadow:0 30px 90px #000}.sire-wallet-modal-head{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px}.sire-wallet-modal-head span{font-size:7px;color:#6e7a84;letter-spacing:.13em;font-weight:800}.sire-wallet-modal-head h3{font-size:16px;margin:3px 0 0}.sire-wallet-modal-head button{border:0;background:transparent;color:#9ba6ae}.sire-wallet-modal input,.sire-wallet-modal select,.sire-wallet-lock-shell input{width:100%;height:43px;border:1px solid #2a343d;border-radius:10px;background:#080c10;color:#edf2f5;padding:0 11px;outline:0;margin-bottom:8px;font-size:9px}.sire-wallet-primary{width:100%;height:43px;border:1px solid #9469cf;border-radius:10px;background:#70429e;color:#fff;font-size:9px;font-weight:900;margin-top:5px}.sire-wallet-secondary{width:100%;height:38px;border:1px solid #303a43;border-radius:10px;background:#151b21;color:#cbd3d8;font-size:8px;margin-bottom:7px}.sire-wallet-fee{display:block;color:#9ba6ad;font-size:8px;margin:-1px 0 8px}.sire-wallet-review{display:flex;gap:7px;padding:9px;margin:2px 0 8px;border-radius:10px;background:#12171d;color:#87939c;font-size:7px;line-height:1.4}.sire-wallet-address-box{padding:12px;border:1px solid #232d35;background:#080c10;border-radius:11px;margin-bottom:9px}.sire-wallet-address-box span{display:block;font-size:7px;color:#697580;letter-spacing:.1em}.sire-wallet-address-box code{display:block;margin-top:6px;word-break:break-all;font:8px ui-monospace,monospace;color:#dbe2e7;line-height:1.5}.sire-wallet-receive p,.sire-wallet-modal p{font-size:8px;color:#697680;line-height:1.5}.sire-wallet-activity{margin-top:16px}.sire-wallet-activity>a{display:flex;align-items:center;gap:7px;padding:11px;border-bottom:1px solid #1c242b;color:#bfc8ce;text-decoration:none;font-size:8px}.sire-wallet-activity>a span{flex:1}.sire-wallet-activity>a b{font:8px ui-monospace,monospace;color:#727e87}.sire-wallet-lock-shell{height:auto;min-height:390px;padding:35px 22px;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center}.sire-wallet-lock-shell .sire-wallet-close{position:absolute;right:14px;top:14px}.sire-wallet-lock-icon{width:58px;height:58px;border-radius:18px;background:#171326;border:1px solid #463365;color:#bd91ee;display:grid;place-items:center;margin-bottom:16px}.sire-wallet-lock-shell h2{font-size:21px;margin:7px 0}.sire-wallet-lock-shell p{max-width:330px;color:#77838d;font-size:9px;line-height:1.55;margin:0 auto 16px}.sire-wallet-lock-shell input{max-width:330px}.sire-wallet-error{color:#cf9292;font-size:8px;margin-top:8px}.spin{animation:sire-wallet-spin .8s linear infinite}@keyframes sire-wallet-spin{to{transform:rotate(360deg)}}@media(max-width:520px){.sire-wallet-shell{height:96dvh;border-radius:23px 23px 0 0}.sire-wallet-hero{margin:9px}.sire-wallet-assets-section,.sire-wallet-activity,.sire-wallet-tools,.sire-wallet-multichain,.sire-wallet-network-bar{margin-left:9px;margin-right:9px}.sire-wallet-hero strong{font-size:27px}.sire-wallet-account{max-width:125px}.sire-wallet-scroll{height:calc(100% - 61px)}.sire-wallet-topbar{height:61px}}
 
-/* SIRE Wallet — Portfolio is a full application tab, not a floating sub-panel. */
-.sire-wallet-shell-backdrop{
-  position:fixed;
-  inset:0;
-  z-index:12000;
-  display:block;
-  padding:0;
-  background:#ffffff;
-  color:#0b0b0d;
-  backdrop-filter:none;
-}
-.sire-wallet-shell{
-  position:relative;
-  width:100%;
-  max-width:none;
-  height:100dvh;
-  min-height:100dvh;
-  overflow:hidden;
-  background:#ffffff;
-  color:#0b0b0d;
-  border:0;
-  border-radius:0;
-  box-shadow:none;
-  font-family:inherit;
-}
-.sire-wallet-scroll{
-  height:calc(100% - 67px);
-  overflow:auto;
-  padding:0 0 34px;
-  background:#ffffff;
-}
-.sire-wallet-topbar{
-  height:67px;
-  padding:0 20px;
-  background:#ffffff;
-  color:#0b0b0d;
-  border-bottom:1px solid #e7e7ea;
-  backdrop-filter:none;
-}
-.sire-wallet-brand b{color:#0b0b0d}
-.sire-wallet-brand span{color:#77777f}
-.sire-wallet-mark{
-  background:#0b0b0d;
-  border:1px solid #0b0b0d;
-}
-.sire-wallet-top-actions button,.sire-wallet-close{
-  background:#ffffff;
-  color:#17171b;
-  border:1px solid #dcdce1;
-}
-.sire-wallet-hero{
-  margin:18px 20px 12px;
-  border:1px solid #dedee3;
-  border-radius:18px;
-  background:#ffffff;
-  color:#0b0b0d;
-  box-shadow:0 8px 28px rgba(0,0,0,.05);
-}
-.sire-wallet-kicker,
-.sire-wallet-section-head span,
-.sire-wallet-network-title span{color:#77777f}
-.sire-wallet-hero strong{color:#0b0b0d}
-.sire-wallet-hero small{color:#77777f}
-.sire-wallet-eye{color:#5f6067}
-.sire-wallet-account{
-  background:#f7f7f8;
-  color:#111115;
-  border:1px solid #dedee3;
-}
-.sire-wallet-quick-actions button{color:#111115}
-.sire-wallet-quick-actions span{
-  background:#f5f5f6;
-  color:#111115;
-  border:1px solid #dedee3;
-}
+
+/* SIRE Wallet — full-screen black canvas with white UI. */
+.sire-wallet-shell-backdrop{position:fixed;inset:0;z-index:12000;display:block;padding:0;background:#050505;color:#fff;backdrop-filter:none}
+.sire-wallet-shell{position:relative;width:100%;max-width:none;height:100dvh;min-height:100dvh;overflow:hidden;background:#050505;color:#fff;border:0;border-radius:0;box-shadow:none;font-family:inherit}
+.sire-wallet-scroll{height:calc(100% - 67px);overflow:auto;padding:0 0 34px;background:#050505}
+.sire-wallet-topbar{height:67px;padding:0 20px;background:#050505;color:#fff;border-bottom:1px solid #202024;backdrop-filter:none}
+.sire-wallet-brand b{color:#fff}.sire-wallet-brand span{color:#a1a1a8}
+.sire-wallet-mark{background:#fff;border:1px solid #fff}
+.sire-wallet-top-actions button,.sire-wallet-close{background:#0d0d0f;color:#fff;border:1px solid #2a2a2e}
+.sire-wallet-hero{margin:18px 20px 12px;border:1px solid #28282d;border-radius:18px;background:#0b0b0d;color:#fff;box-shadow:none}
+.sire-wallet-kicker,.sire-wallet-section-head span,.sire-wallet-network-title span{color:#9a9aa1}
+.sire-wallet-hero strong{color:#fff}.sire-wallet-hero small{color:#999aa1}.sire-wallet-eye{color:#d0d0d4}
+.sire-wallet-account{background:#151518;color:#fff;border:1px solid #2a2a2f}
+.sire-wallet-quick-actions button{color:#fff}.sire-wallet-quick-actions span{background:#151518;color:#fff;border:1px solid #2a2a2f}
 .sire-wallet-network-bar{margin-left:20px;margin-right:20px}
-.sire-wallet-network-title{
-  background:#ffffff;
-  border:1px solid #dedee3;
-  color:#111115;
-}
-.sire-wallet-network-title button{color:#111115}
-.sire-wallet-network-menu{
-  background:#ffffff;
-  border:1px solid #dedee3;
-  box-shadow:0 18px 45px rgba(0,0,0,.12);
-}
-.sire-wallet-network-menu button{color:#55565d}
-.sire-wallet-network-menu button.active{background:#f0f0f2;color:#0b0b0d}
-.sire-wallet-assets-section,.sire-wallet-activity,.sire-wallet-tools,.sire-wallet-multichain{
-  margin-left:20px;
-  margin-right:20px;
-}
-.sire-wallet-section-head h3{color:#0b0b0d}
-.sire-wallet-section-head button{color:#4d4e55}
-.sire-wallet-search{
-  background:#f7f7f8;
-  border:1px solid #dedee3;
-  color:#6b6c73;
-}
-.sire-wallet-search input{color:#0b0b0d}
-.sire-wallet-asset-row{
-  background:#ffffff;
-  border:1px solid #e1e1e5;
-  color:#0b0b0d;
-}
-.sire-wallet-asset-icon{background:#f3f3f4;border-color:#dedee3;color:#111115}
-.sire-wallet-asset-copy small,.sire-wallet-asset-balance small{color:#77777f}
-.sire-wallet-empty{border-color:#d8d8dd;color:#77777f}
-.sire-wallet-empty b{color:#222228}
-.sire-wallet-tools{border-color:#dedee3}
-.sire-wallet-tools button{background:#ffffff;color:#202126;border-bottom-color:#ededf0}
-.sire-wallet-tools small{color:#77777f}
-.sire-wallet-multichain{
-  background:#f7f7f8;
-  border-color:#dedee3;
-}
-.sire-wallet-multichain span,.sire-wallet-multichain small{color:#77777f}
-.sire-wallet-multichain button{
-  background:#0b0b0d;
-  border-color:#0b0b0d;
-  color:#ffffff;
-}
-.sire-wallet-toast{background:#111115;color:#ffffff;border-color:#111115}
-.sire-wallet-modal-backdrop{background:rgba(255,255,255,.82)}
-.sire-wallet-modal{
-  background:#ffffff;
-  color:#0b0b0d;
-  border:1px solid #dcdce1;
-  box-shadow:0 24px 80px rgba(0,0,0,.16);
-}
-.sire-wallet-modal-head h3{color:#0b0b0d}
-.sire-wallet-modal-head button{color:#55565d}
-.sire-wallet-modal input,.sire-wallet-modal select,.sire-wallet-lock-shell input{
-  background:#ffffff;
-  color:#0b0b0d;
-  border-color:#d5d5da;
-}
-.sire-wallet-primary{background:#0b0b0d;border-color:#0b0b0d;color:#ffffff}
-.sire-wallet-secondary{background:#f5f5f6;color:#202126;border-color:#d8d8dd}
-.sire-wallet-fee,.sire-wallet-modal p{color:#66676e}
-.sire-wallet-review{background:#f5f5f6;color:#5e5f66}
-.sire-wallet-address-box{background:#f7f7f8;border-color:#dedee3}
-.sire-wallet-address-box code{color:#17171b}
-.sire-wallet-activity>a{border-bottom-color:#ededf0;color:#303137}
-.sire-wallet-activity>a b{color:#77777f}
-.sire-wallet-lock-shell{background:#ffffff;color:#0b0b0d}
-.sire-wallet-lock-icon{background:#f3f3f4;border-color:#dcdce1;color:#111115}
-.sire-wallet-lock-shell p{color:#66676e}
-.sire-wallet-error{color:#a33b3b}
-@media(max-width:520px){
-  .sire-wallet-shell{height:100dvh;min-height:100dvh;border-radius:0}
-  .sire-wallet-scroll{height:calc(100% - 61px)}
-  .sire-wallet-topbar{height:61px;padding:0 14px}
-  .sire-wallet-hero{margin:12px 12px 10px}
-  .sire-wallet-network-bar,.sire-wallet-assets-section,.sire-wallet-activity,.sire-wallet-tools,.sire-wallet-multichain{margin-left:12px;margin-right:12px}
-}
+.sire-wallet-network-title{background:#0b0b0d;border:1px solid #2b2b30;color:#fff}
+.sire-wallet-network-title button{color:#fff}
+.sire-wallet-network-menu{background:#101012;border:1px solid #2c2c31;box-shadow:0 18px 45px rgba(0,0,0,.55)}
+.sire-wallet-network-menu button{color:#aaaab1}.sire-wallet-network-menu button.active{background:#202024;color:#fff}
+.sire-wallet-assets-section,.sire-wallet-activity,.sire-wallet-tools,.sire-wallet-multichain{margin-left:20px;margin-right:20px}
+.sire-wallet-section-head h3{color:#fff}.sire-wallet-section-head button{color:#c2c2c8}
+.sire-wallet-search{background:#101012;border:1px solid #29292e;color:#9b9ba2}.sire-wallet-search input{color:#fff}
+.sire-wallet-asset-row{background:#0b0b0d;border:1px solid #252529;color:#fff}
+.sire-wallet-asset-icon{background:#18181b;border-color:#2d2d32;color:#fff}.sire-wallet-asset-copy small,.sire-wallet-asset-balance small{color:#999aa1}
+.sire-wallet-empty{border-color:#29292e;color:#9b9ba2}.sire-wallet-empty b{color:#fff}
+.sire-wallet-tools{border-color:#29292e}.sire-wallet-tools button{background:#0b0b0d;color:#fff;border-bottom-color:#202024}.sire-wallet-tools small{color:#9b9ba2}
+.sire-wallet-multichain{background:#0f0f11;border-color:#2b2b30}.sire-wallet-multichain span,.sire-wallet-multichain small{color:#a2a2a9}
+.sire-wallet-multichain button{background:#fff;border-color:#fff;color:#050505}
+.sire-wallet-toast{background:#fff;color:#050505;border-color:#fff}
+.sire-wallet-modal-backdrop{background:rgba(0,0,0,.78)}
+.sire-wallet-modal{background:#0b0b0d;color:#fff;border:1px solid #303036;box-shadow:0 24px 80px rgba(0,0,0,.6)}
+.sire-wallet-modal-head h3{color:#fff}.sire-wallet-modal-head button{color:#c8c8ce}
+.sire-wallet-modal input,.sire-wallet-modal select,.sire-wallet-lock-shell input{background:#050505;color:#fff;border-color:#303036}
+.sire-wallet-primary{background:#fff;border-color:#fff;color:#050505}.sire-wallet-secondary{background:#171719;color:#fff;border-color:#303036}
+.sire-wallet-fee,.sire-wallet-modal p{color:#a2a2a9}.sire-wallet-review{background:#171719;color:#c6c6cb}
+.sire-wallet-address-box{background:#101012;border-color:#2b2b30}.sire-wallet-address-box code{color:#fff}
+.sire-wallet-activity>a{border-bottom-color:#202024;color:#ddd}.sire-wallet-activity>a b{color:#9b9ba2}
+.sire-wallet-lock-shell{background:#050505;color:#fff}.sire-wallet-lock-icon{background:#151518;border-color:#303036;color:#fff}.sire-wallet-lock-shell p{color:#a2a2a9}.sire-wallet-error{color:#ff7d7d}
+@media(max-width:520px){.sire-wallet-shell{height:100dvh;min-height:100dvh;border-radius:0}.sire-wallet-scroll{height:calc(100% - 61px)}.sire-wallet-topbar{height:61px;padding:0 14px}.sire-wallet-hero{margin:12px 12px 10px}.sire-wallet-network-bar,.sire-wallet-assets-section,.sire-wallet-activity,.sire-wallet-tools,.sire-wallet-multichain{margin-left:12px;margin-right:12px}}
