@@ -1,4 +1,4 @@
-import { HDNodeWallet, JsonRpcProvider, type Provider, type TransactionRequest } from 'ethers';
+import { HDNodeWallet, JsonRpcProvider, Wallet, type TransactionRequest } from 'ethers';
 
 export type SireEvmNetwork = {
   name: string;
@@ -26,7 +26,9 @@ type StoredWallet = {
   createdAt: string;
 };
 
-let unlockedWallet: HDNodeWallet | null = null;
+type SireWalletSigner = HDNodeWallet | Wallet;
+
+let unlockedWallet: SireWalletSigner | null = null;
 
 function storageAvailable() {
   return typeof window !== 'undefined' && typeof window.localStorage !== 'undefined';
@@ -119,7 +121,7 @@ export async function importNativeWalletFromPrivateKey(password: string, private
   if (hasNativeWallet()) throw new Error('A SIRE Wallet already exists on this device.');
   const key = privateKey.trim();
   if (!/^0x[0-9a-fA-F]{64}$/.test(key)) throw new Error('Invalid EVM private key.');
-  const wallet = new HDNodeWallet(key);
+  const wallet = new Wallet(key);
   const keystore = await wallet.encrypt(password);
   saveStoredWallet({
     version: 1,
@@ -136,7 +138,7 @@ export async function unlockNativeWallet(password: string) {
   validatePassword(password);
   const stored = loadStoredWallet();
   if (!stored) throw new Error('No SIRE Wallet exists on this device.');
-  const wallet = await HDNodeWallet.fromEncryptedJson(stored.keystore, password);
+  const wallet = await Wallet.fromEncryptedJson(stored.keystore, password);
   if (wallet.address.toLowerCase() !== stored.address.toLowerCase()) {
     throw new Error('Wallet integrity check failed.');
   }
@@ -158,7 +160,7 @@ export function deleteNativeWallet() {
 
 export async function exportNativeMnemonic() {
   if (!unlockedWallet) throw new Error('Unlock SIRE Wallet before exporting recovery information.');
-  const phrase = unlockedWallet.mnemonic?.phrase;
+  const phrase = 'mnemonic' in unlockedWallet ? unlockedWallet.mnemonic?.phrase : undefined;
   if (!phrase) throw new Error('This wallet does not expose a mnemonic recovery phrase.');
   return phrase;
 }
