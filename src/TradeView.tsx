@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from 'react';
 import { ArrowDownUp, ChevronDown, CircleAlert, LoaderCircle, LockKeyhole, Search, WalletCards, X } from 'lucide-react';
 import './tradeSwap.css';
 import {
-  ETHEREUM_CHAIN_ID,
   ETHEREUM_TOKENS,
   SWAP_NETWORKS,
   EVM_SWAP_NETWORKS,
@@ -10,13 +9,11 @@ import {
   type SwapQuote,
   connectWallet,
   executeSwap,
-  fetchEthereumTokens,
   fetchNetworkTokens,
   formatUnits,
   getInjectedProvider,
   getSwapQuote,
   readTokenBalance,
-  switchToEthereum,
   switchToNetwork,
 } from './swapEngine';
 
@@ -138,13 +135,28 @@ export default function TradeView({ referencePrice = 0 }: Props) {
   };
 
   const selectNetwork = async (value: string) => {
-    if (value !== 'Ethereum') {
-      setExecutionError(value + ' Swap execution is the next chain rollout. Ethereum is the first live execution path.');
+    const selectedNetwork = SWAP_NETWORKS[value];
+    if (!selectedNetwork) return;
+    setExecutionError('');
+    setNetwork(value);
+    setQuote(null);
+
+    if (!EVM_SWAP_NETWORKS.some(item => item.chainId === selectedNetwork.chainId)) {
+      setExecutionError(value + ' needs its native wallet/router adapter; it is not routed through the EVM transaction path.');
       return;
     }
-    setNetwork(value);
-    if (wallet && walletChain !== 1) {
-      try { await switchToEthereum(); } catch (error) { setExecutionError(error instanceof Error ? error.message : String(error)); }
+
+    try {
+      if (wallet) {
+        await switchToNetwork(selectedNetwork);
+        const nextTokens = await fetchNetworkTokens(selectedNetwork);
+        setTokens(nextTokens);
+        setWalletChain(selectedNetwork.chainId);
+        setFrom(nextTokens[0] || from);
+        setTo(nextTokens[1] || nextTokens[0] || to);
+      }
+    } catch (error) {
+      setExecutionError(error instanceof Error ? error.message : String(error));
     }
   };
 
@@ -287,8 +299,8 @@ export default function TradeView({ referencePrice = 0 }: Props) {
               <button type="button" className="sire-review-button sire-connect-button" onClick={() => void connect()}>
                 <WalletCards size={15}/> Connect Wallet
               </button>
-            ) : walletChain !== 1 ? (
-              <button type="button" className="sire-review-button" onClick={() => void selectNetwork('Ethereum')}>Switch to Ethereum</button>
+            ) : walletChain !== (SWAP_NETWORKS[network]?.chainId ?? 1) ? (
+              <button type="button" className="sire-review-button" onClick={() => void selectNetwork(network)}>Switch to Ethereum</button>
             ) : (
               <button type="button" className="sire-review-button" disabled={!canExecute} onClick={() => void execute()}>
                 {busy ? <><LoaderCircle className="sire-spin" size={15}/> {status || 'Executing'}</> : quote ? 'Confirm Swap' : quoteLoading ? 'Getting live quote…' : 'Waiting for executable quote'}
@@ -307,7 +319,7 @@ export default function TradeView({ referencePrice = 0 }: Props) {
     {tokenPicker && <div className="sire-modal-backdrop" onMouseDown={() => setTokenPicker(null)}>
       <section className="sire-token-modal" onMouseDown={e => e.stopPropagation()}>
         <div className="sire-token-modal-head">
-          <div><b>Select token</b><small>Ethereum · live token catalogue</small></div>
+          <div><b>Select token</b><small>{network} · live token catalogue</small></div>
           <button type="button" onClick={() => setTokenPicker(null)}><X size={17}/></button>
         </div>
         <div className="sire-token-search"><Search size={15}/><input autoFocus value={search} onChange={e => setSearch(e.target.value)} placeholder="Search symbol, name or address"/></div>
