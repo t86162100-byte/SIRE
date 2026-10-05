@@ -180,3 +180,7 @@
 .sire-swap-history-row small{font-size:8px;color:rgba(255,255,255,.42)}
 .sire-swap-history-row a{flex:0 0 auto;color:#fff;text-decoration:none;font-size:9px;font-weight:800;padding:6px 9px;border-radius:999px;background:#111;border:1px solid rgba(255,255,255,.08)}
 .sire-swap-history-empty{padding:30px 10px;text-align:center;color:rgba(255,255,255,.4);font-size:9px}
+
+.sire-route-choice-row{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:10px}
+.sire-route-choice-row button{height:32px;border:1px solid rgba(255,255,255,.08);border-radius:8px;background:#0b0b0b;color:rgba(255,255,255,.48);font-size:9px;font-weight:800;cursor:pointer}
+.sire-route-choice-row button.active{background:#fff;color:#050505;border-color:#fff}
