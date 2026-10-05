@@ -16,7 +16,7 @@ import {
   readTokenBalance,
   switchToNetwork,
 } from './swapEngine';
-import { getNativeWalletAddress, hasNativeWallet, isNativeWalletUnlocked, lockNativeWallet } from './sireWalletCore';
+import { cancelPreparedNativeWallet, finalizePreparedNativeWallet, getNativeWalletAddress, hasNativeWallet, isNativeWalletUnlocked, prepareNativeWallet } from './sireWalletCore';
 
 type Props = { referencePrice?: number; referenceChange?: number };
 
@@ -50,16 +50,97 @@ export default function TradeView({ referencePrice = 0 }: Props) {
   const [busy, setBusy] = useState(false);
   const [nativeWallet, setNativeWallet] = useState('');
   const [nativeUnlocked, setNativeUnlocked] = useState(false);
+  const [walletOnboarding, setWalletOnboarding] = useState(false);
+  const [walletStep, setWalletStep] = useState<'intro' | 'backup' | 'confirm'>('intro');
+  const [walletPassword, setWalletPassword] = useState('');
+  const [walletPasswordConfirm, setWalletPasswordConfirm] = useState('');
+  const [walletMnemonic, setWalletMnemonic] = useState('');
+  const [walletConfirmPhrase, setWalletConfirmPhrase] = useState('');
+  const [walletCreationError, setWalletCreationError] = useState('');
+  const [walletCreating, setWalletCreating] = useState(false);
+  const [walletCreatedAddress, setWalletCreatedAddress] = useState('');
 
   useEffect(() => {
     const syncNativeWallet = () => {
       setNativeWallet(getNativeWalletAddress());
       setNativeUnlocked(isNativeWalletUnlocked());
     };
+    const openNativeWallet = () => {
+      setWalletCreationError('');
+      setWalletOnboarding(true);
+      setWalletStep(hasNativeWallet() ? 'intro' : 'intro');
+    };
     syncNativeWallet();
     window.addEventListener('sire:native-wallet-state', syncNativeWallet);
-    return () => window.removeEventListener('sire:native-wallet-state', syncNativeWallet);
+    window.addEventListener('sire:open-native-wallet', openNativeWallet);
+    return () => {
+      window.removeEventListener('sire:native-wallet-state', syncNativeWallet);
+      window.removeEventListener('sire:open-native-wallet', openNativeWallet);
+    };
   }, []);
+
+  const beginWalletCreation = () => {
+    try {
+      const prepared = prepareNativeWallet();
+      setWalletMnemonic(prepared.mnemonic);
+      setWalletConfirmPhrase('');
+      setWalletPassword('');
+      setWalletPasswordConfirm('');
+      setWalletCreationError('');
+      setWalletStep('backup');
+    } catch (error) {
+      setWalletCreationError(error instanceof Error ? error.message : String(error));
+    }
+  };
+
+  const finishWalletCreation = async () => {
+    if (walletPassword.length < 8) {
+      setWalletCreationError('Use a password of at least 8 characters.');
+      return;
+    }
+    if (walletPassword !== walletPasswordConfirm) {
+      setWalletCreationError('The passwords do not match.');
+      return;
+    }
+    if (walletConfirmPhrase.trim().replace(/\\s+/g, ' ') !== walletMnemonic.trim().replace(/\\s+/g, ' ')) {
+      setWalletCreationError('Recovery phrase does not match. Enter all words in the exact order.');
+      return;
+    }
+    setWalletCreating(true);
+    setWalletCreationError('');
+    try {
+      const result = await finalizePreparedNativeWallet(walletPassword);
+      setWalletCreatedAddress(result.address);
+      setWalletStep('confirm');
+      setNativeWallet(result.address);
+      setNativeUnlocked(true);
+      setWallet('');
+      window.setTimeout(() => {
+        setWalletOnboarding(false);
+        setWalletStep('intro');
+        setWalletMnemonic('');
+        setWalletConfirmPhrase('');
+        setWalletPassword('');
+        setWalletPasswordConfirm('');
+        setWalletCreatedAddress('');
+      }, 1800);
+    } catch (error) {
+      setWalletCreationError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setWalletCreating(false);
+    }
+  };
+
+  const closeWalletOnboarding = () => {
+    if (walletStep === 'backup' || walletStep === 'confirm') cancelPreparedNativeWallet();
+    setWalletOnboarding(false);
+    setWalletStep('intro');
+    setWalletMnemonic('');
+    setWalletConfirmPhrase('');
+    setWalletPassword('');
+    setWalletPasswordConfirm('');
+    setWalletCreationError('');
+  };
 
   useEffect(() => {
     const onWalletState = (event: Event) => {
@@ -344,6 +425,44 @@ export default function TradeView({ referencePrice = 0 }: Props) {
       </main>
     </div>
 
+    {walletOnboarding && <div className="sire-modal-backdrop" onMouseDown={closeWalletOnboarding}>
+      <section className="sire-token-modal sire-wallet-onboarding" role="dialog" aria-modal="true" aria-label="Create SIRE Wallet" onMouseDown={e => e.stopPropagation()}>
+        <div className="sire-token-modal-head">
+          <div><b>{walletStep === 'intro' ? 'Create SIRE Wallet' : walletStep === 'backup' ? 'Secure your wallet' : 'Wallet created'}</b><small>Native self-custody wallet · no external wallet required</small></div>
+          {walletStep !== 'confirm' && <button type="button" onClick={closeWalletOnboarding} aria-label="Close wallet setup"><X size={17}/></button>}
+        </div>
+
+        {walletStep === 'intro' && <div className="sire-wallet-onboarding-body">
+          <div className="sire-wallet-hero-icon"><WalletCards size={25}/></div>
+          <h3>Create your SIRE Wallet</h3>
+          <p>Your wallet is created on this device and its recovery phrase is controlled by you. Swap will use this wallet directly instead of asking you to connect an external wallet.</p>
+          <div className="sire-wallet-warning"><LockKeyhole size={15}/><span>Never share your recovery phrase or password. SIRE cannot recover a lost recovery phrase.</span></div>
+          <button type="button" className="sire-review-button" onClick={beginWalletCreation}>Create Wallet</button>
+          {hasNativeWallet() && <button type="button" className="sire-wallet-secondary" onClick={() => { closeWalletOnboarding(); window.dispatchEvent(new CustomEvent('sire:native-wallet-state')); }}>I already have a wallet</button>}
+        </div>}
+
+        {walletStep === 'backup' && <div className="sire-wallet-onboarding-body">
+          <h3>Back up your recovery phrase</h3>
+          <p>Write these words down offline, in the exact order. This phrase is the recovery key for the wallet.</p>
+          <div className="sire-wallet-mnemonic">{walletMnemonic.split(' ').map((word, index) => <span key={word + index}><i>{index + 1}</i><b>{word}</b></span>)}</div>
+          <div className="sire-wallet-form">
+            <label>Set wallet password<input type="password" autoComplete="new-password" value={walletPassword} onChange={e => setWalletPassword(e.target.value)} placeholder="At least 8 characters"/></label>
+            <label>Confirm password<input type="password" autoComplete="new-password" value={walletPasswordConfirm} onChange={e => setWalletPasswordConfirm(e.target.value)} placeholder="Repeat password"/></label>
+            <label>Confirm recovery phrase<input value={walletConfirmPhrase} onChange={e => setWalletConfirmPhrase(e.target.value)} placeholder="Type all words in order"/></label>
+          </div>
+          {walletCreationError && <div className="sire-swap-error"><CircleAlert size={14}/><span>{walletCreationError}</span></div>}
+          <button type="button" className="sire-review-button" disabled={walletCreating || !walletMnemonic} onClick={() => void finishWalletCreation()}>{walletCreating ? <><LoaderCircle className="sire-spin" size={15}/> Creating wallet…</> : 'Confirm & Create Wallet'}</button>
+          <button type="button" className="sire-wallet-secondary" onClick={closeWalletOnboarding}>Cancel</button>
+        </div>}
+
+        {walletStep === 'confirm' && <div className="sire-wallet-onboarding-body sire-wallet-created">
+          <div className="sire-wallet-success">✓</div>
+          <h3>SIRE Wallet created</h3>
+          <p>Your native wallet is unlocked and ready for Swap.</p>
+          <code>{shortAddress(walletCreatedAddress)}</code>
+        </div>}
+      </section>
+    </div>}
     {tokenPicker && <div className="sire-modal-backdrop sire-token-picker-backdrop" onMouseDown={() => setTokenPicker(null)}>
       <section className="sire-token-modal sire-token-picker-sheet" role="dialog" aria-modal="true" aria-label="Select token" onMouseDown={e => e.stopPropagation()}>
         <div className="sire-token-sheet-handle" aria-hidden="true"><span /></div>
