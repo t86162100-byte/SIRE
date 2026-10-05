@@ -219,9 +219,63 @@ export async function getNativeBalance(network: SireEvmNetwork, address = getNat
   throw lastError instanceof Error ? lastError : new Error('EVM balance RPCs are temporarily unavailable.');
 }
 
+function isRetryableRpcError(error: any) {
+  const code = String(error?.code || '');
+  const message = String(error?.message || error || '').toLowerCase();
+  if (code === 'NETWORK_ERROR' || code === 'TIMEOUT') return true;
+  if (code === 'SERVER_ERROR' && !error?.response) return true;
+  return /failed to fetch|fetch failed|network|timeout|timed out|econn|enotfound|socket/i.test(message);
+}
+
 export async function sendNativeTransaction(network: SireEvmNetwork, request: TransactionRequest) {
-  const signer = getNativeSigner(network);
-  return signer.sendTransaction(request);
+  if (!unlockedWallet) throw new Error('Unlock SIRE Wallet before signing.');
+  const urls = Array.from(new Set([network.rpcUrl, ...(network.rpcUrls || [])]));
+  let signedTransaction: string | null = null;
+  let lastError: unknown = null;
+
+  for (const url of urls) {
+    const provider = new JsonRpcProvider(url, network.chainId, { staticNetwork: true });
+    try {
+      if (!signedTransaction) {
+        const signer = unlockedWallet.connect(provider);
+        const populated = await signer.populateTransaction(request);
+        signedTransaction = await signer.signTransaction(populated);
+      }
+      // Broadcast the exact same signed transaction on the next RPC if a
+      // transport failure occurs. Re-broadcasting the same raw transaction
+      // is safe because the nonce and hash are identical.
+      return await provider.broadcastTransaction(signedTransaction);
+    } catch (error: any) {
+      lastError = error;
+      if (!isRetryableRpcError(error)) throw error;
+    }
+  }
+
+  const detail = lastError instanceof Error ? lastError.message : String(lastError || '');
+  throw new Error('EVM transaction RPC unavailable. Tried all configured RPC endpoints.' + (detail ? ' Last error: ' + detail : ''));
+}
+
+export async function waitForNativeTransaction(network: SireEvmNetwork, hash: string, timeoutMs = 180000) {
+  const urls = Array.from(new Set([network.rpcUrl, ...(network.rpcUrls || [])]));
+  const started = Date.now();
+  let lastError: unknown = null;
+
+  while (Date.now() - started < timeoutMs) {
+    for (const url of urls) {
+      try {
+        const provider = new JsonRpcProvider(url, network.chainId, { staticNetwork: true });
+        const receipt = await provider.getTransactionReceipt(hash);
+        if (receipt) return receipt;
+      } catch (error: any) {
+        lastError = error;
+        if (!isRetryableRpcError(error)) throw error;
+      }
+    }
+    await new Promise(resolve => setTimeout(resolve, 1500));
+  }
+
+  const detail = lastError instanceof Error ? lastError.message : '';
+  throw new Error('Transaction confirmation timed out across all configured RPC endpoints.' + (detail ? ' Last RPC error: ' + detail : ''));
 }
 
 export function getStoredWalletMetadata() {
