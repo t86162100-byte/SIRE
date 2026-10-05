@@ -343,12 +343,18 @@ export default function TradeView({ referencePrice = 0 }: Props) {
     setExecutionError('');
     setTxHash('');
     try {
-      setStatus('Refreshing executable quote');
-      const freshQuote = await getSwapQuote({ fromToken: from, toToken: to, amount, wallet, slippage });
-      setQuote(freshQuote);
-      if (!freshQuote.transactionRequest?.to) throw new Error('The provider returned a non-executable quote.');
-      if (freshQuote.expiresAt && Date.now() >= freshQuote.expiresAt) throw new Error('The refreshed quote expired before execution. Please try again.');
-      const result = await executeSwap(freshQuote, wallet, setStatus);
+      // Use the executable quote already shown to the user. Avoid an unnecessary
+      // second LI.FI browser fetch at confirmation time; refresh only when the
+      // current quote is expired or too close to expiry.
+      let executableQuote = quote;
+      if (executableQuote.expiresAt && Date.now() >= executableQuote.expiresAt - 5000) {
+        setStatus('Refreshing expired quote');
+        executableQuote = await getSwapQuote({ fromToken: from, toToken: to, amount, wallet, slippage });
+        setQuote(executableQuote);
+      }
+      if (!executableQuote.transactionRequest?.to) throw new Error('The provider returned a non-executable quote.');
+      if (executableQuote.expiresAt && Date.now() >= executableQuote.expiresAt) throw new Error('This quote expired before execution. Please request a new quote.');
+      const result = await executeSwap(executableQuote, wallet, setStatus);
       setTxHash(result.hash);
       setStatus('Swap confirmed');
     } catch (error) {
