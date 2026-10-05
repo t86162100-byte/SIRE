@@ -160,3 +160,23 @@
     height:20px;
   }
 }
+
+/* Production Swap controls: recipient routing and local execution history. */
+.sire-swap-recipient{margin-top:8px;border-top:1px solid rgba(255,255,255,.06);padding-top:8px}
+.sire-swap-recipient>button{width:100%;display:flex;align-items:center;justify-content:space-between;border:0;background:transparent;color:rgba(255,255,255,.5);font-size:9px;padding:5px 0;cursor:pointer}
+.sire-swap-recipient>button b{color:rgba(255,255,255,.82);font-size:9px}
+.sire-swap-recipient>button.active b{color:#fff}
+.sire-recipient-editor{display:flex;gap:6px;align-items:center;margin-top:5px;flex-wrap:wrap}
+.sire-recipient-editor input{flex:1 1 210px;min-width:0;height:34px;border:1px solid rgba(255,255,255,.1);border-radius:9px;background:#050505;color:#fff;padding:0 9px;font-size:9px;outline:0}
+.sire-recipient-editor input:focus{border-color:rgba(255,255,255,.28)}
+.sire-recipient-editor button{height:34px;border:1px solid rgba(255,255,255,.09);border-radius:9px;background:#111;color:rgba(255,255,255,.7);padding:0 9px;font-size:8px;font-weight:800;cursor:pointer}
+.sire-recipient-editor small{flex:1 0 100%;color:#ff9f9f;font-size:8px}
+.sire-history-trigger{display:block;margin:2px auto 0}
+.sire-swap-history-sheet{width:min(520px,100%);max-height:min(76vh,680px);overflow:hidden}
+.sire-swap-history-list{display:flex;flex-direction:column;overflow:auto;padding:8px 0}
+.sire-swap-history-row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 4px;border-bottom:1px solid rgba(255,255,255,.06)}
+.sire-swap-history-row>div{min-width:0;display:flex;flex-direction:column;gap:4px}
+.sire-swap-history-row b{font-size:10px;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sire-swap-history-row small{font-size:8px;color:rgba(255,255,255,.42)}
+.sire-swap-history-row a{flex:0 0 auto;color:#fff;text-decoration:none;font-size:9px;font-weight:800;padding:6px 9px;border-radius:999px;background:#111;border:1px solid rgba(255,255,255,.08)}
+.sire-swap-history-empty{padding:30px 10px;text-align:center;color:rgba(255,255,255,.4);font-size:9px}
