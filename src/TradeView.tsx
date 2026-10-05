@@ -635,7 +635,14 @@ export default function TradeView({ referencePrice = 0 }: Props) {
         <div className="sire-token-list" aria-label="Instruments">
           {filteredTokens.map(token => (
             <button key={token.address} type="button" onClick={() => chooseToken(token)}>
-              <LogoMark src={token.logoURI} fallback={token.symbol.slice(0,1)} className="sire-token-mark" />
+              <span className="sire-token-list-logo">
+                <LogoMark src={token.logoURI} fallback={token.symbol.slice(0,1)} className="sire-token-mark" />
+                <LogoMark
+                  src={supportedNetworks.find(item => item.chainId === token.chainId)?.logoURI}
+                  fallback={supportedNetworks.find(item => item.chainId === token.chainId)?.name.slice(0,1) || network.slice(0,1)}
+                  className="sire-token-chain-badge"
+                />
+              </span>
               <span><b>{token.symbol}</b><small>{token.name}</small></span>
               <span className="sire-token-address">{token.address.slice(0,6) + '…' + token.address.slice(-4)}</span>
             </button>
