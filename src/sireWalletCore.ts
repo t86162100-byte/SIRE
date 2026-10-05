@@ -1,22 +1,23 @@
-import { HDNodeWallet, JsonRpcProvider, Wallet, type TransactionRequest } from 'ethers';
+import { FallbackProvider, HDNodeWallet, JsonRpcProvider, Wallet, type Provider, type TransactionRequest } from 'ethers';
 
 export type SireEvmNetwork = {
   name: string;
   chainId: number;
   rpcUrl: string;
+  rpcUrls?: string[];
   nativeSymbol: string;
 };
 
 const STORAGE_KEY = 'sire.wallet.keystore.v1';
 
 export const SIRE_EVM_NETWORKS: Record<string, SireEvmNetwork> = {
-  Ethereum: { name: 'Ethereum', chainId: 1, rpcUrl: 'https://cloudflare-eth.com', nativeSymbol: 'ETH' },
-  'BNB Chain': { name: 'BNB Chain', chainId: 56, rpcUrl: 'https://bsc-dataseed.binance.org', nativeSymbol: 'BNB' },
-  Base: { name: 'Base', chainId: 8453, rpcUrl: 'https://mainnet.base.org', nativeSymbol: 'ETH' },
-  Arbitrum: { name: 'Arbitrum', chainId: 42161, rpcUrl: 'https://arb1.arbitrum.io/rpc', nativeSymbol: 'ETH' },
-  Optimism: { name: 'Optimism', chainId: 10, rpcUrl: 'https://mainnet.optimism.io', nativeSymbol: 'ETH' },
-  Polygon: { name: 'Polygon', chainId: 137, rpcUrl: 'https://polygon-rpc.com', nativeSymbol: 'POL' },
-  Avalanche: { name: 'Avalanche', chainId: 43114, rpcUrl: 'https://api.avax.network/ext/bc/C/rpc', nativeSymbol: 'AVAX' },
+  Ethereum: { name: 'Ethereum', chainId: 1, rpcUrl: 'https://ethereum-rpc.publicnode.com', rpcUrls: ['https://ethereum-rpc.publicnode.com', 'https://eth.llamarpc.com', 'https://cloudflare-eth.com'], nativeSymbol: 'ETH' },
+  'BNB Chain': { name: 'BNB Chain', chainId: 56, rpcUrl: 'https://bsc-dataseed.binance.org', rpcUrls: ['https://bsc-dataseed.binance.org', 'https://bsc-dataseed1.binance.org', 'https://bsc-rpc.publicnode.com'], nativeSymbol: 'BNB' },
+  Base: { name: 'Base', chainId: 8453, rpcUrl: 'https://mainnet.base.org', rpcUrls: ['https://mainnet.base.org', 'https://base-rpc.publicnode.com'], nativeSymbol: 'ETH' },
+  Arbitrum: { name: 'Arbitrum', chainId: 42161, rpcUrl: 'https://arb1.arbitrum.io/rpc', rpcUrls: ['https://arb1.arbitrum.io/rpc', 'https://arbitrum-one-rpc.publicnode.com'], nativeSymbol: 'ETH' },
+  Optimism: { name: 'Optimism', chainId: 10, rpcUrl: 'https://mainnet.optimism.io', rpcUrls: ['https://mainnet.optimism.io', 'https://optimism-rpc.publicnode.com'], nativeSymbol: 'ETH' },
+  Polygon: { name: 'Polygon', chainId: 137, rpcUrl: 'https://polygon-rpc.com', rpcUrls: ['https://polygon-rpc.com', 'https://polygon-bor-rpc.publicnode.com'], nativeSymbol: 'POL' },
+  Avalanche: { name: 'Avalanche', chainId: 43114, rpcUrl: 'https://api.avax.network/ext/bc/C/rpc', rpcUrls: ['https://api.avax.network/ext/bc/C/rpc', 'https://avalanche-c-chain-rpc.publicnode.com'], nativeSymbol: 'AVAX' },
 };
 
 type StoredWallet = {
@@ -189,8 +190,16 @@ export async function exportNativeMnemonic() {
   return phrase;
 }
 
-export function getNativeProvider(network: SireEvmNetwork): JsonRpcProvider {
-  return new JsonRpcProvider(network.rpcUrl, network.chainId, { staticNetwork: true });
+export function getNativeProvider(network: SireEvmNetwork): Provider {
+  const urls = Array.from(new Set([network.rpcUrl, ...(network.rpcUrls || [])]));
+  const providers = urls.map((url) => new JsonRpcProvider(url, network.chainId, { staticNetwork: true }));
+  if (providers.length === 1) return providers[0];
+  return new FallbackProvider(providers.map((provider, index) => ({
+    provider,
+    priority: index + 1,
+    weight: 1,
+    stallTimeout: index === 0 ? 1500 : 3000,
+  })), 1);
 }
 
 export function getNativeSigner(network: SireEvmNetwork) {
