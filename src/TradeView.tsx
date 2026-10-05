@@ -740,6 +740,40 @@ export default function TradeView({ referencePrice = 0 }: Props) {
               </small>
             </div>
 
+            {tradeMode === 'Limit' && <div className="sire-limit-panel">
+              <div className="sire-limit-field">
+                <label>Limit price <span>{to.symbol} per {from.symbol}</span></label>
+                <input inputMode="decimal" value={limitPrice} onChange={e => { setLimitPrice(e.target.value.replace(/[^0-9.]/g,'')); setLimitError(''); }} placeholder="0.00" />
+              </div>
+              <div className="sire-limit-field">
+                <label>Expires in</label>
+                <select value={limitExpiry} onChange={e => setLimitExpiry(Number(e.target.value))}>
+                  <option value={3600}>1 hour</option>
+                  <option value={86400}>24 hours</option>
+                  <option value={604800}>7 days</option>
+                  <option value={2592000}>30 days</option>
+                </select>
+              </div>
+              <div className="sire-limit-preview">
+                <span>Receive at target</span>
+                <b>{limitPrice && amount ? (() => { try { return formatUnits(limitTakingAmount(amountToBaseUnits(amount, from), from.decimals, to.decimals, limitPrice), to.decimals, 6) + ' ' + to.symbol; } catch { return '—'; } })() : '—'}</b>
+              </div>
+              <button type="button" className="sire-review-button" disabled={limitBusy || !wallet || !nativeUnlocked} onClick={() => void placeLimitOrder()}>
+                {limitBusy ? <><LoaderCircle className="sire-spin" size={15}/> {status || 'Placing order'}</> : 'Place Limit Order'}
+              </button>
+              <small className="sire-limit-note">Your order is signed locally and published to the 1inch Orderbook. Funds remain in your wallet until a resolver fills the order.</small>
+              {limitError && <div className="sire-swap-error"><CircleAlert size={14}/><span>{limitError}</span></div>}
+              {limitOrders.length > 0 && <div className="sire-limit-orders">
+                <div className="sire-limit-orders-head"><b>Open limit orders</b><button type="button" onClick={() => void refreshLimitOrders()}>Refresh</button></div>
+                {limitOrders.slice(0, 8).map((order:any) => (
+                  <div className="sire-limit-order-row" key={order.orderHash}>
+                    <div><b>{order.makerSymbol || from.symbol} → {order.takerSymbol || to.symbol}</b><small>{order.limitPrice || 'Limit'} · {order.orderStatus === 1 || order.status === 'Open' ? 'Open' : String(order.orderStatus || order.status || 'Pending')}</small></div>
+                    <button type="button" disabled={limitBusy} onClick={() => void cancelLimit(order)}>Cancel</button>
+                  </div>
+                ))}
+              </div>}
+            </div>}
+
             <div className="sire-swap-route">
               <button type="button" onClick={() => setRouteOpen(value => !value)}>
                 <span>Route preference</span><small>{routeOrder === 'CHEAPEST' ? 'Best price' : 'Fastest'} · {routeOpen ? 'Hide' : 'Adjust'}</small>
@@ -773,7 +807,7 @@ export default function TradeView({ referencePrice = 0 }: Props) {
                   {busy ? <><LoaderCircle className="sire-spin" size={15}/> {status || 'Executing'}</> : quote ? 'Confirm Swap' : quoteLoading ? 'Getting live quote…' : 'Waiting for executable quote'}
                 </button>
               )}
-            </div>
+            </div>}
 
             <div className="sire-slippage">
               <span>Slippage</span>
@@ -918,7 +952,7 @@ export default function TradeView({ referencePrice = 0 }: Props) {
               </div>}
             </div>
 
-            <div className="sire-swap-confirm-wrap">
+            {tradeMode === 'Swap' && <div className="sire-swap-confirm-wrap">
               {!wallet ? (
                 <button type="button" className="sire-review-button sire-connect-button" onClick={() => void connect()}>
                   <WalletCards size={15}/> {hasNativeWallet() ? 'Unlock SIRE Wallet' : 'Create SIRE Wallet'}
