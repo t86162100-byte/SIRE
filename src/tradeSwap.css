@@ -43,3 +43,10 @@
 .sire-wallet-success{width:52px;height:52px;border-radius:50%;display:grid;place-items:center;background:#55d69b;color:#04150d;font-size:24px;font-weight:900}
 .sire-wallet-created code{font-size:10px;color:rgba(255,255,255,.55)}
 @media(max-width:620px){.sire-wallet-onboarding{border-radius:18px 18px 0 0;margin-top:auto;max-height:92vh}.sire-wallet-mnemonic{grid-template-columns:repeat(2,1fr)}}
+
+/* Live LI.FI network/token logos. Keep the existing selector geometry; logos only replace the letter marks. */
+.sire-logo-image{width:100%;height:100%;display:block;border-radius:50%;object-fit:contain;object-position:center}
+.sire-logo-fallback{display:grid;place-items:center;width:100%;height:100%;border-radius:50%}
+.sire-network-icon,.sire-token-mark,.sire-token-network-icon{overflow:hidden;flex:0 0 auto}
+.sire-network-icon .sire-logo-image,.sire-token-network-icon .sire-logo-image{padding:2px;box-sizing:border-box}
+.sire-token-mark.large .sire-logo-image{padding:1px;box-sizing:border-box}
