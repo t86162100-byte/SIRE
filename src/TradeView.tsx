@@ -491,7 +491,9 @@ export default function TradeView({ referencePrice = 0 }: Props) {
 
             <div className="sire-swap-details">
               <div><span>Price impact</span><b>{quote?.priceImpact != null ? (quote.priceImpact * 100).toFixed(2) + '%' : '—'}</b></div>
-              <div><span>Network fee</span><b>{quote?.gasUSD ? '
+              <div><span>Network fee</span><b>{quote?.gasUSD ? '$' + Number(quote.gasUSD).toFixed(2) : '—'}</b></div>
+              <div><span>Minimum received</span><b>{quote ? minimum + ' ' + to.symbol : '—'}</b></div>
+            </div>
 
             {quote && wallet && nativeUnlocked && !busy && !simulationBusy && <button type="button" className="sire-wallet-secondary sire-test-swap-button" onClick={() => void simulate()}>
               Run no-money test
