@@ -4,16 +4,20 @@ import './tradeSwap.css';
 import {
   ETHEREUM_CHAIN_ID,
   ETHEREUM_TOKENS,
+  SWAP_NETWORKS,
+  EVM_SWAP_NETWORKS,
   type SwapToken,
   type SwapQuote,
   connectWallet,
   executeSwap,
   fetchEthereumTokens,
+  fetchNetworkTokens,
   formatUnits,
   getInjectedProvider,
   getSwapQuote,
   readTokenBalance,
   switchToEthereum,
+  switchToNetwork,
 } from './swapEngine';
 
 type Props = { referencePrice?: number; referenceChange?: number };
@@ -58,11 +62,17 @@ export default function TradeView({ referencePrice = 0 }: Props) {
   }, [tokens, search]);
 
   useEffect(() => {
-    void fetchEthereumTokens().then(setTokens);
-  }, []);
+    const selectedNetwork = SWAP_NETWORKS[network];
+    if (!selectedNetwork || !EVM_SWAP_NETWORKS.some(item => item.chainId === selectedNetwork.chainId)) return;
+    void fetchNetworkTokens(selectedNetwork).then(next => {
+      setTokens(next);
+      setFrom(current => next.find(token => token.address.toLowerCase() === current.address.toLowerCase()) || next[0] || current);
+      setTo(current => next.find(token => token.address.toLowerCase() === current.address.toLowerCase()) || next[1] || next[0] || current);
+    });
+  }, [network]);
 
   useEffect(() => {
-    if (!wallet || network !== 'Ethereum') return;
+    if (!wallet || !EVM_SWAP_NETWORKS.some(item => item.name === network)) return;
     void readTokenBalance(from, wallet).then(setFromBalance).catch(() => setFromBalance('0'));
   }, [wallet, from, network]);
 
@@ -84,7 +94,7 @@ export default function TradeView({ referencePrice = 0 }: Props) {
   useEffect(() => {
     setQuote(null);
     setQuoteError('');
-    if (!wallet || network !== 'Ethereum' || tradeMode !== 'Swap' || from.address.toLowerCase() === to.address.toLowerCase()) return;
+    if (!wallet || !EVM_SWAP_NETWORKS.some(item => item.name === network) || tradeMode !== 'Swap' || from.address.toLowerCase() === to.address.toLowerCase()) return;
     const numeric = Number(amount);
     if (!Number.isFinite(numeric) || numeric <= 0) return;
     let cancelled = false;
@@ -117,7 +127,11 @@ export default function TradeView({ referencePrice = 0 }: Props) {
       const result = await connectWallet();
       setWallet(result.address);
       setWalletChain(result.chainId);
-      if (result.chainId !== ETHEREUM_CHAIN_ID) await switchToEthereum();
+      const selectedNetwork = SWAP_NETWORKS[network];
+      if (selectedNetwork && EVM_SWAP_NETWORKS.some(item => item.chainId === selectedNetwork.chainId) && result.chainId !== selectedNetwork.chainId) {
+        await switchToNetwork(selectedNetwork);
+        setWalletChain(selectedNetwork.chainId);
+      }
     } catch (error) {
       setExecutionError(error instanceof Error ? error.message : String(error));
     }
@@ -149,7 +163,7 @@ export default function TradeView({ referencePrice = 0 }: Props) {
   const output = quote ? formatUnits(quote.toAmount, quote.toToken.decimals, 6) : '';
   const minimum = quote ? formatUnits(quote.toAmountMin, quote.toToken.decimals, 6) : '';
   const balanceDisplay = formatUnits(fromBalance, from.decimals, 6);
-  const canExecute = Boolean(wallet && quote?.transactionRequest && !busy && network === 'Ethereum');
+  const canExecute = Boolean(wallet && quote?.transactionRequest && !busy && EVM_SWAP_NETWORKS.some(item => item.name === network));
 
   const execute = async () => {
     if (!quote || !wallet) return;
