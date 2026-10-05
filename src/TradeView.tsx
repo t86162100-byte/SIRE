@@ -55,8 +55,10 @@ export default function TradeView({ referencePrice = 0 }: Props) {
   const [network, setNetwork] = useState('');
   const [supportedNetworks, setSupportedNetworks] = useState<SwapNetwork[]>([]);
   const [tokens, setTokens] = useState<SwapToken[]>([]);
+  const [toTokens, setToTokens] = useState<SwapToken[]>([]);
   const [from, setFrom] = useState<SwapToken>({ symbol:'', name:'', address:'', decimals:18, chainId:0 });
   const [to, setTo] = useState<SwapToken>({ symbol:'', name:'', address:'', decimals:18, chainId:0 });
+  const [toNetwork, setToNetwork] = useState('');
   const [amount, setAmount] = useState('1');
   const [wallet, setWallet] = useState('');
   const [walletChain, setWalletChain] = useState<number | null>(null);
@@ -86,6 +88,12 @@ export default function TradeView({ referencePrice = 0 }: Props) {
   const [walletCreationError, setWalletCreationError] = useState('');
   const [walletCreating, setWalletCreating] = useState(false);
   const [walletCreatedAddress, setWalletCreatedAddress] = useState('');
+  const [recipient, setRecipient] = useState('');
+  const [recipientOpen, setRecipientOpen] = useState(false);
+  const [recipientError, setRecipientError] = useState('');
+  const [quoteSeconds, setQuoteSeconds] = useState(0);
+  const [swapHistory, setSwapHistory] = useState<Array<{hash:string;from:string;to:string;amount:string;output:string;fromNetwork:string;toNetwork:string;time:number;recipient:string}>>([]);
+  const [historyOpen, setHistoryOpen] = useState(false);
 
   useEffect(() => {
     const syncNativeWallet = () => {
@@ -206,14 +214,15 @@ export default function TradeView({ referencePrice = 0 }: Props) {
     const q = search.trim().toLowerCase();
     const opposite = tokenPicker === 'from' ? to : tokenPicker === 'to' ? from : null;
     const oppositeIdentity = opposite ? tokenIdentity(opposite) : '';
-    const available = tokens.filter(token => tokenIdentity(token) !== oppositeIdentity);
+    const pickerTokens = tokenPicker === 'to' ? toTokens : tokens;
+    const available = pickerTokens.filter(token => tokenIdentity(token) !== oppositeIdentity);
     if (!q) return available.slice(0, 100);
     return available.filter(token =>
       token.symbol.toLowerCase().includes(q) ||
       token.name.toLowerCase().includes(q) ||
       token.address.toLowerCase() === q
     ).slice(0, 100);
-  }, [tokens, search, tokenPicker, from, to]);
+  }, [tokens, toTokens, search, tokenPicker, from, to]);
 
   useEffect(() => {
     let cancelled = false;
@@ -221,7 +230,10 @@ export default function TradeView({ referencePrice = 0 }: Props) {
       if (cancelled) return;
       setSupportedNetworks(nextNetworks);
       const preferred = nextNetworks[0];
-      if (preferred) setNetwork(current => current && nextNetworks.some(item => item.name === current) ? current : preferred.name);
+      if (preferred) {
+        setNetwork(current => current && nextNetworks.some(item => item.name === current) ? current : preferred.name);
+        setToNetwork(current => current && nextNetworks.some(item => item.name === current) ? current : preferred.name);
+      }
     }).catch(error => {
       if (!cancelled) setExecutionError(error instanceof Error ? error.message : String(error));
     });
@@ -239,9 +251,12 @@ export default function TradeView({ referencePrice = 0 }: Props) {
         const preserved = next.find(token => tokenIdentity(token) === tokenIdentity(current));
         return preserved || next[0] || current;
       });
+      setToNetwork(current => current || network);
       setTo(current => {
-        const preserved = next.find(token => tokenIdentity(token) === tokenIdentity(current));
-        if (preserved) return preserved;
+        if (current.chainId === selectedNetwork.chainId) {
+          const preserved = next.find(token => tokenIdentity(token) === tokenIdentity(current));
+          if (preserved) return preserved;
+        }
         const nextFrom = next[0];
         return next.find(token => !nextFrom || tokenIdentity(token) !== tokenIdentity(nextFrom)) || nextFrom || current;
       });
@@ -253,6 +268,30 @@ export default function TradeView({ referencePrice = 0 }: Props) {
     });
     return () => { cancelled = true; };
   }, [network]);
+
+  useEffect(() => {
+    const selectedNetwork = SWAP_NETWORKS[toNetwork];
+    if (!selectedNetwork || !EVM_SWAP_NETWORKS.some(item => item.chainId === selectedNetwork.chainId)) return;
+    if (toNetwork === network) {
+      setToTokens(tokens);
+      return;
+    }
+    let cancelled = false;
+    void fetchNetworkTokens(selectedNetwork).then(next => {
+      if (cancelled) return;
+      setToTokens(next);
+      setTo(current => {
+        const preserved = next.find(token => tokenIdentity(token) === tokenIdentity(current));
+        return preserved || next[0] || current;
+      });
+    }).catch(error => {
+      if (!cancelled) {
+        setToTokens([]);
+        setExecutionError(error instanceof Error ? error.message : String(error));
+      }
+    });
+    return () => { cancelled = true; };
+  }, [toNetwork, network, tokens]);
 
   useEffect(() => {
     if (!wallet || !EVM_SWAP_NETWORKS.some(item => item.name === network)) return;
@@ -307,7 +346,7 @@ export default function TradeView({ referencePrice = 0 }: Props) {
             ' but entered ' + amount + ' ' + from.symbol + '.'
           );
         }
-        const next = await getSwapQuote({ fromToken: from, toToken: to, amount, wallet, slippage });
+        const next = await getSwapQuote({ fromToken: from, toToken: to, amount, wallet, toAddress: effectiveRecipient, slippage });
         if (!cancelled && requestId === quoteRequestId.current) {
           setQuote(next);
           setQuoteError('');
@@ -327,7 +366,7 @@ export default function TradeView({ referencePrice = 0 }: Props) {
       window.clearTimeout(timer);
       if (requestId === quoteRequestId.current) setQuoteLoading(false);
     };
-  }, [wallet, network, tradeMode, from, to, amount, slippage]);
+  }, [wallet, network, toNetwork, tradeMode, from, to, amount, slippage, recipient]);
 
   const connect = async () => {
     setExecutionError('');
@@ -345,11 +384,10 @@ export default function TradeView({ referencePrice = 0 }: Props) {
     window.dispatchEvent(new CustomEvent('sire:open-native-wallet'));
   };
 
-  const selectNetwork = async (value: string) => {
+  const selectNetwork = async (value: string, side: 'from' | 'to' = 'from') => {
     const selectedNetwork = supportedNetworks.find(item => item.name === value) || SWAP_NETWORKS[value];
     if (!selectedNetwork) return;
     setExecutionError('');
-    setNetwork(value);
     setQuote(null);
 
     if (!EVM_SWAP_NETWORKS.some(item => item.chainId === selectedNetwork.chainId)) {
@@ -358,15 +396,18 @@ export default function TradeView({ referencePrice = 0 }: Props) {
     }
 
     try {
-      if (wallet && !nativeUnlocked) {
-        await switchToNetwork(selectedNetwork);
-        const nextTokens = await fetchNetworkTokens(selectedNetwork);
-        setTokens(nextTokens);
-        setWalletChain(selectedNetwork.chainId);
-        const nextFrom = nextTokens[0] || from;
-        const nextTo = nextTokens.find(token => tokenIdentity(token) !== tokenIdentity(nextFrom)) || to;
-        setFrom(nextFrom);
-        setTo(nextTo);
+      if (side === 'from') {
+        const previousSource = network;
+        setNetwork(value);
+        if (toNetwork === previousSource) setToNetwork(value);
+        if (wallet && !nativeUnlocked) {
+          await switchToNetwork(selectedNetwork);
+          setWalletChain(selectedNetwork.chainId);
+        }
+      } else {
+        setToNetwork(value);
+        if (value === network) setToTokens(tokens);
+        else setToTokens(await fetchNetworkTokens(selectedNetwork));
       }
     } catch (error) {
       setExecutionError(error instanceof Error ? error.message : String(error));
@@ -387,6 +428,7 @@ export default function TradeView({ referencePrice = 0 }: Props) {
       }
     } else if (tokenPicker === 'to') {
       setTo(token);
+      setToNetwork(supportedNetworks.find(item => item.chainId === token.chainId)?.name || toNetwork);
       if (selectedIdentity === tokenIdentity(from)) {
         const replacement = tokens.find(candidate => tokenIdentity(candidate) !== selectedIdentity);
         if (replacement) setFrom(replacement);
@@ -397,9 +439,39 @@ export default function TradeView({ referencePrice = 0 }: Props) {
   };
 
   const output = quote ? formatUnits(quote.toAmount, quote.toToken.decimals, 6) : '';
+  const effectiveRecipient = recipient.trim() || wallet;
+  const recipientValid = /^0x[a-fA-F0-9]{40}$/.test(effectiveRecipient);
+  const isCrossChain = network !== toNetwork;
+  const pickerTokens = tokenPicker === 'to' ? toTokens : tokens;
+  const pickerNetwork = tokenPicker === 'to' ? toNetwork : network;
   const minimum = quote ? formatUnits(quote.toAmountMin, quote.toToken.decimals, 6) : '';
   const balanceDisplay = formatUnits(fromBalance, from.decimals, 6);
-  const canExecute = Boolean(nativeUnlocked && nativeWallet && quote?.transactionRequest && !busy && EVM_SWAP_NETWORKS.some(item => item.name === network));
+  const canExecute = Boolean(nativeUnlocked && nativeWallet && recipientValid && quote?.transactionRequest && !busy && EVM_SWAP_NETWORKS.some(item => item.name === network) && EVM_SWAP_NETWORKS.some(item => item.name === toNetwork));
+
+  useEffect(() => {
+    if (!quote?.expiresAt) { setQuoteSeconds(0); return; }
+    const tick = () => setQuoteSeconds(Math.max(0, Math.ceil((quote.expiresAt - Date.now()) / 1000)));
+    tick();
+    const timer = window.setInterval(tick, 1000);
+    return () => window.clearInterval(timer);
+  }, [quote?.expiresAt]);
+
+  useEffect(() => {
+    try {
+      const raw = window.localStorage.getItem('sire.swap.history.v1');
+      const parsed = raw ? JSON.parse(raw) : [];
+      if (Array.isArray(parsed)) setSwapHistory(parsed.slice(0, 20));
+    } catch {}
+  }, []);
+
+  const recordSwap = (hash: string, executedQuote: SwapQuote) => {
+    const item = { hash, from: executedQuote.fromToken.symbol, to: executedQuote.toToken.symbol, amount, output: formatUnits(executedQuote.toAmount, executedQuote.toToken.decimals, 8), fromNetwork: network, toNetwork, time: Date.now(), recipient: effectiveRecipient };
+    setSwapHistory(current => {
+      const next = [item, ...current.filter(entry => entry.hash !== hash)].slice(0, 20);
+      try { window.localStorage.setItem('sire.swap.history.v1', JSON.stringify(next)); } catch {}
+      return next;
+    });
+  };
 
   const simulate = async () => {
     if (!quote || !wallet || !nativeUnlocked) return;
@@ -407,7 +479,7 @@ export default function TradeView({ referencePrice = 0 }: Props) {
     setSimulationResult('');
     setExecutionError('');
     try {
-      const freshQuote = await getSwapQuote({ fromToken: from, toToken: to, amount, wallet, slippage });
+      const freshQuote = await getSwapQuote({ fromToken: from, toToken: to, amount, wallet, toAddress: effectiveRecipient, slippage });
       setQuote(freshQuote);
       const result = await simulateSwap(freshQuote, wallet);
       const gas = result.gasEstimate ? formatUnits(result.gasEstimate, 0, 0) : '—';
@@ -430,13 +502,15 @@ export default function TradeView({ referencePrice = 0 }: Props) {
       // The displayed quote is for UI feedback; the signed transaction must be
       // built from current liquidity, balances, gas and slippage conditions.
       setStatus('Refreshing executable quote');
-      const executableQuote = await getSwapQuote({ fromToken: from, toToken: to, amount, wallet, slippage });
+      const executableQuote = await getSwapQuote({ fromToken: from, toToken: to, amount, wallet, toAddress: effectiveRecipient, slippage });
       setQuote(executableQuote);
       if (!executableQuote.transactionRequest?.to) throw new Error('The provider returned a non-executable quote.');
       if (executableQuote.expiresAt && Date.now() >= executableQuote.expiresAt) throw new Error('This quote expired before execution. Please request a new quote.');
       const result = await executeSwap(executableQuote, wallet, setStatus);
       setTxHash(result.hash);
-      setStatus('Swap confirmed');
+      recordSwap(result.hash, executableQuote);
+      setStatus(isCrossChain ? 'Swap completed across ' + network + ' → ' + toNetwork : 'Swap confirmed');
+      void readTokenBalance(from, wallet).then(setFromBalance).catch(() => {});
     } catch (error) {
       setExecutionError(error instanceof Error ? error.message : String(error));
     } finally {
