@@ -308,8 +308,10 @@ export async function fetchEthereumTokens(query=''): Promise<SwapToken[]> {
   return fetchNetworkTokens(SWAP_NETWORKS.Ethereum, query);
 }
 
+export type SwapRouteOrder = 'FASTEST' | 'CHEAPEST';
+
 export async function getSwapQuote(args:{
-  fromToken:SwapToken; toToken:SwapToken; amount:string; wallet:string; slippage:number; toAddress?:string;
+  fromToken:SwapToken; toToken:SwapToken; amount:string; wallet:string; slippage:number; toAddress?:string; order?:SwapRouteOrder;
 }):Promise<SwapQuote> {
   const network = Object.values(SWAP_NETWORKS).find(n => n.chainId === args.fromToken.chainId);
   if (!network || !EVM_SWAP_NETWORKS.some(n => n.chainId === network.chainId)) {
@@ -330,7 +332,7 @@ export async function getSwapQuote(args:{
   url.searchParams.set('toAddress',args.toAddress?.trim() || args.wallet);
   url.searchParams.set('fromAmount',fromAmount);
   url.searchParams.set('slippage',String(args.slippage));
-  url.searchParams.set('order','CHEAPEST');
+  url.searchParams.set('order',args.order || 'CHEAPEST');
   url.searchParams.set('integrator','sire');
   // Keep the interactive quote responsive. We validate the executable transaction
   // separately in Test Mode; LI.FI documents skipSimulation as the faster quote path.
