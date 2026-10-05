@@ -592,3 +592,25 @@ html:has(.sire-wallet-shell-backdrop) { background:#050505 !important; }
   .sire-wallet-more-button{flex-basis:44px !important;width:44px !important;height:44px !important}
   .sire-wallet-network-bar{margin:8px 20px 0 !important}
 }
+
+
+/* TIGHTEN VERTICAL ROW RHYTHM — keep sections/cards close */
+.sire-wallet-account-row{
+  margin-bottom:4px !important;
+}
+.sire-wallet-hero{
+  margin-bottom:3px !important;
+  padding-bottom:2px !important;
+}
+.sire-wallet-wallet-actions{
+  margin-top:4px !important;
+}
+.sire-wallet-network-bar{
+  margin-top:6px !important;
+}
+@media(max-width:520px){
+  .sire-wallet-account-row{margin-bottom:4px !important}
+  .sire-wallet-hero{margin-bottom:3px !important;padding-bottom:2px !important}
+  .sire-wallet-wallet-actions{margin-top:4px !important}
+  .sire-wallet-network-bar{margin-top:6px !important}
+}
