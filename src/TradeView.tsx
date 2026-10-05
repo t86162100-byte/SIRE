@@ -86,7 +86,6 @@ export default function TradeView({ referencePrice = 0, referenceChange = 0 }: P
 
       <main className="sire-swap-main">
         <div className="sire-swap-main-head">
-          <div><h1>Swap</h1></div>
           <div className="sire-swap-head-actions">
             <button type="button" aria-label="Swap settings" onClick={() => setSettingsOpen(v => !v)}><Settings2 size={16}/></button>
           </div>
