@@ -316,14 +316,23 @@ export default function TradeView({ referencePrice = 0 }: Props) {
       </main>
     </div>
 
-    {tokenPicker && <div className="sire-modal-backdrop" onMouseDown={() => setTokenPicker(null)}>
-      <section className="sire-token-modal" onMouseDown={e => e.stopPropagation()}>
+    {tokenPicker && <div className="sire-modal-backdrop sire-token-picker-backdrop" onMouseDown={() => setTokenPicker(null)}>
+      <section className="sire-token-modal sire-token-picker-sheet" role="dialog" aria-modal="true" aria-label="Select token" onMouseDown={e => e.stopPropagation()}>
+        <div className="sire-token-sheet-handle" aria-hidden="true"><span /></div>
         <div className="sire-token-modal-head">
           <div><b>Select token</b><small>{network} · live token catalogue</small></div>
-          <button type="button" onClick={() => setTokenPicker(null)}><X size={17}/></button>
+          <button type="button" onClick={() => setTokenPicker(null)} aria-label="Close token selector"><X size={17}/></button>
         </div>
         <div className="sire-token-search"><Search size={15}/><input autoFocus value={search} onChange={e => setSearch(e.target.value)} placeholder="Search symbol, name or address"/></div>
-        <div className="sire-token-list">
+        <div className="sire-token-network-strip" aria-label="Networks">
+          {NETWORKS.map(item => (
+            <button key={item} type="button" className={item === network ? 'active' : ''} onClick={() => void selectNetwork(item)}>
+              <span className="sire-token-network-icon">{item.slice(0, 1)}</span>
+              <span>{item}</span>
+            </button>
+          ))}
+        </div>
+        <div className="sire-token-list" aria-label="Instruments">
           {filteredTokens.map(token => (
             <button key={token.address} type="button" onClick={() => chooseToken(token)}>
               <span className="sire-token-mark">{token.symbol.slice(0,1)}</span>
