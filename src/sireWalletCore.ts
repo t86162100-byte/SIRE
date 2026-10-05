@@ -1,4 +1,4 @@
-import { FallbackProvider, HDNodeWallet, JsonRpcProvider, Wallet, type Provider, type TransactionRequest } from 'ethers';
+import { HDNodeWallet, JsonRpcProvider, Wallet, type Provider, type TransactionRequest } from 'ethers';
 
 export type SireEvmNetwork = {
   name: string;
@@ -191,15 +191,12 @@ export async function exportNativeMnemonic() {
 }
 
 export function getNativeProvider(network: SireEvmNetwork): Provider {
-  const urls = Array.from(new Set([network.rpcUrl, ...(network.rpcUrls || [])]));
-  const providers = urls.map((url) => new JsonRpcProvider(url, network.chainId, { staticNetwork: true }));
-  if (providers.length === 1) return providers[0];
-  return new FallbackProvider(providers.map((provider, index) => ({
-    provider,
-    priority: index + 1,
-    weight: 1,
-    stallTimeout: index === 0 ? 1500 : 3000,
-  })), 1);
+  // Do not use ethers FallbackProvider here. Public RPCs can disagree on
+  // transient errors/zero-value responses, which can surface as
+  // "quorum not met" in the wallet UI. Each network therefore has one
+  // deterministic primary provider; balance reads below explicitly retry
+  // the configured fallbacks when the primary fails.
+  return new JsonRpcProvider(network.rpcUrl, network.chainId, { staticNetwork: true });
 }
 
 export function getNativeSigner(network: SireEvmNetwork) {
@@ -209,7 +206,17 @@ export function getNativeSigner(network: SireEvmNetwork) {
 
 export async function getNativeBalance(network: SireEvmNetwork, address = getNativeWalletAddress()) {
   if (!address) return 0n;
-  return getNativeProvider(network).getBalance(address);
+  const urls = Array.from(new Set([network.rpcUrl, ...(network.rpcUrls || [])]));
+  let lastError: unknown = null;
+  for (const url of urls) {
+    try {
+      const provider = new JsonRpcProvider(url, network.chainId, { staticNetwork: true });
+      return await provider.getBalance(address);
+    } catch (error) {
+      lastError = error;
+    }
+  }
+  throw lastError instanceof Error ? lastError : new Error('EVM balance RPCs are temporarily unavailable.');
 }
 
 export async function sendNativeTransaction(network: SireEvmNetwork, request: TransactionRequest) {
