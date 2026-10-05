@@ -585,22 +585,6 @@ export default function TradeView({ referencePrice = 0 }: Props) {
     </div>}
   </div>;
 }
- + Number(quote.gasUSD).toFixed(2) : '—'}</b></div>
-              <div><span>Minimum received</span><b>{quote ? minimum + ' ' + to.symbol : '—'}</b></div>
-            </div>
-
-            {quote && wallet && nativeUnlocked && !busy && !simulationBusy && <button type="button" className="sire-wallet-secondary sire-test-swap-button" onClick={() => void simulate()}>
-              Run no-money test
-            </button>}
-            {(quoteError || executionError) && <div className="sire-swap-error"><CircleAlert size={14}/><span>{quoteError || executionError}</span></div>}
-            {simulationResult && <div className="sire-swap-status sire-swap-simulation-result"><span>{simulationResult}</span></div>}
-            {status && !executionError && <div className="sire-swap-status">{status}{txHash && <a href={'https://etherscan.io/tx/' + txHash} target="_blank" rel="noreferrer">View transaction</a>}</div>}
-
-            <div className="sire-swap-safety"><LockKeyhole size={13}/> Quotes expire quickly and are revalidated before signing.</div>
-          </section>
-        </div>
-      </main>
-    </div>
 
     {walletOnboarding && <div className="sire-modal-backdrop" onMouseDown={closeWalletOnboarding}>
       <section className="sire-token-modal sire-wallet-onboarding" role="dialog" aria-modal="true" aria-label="Create SIRE Wallet" onMouseDown={e => e.stopPropagation()}>
