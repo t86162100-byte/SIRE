@@ -52,7 +52,11 @@ export default function TradeView({ referencePrice = 0, referenceChange = 0 }: P
       <div className="sire-trade-product-scroll">
         {PRODUCTS.map(product => <button key={product} type="button" className={product === 'Swap' ? 'active' : ''} disabled={product !== 'Swap'}>{product}</button>)}
       </div>
-      <div className="sire-trade-mode-pills" role="tablist" aria-label="Trade mode">
+      <div className="sire-trade-status"><span className="sire-status-dot" /> Aggregated execution layer</div>
+    </header>
+
+    <div className="sire-trade-mode-row" role="tablist" aria-label="Trade mode">
+      <div className="sire-trade-mode-pills">
         {(['Swap', 'Limit'] as const).map(mode => (
           <button
             key={mode}
@@ -66,8 +70,7 @@ export default function TradeView({ referencePrice = 0, referenceChange = 0 }: P
           </button>
         ))}
       </div>
-      <div className="sire-trade-status"><span className="sire-status-dot" /> Aggregated execution layer</div>
-    </header>
+    </div>
 
     <div className="sire-swap-workspace">
       <aside className="sire-swap-rail">
