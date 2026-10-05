@@ -8,7 +8,7 @@ import {
   type WalletAsset, type WalletHistoryItem, type WalletNetwork,
   createSolanaAccount, createTronAccount, estimateEvmGas, getEvmAssets, getEvmHistory,
   getReceiveAddresses, getSolanaAssets, getSolanaHistory, getTronAssets,
-  importEvmToken, sendEvmAsset, sendSolana, sendTron, getTronHistory
+  importEvmToken, sendEvmAsset, sendSolana, sendTron, getTronHistory, getEvmTokenCatalog
 } from './sireWalletMultiChain';
 import { isNativeWalletUnlocked, unlockNativeWallet } from './sireWalletCore';
 
@@ -45,6 +45,8 @@ export default function SireWalletPanel() {
   const [tokenNetwork, setTokenNetwork] = useState<WalletNetwork>('Ethereum');
   const [tokenAddress, setTokenAddress] = useState('');
   const [search, setSearch] = useState('');
+  const [tokenCatalog, setTokenCatalog] = useState<any[]>([]);
+  const [tokenCatalogSearch, setTokenCatalogSearch] = useState('');
 
   useEffect(() => {
     const onOpen = () => setOpen(true);
@@ -91,6 +93,25 @@ export default function SireWalletPanel() {
   };
 
   useEffect(() => { if (open && unlocked) void refresh(); }, [open, unlocked, network, historyOpen]);
+  useEffect(() => {
+    if (!tokenOpen || !EVM_NETWORKS.includes(tokenNetwork)) return;
+    let cancelled = false;
+    setTokenCatalogSearch('');
+    void getEvmTokenCatalog(tokenNetwork as Exclude<WalletNetwork,'Solana'|'TRON'>)
+      .then(tokens => { if (!cancelled) setTokenCatalog(tokens); })
+      .catch(error => { if (!cancelled) setMessage(error instanceof Error ? error.message : String(error)); });
+    return () => { cancelled = true; };
+  }, [tokenOpen, tokenNetwork]);
+
+  const filteredTokenCatalog = useMemo(() => {
+    const q = tokenCatalogSearch.trim().toLowerCase();
+    if (!q) return tokenCatalog;
+    return tokenCatalog.filter(token =>
+      String(token.symbol || '').toLowerCase().includes(q) ||
+      String(token.name || '').toLowerCase().includes(q) ||
+      String(token.address || '').toLowerCase().includes(q)
+    );
+  }, [tokenCatalog, tokenCatalogSearch]);
 
   const copy = async (value: string) => {
     if (!value) return;
@@ -306,9 +327,25 @@ export default function SireWalletPanel() {
         {tokenOpen && <div className="sire-wallet-modal-backdrop" onMouseDown={() => setTokenOpen(false)}><div className="sire-wallet-modal" onMouseDown={e => e.stopPropagation()}>
           <div className="sire-wallet-modal-head"><div><span>MANAGE TOKENS</span><h3>Add asset</h3></div><button onClick={() => setTokenOpen(false)}><X size={17}/></button></div>
           <select value={tokenNetwork} onChange={e => setTokenNetwork(e.target.value as WalletNetwork)}>{EVM_NETWORKS.map(n => <option key={n}>{n}</option>)}</select>
-          <input value={tokenAddress} onChange={e => setTokenAddress(e.target.value)} placeholder="ERC-20 contract address"/>
-          <button className="sire-wallet-primary" disabled={busy} onClick={() => void addToken()}>{busy ? 'Reading contract…' : 'Add token'}</button>
-          <p>SIRE reads symbol, name, decimals and balance directly from the selected chain.</p>
+          <label className="sire-wallet-global-search"><Search size={15}/><input value={tokenCatalogSearch} onChange={e => setTokenCatalogSearch(e.target.value)} placeholder="Search live Swap tokens"/></label>
+          <div className="sire-wallet-token-catalog">
+            {filteredTokenCatalog.slice(0,100).map(token => <button type="button" key={String(token.address)} onClick={async () => {
+              setBusy(true);
+              try {
+                await importEvmToken({ network: tokenNetwork, address: String(token.address), symbol: String(token.symbol || ''), name: String(token.name || ''), decimals: Number(token.decimals || 18), logoURI: token.logoURI });
+                setTokenOpen(false);
+                setMessage(String(token.symbol || token.name || 'Token') + ' added.');
+                await refresh();
+              } catch (error) { setMessage(error instanceof Error ? error.message : String(error)); }
+              finally { setBusy(false); }
+            }}>
+              <span className="sire-wallet-asset-icon">{token.logoURI ? <img src={token.logoURI} alt=""/> : <span>{String(token.symbol || '?').slice(0,2)}</span>}</span>
+              <span className="sire-wallet-asset-copy"><b>{String(token.symbol || 'Token')}</b><small>{String(token.name || 'Unknown asset')}</small></span>
+            </button>)}
+          </div>
+          <input value={tokenAddress} onChange={e => setTokenAddress(e.target.value)} placeholder="Or enter ERC-20 contract address"/>
+          <button className="sire-wallet-primary" disabled={busy} onClick={() => void addToken()}>{busy ? 'Reading contract…' : 'Add custom token'}</button>
+          <p>The catalog above is the same live token metadata used by SIRE Swap. Balances are still verified directly on the selected chain.</p>
         </div></div>}
       </section>
     </div>
