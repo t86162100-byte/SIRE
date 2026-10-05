@@ -156,12 +156,48 @@ const providerLogoSources = (item: Instrument) => {
   return Array.from(new Set(sources));
 };
 
-const Logo = ({ item, providerLogo = false }: { item: Instrument; providerLogo?: boolean }) => {
-  const sources = providerLogo ? providerLogoSources(item) : assetLogoSources(item);
+const chainDomains: Record<string, string> = {
+  ethereum:'ethereum.org', eth:'ethereum.org',
+  bnb:'bnbchain.org', bsc:'bnbchain.org', 'bnb chain':'bnbchain.org', binance:'bnbchain.org',
+  base:'base.org', arbitrum:'arbitrum.io', optimism:'optimism.io',
+  polygon:'polygon.technology', matic:'polygon.technology',
+  avalanche:'avax.network', avax:'avax.network',
+  solana:'solana.com', tron:'tron.network', trx:'tron.network',
+  sui:'sui.io', sonic:'soniclabs.com', bitcoin:'bitcoin.org', btc:'bitcoin.org',
+};
+
+const chainKey = (item: Instrument) => {
+  const r = raw(item);
+  const explicit = str(r.chain || r.chainName || r.network || r.networkName || r.blockchain || r.blockchainName);
+  if (explicit) return explicit.toLowerCase().trim();
+  const marketGroup = upper(r.marketGroup || item.category);
+  const alpha = str(r.marketSubSubcategory || r.marketFilter || r.marketSubcategory);
+  if (marketGroup === 'ALPHA' && alpha && chainDomains[alpha.toLowerCase()]) return alpha.toLowerCase();
+  return '';
+};
+
+const chainLogoSources = (item: Instrument) => {
+  const key = chainKey(item);
+  if (!key) return [];
+  const normalized = key.replace(/[^a-z0-9]+/g, ' ').trim();
+  const domain = chainDomains[key] || chainDomains[normalized] || '';
+  if (!domain) return [];
+  const label = normalized.slice(0, 2).toUpperCase() || '?';
+  const fallback = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#151515"/><text x="32" y="38" text-anchor="middle" font-family="Arial" font-size="19" font-weight="800" fill="#fff">' + label + '</text></svg>';
+  return Array.from(new Set([
+    str((raw(item) as any).chainLogoUrl),
+    'https://www.google.com/s2/favicons?domain=' + encodeURIComponent(domain) + '&sz=64',
+    'https://' + domain + '/favicon.ico',
+    'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(fallback),
+  ].filter(Boolean)));
+};
+
+const Logo = ({ item, providerLogo = false, chainLogo = false }: { item: Instrument; providerLogo?: boolean; chainLogo?: boolean }) => {
+  const sources = providerLogo ? providerLogoSources(item) : chainLogo ? chainLogoSources(item) : assetLogoSources(item);
   const [index, setIndex] = useState(0);
   const src = sources[Math.min(index, sources.length - 1)];
   return (
-    <span className={providerLogo ? 'bn-logo bn-provider-logo' : 'bn-logo'}>
+    <span className={providerLogo ? 'bn-logo bn-provider-logo' : chainLogo ? 'bn-logo bn-chain-logo' : 'bn-logo'}>
       <img
         src={src}
         alt=""
@@ -186,14 +222,18 @@ const BinanceShell = ({
       onClick={() => onSelect(item)}
     >
       <div className="bn-identity">
-        <Logo item={item} />
+        <span className="bn-asset-badges">
+          <Logo item={item} />
+          <span className="bn-exchange-badge"><Logo item={item} providerLogo /></span>
+          {chainLogoSources(item).length ? <span className="bn-chain-badge"><Logo item={item} chainLogo /></span> : null}
+        </span>
         <div className="bn-name">
           <strong>
             {children}
             {quote(item) && upper(item.subgroup) === 'SPOT' ? ' / ' + quote(item) : ''}
           </strong>
           <span>{name(item)}{volume ? <><b> | </b>{volume}</> : ''}</span>
-          <small><Logo item={item} providerLogo />{provider(item)}</small>
+          <small>{provider(item)}{chainKey(item) ? <> <b>·</b> {chainKey(item)}</> : null}</small>
           {visibleFields.length > 0 ? (
             <div className="bn-metrics" aria-label="Additional market data">
               <div className="bn-metrics-set">
@@ -291,6 +331,47 @@ if (!document.getElementById(styleId)) {
       align-items:center!important;
       gap:9px!important;
       overflow:hidden!important;
+    }
+    .bn-asset-badges{
+      position:relative!important;
+      width:38px!important;
+      height:38px!important;
+      min-width:38px!important;
+      display:block!important;
+    }
+    .bn-asset-badges > .bn-logo{
+      position:absolute!important;
+      inset:0!important;
+    }
+    .bn-exchange-badge,.bn-chain-badge{
+      position:absolute!important;
+      z-index:3!important;
+      width:14px!important;
+      height:14px!important;
+      min-width:14px!important;
+      padding:1px!important;
+      box-sizing:border-box!important;
+      border-radius:50%!important;
+      display:grid!important;
+      place-items:center!important;
+      background:#050505!important;
+      border:1px solid rgba(255,255,255,.32)!important;
+      box-shadow:0 1px 4px rgba(0,0,0,.75)!important;
+    }
+    .bn-exchange-badge{right:-3px!important;bottom:-3px!important}
+    .bn-chain-badge{right:-3px!important;top:-3px!important}
+    .bn-exchange-badge .bn-logo,.bn-chain-badge .bn-logo{
+      width:100%!important;
+      height:100%!important;
+      min-width:0!important;
+      border:0!important;
+      background:transparent!important;
+    }
+    .bn-exchange-badge img,.bn-chain-badge img{
+      width:100%!important;
+      height:100%!important;
+      object-fit:contain!important;
+      border-radius:50%!important;
     }
      .bn-logo{
       width:38px!important;
