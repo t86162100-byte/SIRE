@@ -1,6 +1,6 @@
 import { Address, LimitOrder, MakerTraits, getLimitOrderContract, randBigInt } from '@1inch/limit-order-sdk';
 import { UINT_40_MAX } from '@1inch/byte-utils';
-import { approveIfNeeded, getInjectedProvider, type Eip1193Provider, type SwapNetwork, type SwapToken } from './swapEngine';
+import { approveIfNeeded, getInjectedProvider, type SwapNetwork, type SwapToken } from './swapEngine';
 import { getNativeSigner } from './sireWalletCore';
 
 export type LimitOrderPayload = {
@@ -119,7 +119,6 @@ export async function cancelLimitOrder(args: {
   native: boolean;
 }) {
   const contract = getLimitOrderContract(args.network.chainId);
-  const selector = '0x' + '0'.repeat(8);
   // cancelOrder(uint256,bytes32) is encoded with ethers below without adding another dependency.
   const { Interface } = await import('ethers');
   const iface = new Interface(['function cancelOrder(uint256 makerTraits, bytes32 orderHash)']);
