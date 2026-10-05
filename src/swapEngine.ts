@@ -33,6 +33,7 @@ export type SwapQuote = {
   gasUSD?: string;
   executionDuration?: number;
   priceImpact?: number;
+  expiresAt: number;
   raw: any;
 };
 
@@ -188,7 +189,7 @@ export async function fetchEthereumTokens(query=''): Promise<SwapToken[]> {
     })).filter((t:SwapToken)=>t.symbol && t.address);
     const merged = [...fallback, ...normalized].filter((t,i,a)=>a.findIndex(x=>x.address.toLowerCase()===t.address.toLowerCase())===i);
     const q=query.trim().toLowerCase();
-    return (q ? merged.filter(t=>t.symbol.toLowerCase().includes(q)||t.name.toLowerCase().includes(q)||t.address.toLowerCase()===q) : merged).slice(0,120);
+    return (q ? merged.filter(t=>t.symbol.toLowerCase().includes(q)||t.name.toLowerCase().includes(q)||t.address.toLowerCase()===q) : merged).slice(0,2000);
   } catch {
     const q=query.trim().toLowerCase();
     return q ? fallback.filter(t=>t.symbol.toLowerCase().includes(q)||t.name.toLowerCase().includes(q)) : fallback;
@@ -227,15 +228,19 @@ export async function getSwapQuote(args:{
     fromAmount:estimate.fromAmount||fromAmount, toAmount:estimate.toAmount||'0', toAmountMin:estimate.toAmountMin||estimate.toAmount||'0',
     fromToken:args.fromToken, toToken:args.toToken, approvalAddress:estimate.approvalAddress,
     transactionRequest:tx, gasAmount:gas?.amount, gasUSD:gas?.amountUSD, executionDuration:estimate.executionDuration,
-    priceImpact:estimate.priceImpact, raw:body,
+    priceImpact:estimate.priceImpact,
+    expiresAt: Number(body?.validUntil || body?.quote?.expiry || body?.estimate?.validUntil || 0) > 0 ? Number(body?.validUntil || body?.quote?.expiry || body?.estimate?.validUntil) * 1000 : Date.now() + 20_000,
+    raw:body,
   };
 }
 
 export async function executeSwap(quote:SwapQuote, owner:string, onStatus?:(s:string)=>void) {
   const provider=getInjectedProvider();
+  if (quote.expiresAt && Date.now() >= quote.expiresAt) throw new Error('This quote has expired. Requesting a fresh quote is required.');
   if (!provider) throw new Error('Wallet provider unavailable.');
   if (!quote.transactionRequest?.to) throw new Error('Quote did not return an executable transaction.');
   await switchToEthereum();
+  if (!quote.fromToken.native && !quote.approvalAddress) throw new Error('The executable quote did not provide an approval spender.');
   await approveIfNeeded(quote.fromToken,owner,quote.approvalAddress||'',quote.fromAmount,onStatus);
   onStatus?.('Confirm swap in wallet');
   const tx=quote.transactionRequest;
