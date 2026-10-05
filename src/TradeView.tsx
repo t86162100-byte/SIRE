@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { ArrowDownUp, ChevronDown, CircleHelp, Fuel, Info, LockKeyhole, Search, Settings2, ShieldCheck, X } from 'lucide-react';
+import { ArrowDownUp, ChevronDown, CircleHelp, Fuel, Info, LockKeyhole, Search, ShieldCheck, X } from 'lucide-react';
 import './tradeSwap.css';
 
 type Token = { symbol: string; name: string; network: string; balance?: number; price?: number };
@@ -27,7 +27,6 @@ export default function TradeView({ referencePrice = 0, referenceChange = 0 }: P
   const [slippage, setSlippage] = useState('Auto');
   const [customSlippage, setCustomSlippage] = useState('0.5');
   const [tokenPicker, setTokenPicker] = useState<'from' | 'to' | null>(null);
-  const [settingsOpen, setSettingsOpen] = useState(false);
   const [routeOpen, setRouteOpen] = useState(true);
   const [reviewOpen, setReviewOpen] = useState(false);
   const [search, setSearch] = useState('');
@@ -88,11 +87,6 @@ export default function TradeView({ referencePrice = 0, referenceChange = 0 }: P
       </aside>
 
       <main className="sire-swap-main">
-        <div className="sire-swap-main-head">
-          <div className="sire-swap-head-actions">
-            <button type="button" aria-label="Swap settings" onClick={() => setSettingsOpen(v => !v)}><Settings2 size={16}/></button>
-          </div>
-        </div>
 
         <div className="sire-swap-grid">
           <section className="sire-swap-card sire-swap-form-card">
@@ -151,7 +145,6 @@ export default function TradeView({ referencePrice = 0, referenceChange = 0 }: P
       </main>
     </div>
 
-    {settingsOpen && <div className="sire-swap-popover"><div className="sire-popover-head"><b>Swap settings</b><button type="button" onClick={() => setSettingsOpen(false)}><X size={15}/></button></div><label>Slippage tolerance <span>{slippage === 'Custom' ? `${customSlippage}%` : slippage}</span></label><label>Quote refresh <span>Automatic</span></label><label>Route preference <span>Best execution</span></label></div>}
 
     {tokenPicker && <div className="sire-modal-backdrop" onMouseDown={() => setTokenPicker(null)}><section className="sire-token-modal" onMouseDown={e => e.stopPropagation()}><div className="sire-token-modal-head"><div><b>Select token</b><small>{network}</small></div><button type="button" onClick={() => setTokenPicker(null)}><X size={17}/></button></div><div className="sire-token-search"><Search size={15}/><input autoFocus value={search} onChange={e => setSearch(e.target.value)} placeholder="Search token"/></div><div className="sire-token-list">{filteredTokens.map(token => <button key={token.symbol} type="button" onClick={() => chooseToken(token)}><span className="sire-token-mark">{token.symbol.slice(0,1)}</span><span><b>{token.symbol}</b><small>{token.name}</small></span><ChevronDown size={14} className="sire-token-arrow"/></button>)}</div></section></div>}
 
