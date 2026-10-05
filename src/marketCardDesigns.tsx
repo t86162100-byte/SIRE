@@ -131,39 +131,42 @@ const assetLogoSources = (item: Instrument) => {
   return Array.from(new Set(sources));
 };
 
-const providerDomains: Record<string, string> = {
-  binance:'binance.com', bitget:'bitget.com', gate:'gate.io', gateio:'gate.io', bybit:'bybit.com',
-  okx:'okx.com', kraken:'kraken.com', coinbase:'coinbase.com', kucoin:'kucoin.com', mexc:'mexc.com',
-  gemini:'gemini.com', bitfinex:'bitfinex.com', bitstamp:'bitstamp.net', coinex:'coinex.com',
-  htx:'htx.com', phemex:'phemex.com', bingx:'bingx.com', hyperliquid:'hyperliquid.xyz',
-  oanda:'oanda.com', uniswap:'uniswap.org', curve:'curve.fi', pancakeswap:'pancakeswap.finance',
-  sushiswap:'sushi.com', raydium:'raydium.io', jupiter:'jup.ag', orca:'orca.so',
-  polymarket:'polymarket.com', kalshi:'kalshi.com',
-};
-const providerLogoSources = (item: Instrument) => {
-  const r = raw(item);
-  const key = str(item.exchange || item.providerLabel || item.provider).toLowerCase().replace(/[^a-z0-9]/g, '');
-  const domain = providerDomains[key] || '';
-  const sources = [
-    str(item.providerLogoUrl),
-    domain ? 'https://www.google.com/s2/favicons?domain=' + encodeURIComponent(domain) + '&sz=64' : '',
-    domain ? 'https://' + domain + '/favicon.ico' : '',
-    str(r.exchangeLogoUrl),
-  ].filter(Boolean);
-  const label = provider(item).slice(0, 2) || '?';
-  const fallback = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#151515"/><text x="32" y="38" text-anchor="middle" font-family="Arial" font-size="19" font-weight="800" fill="#fff">' + label + '</text></svg>';
-  sources.push('data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(fallback));
-  return Array.from(new Set(sources));
+const iconKey = (value: unknown) => str(value).toLowerCase().replace(/[^a-z0-9]/g, '');
+
+const exchangeIconKeys: Record<string, string> = {
+  binance:'binance', bitget:'bitget', gate:'gateio', gateio:'gateio', bybit:'bybit',
+  okx:'okx', kraken:'kraken', coinbase:'coinbase', kucoin:'kucoin', mexc:'mexc',
+  gemini:'gemini', bitfinex:'bitfinex', bitstamp:'bitstamp', coinex:'coinex',
+  htx:'htx', phemex:'phemex', bingx:'bingx', hyperliquid:'hyperliquid',
+  uniswap:'uniswap', curve:'curve', pancakeswap:'pancakeswap', sushiswap:'sushi',
+  raydium:'raydium', jupiter:'jupiter', orca:'orca',
 };
 
-const chainDomains: Record<string, string> = {
-  ethereum:'ethereum.org', eth:'ethereum.org',
-  bnb:'bnbchain.org', bsc:'bnbchain.org', 'bnb chain':'bnbchain.org', binance:'bnbchain.org',
-  base:'base.org', arbitrum:'arbitrum.io', optimism:'optimism.io',
-  polygon:'polygon.technology', matic:'polygon.technology',
-  avalanche:'avax.network', avax:'avax.network',
-  solana:'solana.com', tron:'tron.network', trx:'tron.network',
-  sui:'sui.io', sonic:'soniclabs.com', bitcoin:'bitcoin.org', btc:'bitcoin.org',
+const chainIconKeys: Record<string, string> = {
+  ethereum:'ethereum', eth:'ethereum',
+  bnb:'bnb', bsc:'bnb', bnbchain:'bnb',
+  base:'base', arbitrum:'arbitrum', optimism:'optimism',
+  polygon:'polygon', matic:'polygon',
+  avalanche:'avalanche', avax:'avalanche',
+  solana:'solana', tron:'tron', trx:'tron',
+  sui:'sui', sonic:'sonic', bitcoin:'bitcoin', btc:'bitcoin',
+};
+
+const simpleIcon = (key: string, fallback?: string) =>
+  key ? 'https://cdn.simpleicons.org/' + encodeURIComponent(key) : (fallback || '');
+
+const providerLogoSources = (item: Instrument) => {
+  const r = raw(item);
+  const key = iconKey(item.exchange || item.providerLabel || item.provider);
+  const simpleKey = exchangeIconKeys[key] || key;
+  const label = provider(item).slice(0, 2) || '?';
+  const fallback = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#151515"/><text x="32" y="38" text-anchor="middle" font-family="Arial" font-size="19" font-weight="800" fill="#fff">' + label + '</text></svg>';
+  return Array.from(new Set([
+    str(item.providerLogoUrl),
+    str(r.exchangeLogoUrl),
+    simpleIcon(simpleKey),
+    'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(fallback),
+  ].filter(Boolean)));
 };
 
 const chainKey = (item: Instrument) => {
@@ -172,22 +175,20 @@ const chainKey = (item: Instrument) => {
   if (explicit) return explicit.toLowerCase().trim();
   const marketGroup = upper(r.marketGroup || item.category);
   const alpha = str(r.marketSubSubcategory || r.marketFilter || r.marketSubcategory);
-  if (marketGroup === 'ALPHA' && alpha && chainDomains[alpha.toLowerCase()]) return alpha.toLowerCase();
+  if (marketGroup === 'ALPHA' && alpha && chainIconKeys[iconKey(alpha)]) return alpha.toLowerCase();
   return '';
 };
 
 const chainLogoSources = (item: Instrument) => {
-  const key = chainKey(item);
-  if (!key) return [];
-  const normalized = key.replace(/[^a-z0-9]+/g, ' ').trim();
-  const domain = chainDomains[key] || chainDomains[normalized] || '';
-  if (!domain) return [];
-  const label = normalized.slice(0, 2).toUpperCase() || '?';
+  const r = raw(item);
+  const key = iconKey(chainKey(item));
+  const simpleKey = chainIconKeys[key] || key;
+  if (!simpleKey) return [];
+  const label = key.slice(0, 2).toUpperCase() || '?';
   const fallback = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#151515"/><text x="32" y="38" text-anchor="middle" font-family="Arial" font-size="19" font-weight="800" fill="#fff">' + label + '</text></svg>';
   return Array.from(new Set([
-    str((raw(item) as any).chainLogoUrl),
-    'https://www.google.com/s2/favicons?domain=' + encodeURIComponent(domain) + '&sz=64',
-    'https://' + domain + '/favicon.ico',
+    str(r.chainLogoUrl),
+    simpleIcon(simpleKey),
     'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(fallback),
   ].filter(Boolean)));
 };
@@ -195,16 +196,10 @@ const chainLogoSources = (item: Instrument) => {
 const Logo = ({ item, providerLogo = false, chainLogo = false }: { item: Instrument; providerLogo?: boolean; chainLogo?: boolean }) => {
   const sources = providerLogo ? providerLogoSources(item) : chainLogo ? chainLogoSources(item) : assetLogoSources(item);
   const [index, setIndex] = useState(0);
-  const src = sources[Math.min(index, sources.length - 1)];
+  const src = sources[Math.min(index, Math.max(0, sources.length - 1))];
   return (
     <span className={providerLogo ? 'bn-logo bn-provider-logo' : chainLogo ? 'bn-logo bn-chain-logo' : 'bn-logo'}>
-      <img
-        src={src}
-        alt=""
-        decoding="async"
-        loading="lazy"
-        onError={() => setIndex(v => Math.min(v + 1, sources.length - 1))}
-      />
+      {src ? <img src={src} alt="" decoding="async" loading="lazy" onError={() => setIndex(v => Math.min(v + 1, sources.length - 1))} /> : null}
     </span>
   );
 };
