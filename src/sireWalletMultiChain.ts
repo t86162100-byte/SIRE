@@ -11,7 +11,7 @@ import {
   unlockNativeWallet,
 } from './sireWalletCore';
 
-export type WalletNetwork = 'Ethereum' | 'BNB Chain' | 'Base' | 'Arbitrum' | 'Optimism' | 'Polygon' | 'Avalanche' | 'Solana' | 'TRON';
+export type WalletNetwork = string;
 
 export type WalletAsset = {
   id: string;
@@ -138,10 +138,22 @@ function requireUnlocked() {
   if (!isNativeWalletUnlocked()) throw new Error('Unlock SIRE Wallet before managing assets.');
 }
 
+let walletNetworkCatalog: Array<{name:string; chainId:number; key:string; nativeSymbol:string; nativeName:string; logoURI?:string; rpcUrl?:string; rpcUrls?:string[]}> = [];
+export function setWalletNetworkCatalog(networks: typeof walletNetworkCatalog) {
+  walletNetworkCatalog = networks;
+}
 function networkOrThrow(name: WalletNetwork) {
-  const network = SIRE_EVM_NETWORKS[name];
-  if (!network) throw new Error('This operation is not available on that network.');
-  return network;
+  const known = SIRE_EVM_NETWORKS[name];
+  if (known) return known;
+  const live = walletNetworkCatalog.find(item => item.name === name);
+  if (!live || !live.rpcUrl) throw new Error('This operation is not available on that network yet.');
+  return {
+    name: live.name,
+    chainId: live.chainId,
+    rpcUrl: live.rpcUrl,
+    rpcUrls: live.rpcUrls?.length ? live.rpcUrls : [live.rpcUrl],
+    nativeSymbol: live.nativeSymbol,
+  };
 }
 
 export async function getEvmTokenCatalog(
@@ -158,8 +170,14 @@ export async function getEvmTokenCatalog(
   });
 }
 
+export async function loadSupportedWalletNetworks() {
+  const { fetchSupportedSwapNetworks } = await import('./swapEngine');
+  const networks = await fetchSupportedSwapNetworks();
+  setWalletNetworkCatalog(networks);
+  return networks;
+}
 export function getSupportedWalletNetworks(): WalletNetwork[] {
-  return ['Ethereum', 'BNB Chain', 'Base', 'Arbitrum', 'Optimism', 'Polygon', 'Avalanche', 'Solana', 'TRON'];
+  return [...walletNetworkCatalog.map(network => network.name), 'Solana', 'TRON'];
 }
 
 export function getStoredMultiChainMetadata() {
