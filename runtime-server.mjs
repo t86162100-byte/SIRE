@@ -896,6 +896,54 @@ const server = http.createServer(async (req,res) => {
       return;
     }
     if (req.method === 'POST' && pathname === '/api/sire/agent/gpt') { const parsed = body ? JSON.parse(body) : {}; if (!String(parsed.query || '').trim()) return res.writeHead(400,{ 'Access-Control-Allow-Origin':'*','Content-Type':'application/json; charset=utf-8' }).end(JSON.stringify({ error:'query is required' })); try { const response = await handleDirectGptRequest(parsed); return res.writeHead(200,{ 'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8' }).end(JSON.stringify(response)); } catch (cause) { const message = cause instanceof Error ? cause.message : String(cause); console.error('[DIRECT GPT]', message); return res.writeHead(502,{ 'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8' }).end(JSON.stringify({ error:`Direct GPT test failed: ${message}` })); } }
+    if (pathname.startsWith('/api/sire/limit-orders')) {
+      const apiKey = String(process.env.ONEINCH_API_KEY || process.env.ONEINCH_AUTH_KEY || '').trim();
+      const json = (status, payload) => res.writeHead(status, {'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify(payload));
+      if (!apiKey) return json(503, { ok:false, error:'Limit orders are not configured yet. Add ONEINCH_API_KEY to the SIRE Render service.' });
+      const authHeaders = { Authorization:'Bearer ' + apiKey, Accept:'application/json', 'Content-Type':'application/json' };
+      try {
+        const parts = pathname.split('/').filter(Boolean);
+        if (req.method === 'POST' && pathname === '/api/sire/limit-orders/submit') {
+          const parsed = body ? JSON.parse(body) : {};
+          const orderHash = String(parsed?.orderHash || '');
+          const signature = String(parsed?.signature || '');
+          const data = parsed?.data;
+          const chainId = Number(data?.makerAsset ? parsed?.chainId : 0);
+          if (!/^0x[0-9a-fA-F]{64}$/.test(orderHash)) return json(400,{ok:false,error:'Invalid limit order hash.'});
+          if (!/^0x[0-9a-fA-F]{130,}$/.test(signature)) return json(400,{ok:false,error:'Invalid limit order signature.'});
+          if (!data || typeof data !== 'object') return json(400,{ok:false,error:'Missing limit order data.'});
+          const resolvedChain = Number(parsed?.chainId || data?.chainId || 0);
+          if (!Number.isInteger(resolvedChain) || resolvedChain <= 0) return json(400,{ok:false,error:'Missing limit order chain ID.'});
+          const upstream = await fetch('https://api.1inch.com/orderbook/v4.1/' + resolvedChain, {
+            method:'POST', headers:authHeaders,
+            body:JSON.stringify({orderHash,signature,data})
+          });
+          const raw = await upstream.text();
+          let result = {}; try { result = raw ? JSON.parse(raw) : {}; } catch { result = { raw }; }
+          if (!upstream.ok) return json(upstream.status,{ok:false,error:String(result?.message || result?.error || raw.slice(0,500) || '1inch rejected the limit order.'),upstream:result});
+          return json(201,{ok:true,orderHash,result});
+        }
+        const makerMatch = pathname.match(/^\/api\/sire\/limit-orders\/maker\/(\d+)\/(0x[a-fA-F0-9]{40})$/);
+        if (req.method === 'GET' && makerMatch) {
+          const chainId=Number(makerMatch[1]); const maker=makerMatch[2];
+          const upstream=await fetch('https://api.1inch.com/orderbook/v4.1/' + chainId + '/address/' + maker + '?statuses=1,2,3&limit=100',{headers:authHeaders});
+          const raw=await upstream.text(); let result={}; try{result=raw?JSON.parse(raw):{};}catch{result={};}
+          if(!upstream.ok) return json(upstream.status,{ok:false,error:String(result?.message||result?.error||raw.slice(0,500)||'1inch orderbook query failed.')});
+          return json(200,{ok:true,orders:Array.isArray(result?.items)?result.items:[],meta:result?.meta||{}});
+        }
+        const orderMatch=pathname.match(/^\/api\/sire\/limit-orders\/(\d+)\/(0x[0-9a-fA-F]{64})$/);
+        if(req.method==='GET' && orderMatch){
+          const chainId=Number(orderMatch[1]); const hash=orderMatch[2];
+          const upstream=await fetch('https://api.1inch.com/orderbook/v4.1/' + chainId + '/order/' + hash,{headers:authHeaders});
+          const raw=await upstream.text(); let result={}; try{result=raw?JSON.parse(raw):{};}catch{result={};}
+          if(!upstream.ok) return json(upstream.status,{ok:false,error:String(result?.message||result?.error||raw.slice(0,500)||'1inch order status query failed.')});
+          return json(200,{ok:true,order:result});
+        }
+        return json(404,{ok:false,error:'Unknown limit-order endpoint.'});
+      } catch (cause) {
+        return json(502,{ok:false,error:cause instanceof Error ? cause.message : String(cause)});
+      }
+    }
     if (req.method === 'POST' && pathname === '/api/sire/evm/rpc') {
       try {
         const parsed = body ? JSON.parse(body) : {};
