@@ -948,12 +948,6 @@ export default function TradeView({ referencePrice = 0 }: Props) {
         </div>
       </section>
     </div>}
-  </div>;
-}
- + Number(quote.gasUSD).toFixed(2) : '—'}</b><small>Network fee</small></span>
-                </div>}
-              </div>}
-            </div>
 
             {tradeMode === 'Swap' && <div className="sire-swap-confirm-wrap">
               {!wallet ? (
