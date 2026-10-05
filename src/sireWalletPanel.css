@@ -39,3 +39,52 @@
 .sire-wallet-activity>a{border-bottom-color:#202024;color:#ddd}.sire-wallet-activity>a b{color:#9b9ba2}
 .sire-wallet-lock-shell{background:#050505;color:#fff}.sire-wallet-lock-icon{background:#151518;border-color:#303036;color:#fff}.sire-wallet-lock-shell p{color:#a2a2a9}.sire-wallet-error{color:#ff7d7d}
 @media(max-width:520px){.sire-wallet-shell{height:100dvh;min-height:100dvh;border-radius:0}.sire-wallet-scroll{height:calc(100% - 61px)}.sire-wallet-topbar{height:61px;padding:0 14px}.sire-wallet-hero{margin:12px 12px 10px}.sire-wallet-network-bar,.sire-wallet-assets-section,.sire-wallet-activity,.sire-wallet-tools,.sire-wallet-multichain{margin-left:12px;margin-right:12px}}
+
+
+/* FINAL SIRE WALLET THEME LOCK — black canvas, white interface. */
+.sire-wallet-shell-backdrop,
+.sire-wallet-shell,
+.sire-wallet-scroll,
+.sire-wallet-topbar,
+.sire-wallet-hero,
+.sire-wallet-network-title,
+.sire-wallet-network-menu,
+.sire-wallet-search,
+.sire-wallet-asset-row,
+.sire-wallet-tools,
+.sire-wallet-multichain,
+.sire-wallet-modal,
+.sire-wallet-lock-shell {
+  background-color:#050505 !important;
+  color:#ffffff !important;
+}
+.sire-wallet-shell-backdrop { background:#050505 !important; }
+.sire-wallet-shell { background:#050505 !important; color:#ffffff !important; }
+.sire-wallet-scroll { background:#050505 !important; }
+.sire-wallet-topbar { background:#050505 !important; color:#ffffff !important; }
+.sire-wallet-hero { background:#0b0b0d !important; color:#ffffff !important; }
+.sire-wallet-network-title,
+.sire-wallet-search,
+.sire-wallet-asset-row,
+.sire-wallet-tools button,
+.sire-wallet-address-box,
+.sire-wallet-secondary { background:#0b0b0d !important; color:#ffffff !important; }
+.sire-wallet-network-menu,
+.sire-wallet-modal { background:#0b0b0d !important; color:#ffffff !important; }
+.sire-wallet-network-menu button,
+.sire-wallet-section-head h3,
+.sire-wallet-brand b,
+.sire-wallet-hero strong,
+.sire-wallet-asset-copy b,
+.sire-wallet-asset-balance b,
+.sire-wallet-tools b,
+.sire-wallet-modal-head h3 { color:#ffffff !important; }
+.sire-wallet-search input,
+.sire-wallet-modal input,
+.sire-wallet-modal select,
+.sire-wallet-lock-shell input { background:#050505 !important; color:#ffffff !important; }
+.sire-wallet-primary,
+.sire-wallet-multichain button { background:#ffffff !important; color:#050505 !important; }
+.sire-wallet-mark { background:#ffffff !important; }
+body:has(.sire-wallet-shell-backdrop) { background:#050505 !important; }
+html:has(.sire-wallet-shell-backdrop) { background:#050505 !important; }
