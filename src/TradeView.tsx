@@ -596,7 +596,7 @@ export default function TradeView({ referencePrice = 0 }: Props) {
                 <div className="sire-output-value">{quoteLoading ? <LoaderCircle className="sire-spin" size={21}/> : output || '—'}</div>
               </div>
               <small className="sire-usd-reference">
-                {quote ? 'Route: ' + (quote.toolName || quote.tool || 'aggregator') : 'Waiting for an executable provider quote'}
+                {quote ? (isCrossChain ? 'Route: ' + (quote.toolName || quote.tool || 'aggregator') + ' · ' + network + ' → ' + toNetwork : 'Route: ' + (quote.toolName || quote.tool || 'aggregator')) : 'Waiting for an executable provider quote'}
               </small>
             </div>
 
@@ -626,9 +626,23 @@ export default function TradeView({ referencePrice = 0 }: Props) {
             </div>
 
             <div className="sire-swap-details">
-              <div><span>Price impact</span><b>{quote?.priceImpact != null ? (quote.priceImpact * 100).toFixed(2) + '%' : '—'}</b></div>
-              <div><span>Network fee</span><b>{quote?.gasUSD ? '$' + Number(quote.gasUSD).toFixed(2) : '—'}</b></div>
-              <div><span>Minimum received</span><b>{quote ? minimum + ' ' + to.symbol : '—'}</b></div>
+               <div><span>Price impact</span><b>{quote?.priceImpact != null ? (quote.priceImpact * 100).toFixed(2) + '%' : '—'}</b></div>
+               <div><span>Network fee</span><b>{quote?.gasUSD ? '$' + Number(quote.gasUSD).toFixed(2) : '—'}</b></div>
+               <div><span>Minimum received</span><b>{quote ? minimum + ' ' + to.symbol : '—'}</b></div>
+               <div><span>{isCrossChain ? 'Destination' : 'Recipient'}</span><b>{recipient ? shortAddress(recipient) : 'You'}</b></div>
+               {quote && <div><span>Quote refresh</span><b>{quoteSeconds > 0 ? quoteSeconds + 's' : 'Refresh required'}</b></div>}
+             </div>
+
+             <div className="sire-swap-recipient">
+               <button type="button" className={recipientOpen ? 'active' : ''} onClick={() => setRecipientOpen(value => !value)}>
+                 <span>Send to</span><b>{recipient ? shortAddress(recipient) : 'My wallet'}</b>
+               </button>
+               {recipientOpen && <div className="sire-recipient-editor">
+                 <input value={recipient} onChange={e => { setRecipient(e.target.value.trim()); setRecipientError(''); }} placeholder="0x… destination address" spellCheck={false} />
+                 <button type="button" onClick={() => { setRecipient(''); setRecipientError(''); }}>Use my wallet</button>
+                 {recipient && !recipientValid && <small>Enter a valid EVM destination address.</small>}
+               </div>}
+             </div>
             </div>
 
             {quote && wallet && nativeUnlocked && !busy && !simulationBusy && <button type="button" className="sire-wallet-secondary sire-test-swap-button" onClick={() => void simulate()}>
