@@ -201,16 +201,19 @@ export default function SireWalletPanel() {
           </button>
         </div>
 
+        <div className="sire-wallet-account-row">
+          <button className="sire-wallet-account" onClick={() => void copy(address)} aria-label="Copy wallet address">
+            <span>Wallet</span><b>{short(address)}</b><Copy size={13}/>
+          </button>
+        </div>
+
         <div className="sire-wallet-scroll">
           <section className="sire-wallet-hero">
             <div className="sire-wallet-hero-row">
               <div>
-                <span className="sire-wallet-kicker">TOTAL PORTFOLIO</span>
                 <button className="sire-wallet-eye" onClick={() => setBalanceVisible(v => !v)}>{balanceVisible ? <Eye size={14}/> : <EyeOff size={14}/>} {balanceVisible ? 'Visible' : 'Hidden'}</button>
-                <strong>{balanceVisible ? '$0.00' : '••••••'}</strong>
-                <small>USD · on-chain value</small>
+                <strong><span className="sire-wallet-currency">$</span><span className="sire-wallet-leading-digit">{balanceVisible ? '0' : '•'}</span><span className="sire-wallet-decimal">{balanceVisible ? '.00' : '••'}</span></strong>
               </div>
-              <button className="sire-wallet-account" onClick={() => void copy(address)}><span>Wallet</span><b>{short(address)}</b><Copy size={13}/></button>
             </div>
             <div className="sire-wallet-quick-actions">
               <button onClick={() => setSendOpen(true)}><span><ArrowUpFromLine size={17}/></span><b>Send</b></button>
