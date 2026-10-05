@@ -25,7 +25,6 @@ export default function TradeView({ referencePrice = 0, referenceChange = 0 }: P
   const [amount, setAmount] = useState('1');
   const [tradeMode, setTradeMode] = useState<'Swap' | 'Limit'>('Swap');
   const [tokenPicker, setTokenPicker] = useState<'from' | 'to' | null>(null);
-  const [reviewOpen, setReviewOpen] = useState(false);
   const [search, setSearch] = useState('');
 
   const ethReference = referencePrice > 0 ? referencePrice : 0;
@@ -119,6 +118,5 @@ export default function TradeView({ referencePrice = 0, referenceChange = 0 }: P
 
     {tokenPicker && <div className="sire-modal-backdrop" onMouseDown={() => setTokenPicker(null)}><section className="sire-token-modal" onMouseDown={e => e.stopPropagation()}><div className="sire-token-modal-head"><div><b>Select token</b><small>{network}</small></div><button type="button" onClick={() => setTokenPicker(null)}><X size={17}/></button></div><div className="sire-token-search"><Search size={15}/><input autoFocus value={search} onChange={e => setSearch(e.target.value)} placeholder="Search token"/></div><div className="sire-token-list">{filteredTokens.map(token => <button key={token.symbol} type="button" onClick={() => chooseToken(token)}><span className="sire-token-mark">{token.symbol.slice(0,1)}</span><span><b>{token.symbol}</b><small>{token.name}</small></span><ChevronDown size={14} className="sire-token-arrow"/></button>)}</div></section></div>}
 
-    {reviewOpen && <div className="sire-modal-backdrop" onMouseDown={() => setReviewOpen(false)}><section className="sire-review-modal" onMouseDown={e => e.stopPropagation()}><div className="sire-token-modal-head"><div><b>Review swap</b><small>Final quote check</small></div><button type="button" onClick={() => setReviewOpen(false)}><X size={17}/></button></div><div className="sire-review-pair"><span>{amount || '0'} {from.symbol}</span><ArrowDownUp size={18}/><span>{indicative ? money(output,2) : '—'} {to.symbol}</span></div><div className="sire-review-list"><div><span>Network</span><b>{network}</b></div><div><span>Slippage</span><b>{slippage === 'Custom' ? `${customSlippage}%` : slippage}</b></div><div><span>Route</span><b>SIRE Smart Route</b></div><div><span>Network fee</span><b>Re-quoted before signing</b></div></div><button className="sire-review-button" type="button" onClick={() => setReviewOpen(false)}>Refresh executable quote</button><div className="sire-swap-safety"><LockKeyhole size={13}/> Nothing is signed until you confirm in your wallet.</div></section></div>}
   </div>;
 }
