@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
   ArrowDownToLine, ArrowUpFromLine, ChevronDown, Copy, ExternalLink, Eye, EyeOff,
-  History, KeyRound, LockKeyhole, Plus, RefreshCw, Search, Send, Settings2,
+  History, KeyRound, LockKeyhole, Plus, Search, Send, Settings2,
   ShieldCheck, WalletCards, X
 } from 'lucide-react';
 import {
