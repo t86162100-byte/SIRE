@@ -288,3 +288,25 @@ html:has(.sire-wallet-shell-backdrop) { background:#050505 !important; }
   .sire-wallet-currency,.sire-wallet-leading-digit{font-size:31px}
   .sire-wallet-decimal{font-size:18px}
 }
+
+
+/* LEFT-ALIGN PORTFOLIO ADDRESS AND BALANCE */
+.sire-wallet-account-row{
+  justify-content:flex-start !important;
+}
+.sire-wallet-account-row .sire-wallet-account{
+  width:auto !important;
+  margin:0 !important;
+  text-align:left !important;
+}
+.sire-wallet-hero-row{
+  justify-content:flex-start !important;
+  text-align:left !important;
+}
+.sire-wallet-hero-row > div{
+  align-items:flex-start !important;
+  text-align:left !important;
+}
+.sire-wallet-hero .sire-wallet-eye{
+  align-self:flex-start !important;
+}
