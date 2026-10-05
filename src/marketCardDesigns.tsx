@@ -128,8 +128,8 @@ const assetLogoSources = (item: Instrument) => {
   const fallbackKey = iconKey(base);
   const simpleKey = simpleAssetKeys[fallbackKey] || '';
   const sources = [
-    str(item.logoUrl),
     str(r.assetLogoUrl),
+    str(item.logoUrl),
     str(r.tokenLogoUrl),
     str(r.iconUrl),
     simpleKey ? simpleIcon(simpleKey) : '',
@@ -187,7 +187,7 @@ const chainKey = (item: Instrument) => {
   const marketGroup = upper(r.marketGroup || item.category);
   const alpha = str(r.marketSubSubcategory || r.marketFilter || r.marketSubcategory);
   if (marketGroup === 'ALPHA' && alpha && chainIconKeys[iconKey(alpha)]) return alpha.toLowerCase();
-  return 'cex';
+  return '';
 };
 
 const chainSymbol = (item: Instrument) => {
@@ -195,6 +195,7 @@ const chainSymbol = (item: Instrument) => {
   const explicit = str(r.chainSymbol || r.networkSymbol || r.blockchainSymbol);
   if (explicit) return upper(explicit).slice(0, 6);
   const key = iconKey(chainKey(item));
+  if (!key) return '';
   if (key === 'cex') return 'CEX';
   const symbols: Record<string, string> = {
     ethereum: 'ETH', eth: 'ETH',
