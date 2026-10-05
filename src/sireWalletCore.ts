@@ -278,26 +278,27 @@ export async function sendNativeTransaction(network: SireEvmNetwork, request: Tr
 }
 
 export async function waitForNativeTransaction(network: SireEvmNetwork, hash: string, timeoutMs = 180000) {
-  const urls = Array.from(new Set([network.rpcUrl, ...(network.rpcUrls || [])]));
   const started = Date.now();
-  let lastError: unknown = null;
-
+  let lastError = '';
   while (Date.now() - started < timeoutMs) {
-    for (const url of urls) {
-      try {
-        const provider = new JsonRpcProvider(url, network.chainId, { staticNetwork: true });
-        const receipt = await provider.getTransactionReceipt(hash);
-        if (receipt) return receipt;
-      } catch (error: any) {
-        lastError = error;
-        if (!isRetryableRpcError(error)) throw error;
+    try {
+      const response = await fetch('/api/sire/evm/rpc', {
+        method:'POST',
+        headers:{'content-type':'application/json','accept':'application/json'},
+        body:JSON.stringify({network:network.name,method:'eth_getTransactionReceipt',params:[hash]}),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok || payload?.ok === false) throw new Error(String(payload?.error || payload?.detail || ('HTTP ' + response.status)));
+      if (payload?.result) {
+        const status = payload.result.status == null ? 1 : Number(BigInt(payload.result.status));
+        return { ...payload.result, status };
       }
+    } catch (error: any) {
+      lastError = error instanceof Error ? error.message : String(error || '');
     }
     await new Promise(resolve => setTimeout(resolve, 1500));
   }
-
-  const detail = lastError instanceof Error ? lastError.message : '';
-  throw new Error('Transaction confirmation timed out across all configured RPC endpoints.' + (detail ? ' Last RPC error: ' + detail : ''));
+  throw new Error('Transaction confirmation timed out.' + (lastError ? ' Last RPC error: ' + lastError : ''));
 }
 
 export function getStoredWalletMetadata() {
