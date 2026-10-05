@@ -30,6 +30,27 @@ const money = (value: number, digits = 2) =>
 
 const shortAddress = (value: string) => value ? value.slice(0, 6) + '…' + value.slice(-4) : '';
 
+const Logo = ({ src, className = '' }: { src?: string; className?: string }) => src ? (
+  <img
+    src={src}
+    alt=""
+    className={className}
+    loading="lazy"
+    decoding="async"
+    onError={event => {
+      event.currentTarget.style.display = 'none';
+      event.currentTarget.nextElementSibling?.removeAttribute('hidden');
+    }}
+  />
+) : null;
+
+const LogoMark = ({ src, fallback, className = '' }: { src?: string; fallback: string; className?: string }) => (
+  <span className={className}>
+    <Logo src={src} className="sire-logo-image" />
+    <span className="sire-logo-fallback" hidden={Boolean(src)}>{fallback}</span>
+  </span>
+);
+
 export default function TradeView({ referencePrice = 0 }: Props) {
   const [network, setNetwork] = useState('');
   const [supportedNetworks, setSupportedNetworks] = useState<SwapNetwork[]>([]);
@@ -452,8 +473,8 @@ export default function TradeView({ referencePrice = 0 }: Props) {
         <div className="sire-swap-rail-head"><span>NETWORK</span><strong>Choose chain</strong></div>
         <div className="sire-swap-network-list">
           {supportedNetworks.map(item => (
-            <button key={item} type="button" className={item === network ? 'active' : ''} onClick={() => void selectNetwork(item)}>
-              <LogoMark src={item.logoURI} fallback={item.name.slice(0, 1)} className="sire-network-icon" /><span>{item.name}</span>{item === network && <i>✓</i>}
+            <button key={item.name} type="button" className={item.name === network ? 'active' : ''} onClick={() => void selectNetwork(item.name)}>
+              <LogoMark src={item.logoURI} fallback={item.name.slice(0, 1)} className="sire-network-icon" /><span>{item.name}</span>{item.name === network && <i>✓</i>}
             </button>
           ))}
         </div>
