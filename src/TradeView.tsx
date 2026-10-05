@@ -328,7 +328,7 @@ export default function TradeView({ referencePrice = 0 }: Props) {
                 <WalletCards size={15}/> {hasNativeWallet() ? 'Unlock SIRE Wallet' : 'Create SIRE Wallet'}
               </button>
             ) : walletChain !== (SWAP_NETWORKS[network]?.chainId ?? 1) ? (
-              <button type="button" className="sire-review-button" onClick={() => void selectNetwork(network)}>Switch to ${network}</button>
+              <button type="button" className="sire-review-button" onClick={() => void selectNetwork(network)}>Switch to {network}</button>
             ) : (
               <button type="button" className="sire-review-button" disabled={!canExecute} onClick={() => void execute()}>
                 {busy ? <><LoaderCircle className="sire-spin" size={15}/> {status || 'Executing'}</> : quote ? 'Confirm Swap' : quoteLoading ? 'Getting live quote…' : 'Waiting for executable quote'}
