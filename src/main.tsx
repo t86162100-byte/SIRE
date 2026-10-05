@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import App from './App';
+import { WalletKitBridge } from './reownWallet';
 import { SireErrorBoundary, SireErrorScreen, getSireErrorMessage } from './SireErrorBoundary';
 import './index.css';
 import './mobile.css';
@@ -53,7 +54,7 @@ function SireRuntimeGuard() {
   }, []);
 
   if (fatal) return <SireErrorScreen {...fatal} />;
-  return <SireErrorBoundary><App /></SireErrorBoundary>;
+  return <SireErrorBoundary><WalletKitBridge /><App /></SireErrorBoundary>;
 }
 
 createRoot(document.getElementById('root')!).render(
