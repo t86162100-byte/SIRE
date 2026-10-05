@@ -1,0 +1,188 @@
+import { HDNodeWallet, JsonRpcProvider, type Provider, type TransactionRequest } from 'ethers';
+
+export type SireEvmNetwork = {
+  name: string;
+  chainId: number;
+  rpcUrl: string;
+  nativeSymbol: string;
+};
+
+const STORAGE_KEY = 'sire.wallet.keystore.v1';
+
+export const SIRE_EVM_NETWORKS: Record<string, SireEvmNetwork> = {
+  Ethereum: { name: 'Ethereum', chainId: 1, rpcUrl: 'https://cloudflare-eth.com', nativeSymbol: 'ETH' },
+  'BNB Chain': { name: 'BNB Chain', chainId: 56, rpcUrl: 'https://bsc-dataseed.binance.org', nativeSymbol: 'BNB' },
+  Base: { name: 'Base', chainId: 8453, rpcUrl: 'https://mainnet.base.org', nativeSymbol: 'ETH' },
+  Arbitrum: { name: 'Arbitrum', chainId: 42161, rpcUrl: 'https://arb1.arbitrum.io/rpc', nativeSymbol: 'ETH' },
+  Optimism: { name: 'Optimism', chainId: 10, rpcUrl: 'https://mainnet.optimism.io', nativeSymbol: 'ETH' },
+  Polygon: { name: 'Polygon', chainId: 137, rpcUrl: 'https://polygon-rpc.com', nativeSymbol: 'POL' },
+  Avalanche: { name: 'Avalanche', chainId: 43114, rpcUrl: 'https://api.avax.network/ext/bc/C/rpc', nativeSymbol: 'AVAX' },
+};
+
+type StoredWallet = {
+  version: 1;
+  address: string;
+  keystore: string;
+  createdAt: string;
+};
+
+let unlockedWallet: HDNodeWallet | null = null;
+
+function storageAvailable() {
+  return typeof window !== 'undefined' && typeof window.localStorage !== 'undefined';
+}
+
+function saveStoredWallet(value: StoredWallet) {
+  if (!storageAvailable()) throw new Error('SIRE Wallet storage is unavailable in this browser.');
+  window.localStorage.setItem(STORAGE_KEY, JSON.stringify(value));
+}
+
+function loadStoredWallet(): StoredWallet | null {
+  if (!storageAvailable()) return null;
+  const raw = window.localStorage.getItem(STORAGE_KEY);
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw) as StoredWallet;
+    if (parsed?.version !== 1 || !parsed.address || !parsed.keystore) return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+function validatePassword(password: string) {
+  if (typeof password !== 'string' || password.length < 8) {
+    throw new Error('SIRE Wallet password must contain at least 8 characters.');
+  }
+}
+
+function emitState() {
+  if (typeof window === 'undefined') return;
+  window.dispatchEvent(new CustomEvent('sire:native-wallet-state', {
+    detail: {
+      address: unlockedWallet?.address || loadStoredWallet()?.address || '',
+      unlocked: Boolean(unlockedWallet),
+      hasWallet: Boolean(loadStoredWallet()),
+    },
+  }));
+}
+
+export function hasNativeWallet() {
+  return Boolean(loadStoredWallet());
+}
+
+export function isNativeWalletUnlocked() {
+  return Boolean(unlockedWallet);
+}
+
+export function getNativeWalletAddress() {
+  return unlockedWallet?.address || loadStoredWallet()?.address || '';
+}
+
+export async function createNativeWallet(password: string) {
+  validatePassword(password);
+  if (hasNativeWallet()) throw new Error('A SIRE Wallet already exists on this device.');
+  const wallet = HDNodeWallet.createRandom();
+  const keystore = await wallet.encrypt(password);
+  saveStoredWallet({
+    version: 1,
+    address: wallet.address,
+    keystore,
+    createdAt: new Date().toISOString(),
+  });
+  unlockedWallet = wallet;
+  emitState();
+  return { address: wallet.address, mnemonic: wallet.mnemonic?.phrase || '' };
+}
+
+export async function importNativeWalletFromMnemonic(password: string, mnemonic: string, accountIndex = 0) {
+  validatePassword(password);
+  if (hasNativeWallet()) throw new Error('A SIRE Wallet already exists on this device.');
+  const phrase = mnemonic.trim().replace(/\\s+/g, ' ');
+  if (!phrase) throw new Error('Enter a recovery phrase.');
+  const path = `m/44'/60'/0'/0/${Math.max(0, Math.floor(accountIndex))}`;
+  const wallet = HDNodeWallet.fromPhrase(phrase, undefined, path);
+  const keystore = await wallet.encrypt(password);
+  saveStoredWallet({
+    version: 1,
+    address: wallet.address,
+    keystore,
+    createdAt: new Date().toISOString(),
+  });
+  unlockedWallet = wallet;
+  emitState();
+  return { address: wallet.address };
+}
+
+export async function importNativeWalletFromPrivateKey(password: string, privateKey: string) {
+  validatePassword(password);
+  if (hasNativeWallet()) throw new Error('A SIRE Wallet already exists on this device.');
+  const key = privateKey.trim();
+  if (!/^0x[0-9a-fA-F]{64}$/.test(key)) throw new Error('Invalid EVM private key.');
+  const wallet = new HDNodeWallet(key);
+  const keystore = await wallet.encrypt(password);
+  saveStoredWallet({
+    version: 1,
+    address: wallet.address,
+    keystore,
+    createdAt: new Date().toISOString(),
+  });
+  unlockedWallet = wallet;
+  emitState();
+  return { address: wallet.address };
+}
+
+export async function unlockNativeWallet(password: string) {
+  validatePassword(password);
+  const stored = loadStoredWallet();
+  if (!stored) throw new Error('No SIRE Wallet exists on this device.');
+  const wallet = await HDNodeWallet.fromEncryptedJson(stored.keystore, password);
+  if (wallet.address.toLowerCase() !== stored.address.toLowerCase()) {
+    throw new Error('Wallet integrity check failed.');
+  }
+  unlockedWallet = wallet;
+  emitState();
+  return { address: wallet.address };
+}
+
+export function lockNativeWallet() {
+  unlockedWallet = null;
+  emitState();
+}
+
+export function deleteNativeWallet() {
+  lockNativeWallet();
+  if (storageAvailable()) window.localStorage.removeItem(STORAGE_KEY);
+  emitState();
+}
+
+export async function exportNativeMnemonic() {
+  if (!unlockedWallet) throw new Error('Unlock SIRE Wallet before exporting recovery information.');
+  const phrase = unlockedWallet.mnemonic?.phrase;
+  if (!phrase) throw new Error('This wallet does not expose a mnemonic recovery phrase.');
+  return phrase;
+}
+
+export function getNativeProvider(network: SireEvmNetwork): JsonRpcProvider {
+  return new JsonRpcProvider(network.rpcUrl, network.chainId, { staticNetwork: true });
+}
+
+export function getNativeSigner(network: SireEvmNetwork) {
+  if (!unlockedWallet) throw new Error('Unlock SIRE Wallet before signing.');
+  return unlockedWallet.connect(getNativeProvider(network));
+}
+
+export async function getNativeBalance(network: SireEvmNetwork, address = getNativeWalletAddress()) {
+  if (!address) return 0n;
+  return getNativeProvider(network).getBalance(address);
+}
+
+export async function sendNativeTransaction(network: SireEvmNetwork, request: TransactionRequest) {
+  const signer = getNativeSigner(network);
+  return signer.sendTransaction(request);
+}
+
+export function getStoredWalletMetadata() {
+  const stored = loadStoredWallet();
+  return stored ? { address: stored.address, createdAt: stored.createdAt } : null;
+}
