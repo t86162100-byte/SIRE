@@ -50,3 +50,113 @@
 .sire-network-icon,.sire-token-mark,.sire-token-network-icon{overflow:hidden;flex:0 0 auto}
 .sire-network-icon .sire-logo-image,.sire-token-network-icon .sire-logo-image{padding:2px;box-sizing:border-box}
 .sire-token-mark.large .sire-logo-image{padding:1px;box-sizing:border-box}
+
+/* Token picker visual treatment: heavier chain pills and Bitget-style token/chain logo pairing. */
+.sire-token-network-strip button{
+  height:40px;
+  padding:0 13px;
+  border:1px solid #171717;
+  border-radius:999px;
+  background:#000;
+  color:rgba(255,255,255,.76);
+  font-size:11px;
+  font-weight:900;
+  letter-spacing:.01em;
+  box-shadow:0 4px 14px rgba(0,120,255,.24),inset 0 1px 0 rgba(255,255,255,.04);
+}
+.sire-token-network-strip button:hover{
+  border-color:#2a2a2a;
+  color:#fff;
+  box-shadow:0 5px 17px rgba(0,140,255,.32);
+}
+.sire-token-network-strip button.active{
+  border-color:#fff;
+  background:#fff;
+  color:#050505;
+  box-shadow:0 5px 18px rgba(0,140,255,.48),0 0 2px rgba(255,255,255,.9);
+}
+.sire-token-network-icon{
+  width:22px;
+  height:22px;
+  flex:0 0 22px;
+  border:1px solid rgba(255,255,255,.10);
+  background:#111;
+  font-size:8px;
+}
+.sire-token-network-strip button.active .sire-token-network-icon{
+  background:#111;
+  color:#fff;
+}
+.sire-token-list-logo{
+  position:relative;
+  width:48px;
+  height:48px;
+  flex:0 0 48px;
+  display:block;
+}
+.sire-token-list-logo .sire-token-mark{
+  width:48px;
+  height:48px;
+  border-radius:50%;
+  font-size:14px;
+  border:1px solid rgba(255,255,255,.16);
+  background:#151515;
+  box-shadow:0 2px 8px rgba(0,0,0,.32);
+}
+.sire-token-list-logo .sire-token-mark .sire-logo-image{
+  padding:2px;
+}
+.sire-token-chain-badge{
+  position:absolute;
+  right:-1px;
+  bottom:-1px;
+  width:19px;
+  height:19px;
+  border-radius:50%;
+  border:2px solid #080808;
+  background:#111;
+  display:grid;
+  place-items:center;
+  overflow:hidden;
+  box-shadow:0 2px 7px rgba(0,0,0,.45);
+  z-index:2;
+}
+.sire-token-chain-badge .sire-logo-image{
+  width:100%;
+  height:100%;
+  padding:2px;
+  box-sizing:border-box;
+}
+.sire-token-chain-badge .sire-logo-fallback{
+  font-size:7px;
+  font-weight:900;
+}
+.sire-token-picker-sheet .sire-token-list button{
+  min-height:70px;
+  padding:10px 7px;
+}
+@media(max-width:620px){
+  .sire-token-network-strip button{
+    height:40px;
+    padding:0 12px;
+    font-size:10px;
+  }
+  .sire-token-network-icon{
+    width:22px;
+    height:22px;
+    flex-basis:22px;
+  }
+  .sire-token-list-logo{
+    width:50px;
+    height:50px;
+    flex-basis:50px;
+  }
+  .sire-token-list-logo .sire-token-mark{
+    width:50px;
+    height:50px;
+  }
+  .sire-token-chain-badge{
+    width:20px;
+    height:20px;
+  }
+}
