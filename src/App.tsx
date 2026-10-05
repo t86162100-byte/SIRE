@@ -79,6 +79,15 @@ export type Instrument = Partial<DerivInstrument> & Partial<BinanceInstrument> &
   dailyVolume?: number;
   beta?: number;
   volatility?: number;
+  assetId?: string;
+  assetLogoUrl?: string;
+  chain?: string;
+  chainName?: string;
+  chainSymbol?: string;
+  chainId?: string;
+  chainLogoUrl?: string;
+  contractAddress?: string;
+  metadataSource?: string;
 };
 
 const makeLogoFallback = (label: string) => {
@@ -443,8 +452,8 @@ export default function App() {
       if (binanceResult.status === 'fulfilled') {
         normalized.push(...binanceResult.value.map(item => ({
           ...item, id:'BINANCE:'+item.marketType+':'+item.symbol, provider:'BINANCE' as MarketProvider,
-          providerLabel:'Binance', displaySymbol:item.symbol, logoUrl:makeLogoFallback(item.baseAsset || item.symbol),
-          providerLogoUrl:'https://www.binance.com/favicon.ico',
+          providerLabel:'Binance', displaySymbol:item.symbol, logoUrl:item.logoUrl || makeLogoFallback(item.baseAsset || item.symbol),
+          providerLogoUrl:item.providerLogoUrl || 'https://www.binance.com/favicon.ico',
         })) as Instrument[]);
       }
       const unique = normalized.filter((item,index,all)=>item.id && all.findIndex(x=>x.id===item.id)===index);
