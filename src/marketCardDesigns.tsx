@@ -116,12 +116,23 @@ const fieldsFor = (item: Instrument, group: string, subgroup: string): Field[] =
 
 const assetLogoSources = (item: Instrument) => {
   const r = raw(item);
-  const base = str(item.base).toLowerCase();
+  const base = str(item.base || r.baseAsset).toLowerCase();
+  const simpleAssetKeys: Record<string, string> = {
+    btc:'bitcoin', eth:'ethereum', bnb:'bnb', sol:'solana', xrp:'xrp',
+    ada:'cardano', doge:'dogecoin', avax:'avalanche', dot:'polkadot',
+    link:'chainlink', uni:'uniswap', atom:'cosmos', trx:'tron',
+    ton:'ton', sui:'sui', apt:'aptos', near:'near', arb:'arbitrum',
+    op:'optimism', matic:'polygon', pol:'polygon', pepe:'pepe',
+    usdt:'tether', usdc:'usd-coin', dai:'dai', wbtc:'wrapped-bitcoin',
+  };
+  const fallbackKey = iconKey(base);
+  const simpleKey = simpleAssetKeys[fallbackKey] || '';
   const sources = [
     str(item.logoUrl),
     str(r.assetLogoUrl),
     str(r.tokenLogoUrl),
     str(r.iconUrl),
+    simpleKey ? simpleIcon(simpleKey) : '',
     base ? 'https://cdn.jsdelivr.net/gh/vadimmalykhin/binance-icons/crypto/' + encodeURIComponent(base) + '.svg' : '',
     base ? 'https://cdn.jsdelivr.net/gh/spothq/cryptocurrency-icons@master/128/color/' + encodeURIComponent(base) + '.png' : '',
   ].filter(Boolean);
