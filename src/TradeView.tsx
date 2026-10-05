@@ -2,11 +2,12 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowDownUp, ChevronDown, CircleAlert, LoaderCircle, LockKeyhole, Search, WalletCards, X } from 'lucide-react';
 import './tradeSwap.css';
 import {
-  ETHEREUM_TOKENS,
   SWAP_NETWORKS,
   EVM_SWAP_NETWORKS,
+  fetchSupportedSwapNetworks,
   type SwapToken,
   type SwapQuote,
+  type SwapNetwork,
   
   executeSwap,
   simulateSwap,
@@ -23,7 +24,6 @@ import { cancelPreparedNativeWallet, finalizePreparedNativeWallet, getNativeWall
 type Props = { referencePrice?: number; referenceChange?: number };
 
 const PRODUCTS = ['Swap', 'Spot', 'Margin', 'Futures', 'Options', 'Alpha', 'Tokenized', 'TradFi'];
-const NETWORKS = ['Ethereum', 'BNB Chain', 'Solana', 'Base', 'Arbitrum', 'Optimism', 'Polygon', 'Avalanche', 'TRON'];
 
 const money = (value: number, digits = 2) =>
   Number.isFinite(value) ? value.toLocaleString(undefined, { maximumFractionDigits: digits }) : '—';
@@ -31,10 +31,11 @@ const money = (value: number, digits = 2) =>
 const shortAddress = (value: string) => value ? value.slice(0, 6) + '…' + value.slice(-4) : '';
 
 export default function TradeView({ referencePrice = 0 }: Props) {
-  const [network, setNetwork] = useState('Ethereum');
-  const [tokens, setTokens] = useState<SwapToken[]>(ETHEREUM_TOKENS);
-  const [from, setFrom] = useState<SwapToken>(ETHEREUM_TOKENS[0]);
-  const [to, setTo] = useState<SwapToken>(ETHEREUM_TOKENS[1]);
+  const [network, setNetwork] = useState('');
+  const [supportedNetworks, setSupportedNetworks] = useState<SwapNetwork[]>([]);
+  const [tokens, setTokens] = useState<SwapToken[]>([]);
+  const [from, setFrom] = useState<SwapToken>({ symbol:'', name:'', address:'', decimals:18, chainId:0 });
+  const [to, setTo] = useState<SwapToken>({ symbol:'', name:'', address:'', decimals:18, chainId:0 });
   const [amount, setAmount] = useState('1');
   const [wallet, setWallet] = useState('');
   const [walletChain, setWalletChain] = useState<number | null>(null);
@@ -194,12 +195,25 @@ export default function TradeView({ referencePrice = 0 }: Props) {
   }, [tokens, search, tokenPicker, from, to]);
 
   useEffect(() => {
+    let cancelled = false;
+    void fetchSupportedSwapNetworks().then(nextNetworks => {
+      if (cancelled) return;
+      setSupportedNetworks(nextNetworks);
+      const preferred = nextNetworks[0];
+      if (preferred) setNetwork(current => current && nextNetworks.some(item => item.name === current) ? current : preferred.name);
+    }).catch(error => {
+      if (!cancelled) setExecutionError(error instanceof Error ? error.message : String(error));
+    });
+    return () => { cancelled = true; };
+  }, []);
+
+  useEffect(() => {
     const selectedNetwork = SWAP_NETWORKS[network];
     if (!selectedNetwork || !EVM_SWAP_NETWORKS.some(item => item.chainId === selectedNetwork.chainId)) return;
+    let cancelled = false;
     void fetchNetworkTokens(selectedNetwork).then(next => {
+      if (cancelled) return;
       setTokens(next);
-      // From and To are independent selections. Preserve each selection when possible,
-      // but never let catalogue/network fallback collapse both sides onto the same token.
       setFrom(current => {
         const preserved = next.find(token => tokenIdentity(token) === tokenIdentity(current));
         return preserved || next[0] || current;
@@ -210,7 +224,13 @@ export default function TradeView({ referencePrice = 0 }: Props) {
         const nextFrom = next[0];
         return next.find(token => !nextFrom || tokenIdentity(token) !== tokenIdentity(nextFrom)) || nextFrom || current;
       });
+    }).catch(error => {
+      if (!cancelled) {
+        setTokens([]);
+        setExecutionError(error instanceof Error ? error.message : String(error));
+      }
     });
+    return () => { cancelled = true; };
   }, [network]);
 
   useEffect(() => {
@@ -305,7 +325,7 @@ export default function TradeView({ referencePrice = 0 }: Props) {
   };
 
   const selectNetwork = async (value: string) => {
-    const selectedNetwork = SWAP_NETWORKS[value];
+    const selectedNetwork = supportedNetworks.find(item => item.name === value) || SWAP_NETWORKS[value];
     if (!selectedNetwork) return;
     setExecutionError('');
     setNetwork(value);
@@ -431,7 +451,7 @@ export default function TradeView({ referencePrice = 0 }: Props) {
       <aside className="sire-swap-rail">
         <div className="sire-swap-rail-head"><span>NETWORK</span><strong>Choose chain</strong></div>
         <div className="sire-swap-network-list">
-          {NETWORKS.map(item => (
+          {supportedNetworks.map(item => (
             <button key={item} type="button" className={item === network ? 'active' : ''} onClick={() => void selectNetwork(item)}>
               <span className="sire-network-icon">{item.slice(0, 1)}</span><span>{item}</span>{item === network && <i>✓</i>}
             </button>
