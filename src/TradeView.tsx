@@ -177,15 +177,20 @@ export default function TradeView({ referencePrice = 0 }: Props) {
     return () => window.removeEventListener('sire:wallet-state', onWalletState);
   }, []);
 
+  const tokenIdentity = (token: SwapToken) => token.chainId + ':' + token.address.toLowerCase();
+
   const filteredTokens = useMemo(() => {
     const q = search.trim().toLowerCase();
-    if (!q) return tokens.slice(0, 100);
-    return tokens.filter(token =>
+    const opposite = tokenPicker === 'from' ? to : tokenPicker === 'to' ? from : null;
+    const oppositeIdentity = opposite ? tokenIdentity(opposite) : '';
+    const available = tokens.filter(token => tokenIdentity(token) !== oppositeIdentity);
+    if (!q) return available.slice(0, 100);
+    return available.filter(token =>
       token.symbol.toLowerCase().includes(q) ||
       token.name.toLowerCase().includes(q) ||
       token.address.toLowerCase() === q
     ).slice(0, 100);
-  }, [tokens, search]);
+  }, [tokens, search, tokenPicker, from, to]);
 
   useEffect(() => {
     const selectedNetwork = SWAP_NETWORKS[network];
@@ -302,11 +307,12 @@ export default function TradeView({ referencePrice = 0 }: Props) {
   };
 
   const chooseToken = (token: SwapToken) => {
+    const selectedIdentity = tokenIdentity(token);
     if (tokenPicker === 'from') {
-      if (token.address.toLowerCase() === to.address.toLowerCase()) setTo(from);
+      if (selectedIdentity === tokenIdentity(to)) return;
       setFrom(token);
     } else if (tokenPicker === 'to') {
-      if (token.address.toLowerCase() === from.address.toLowerCase()) setFrom(to);
+      if (selectedIdentity === tokenIdentity(from)) return;
       setTo(token);
     }
     setTokenPicker(null);
@@ -400,8 +406,8 @@ export default function TradeView({ referencePrice = 0 }: Props) {
         </div>
         <div className="sire-swap-rail-divider" />
         <div className="sire-swap-rail-label">POPULAR TOKENS</div>
-        {tokens.slice(0, 6).map(token => (
-          <button key={token.address} className="sire-popular-token" type="button" onClick={() => setTo(token)}>
+        {tokens.filter(token => tokenIdentity(token) !== tokenIdentity(from)).slice(0, 6).map(token => (
+          <button key={tokenIdentity(token)} className="sire-popular-token" type="button" onClick={() => setTo(token)}>
             <span className="sire-token-mark">{token.symbol.slice(0, 1)}</span>
             <span><b>{token.symbol}</b><small>{token.name}</small></span>
           </button>
