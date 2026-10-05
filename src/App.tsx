@@ -290,6 +290,12 @@ export default function App() {
   const liveInstruments = instruments;
 
   useEffect(() => {
+    const openTrade = () => setTradeOpen(true);
+    window.addEventListener('sire:open-trade', openTrade);
+    return () => window.removeEventListener('sire:open-trade', openTrade);
+  }, []);
+
+  useEffect(() => {
     if (!instruments.some(item => item.provider === 'BINANCE')) return;
     let cancelled = false;
     const applySnapshot = async () => {
