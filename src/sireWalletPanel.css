@@ -614,3 +614,12 @@ html:has(.sire-wallet-shell-backdrop) { background:#050505 !important; }
   .sire-wallet-wallet-actions{margin-top:4px !important}
   .sire-wallet-network-bar{margin-top:6px !important}
 }
+
+
+/* Lower wallet action row without changing surrounding card spacing */
+.sire-wallet-wallet-actions{
+  margin-top:12px !important;
+}
+@media(max-width:520px){
+  .sire-wallet-wallet-actions{margin-top:11px !important}
+}
