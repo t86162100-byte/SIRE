@@ -12,6 +12,7 @@ import {
   
   executeSwap,
   simulateSwap,
+  fetchSwapStatus,
   fetchNetworkTokens,
   formatUnits,
   getInjectedProvider,
@@ -377,7 +378,7 @@ export default function TradeView({ referencePrice = 0 }: Props) {
       window.clearTimeout(timer);
       if (requestId === quoteRequestId.current) setQuoteLoading(false);
     };
-  }, [wallet, network, toNetwork, tradeMode, from, to, amount, slippage, recipient, routeOrder]);
+  }, [wallet, network, toNetwork, tradeMode, from, to, amount, fromBalance, slippage, recipient, routeOrder]);
 
   const connect = async () => {
     setExecutionError('');
@@ -624,7 +625,7 @@ export default function TradeView({ referencePrice = 0 }: Props) {
     setSimulationResult('');
     setExecutionError('');
     try {
-      const freshQuote = await getSwapQuote({ fromToken: from, toToken: to, amount, wallet, toAddress: effectiveRecipient, slippage });
+      const freshQuote = await getSwapQuote({ fromToken: from, toToken: to, amount, wallet, toAddress: effectiveRecipient, slippage, order: routeOrder });
       setQuote(freshQuote);
       const result = await simulateSwap(freshQuote, wallet);
       const gas = result.gasEstimate ? formatUnits(result.gasEstimate, 0, 0) : '—';
@@ -647,14 +648,49 @@ export default function TradeView({ referencePrice = 0 }: Props) {
       // The displayed quote is for UI feedback; the signed transaction must be
       // built from current liquidity, balances, gas and slippage conditions.
       setStatus('Refreshing executable quote');
-      const executableQuote = await getSwapQuote({ fromToken: from, toToken: to, amount, wallet, toAddress: effectiveRecipient, slippage });
+      const executableQuote = await getSwapQuote({ fromToken: from, toToken: to, amount, wallet, toAddress: effectiveRecipient, slippage, order: routeOrder });
       setQuote(executableQuote);
       if (!executableQuote.transactionRequest?.to) throw new Error('The provider returned a non-executable quote.');
       if (executableQuote.expiresAt && Date.now() >= executableQuote.expiresAt) throw new Error('This quote expired before execution. Please request a new quote.');
       const result = await executeSwap(executableQuote, wallet, setStatus);
       setTxHash(result.hash);
       recordSwap(result.hash, executableQuote);
-      setStatus(isCrossChain ? 'Cross-chain source transaction confirmed · destination processing' : 'Swap confirmed');
+      if (isCrossChain) {
+        setStatus('Cross-chain source transaction confirmed · destination processing');
+        const started = Date.now();
+        const poll = async (): Promise<void> => {
+          if (Date.now() - started > 10 * 60 * 1000) {
+            setStatus('Source confirmed · destination still processing');
+            return;
+          }
+          try {
+            const state = await fetchSwapStatus({
+              txHash: result.hash,
+              fromChain: executableQuote.fromToken.chainId,
+              toChain: executableQuote.toToken.chainId,
+              bridge: executableQuote.raw?.tool || executableQuote.tool,
+            });
+            const normalized = String(state.status || '').toUpperCase();
+            const sub = String(state.substatus || '').toUpperCase();
+            if (normalized === 'DONE') {
+              if (sub === 'REFUNDED') setStatus('Cross-chain swap refunded');
+              else if (sub === 'PARTIAL') setStatus('Cross-chain swap partially completed');
+              else setStatus('Cross-chain swap completed');
+              return;
+            }
+            if (normalized === 'FAILED') {
+              setStatus('Cross-chain swap failed');
+              setExecutionError(state.substatusMessage || state.error || 'The destination transfer failed.');
+              return;
+            }
+            setStatus('Cross-chain transfer processing');
+          } catch {}
+          window.setTimeout(() => { void poll(); }, 5000);
+        };
+        void poll();
+      } else {
+        setStatus('Swap confirmed');
+      }
       void readTokenBalance(from, wallet).then(setFromBalance).catch(() => {});
     } catch (error) {
       setExecutionError(error instanceof Error ? error.message : String(error));
