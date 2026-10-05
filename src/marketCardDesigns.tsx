@@ -190,6 +190,23 @@ const chainKey = (item: Instrument) => {
   return '';
 };
 
+const chainSymbol = (item: Instrument) => {
+  const r = raw(item);
+  const explicit = str(r.chainSymbol || r.networkSymbol || r.blockchainSymbol);
+  if (explicit) return upper(explicit).slice(0, 6);
+  const key = iconKey(chainKey(item));
+  const symbols: Record<string, string> = {
+    ethereum: 'ETH', eth: 'ETH',
+    bnb: 'BNB', bsc: 'BSC', bnbchain: 'BNB',
+    base: 'BASE', arbitrum: 'ARB', optimism: 'OP',
+    polygon: 'POL', matic: 'MATIC',
+    avalanche: 'AVAX', avax: 'AVAX',
+    solana: 'SOL', tron: 'TRX', trx: 'TRX',
+    sui: 'SUI', sonic: 'SONIC', bitcoin: 'BTC', btc: 'BTC',
+  };
+  return symbols[key] || upper(str(chainKey(item))).slice(0, 6);
+};
+
 const chainLogoSources = (item: Instrument) => {
   const r = raw(item);
   const key = iconKey(chainKey(item));
@@ -230,8 +247,12 @@ const BinanceShell = ({
       <div className="bn-identity">
         <span className="bn-asset-badges">
           <Logo item={item} />
-          <span className="bn-exchange-badge"><Logo item={item} providerLogo /></span>
-          {chainLogoSources(item).length ? <span className="bn-chain-badge"><Logo item={item} chainLogo /></span> : null}
+          {chainLogoSources(item).length ? (
+            <span className="bn-chain-badge">
+              <Logo item={item} chainLogo />
+              <b>{chainSymbol(item)}</b>
+            </span>
+          ) : null}
         </span>
         <div className="bn-name">
           <strong>
@@ -349,35 +370,44 @@ if (!document.getElementById(styleId)) {
       position:absolute!important;
       inset:0!important;
     }
-    .bn-exchange-badge,.bn-chain-badge{
+    .bn-chain-badge{
       position:absolute!important;
       z-index:3!important;
-      width:14px!important;
-      height:14px!important;
-      min-width:14px!important;
-      padding:1px!important;
+      right:-7px!important;
+      top:-5px!important;
+      height:19px!important;
+      min-width:28px!important;
+      padding:2px 4px 2px 2px!important;
       box-sizing:border-box!important;
-      border-radius:50%!important;
-      display:grid!important;
-      place-items:center!important;
+      border-radius:10px!important;
+      display:flex!important;
+      align-items:center!important;
+      justify-content:center!important;
+      gap:2px!important;
       background:#050505!important;
-      border:1px solid rgba(255,255,255,.32)!important;
+      border:1px solid rgba(255,255,255,.34)!important;
       box-shadow:0 1px 4px rgba(0,0,0,.75)!important;
+      color:#fff!important;
     }
-    .bn-exchange-badge{right:-3px!important;bottom:-3px!important}
-    .bn-chain-badge{right:-3px!important;top:-3px!important}
-    .bn-exchange-badge .bn-logo,.bn-chain-badge .bn-logo{
-      width:100%!important;
-      height:100%!important;
-      min-width:0!important;
+    .bn-chain-badge .bn-logo{
+      width:13px!important;
+      height:13px!important;
+      min-width:13px!important;
       border:0!important;
       background:transparent!important;
     }
-    .bn-exchange-badge img,.bn-chain-badge img{
-      width:100%!important;
-      height:100%!important;
+    .bn-chain-badge img{
+      width:13px!important;
+      height:13px!important;
       object-fit:contain!important;
       border-radius:50%!important;
+    }
+    .bn-chain-badge b{
+      font-size:6.5px!important;
+      line-height:1!important;
+      font-weight:950!important;
+      letter-spacing:.02em!important;
+      white-space:nowrap!important;
     }
      .bn-logo{
       width:38px!important;
@@ -441,15 +471,6 @@ if (!document.getElementById(styleId)) {
       font-weight:800!important;
       letter-spacing:.03em!important;
     }
-    .bn-provider-logo{
-      width:12px!important;
-      height:12px!important;
-      min-width:12px!important;
-      background:#0d0d0d!important;
-      border:1px solid rgba(255,255,255,.08)!important;
-    }
-    .bn-provider-logo img{width:12px!important;height:12px!important;object-fit:contain!important}
-
     /* Compact Binance-style secondary data: directly below the venue, never in the price column. */
     .bn-metrics{
       min-width:0!important;
@@ -537,11 +558,6 @@ if (!document.getElementById(styleId)) {
     .bn-options .bn-logo,.bn-futures .bn-logo,.bn-perpetual .bn-logo{
       width:38px!important;height:38px!important;min-width:38px!important
     }
-    .bn-options .bn-provider-logo,.bn-futures .bn-provider-logo,.bn-perpetual .bn-provider-logo,
-    .bn-options .bn-provider-logo img,.bn-futures .bn-provider-logo img,.bn-perpetual .bn-provider-logo img{
-      width:12px!important;height:12px!important;min-width:12px!important;
-    }
-
     @keyframes bn-metrics-scroll{
       from{transform:translate3d(0,0,0)}
       to{transform:translate3d(calc(-50% - 13px),0,0)}
@@ -557,7 +573,6 @@ if (!document.getElementById(styleId)) {
        .bn-name strong{font-size:16.8px!important}
        .bn-name span{font-size:10.8px!important}
        .bn-name small{font-size:7.6px!important}
-      .bn-provider-logo,.bn-provider-logo img{width:12px!important;height:12px!important;min-width:12px!important}
       .bn-metrics-set{gap:8px!important}
        .bn-metric b{font-size:7.2px!important}
        .bn-metric i{font-size:8.4px!important}
