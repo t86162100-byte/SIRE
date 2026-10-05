@@ -214,6 +214,7 @@ export default function SireWalletPanel() {
                 <button className="sire-wallet-eye" onClick={() => setBalanceVisible(v => !v)}>{balanceVisible ? <Eye size={14}/> : <EyeOff size={14}/>} {balanceVisible ? 'Visible' : 'Hidden'}</button>
                 <strong><span className="sire-wallet-currency">$</span><span className="sire-wallet-leading-digit">{balanceVisible ? '0' : '•'}</span><span className="sire-wallet-decimal">{balanceVisible ? '.00' : '••'}</span></strong>
               </div>
+              <button className="sire-wallet-deposit-pill" type="button" onClick={() => setReceiveOpen(true)}>Deposit</button>
             </div>
             <div className="sire-wallet-quick-actions">
               <button onClick={() => setSendOpen(true)}><span><ArrowUpFromLine size={17}/></span><b>Send</b></button>
