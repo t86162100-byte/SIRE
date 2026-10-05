@@ -391,7 +391,8 @@ export async function executeSwap(quote:SwapQuote, owner:string, onStatus?:(s:st
   if (!quote.transactionRequest?.to) throw new Error('Quote did not return an executable transaction.');
   const network = Object.values(SWAP_NETWORKS).find(n => n.chainId === quote.fromToken.chainId);
   if (!network || !EVM_SWAP_NETWORKS.some(n => n.chainId === network.chainId)) throw new Error('Unsupported EVM network.');
-  await switchToNetwork(network);
+  // SIRE Wallet uses its own RPC signer; only external wallets need an injected-provider network switch.
+  if (!usesNativeWallet(owner)) await switchToNetwork(network);
   if (!quote.fromToken.native && !quote.approvalAddress) throw new Error('The executable quote did not provide an approval spender.');
   await approveIfNeeded(quote.fromToken,owner,quote.approvalAddress||'',quote.fromAmount,onStatus);
   onStatus?.('Confirm swap in wallet');
