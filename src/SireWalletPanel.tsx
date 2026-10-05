@@ -8,11 +8,11 @@ import {
   type WalletAsset, type WalletHistoryItem, type WalletNetwork,
   createSolanaAccount, createTronAccount, estimateEvmGas, getEvmAssets, getEvmHistory,
   getReceiveAddresses, getSolanaAssets, getSolanaHistory, getTronAssets,
-  importEvmToken, sendEvmAsset, sendSolana, sendTron, getTronHistory, getEvmTokenCatalog, loadSupportedWalletNetworks, setWalletNetworkCatalog
+  importEvmToken, sendEvmAsset, sendSolana, sendTron, getTronHistory, getEvmTokenCatalog, loadSupportedWalletNetworks
 } from './sireWalletMultiChain';
 import { isNativeWalletUnlocked, unlockNativeWallet } from './sireWalletCore';
 
-const FALLBACK_evmNetworks: WalletNetwork[] = ['Ethereum','BNB Chain','Base','Arbitrum','Optimism','Polygon','Avalanche'];
+const FALLBACK_EVM_NETWORKS: WalletNetwork[] = ['Ethereum','BNB Chain','Base','Arbitrum','Optimism','Polygon','Avalanche'];
 
 
 function short(value: string) { return value ? value.slice(0,6) + '…' + value.slice(-4) : 'Not created'; }
@@ -23,7 +23,7 @@ function num(value?: string | number) {
 
 export default function SireWalletPanel() {
   const [open, setOpen] = useState(false);
-  const [evmNetworks, setEvmNetworks] = useState<WalletNetwork[]>(FALLBACK_evmNetworks);
+  const [evmNetworks, setEvmNetworks] = useState<WalletNetwork[]>(FALLBACK_EVM_NETWORKS);
   const [network, setNetwork] = useState<WalletNetwork>('Ethereum');
   const [assets, setAssets] = useState<WalletAsset[]>([]);
   const [history, setHistory] = useState<WalletHistoryItem[]>([]);
