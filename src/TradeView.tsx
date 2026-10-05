@@ -198,8 +198,18 @@ export default function TradeView({ referencePrice = 0 }: Props) {
     if (!selectedNetwork || !EVM_SWAP_NETWORKS.some(item => item.chainId === selectedNetwork.chainId)) return;
     void fetchNetworkTokens(selectedNetwork).then(next => {
       setTokens(next);
-      setFrom(current => next.find(token => token.address.toLowerCase() === current.address.toLowerCase()) || next[0] || current);
-      setTo(current => next.find(token => token.address.toLowerCase() === current.address.toLowerCase()) || next[1] || next[0] || current);
+      // From and To are independent selections. Preserve each selection when possible,
+      // but never let catalogue/network fallback collapse both sides onto the same token.
+      setFrom(current => {
+        const preserved = next.find(token => tokenIdentity(token) === tokenIdentity(current));
+        return preserved || next[0] || current;
+      });
+      setTo(current => {
+        const preserved = next.find(token => tokenIdentity(token) === tokenIdentity(current));
+        if (preserved) return preserved;
+        const nextFrom = next[0];
+        return next.find(token => !nextFrom || tokenIdentity(token) !== tokenIdentity(nextFrom)) || nextFrom || current;
+      });
     });
   }, [network]);
 
@@ -312,8 +322,10 @@ export default function TradeView({ referencePrice = 0 }: Props) {
         const nextTokens = await fetchNetworkTokens(selectedNetwork);
         setTokens(nextTokens);
         setWalletChain(selectedNetwork.chainId);
-        setFrom(nextTokens[0] || from);
-        setTo(nextTokens[1] || nextTokens[0] || to);
+        const nextFrom = nextTokens[0] || from;
+        const nextTo = nextTokens.find(token => tokenIdentity(token) !== tokenIdentity(nextFrom)) || to;
+        setFrom(nextFrom);
+        setTo(nextTo);
       }
     } catch (error) {
       setExecutionError(error instanceof Error ? error.message : String(error));
