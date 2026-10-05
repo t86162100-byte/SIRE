@@ -105,7 +105,7 @@ export default function SireWalletPanel() {
       setNetwork(current => names.includes(current) ? current : (names[0] || 'Ethereum'));
       setTokenNetwork(current => names.includes(current) ? current : (names[0] || 'Ethereum'));
     }).catch(() => {
-      if (!cancelled) setEvmNetworks(FALLBACK_evmNetworks);
+      if (!cancelled) setEvmNetworks(FALLBACK_EVM_NETWORKS);
     });
     return () => { cancelled = true; };
   }, [open]);
