@@ -369,3 +369,32 @@ html:has(.sire-wallet-shell-backdrop) { background:#050505 !important; }
   .sire-wallet-hero-row{gap:12px}
   .sire-wallet-deposit-pill{height:34px;padding:0 16px;font-size:10px}
 }
+
+
+/* BOLDER MODE + DEPOSIT PILLS */
+.sire-wallet-mode-toggle button{
+  min-width:108px !important;
+  height:40px !important;
+  padding:0 26px !important;
+  font-size:12px !important;
+  font-weight:900 !important;
+}
+.sire-wallet-deposit-pill{
+  height:42px !important;
+  padding:0 21px !important;
+  font-size:12px !important;
+  font-weight:900 !important;
+}
+@media(max-width:520px){
+  .sire-wallet-mode-toggle button{
+    min-width:100px !important;
+    height:38px !important;
+    padding:0 23px !important;
+    font-size:11px !important;
+  }
+  .sire-wallet-deposit-pill{
+    height:40px !important;
+    padding:0 19px !important;
+    font-size:11px !important;
+  }
+}
