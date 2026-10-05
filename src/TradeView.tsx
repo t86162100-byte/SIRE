@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { ArrowDownUp, ChevronDown, LockKeyhole, Search, ShieldCheck, X } from 'lucide-react';
+import { ArrowDownUp, ChevronDown, LockKeyhole, Search, X } from 'lucide-react';
 import './tradeSwap.css';
 
 type Token = { symbol: string; name: string; network: string; balance?: number; price?: number };
@@ -108,16 +108,10 @@ export default function TradeView({ referencePrice = 0, referenceChange = 0 }: P
               <small className="sire-usd-reference">{indicative ? `≈ $${money(output, 2)}` : 'Waiting for an executable provider quote'}</small>
             </div>
 
-            <button className="sire-review-button" type="button" disabled={!indicative} onClick={() => setReviewOpen(true)}>Review Swap</button>
             <div className="sire-swap-safety"><LockKeyhole size={13}/> Quotes expire quickly and are revalidated before signing.</div>
           </section>
 
-          <section className="sire-swap-market-card">
-            <div className="sire-swap-market-head"><div><span>REFERENCE MARKET</span><strong>ETH / USDT</strong></div><div className={referenceChange >= 0 ? 'up' : 'down'}>{referencePrice > 0 ? money(referencePrice, 2) : '—'} <small>{referencePrice > 0 ? `${referenceChange >= 0 ? '+' : ''}${referenceChange.toFixed(2)}%` : ''}</small></div></div>
-            <div className="sire-swap-chart-placeholder"><div className="sire-chart-line"/><div className="sire-chart-axis"><span>1m</span><span>5m</span><span className="active">15m</span><span>1H</span><span>4H</span><span>1D</span></div></div>
-            <div className="sire-swap-market-stats"><div><span>24h High</span><b>—</b></div><div><span>24h Low</span><b>—</b></div><div><span>24h Volume</span><b>—</b></div></div>
-            <div className="sire-swap-activity"><div className="sire-activity-head"><b>Recent Swaps</b><span>My Transactions</span></div><div className="sire-empty-activity"><ShieldCheck size={20}/><span>Transaction history will appear here after your first swap.</span></div></div>
-          </section>
+
         </div>
       </main>
     </div>
