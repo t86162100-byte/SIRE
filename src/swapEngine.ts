@@ -40,6 +40,28 @@ export type SwapQuote = {
 export const ETHEREUM_CHAIN_ID = 1;
 export const NATIVE_ETH = '0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE';
 
+export type SwapNetwork = {
+  name: string;
+  chainId: number;
+  key: string;
+  nativeSymbol: string;
+  nativeName: string;
+};
+
+export const SWAP_NETWORKS: Record<string, SwapNetwork> = {
+  Ethereum: { name:'Ethereum', chainId:1, key:'ETH', nativeSymbol:'ETH', nativeName:'Ethereum' },
+  'BNB Chain': { name:'BNB Chain', chainId:56, key:'BSC', nativeSymbol:'BNB', nativeName:'BNB' },
+  Base: { name:'Base', chainId:8453, key:'BAS', nativeSymbol:'ETH', nativeName:'Ethereum' },
+  Arbitrum: { name:'Arbitrum', chainId:42161, key:'ARB', nativeSymbol:'ETH', nativeName:'Ethereum' },
+  Optimism: { name:'Optimism', chainId:10, key:'OPT', nativeSymbol:'ETH', nativeName:'Ethereum' },
+  Polygon: { name:'Polygon', chainId:137, key:'POL', nativeSymbol:'POL', nativeName:'Polygon' },
+  Avalanche: { name:'Avalanche', chainId:43114, key:'AVA', nativeSymbol:'AVAX', nativeName:'Avalanche' },
+  Solana: { name:'Solana', chainId:101, key:'SOL', nativeSymbol:'SOL', nativeName:'Solana' },
+  TRON: { name:'TRON', chainId:728126428, key:'TRX', nativeSymbol:'TRX', nativeName:'TRON' },
+};
+
+export const EVM_SWAP_NETWORKS = Object.values(SWAP_NETWORKS).filter(n => !['Solana','TRON'].includes(n.name));
+
 export const ETHEREUM_TOKENS: SwapToken[] = [
   { symbol:'ETH', name:'Ethereum', address:NATIVE_ETH, decimals:18, chainId:1, native:true, logoURI:'https://assets.coingecko.com/coins/images/279/small/ethereum.png' },
   { symbol:'USDT', name:'Tether', address:'0xdAC17F958D2ee523a2206206994597C13D831ec7', decimals:6, chainId:1, logoURI:'https://assets.coingecko.com/coins/images/325/small/Tether.png' },
@@ -93,23 +115,32 @@ export async function connectWallet(): Promise<{ address:string; chainId:number 
   return { address, chainId: Number.parseInt(String(chainHex), 16) };
 }
 
-export async function switchToEthereum() {
+export async function switchToNetwork(network: SwapNetwork) {
   const provider = getInjectedProvider();
-  if (!provider) throw new Error('No browser wallet detected.');
+  if (!provider) throw new Error('No EVM wallet provider detected. Connect a wallet first.');
   const current = Number.parseInt(String(await provider.request({method:'eth_chainId'})), 16);
-  if (current === 1) return;
+  if (current === network.chainId) return;
+  const chainId = '0x' + network.chainId.toString(16);
   try {
-    await provider.request({ method:'wallet_switchEthereumChain', params:[{chainId:'0x1'}] });
+    await provider.request({ method:'wallet_switchEthereumChain', params:[{chainId}] });
   } catch (error:any) {
-    if (error?.code === 4902) throw new Error('Ethereum network is not configured in this wallet.');
+    if (error?.code === 4902) throw new Error(network.name + ' is not configured in this wallet.');
     throw error;
   }
 }
 
-export async function readEthBalance(address: string): Promise<string> {
+export async function switchToEthereum() {
+  return switchToNetwork(SWAP_NETWORKS.Ethereum);
+}
+
+export async function readNetworkNativeBalance(address: string, network: SwapNetwork): Promise<string> {
   const provider = getInjectedProvider();
   if (!provider) return '0';
   return BigInt(await provider.request({method:'eth_getBalance', params:[address,'latest']})).toString();
+}
+
+export async function readEthBalance(address: string): Promise<string> {
+  return readNetworkNativeBalance(address, SWAP_NETWORKS.Ethereum);
 }
 
 const ERC20_BALANCE_OF = '0x70a08231';
@@ -167,43 +198,55 @@ export async function approveIfNeeded(token:SwapToken, owner:string, spender:str
   await waitForReceipt(hash);
 }
 
-export async function fetchEthereumTokens(query=''): Promise<SwapToken[]> {
-  const fallback = ETHEREUM_TOKENS;
+export async function fetchNetworkTokens(network: SwapNetwork, query=''): Promise<SwapToken[]> {
+  const native: SwapToken = {
+    symbol: network.nativeSymbol, name: network.nativeName, address:NATIVE_ETH,
+    decimals:18, chainId:network.chainId, native:true
+  };
   try {
     const url = new URL('https://li.quest/v1/tokens');
-    url.searchParams.set('chains','1');
-    const response = await fetch(url.toString(), { headers:{accept:'application/json'} });
+    url.searchParams.set('chains', String(network.chainId));
+    const response = await fetch(url.toString(), {headers:{accept:'application/json'}});
     if (!response.ok) throw new Error('token catalogue unavailable');
     const body = await response.json();
-    const raw = Array.isArray(body) ? body : body?.tokens?.['1'] || body?.tokens || [];
+    const raw = Array.isArray(body) ? body : body?.tokens?.[String(network.chainId)] || body?.tokens || [];
     const list = Array.isArray(raw) ? raw : [];
     const normalized = list.map((t:any)=>({
       symbol:String(t.symbol||'').toUpperCase(),
       name:String(t.name||t.symbol||'Token'),
       address:String(t.address || NATIVE_ETH),
       decimals:Number(t.decimals ?? 18),
-      chainId:1,
+      chainId:network.chainId,
       logoURI:t.logoURI,
       priceUSD:Number(t.priceUSD||0)||undefined,
-      native:String(t.address||'').toLowerCase()===NATIVE_ETH.toLowerCase() || String(t.coinKey||'').toUpperCase()==='ETH',
-    })).filter((t:SwapToken)=>t.symbol && t.address);
-    const merged = [...fallback, ...normalized].filter((t,i,a)=>a.findIndex(x=>x.address.toLowerCase()===t.address.toLowerCase())===i);
+      native:String(t.address||'').toLowerCase()===NATIVE_ETH.toLowerCase() ||
+        String(t.coinKey||'').toUpperCase()===network.nativeSymbol.toUpperCase(),
+    })).filter((t:SwapToken)=>t.symbol && t.address && t.chainId === network.chainId);
+    const merged = [native, ...normalized].filter((t,i,a)=>a.findIndex(x=>x.address.toLowerCase()===t.address.toLowerCase())===i);
     const q=query.trim().toLowerCase();
     return (q ? merged.filter(t=>t.symbol.toLowerCase().includes(q)||t.name.toLowerCase().includes(q)||t.address.toLowerCase()===q) : merged).slice(0,2000);
   } catch {
-    const q=query.trim().toLowerCase();
-    return q ? fallback.filter(t=>t.symbol.toLowerCase().includes(q)||t.name.toLowerCase().includes(q)) : fallback;
+    return [native];
   }
+}
+
+export async function fetchEthereumTokens(query=''): Promise<SwapToken[]> {
+  return fetchNetworkTokens(SWAP_NETWORKS.Ethereum, query);
 }
 
 export async function getSwapQuote(args:{
   fromToken:SwapToken; toToken:SwapToken; amount:string; wallet:string; slippage:number;
 }):Promise<SwapQuote> {
+  const network = Object.values(SWAP_NETWORKS).find(n => n.chainId === args.fromToken.chainId);
+  if (!network || !EVM_SWAP_NETWORKS.some(n => n.chainId === network.chainId)) {
+    throw new Error('This network requires its native wallet/router adapter and is not an EVM route.');
+  }
+  if (args.fromToken.chainId !== args.toToken.chainId) throw new Error('Select tokens on the same network.');
   const fromAmount = amountToBaseUnits(args.amount,args.fromToken);
   if (BigInt(fromAmount) <= 0n) throw new Error('Enter an amount greater than zero.');
   const url = new URL('https://li.quest/v1/quote');
-  url.searchParams.set('fromChain','1');
-  url.searchParams.set('toChain','1');
+  url.searchParams.set('fromChain',String(network.chainId));
+  url.searchParams.set('toChain',String(network.chainId));
   url.searchParams.set('fromToken',args.fromToken.address);
   url.searchParams.set('toToken',args.toToken.address);
   url.searchParams.set('fromAddress',args.wallet);
@@ -239,7 +282,9 @@ export async function executeSwap(quote:SwapQuote, owner:string, onStatus?:(s:st
   if (quote.expiresAt && Date.now() >= quote.expiresAt) throw new Error('This quote has expired. Requesting a fresh quote is required.');
   if (!provider) throw new Error('Wallet provider unavailable.');
   if (!quote.transactionRequest?.to) throw new Error('Quote did not return an executable transaction.');
-  await switchToEthereum();
+  const network = Object.values(SWAP_NETWORKS).find(n => n.chainId === quote.fromToken.chainId);
+  if (!network || !EVM_SWAP_NETWORKS.some(n => n.chainId === network.chainId)) throw new Error('Unsupported EVM network.');
+  await switchToNetwork(network);
   if (!quote.fromToken.native && !quote.approvalAddress) throw new Error('The executable quote did not provide an approval spender.');
   await approveIfNeeded(quote.fromToken,owner,quote.approvalAddress||'',quote.fromAmount,onStatus);
   onStatus?.('Confirm swap in wallet');
