@@ -949,20 +949,6 @@ export default function TradeView({ referencePrice = 0 }: Props) {
       </section>
     </div>}
 
-            {tradeMode === 'Swap' && <div className="sire-swap-confirm-wrap">
-              {!wallet ? (
-                <button type="button" className="sire-review-button sire-connect-button" onClick={() => void connect()}>
-                  <WalletCards size={15}/> {hasNativeWallet() ? 'Unlock SIRE Wallet' : 'Create SIRE Wallet'}
-                </button>
-              ) : walletChain !== (SWAP_NETWORKS[network]?.chainId ?? 1) ? (
-                <button type="button" className="sire-review-button" onClick={() => void selectNetwork(network)}>Switch to {network}</button>
-              ) : (
-                <button type="button" className="sire-review-button" disabled={!canExecute} onClick={() => void execute()}>
-                  {busy ? <><LoaderCircle className="sire-spin" size={15}/> {status || 'Executing'}</> : quote ? 'Confirm Swap' : quoteLoading ? 'Getting live quote…' : 'Waiting for executable quote'}
-                </button>
-              )}
-            </div>
-
 
   </div>;
 }
