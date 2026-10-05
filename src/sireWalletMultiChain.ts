@@ -225,7 +225,7 @@ export async function createTronAccount(password: string) {
   const store = readStore();
   if (store.tron) return { address: store.tron.address };
   const account = TronWeb.utils.accounts.generateAccount();
-  const privateKeyBytes = Uint8Array.from(Buffer.from(account.privateKey, 'hex'));
+  const privateKeyBytes = Uint8Array.from(account.privateKey.match(/.{1,2}/g)!.map(byte => parseInt(byte, 16)));
   store.tron = { address: account.address.base58, encrypted: await encryptSecret(privateKeyBytes, password) };
   writeStore(store);
   return { address: store.tron.address };
@@ -234,7 +234,7 @@ export async function createTronAccount(password: string) {
 async function loadTronPrivateKey(password: string) {
   const record = readStore().tron;
   if (!record) throw new Error('No TRON account has been created.');
-  return Buffer.from(await decryptSecret(record.encrypted, password)).toString('hex');
+  return Array.from(await decryptSecret(record.encrypted, password), byte => byte.toString(16).padStart(2, '0')).join('');
 }
 
 function tronClient(privateKey?: string) {
