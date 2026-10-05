@@ -653,6 +653,7 @@ export default function TradeView({ referencePrice = 0 }: Props) {
             {status && !executionError && <div className="sire-swap-status">{status}{txHash && <a href={(network === 'BNB Chain' ? 'https://bscscan.com/tx/' : network === 'Base' ? 'https://basescan.org/tx/' : network === 'Arbitrum' ? 'https://arbiscan.io/tx/' : network === 'Optimism' ? 'https://optimistic.etherscan.io/tx/' : network === 'Polygon' ? 'https://polygonscan.com/tx/' : network === 'Avalanche' ? 'https://snowtrace.io/tx/' : 'https://etherscan.io/tx/') + txHash} target="_blank" rel="noreferrer">View transaction</a>}</div>}
 
             <div className="sire-swap-safety"><LockKeyhole size={13}/> Quotes expire quickly and are revalidated before signing.</div>
+             <button type="button" className="sire-wallet-secondary sire-history-trigger" onClick={() => setHistoryOpen(true)}>View swap history ({swapHistory.length})</button>
           </section>
         </div>
       </main>
