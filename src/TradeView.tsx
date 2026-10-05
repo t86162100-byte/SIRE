@@ -8,6 +8,7 @@ import {
   type SwapToken,
   type SwapQuote,
   type SwapNetwork,
+  type SwapRouteOrder,
   
   executeSwap,
   simulateSwap,
@@ -65,6 +66,8 @@ export default function TradeView({ referencePrice = 0 }: Props) {
   const [fromBalance, setFromBalance] = useState('0');
   const [tradeMode, setTradeMode] = useState<'Swap' | 'Limit'>('Swap');
   const [slippage, setSlippage] = useState(0.005);
+  const [routeOrder, setRouteOrder] = useState<SwapRouteOrder>('CHEAPEST');
+  const [routeOpen, setRouteOpen] = useState(false);
   const [quote, setQuote] = useState<SwapQuote | null>(null);
   const [quoteLoading, setQuoteLoading] = useState(false);
   const quoteRequestId = useRef(0);
@@ -348,7 +351,7 @@ export default function TradeView({ referencePrice = 0 }: Props) {
             ' but entered ' + amount + ' ' + from.symbol + '.'
           );
         }
-        const next = await getSwapQuote({ fromToken: from, toToken: to, amount, wallet, toAddress: effectiveRecipient, slippage });
+        const next = await getSwapQuote({ fromToken: from, toToken: to, amount, wallet, toAddress: effectiveRecipient, slippage, order: routeOrder })
         if (!cancelled && requestId === quoteRequestId.current) {
           setQuote(next);
           setQuoteError('');
@@ -368,7 +371,7 @@ export default function TradeView({ referencePrice = 0 }: Props) {
       window.clearTimeout(timer);
       if (requestId === quoteRequestId.current) setQuoteLoading(false);
     };
-  }, [wallet, network, toNetwork, tradeMode, from, to, amount, slippage, recipient]);
+  }, [wallet, network, toNetwork, tradeMode, from, to, amount, slippage, recipient, routeOrder]);
 
   const connect = async () => {
     setExecutionError('');
@@ -598,6 +601,184 @@ export default function TradeView({ referencePrice = 0 }: Props) {
               <small className="sire-usd-reference">
                 {quote ? (isCrossChain ? 'Route: ' + (quote.toolName || quote.tool || 'aggregator') + ' · ' + network + ' → ' + toNetwork : 'Route: ' + (quote.toolName || quote.tool || 'aggregator')) : 'Waiting for an executable provider quote'}
               </small>
+            </div>
+
+            <div className="sire-swap-route">
+              <button type="button" onClick={() => setRouteOpen(value => !value)}>
+                <span>Route preference</span><small>{routeOrder === 'CHEAPEST' ? 'Best price' : 'Fastest'} · {routeOpen ? 'Hide' : 'Adjust'}</small>
+              </button>
+              {routeOpen && <div className="sire-route-panel">
+                <div className="sire-route-state">
+                  <b>{routeOrder === 'CHEAPEST' ? 'Best price' : 'Fastest execution'}</b>
+                  <small>{routeOrder === 'CHEAPEST'
+                    ? 'The live router prioritizes the most economical executable route.'
+                    : 'The live router prioritizes the shortest estimated execution time.'}</small>
+                </div>
+                <div className="sire-route-choice-row">
+                  {(['CHEAPEST','FASTEST'] as const).map(value => (
+                    <button key={value} type="button" className={routeOrder === value ? 'active' : ''} onClick={() => { setRouteOrder(value); setQuote(null); }}>
+                      {value === 'CHEAPEST' ? 'Best price' : 'Fastest'}
+                    </button>
+                  ))}
+                </div>
+                {quote && <div className="sire-route-metrics">
+                  <span><b>{quote.toolName || quote.tool || 'Aggregator'}</b><small>Route provider</small></span>
+                  <span><b>{quote.executionDuration ? '~' + Math.max(1, Math.round(quote.executionDuration)) + 's' : '—'}</b><small>Estimated time</small></span>
+                  <span><b>{quote.gasUSD ? '
+              {!wallet ? (
+                <button type="button" className="sire-review-button sire-connect-button" onClick={() => void connect()}>
+                  <WalletCards size={15}/> {hasNativeWallet() ? 'Unlock SIRE Wallet' : 'Create SIRE Wallet'}
+                </button>
+              ) : walletChain !== (SWAP_NETWORKS[network]?.chainId ?? 1) ? (
+                <button type="button" className="sire-review-button" onClick={() => void selectNetwork(network)}>Switch to {network}</button>
+              ) : (
+                <button type="button" className="sire-review-button" disabled={!canExecute} onClick={() => void execute()}>
+                  {busy ? <><LoaderCircle className="sire-spin" size={15}/> {status || 'Executing'}</> : quote ? 'Confirm Swap' : quoteLoading ? 'Getting live quote…' : 'Waiting for executable quote'}
+                </button>
+              )}
+            </div>
+
+            <div className="sire-slippage">
+              <span>Slippage</span>
+              <div>
+                {[0.001, 0.005, 0.01].map(value => (
+                  <button key={value} type="button" className={slippage === value ? 'active' : ''} onClick={() => setSlippage(value)}>
+                    {(value * 100).toFixed(1)}%
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="sire-swap-details">
+               <div><span>Price impact</span><b>{quote?.priceImpact != null ? (quote.priceImpact * 100).toFixed(2) + '%' : '—'}</b></div>
+               <div><span>Network fee</span><b>{quote?.gasUSD ? '$' + Number(quote.gasUSD).toFixed(2) : '—'}</b></div>
+               <div><span>Minimum received</span><b>{quote ? minimum + ' ' + to.symbol : '—'}</b></div>
+               <div><span>{isCrossChain ? 'Destination' : 'Recipient'}</span><b>{recipient ? shortAddress(recipient) : 'You'}</b></div>
+               {quote && <div><span>Quote refresh</span><b>{quoteSeconds > 0 ? quoteSeconds + 's' : 'Refresh required'}</b></div>}
+             </div>
+
+             <div className="sire-swap-recipient">
+               <button type="button" className={recipientOpen ? 'active' : ''} onClick={() => setRecipientOpen(value => !value)}>
+                 <span>Send to</span><b>{recipient ? shortAddress(recipient) : 'My wallet'}</b>
+               </button>
+               {recipientOpen && <div className="sire-recipient-editor">
+                 <input value={recipient} onChange={e => { setRecipient(e.target.value.trim()); setRecipientError(''); }} placeholder="0x… destination address" spellCheck={false} />
+                 <button type="button" onClick={() => { setRecipient(''); setRecipientError(''); }}>Use my wallet</button>
+                 {recipient && !recipientValid && <small>Enter a valid EVM destination address.</small>}
+               </div>}
+             </div>
+
+
+            {quote && wallet && nativeUnlocked && !busy && !simulationBusy && <button type="button" className="sire-wallet-secondary sire-test-swap-button" onClick={() => void simulate()}>
+              Run no-money test
+            </button>}
+            {(quoteError || executionError) && <div className="sire-swap-error"><CircleAlert size={14}/><span>{quoteError || executionError}</span></div>}
+            {simulationResult && <div className="sire-swap-status sire-swap-simulation-result"><span>{simulationResult}</span></div>}
+            {status && !executionError && <div className="sire-swap-status">{status}{txHash && <a href={(network === 'BNB Chain' ? 'https://bscscan.com/tx/' : network === 'Base' ? 'https://basescan.org/tx/' : network === 'Arbitrum' ? 'https://arbiscan.io/tx/' : network === 'Optimism' ? 'https://optimistic.etherscan.io/tx/' : network === 'Polygon' ? 'https://polygonscan.com/tx/' : network === 'Avalanche' ? 'https://snowtrace.io/tx/' : 'https://etherscan.io/tx/') + txHash} target="_blank" rel="noreferrer">View transaction</a>}</div>}
+
+            <div className="sire-swap-safety"><LockKeyhole size={13}/> Quotes expire quickly and are revalidated before signing.</div>
+             <button type="button" className="sire-wallet-secondary sire-history-trigger" onClick={() => setHistoryOpen(true)}>View swap history ({swapHistory.length})</button>
+          </section>
+        </div>
+      </main>
+    </div>
+
+    {walletOnboarding && <div className="sire-modal-backdrop" onMouseDown={closeWalletOnboarding}>
+      <section className="sire-token-modal sire-wallet-onboarding" role="dialog" aria-modal="true" aria-label="Create SIRE Wallet" onMouseDown={e => e.stopPropagation()}>
+        <div className="sire-token-modal-head">
+          <div><b>{walletStep === 'intro' ? 'Create SIRE Wallet' : walletStep === 'backup' ? 'Secure your wallet' : 'Wallet created'}</b><small>Native self-custody wallet · no external wallet required</small></div>
+          {walletStep !== 'confirm' && <button type="button" onClick={closeWalletOnboarding} aria-label="Close wallet setup"><X size={17}/></button>}
+        </div>
+
+        {walletStep === 'intro' && <div className="sire-wallet-onboarding-body">
+          <div className="sire-wallet-hero-icon"><WalletCards size={25}/></div>
+          <h3>Create your SIRE Wallet</h3>
+          <p>Your wallet is created on this device and its recovery phrase is controlled by you. Swap will use this wallet directly instead of asking you to connect an external wallet.</p>
+          <div className="sire-wallet-warning"><LockKeyhole size={15}/><span>Never share your recovery phrase or password. SIRE cannot recover a lost recovery phrase.</span></div>
+          <button type="button" className="sire-review-button" onClick={beginWalletCreation}>Create Wallet</button>
+        </div>}
+
+        {walletStep === 'unlock' && <div className="sire-wallet-onboarding-body">
+          <div className="sire-wallet-hero-icon"><LockKeyhole size={25}/></div>
+          <h3>Unlock SIRE Wallet</h3>
+          <p>Your SIRE Wallet already exists on this device. Enter its password to make it available to Swap.</p>
+          <div className="sire-wallet-form">
+            <label>Wallet password<input type="password" autoFocus autoComplete="current-password" value={walletPassword} onChange={e => setWalletPassword(e.target.value)} placeholder="Enter your password" onKeyDown={e => { if (e.key === 'Enter') void unlockWallet(); }}/></label>
+          </div>
+          {walletCreationError && <div className="sire-swap-error"><CircleAlert size={14}/><span>{walletCreationError}</span></div>}
+          <button type="button" className="sire-review-button" disabled={walletCreating} onClick={() => void unlockWallet()}>{walletCreating ? <><LoaderCircle className="sire-spin" size={15}/> Unlocking…</> : 'Unlock Wallet'}</button>
+        </div>}
+
+        {walletStep === 'backup' && <div className="sire-wallet-onboarding-body">
+          <h3>Back up your recovery phrase</h3>
+          <p>Write these words down offline, in the exact order. This phrase is the recovery key for the wallet.</p>
+          <div className="sire-wallet-mnemonic">{walletMnemonic.split(' ').map((word, index) => <span key={word + index}><i>{index + 1}</i><b>{word}</b></span>)}</div>
+          <div className="sire-wallet-form">
+            <label>Set wallet password<input type="password" autoComplete="new-password" value={walletPassword} onChange={e => setWalletPassword(e.target.value)} placeholder="At least 8 characters"/></label>
+            <label>Confirm password<input type="password" autoComplete="new-password" value={walletPasswordConfirm} onChange={e => setWalletPasswordConfirm(e.target.value)} placeholder="Repeat password"/></label>
+            <label>Confirm recovery phrase<input value={walletConfirmPhrase} onChange={e => setWalletConfirmPhrase(e.target.value)} placeholder="Type all words in order"/></label>
+          </div>
+          {walletCreationError && <div className="sire-swap-error"><CircleAlert size={14}/><span>{walletCreationError}</span></div>}
+          <button type="button" className="sire-review-button" disabled={walletCreating || !walletMnemonic} onClick={() => void finishWalletCreation()}>{walletCreating ? <><LoaderCircle className="sire-spin" size={15}/> Creating wallet…</> : 'Confirm & Create Wallet'}</button>
+          <button type="button" className="sire-wallet-secondary" onClick={closeWalletOnboarding}>Cancel</button>
+        </div>}
+
+        {walletStep === 'confirm' && <div className="sire-wallet-onboarding-body sire-wallet-created">
+          <div className="sire-wallet-success">✓</div>
+          <h3>SIRE Wallet created</h3>
+          <p>Your native wallet is unlocked and ready for Swap.</p>
+          <code>{shortAddress(walletCreatedAddress)}</code>
+        </div>}
+      </section>
+    </div>}
+    {historyOpen && <div className="sire-modal-backdrop sire-token-picker-backdrop" onMouseDown={() => setHistoryOpen(false)}>
+      <section className="sire-token-modal sire-swap-history-sheet" role="dialog" aria-modal="true" aria-label="Swap history" onMouseDown={e => e.stopPropagation()}>
+        <div className="sire-token-modal-head"><div><b>Swap history</b><small>Recent SIRE Swap executions on this device</small></div><button type="button" onClick={() => setHistoryOpen(false)} aria-label="Close history"><X size={17}/></button></div>
+        <div className="sire-swap-history-list">
+          {swapHistory.length ? swapHistory.map(item => <div className="sire-swap-history-row" key={item.hash}><div><b>{item.amount} {item.from} → {item.output} {item.to}</b><small>{item.fromNetwork}{item.fromNetwork !== item.toNetwork ? ' → ' + item.toNetwork : ''} · {new Date(item.time).toLocaleString()}</small></div><a href={(item.fromNetwork === 'BNB Chain' ? 'https://bscscan.com/tx/' : item.fromNetwork === 'Base' ? 'https://basescan.org/tx/' : item.fromNetwork === 'Arbitrum' ? 'https://arbiscan.io/tx/' : item.fromNetwork === 'Optimism' ? 'https://optimistic.etherscan.io/tx/' : item.fromNetwork === 'Polygon' ? 'https://polygonscan.com/tx/' : item.fromNetwork === 'Avalanche' ? 'https://snowtrace.io/tx/' : 'https://etherscan.io/tx/') + item.hash} target="_blank" rel="noreferrer">View</a></div>) : <div className="sire-swap-history-empty">No swaps yet.</div>}
+        </div>
+      </section>
+    </div>}
+
+    {tokenPicker && <div className="sire-modal-backdrop sire-token-picker-backdrop" onMouseDown={() => setTokenPicker(null)}>
+      <section className="sire-token-modal sire-token-picker-sheet" role="dialog" aria-modal="true" aria-label="Select token" onMouseDown={e => e.stopPropagation()}>
+        <div className="sire-token-sheet-handle" aria-hidden="true"><span /></div>
+        <div className="sire-token-modal-head">
+          <div><b>Select token</b><small>{pickerNetwork} · live token catalogue</small></div>
+          <button type="button" onClick={() => setTokenPicker(null)} aria-label="Close token selector"><X size={17}/></button>
+        </div>
+        <div className="sire-token-search"><Search size={15}/><input autoFocus value={search} onChange={e => setSearch(e.target.value)} placeholder="Search symbol, name or address"/></div>
+        <div className="sire-token-network-strip" aria-label="Networks">
+          {supportedNetworks.map(item => (
+            <button key={item.name} type="button" className={item.name === pickerNetwork ? 'active' : ''} onClick={() => void selectNetwork(item.name, tokenPicker === 'to' ? 'to' : 'from')}>
+              <LogoMark src={item.logoURI} fallback={item.name.slice(0, 1)} className="sire-token-network-icon" />
+              <span>{item.name}</span>
+            </button>
+          ))}
+        </div>
+        <div className="sire-token-list" aria-label="Instruments">
+          {filteredTokens.map(token => (
+            <button key={token.address} type="button" onClick={() => chooseToken(token)}>
+              <span className="sire-token-list-logo">
+                <LogoMark src={token.logoURI} fallback={token.symbol.slice(0,1)} className="sire-token-mark" />
+                <LogoMark
+                  src={supportedNetworks.find(item => item.chainId === token.chainId)?.logoURI}
+                  fallback={supportedNetworks.find(item => item.chainId === token.chainId)?.name.slice(0,1) || network.slice(0,1)}
+                  className="sire-token-chain-badge"
+                />
+              </span>
+              <span><b>{token.symbol}</b><small>{token.name}</small></span>
+              <span className="sire-token-address">{token.address.slice(0,6) + '…' + token.address.slice(-4)}</span>
+            </button>
+          ))}
+        </div>
+      </section>
+    </div>}
+  </div>;
+}
+ + Number(quote.gasUSD).toFixed(2) : '—'}</b><small>Network fee</small></span>
+                </div>}
+              </div>}
             </div>
 
             <div className="sire-swap-confirm-wrap">
