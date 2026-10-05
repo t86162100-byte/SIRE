@@ -422,6 +422,33 @@ export async function simulateSwap(quote: SwapQuote, owner: string): Promise<Swa
   return { gasEstimate: gas.toString(), approvalGasEstimate, checkedAt: Date.now() };
 }
 
+export type SwapStatus = {
+  status?: string;
+  substatus?: string;
+  transactionId?: string;
+  sending?: { txHash?: string };
+  receiving?: { txHash?: string };
+  error?: string;
+  substatusMessage?: string;
+};
+
+export async function fetchSwapStatus(args:{
+  txHash:string;
+  fromChain:number;
+  toChain:number;
+  bridge?:string;
+}):Promise<SwapStatus> {
+  const url = new URL('https://li.quest/v1/status');
+  url.searchParams.set('txHash', args.txHash);
+  url.searchParams.set('fromChain', String(args.fromChain));
+  url.searchParams.set('toChain', String(args.toChain));
+  if (args.bridge) url.searchParams.set('bridge', args.bridge);
+  const response = await fetch(url.toString(), {headers:{accept:'application/json'}});
+  const body = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(String(body?.message || body?.error || 'Unable to read swap status.'));
+  return body as SwapStatus;
+}
+
 export async function executeSwap(quote:SwapQuote, owner:string, onStatus?:(s:string)=>void) {
   const provider=usesNativeWallet(owner) ? null : getInjectedProvider();
   if (quote.expiresAt && Date.now() >= quote.expiresAt) throw new Error('This quote has expired. Requesting a fresh quote is required.');
