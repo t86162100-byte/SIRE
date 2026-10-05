@@ -70,6 +70,8 @@ export const ETHEREUM_TOKENS: SwapToken[] = [
   { symbol:'DAI', name:'Dai', address:'0x6B175474E89094C44Da98b954EedeAC495271d0F', decimals:18, chainId:1, logoURI:'https://assets.coingecko.com/coins/images/9956/small/Badge_Dai.png' },
 ];
 
+import { getNativeProvider, getNativeSigner, getNativeWalletAddress, isNativeWalletUnlocked } from './sireWalletCore';
+
 export type Eip1193Provider = {
   request(args: { method: string; params?: any[] }): Promise<any>;
   on?: (event: string, handler: (...args:any[]) => void) => void;
@@ -142,8 +144,11 @@ export async function switchToEthereum() {
 
 export async function readNetworkNativeBalance(address: string, network: SwapNetwork): Promise<string> {
   const provider = getInjectedProvider();
-  if (!provider) return '0';
-  return BigInt(await provider.request({method:'eth_getBalance', params:[address,'latest']})).toString();
+  if (provider) return BigInt(await provider.request({method:'eth_getBalance', params:[address,'latest']})).toString();
+  if (isNativeWalletUnlocked() && address.toLowerCase() === getNativeWalletAddress().toLowerCase()) {
+    return (await getNativeProvider(network).getBalance(address)).toString();
+  }
+  return '0';
 }
 
 export async function readEthBalance(address: string): Promise<string> {
@@ -155,20 +160,33 @@ const ERC20_ALLOWANCE = '0xdd62ed3e';
 function padAddress(address:string) { return address.toLowerCase().replace(/^0x/,'').padStart(64,'0'); }
 
 export async function readTokenBalance(token: SwapToken, owner: string): Promise<string> {
-  if (token.native) return readEthBalance(owner);
+  if (token.native) {
+    const network = Object.values(SWAP_NETWORKS).find(n => n.chainId === token.chainId);
+    return network ? readNetworkNativeBalance(owner, network) : '0';
+  }
   const provider = getInjectedProvider();
-  if (!provider) return '0';
-  const data = ERC20_BALANCE_OF + padAddress(owner);
-  const result = await provider.request({method:'eth_call', params:[{to:token.address,data},'latest']});
+  const network = Object.values(SWAP_NETWORKS).find(n => n.chainId === token.chainId);
+  if (provider) {
+    const data = ERC20_BALANCE_OF + padAddress(owner);
+    const result = await provider.request({method:'eth_call', params:[{to:token.address,data},'latest']});
+    return BigInt(result || '0x0').toString();
+  }
+  if (!network || !isNativeWalletUnlocked() || owner.toLowerCase() !== getNativeWalletAddress().toLowerCase()) return '0';
+  const result = await getNativeProvider(network).call({to: token.address, data});
   return BigInt(result || '0x0').toString();
 }
 
 export async function readAllowance(token: SwapToken, owner: string, spender: string): Promise<string> {
   if (token.native) return '0';
   const provider = getInjectedProvider();
-  if (!provider) return '0';
+  const network = Object.values(SWAP_NETWORKS).find(n => n.chainId === token.chainId);
   const data = ERC20_ALLOWANCE + padAddress(owner) + padAddress(spender);
-  const result = await provider.request({method:'eth_call', params:[{to:token.address,data},'latest']});
+  if (provider) {
+    const result = await provider.request({method:'eth_call', params:[{to:token.address,data},'latest']});
+    return BigInt(result || '0x0').toString();
+  }
+  if (!network || !isNativeWalletUnlocked() || owner.toLowerCase() !== getNativeWalletAddress().toLowerCase()) return '0';
+  const result = await getNativeProvider(network).call({to: token.address, data});
   return BigInt(result || '0x0').toString();
 }
 
@@ -196,13 +214,22 @@ export async function approveIfNeeded(token:SwapToken, owner:string, spender:str
   const allowance = await readAllowance(token, owner, spender);
   if (BigInt(allowance) >= BigInt(amount)) return;
   const provider = getInjectedProvider();
-  if (!provider) throw new Error('Wallet provider unavailable.');
+  const network = Object.values(SWAP_NETWORKS).find(n => n.chainId === token.chainId);
+  if (!network) throw new Error('Unsupported approval network.');
   onStatus?.('Approval required');
-  const hash = await provider.request({method:'eth_sendTransaction', params:[{
-    from:owner, to:token.address, data:encodeApprove(spender, amount), value:'0x0'
-  }]});
+  if (provider) {
+    const hash = await provider.request({method:'eth_sendTransaction', params:[{
+      from:owner, to:token.address, data:encodeApprove(spender, amount), value:'0x0'
+    }]});
+    onStatus?.('Waiting for approval');
+    await waitForReceipt(hash);
+    return;
+  }
+  if (!isNativeWalletUnlocked() || owner.toLowerCase() !== getNativeWalletAddress().toLowerCase()) throw new Error('Unlock SIRE Wallet before approving.');
+  const signer = getNativeSigner(network);
+  const tx = await signer.sendTransaction({to: token.address, data: encodeApprove(spender, amount), value: 0n});
   onStatus?.('Waiting for approval');
-  await waitForReceipt(hash);
+  await tx.wait();
 }
 
 export async function fetchNetworkTokens(network: SwapNetwork, query=''): Promise<SwapToken[]> {
@@ -287,7 +314,7 @@ export async function getSwapQuote(args:{
 export async function executeSwap(quote:SwapQuote, owner:string, onStatus?:(s:string)=>void) {
   const provider=getInjectedProvider();
   if (quote.expiresAt && Date.now() >= quote.expiresAt) throw new Error('This quote has expired. Requesting a fresh quote is required.');
-  if (!provider) throw new Error('Wallet provider unavailable.');
+  if (!provider && (!isNativeWalletUnlocked() || owner.toLowerCase() !== getNativeWalletAddress().toLowerCase())) throw new Error('Connect an external wallet or unlock SIRE Wallet before signing.');
   if (!quote.transactionRequest?.to) throw new Error('Quote did not return an executable transaction.');
   const network = Object.values(SWAP_NETWORKS).find(n => n.chainId === quote.fromToken.chainId);
   if (!network || !EVM_SWAP_NETWORKS.some(n => n.chainId === network.chainId)) throw new Error('Unsupported EVM network.');
@@ -296,15 +323,29 @@ export async function executeSwap(quote:SwapQuote, owner:string, onStatus?:(s:st
   await approveIfNeeded(quote.fromToken,owner,quote.approvalAddress||'',quote.fromAmount,onStatus);
   onStatus?.('Confirm swap in wallet');
   const tx=quote.transactionRequest;
-  const hash=await provider.request({method:'eth_sendTransaction',params:[{
-    from:owner,
-    to:tx.to,
-    data:tx.data||'0x',
-    value:tx.value||'0x0',
-    ...(tx.gasLimit ? {gas:tx.gasLimit} : tx.gas ? {gas:tx.gas} : {}),
-    ...(tx.gasPrice ? {gasPrice:tx.gasPrice} : {}),
-  }]});
+  if (provider) {
+    const hash=await provider.request({method:'eth_sendTransaction',params:[{
+      from:owner,
+      to:tx.to,
+      data:tx.data||'0x',
+      value:tx.value||'0x0',
+      ...(tx.gasLimit ? {gas:tx.gasLimit} : tx.gas ? {gas:tx.gas} : {}),
+      ...(tx.gasPrice ? {gasPrice:tx.gasPrice} : {}),
+    }]});
+    onStatus?.('Waiting for confirmation');
+    const receipt=await waitForReceipt(hash);
+    return {hash,receipt};
+  }
+  const signer = getNativeSigner(network);
+  const nativeTx = await signer.sendTransaction({
+    to: tx.to,
+    data: tx.data || '0x',
+    value: tx.value ? BigInt(tx.value) : 0n,
+    ...(tx.gasLimit ? {gasLimit: BigInt(tx.gasLimit)} : tx.gas ? {gasLimit: BigInt(tx.gas)} : {}),
+    ...(tx.gasPrice ? {gasPrice: BigInt(tx.gasPrice)} : {}),
+  });
   onStatus?.('Waiting for confirmation');
-  const receipt=await waitForReceipt(hash);
-  return {hash,receipt};
+  const receipt = await nativeTx.wait();
+  if (!receipt) throw new Error('Transaction confirmation unavailable.');
+  return {hash:nativeTx.hash,receipt};
 }
