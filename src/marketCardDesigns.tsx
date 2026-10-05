@@ -187,7 +187,7 @@ const chainKey = (item: Instrument) => {
   const marketGroup = upper(r.marketGroup || item.category);
   const alpha = str(r.marketSubSubcategory || r.marketFilter || r.marketSubcategory);
   if (marketGroup === 'ALPHA' && alpha && chainIconKeys[iconKey(alpha)]) return alpha.toLowerCase();
-  return '';
+  return 'cex';
 };
 
 const chainSymbol = (item: Instrument) => {
@@ -195,6 +195,7 @@ const chainSymbol = (item: Instrument) => {
   const explicit = str(r.chainSymbol || r.networkSymbol || r.blockchainSymbol);
   if (explicit) return upper(explicit).slice(0, 6);
   const key = iconKey(chainKey(item));
+  if (key === 'cex') return 'CEX';
   const symbols: Record<string, string> = {
     ethereum: 'ETH', eth: 'ETH',
     bnb: 'BNB', bsc: 'BSC', bnbchain: 'BNB',
@@ -212,11 +213,11 @@ const chainLogoSources = (item: Instrument) => {
   const key = iconKey(chainKey(item));
   const simpleKey = chainIconKeys[key] || key;
   if (!simpleKey) return [];
-  const label = key.slice(0, 2).toUpperCase() || '?';
+  const label = key === 'cex' ? 'CEX' : key.slice(0, 2).toUpperCase() || '?';
   const fallback = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#151515"/><text x="32" y="38" text-anchor="middle" font-family="Arial" font-size="19" font-weight="800" fill="#fff">' + label + '</text></svg>';
   return Array.from(new Set([
     str(r.chainLogoUrl),
-    simpleIcon(simpleKey),
+    key !== 'cex' ? simpleIcon(simpleKey) : '',
     'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(fallback),
   ].filter(Boolean)));
 };
@@ -260,7 +261,7 @@ const BinanceShell = ({
             {quote(item) && upper(item.subgroup) === 'SPOT' ? ' / ' + quote(item) : ''}
           </strong>
           <span>{name(item)}{volume ? <><b> | </b>{volume}</> : ''}</span>
-          <small>{provider(item)}{chainKey(item) ? <> <b>·</b> {chainKey(item)}</> : null}</small>
+          <small>{provider(item)}{chainKey(item) ? <> <b>·</b> {chainKey(item).toUpperCase()}</> : null}</small>
           {visibleFields.length > 0 ? (
             <div className="bn-metrics" aria-label="Additional market data">
               <div className="bn-metrics-set">
