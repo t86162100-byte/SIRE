@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { ArrowDownUp, ChevronDown, CircleHelp, Fuel, Info, LockKeyhole, Search, ShieldCheck, X } from 'lucide-react';
+import { ArrowDownUp, ChevronDown, LockKeyhole, Search, ShieldCheck, X } from 'lucide-react';
 import './tradeSwap.css';
 
 type Token = { symbol: string; name: string; network: string; balance?: number; price?: number };
@@ -24,10 +24,7 @@ export default function TradeView({ referencePrice = 0, referenceChange = 0 }: P
   const [to, setTo] = useState<Token>(TOKENS[1]);
   const [amount, setAmount] = useState('1');
   const [tradeMode, setTradeMode] = useState<'Swap' | 'Limit'>('Swap');
-  const [slippage, setSlippage] = useState('Auto');
-  const [customSlippage, setCustomSlippage] = useState('0.5');
   const [tokenPicker, setTokenPicker] = useState<'from' | 'to' | null>(null);
-  const [routeOpen, setRouteOpen] = useState(true);
   const [reviewOpen, setReviewOpen] = useState(false);
   const [search, setSearch] = useState('');
 
@@ -111,26 +108,6 @@ export default function TradeView({ referencePrice = 0, referenceChange = 0 }: P
               <small className="sire-usd-reference">{indicative ? `≈ $${money(output, 2)}` : 'Waiting for an executable provider quote'}</small>
             </div>
 
-            <div className="sire-swap-details">
-              <div><span>Rate</span><b>{indicative ? `1 ${from.symbol} ≈ ${money(output / Number(amount || 1), 2)} ${to.symbol}` : '—'}</b></div>
-              <div><span>Price impact <CircleHelp size={12}/></span><b>—</b></div>
-              <div><span>Network fee <Fuel size={12}/></span><b>—</b></div>
-              <div><span>SIRE fee <Info size={12}/></span><b>Shown before execution</b></div>
-            </div>
-
-            <div className="sire-swap-route">
-              <button type="button" onClick={() => setRouteOpen(v => !v)}><span><ShieldCheck size={15}/> SIRE Smart Route</span><small>{routeOpen ? 'Hide' : 'View'} route details</small></button>
-              {routeOpen && <div className="sire-route-panel">
-                <div className="sire-route-state"><span className="sire-status-dot"/><b>Awaiting live provider quote</b><small>SIRE will compare available liquidity, price impact, gas, fees and execution reliability before execution.</small></div>
-                <div className="sire-route-metrics"><span><b>Best output</b><small>Live quote required</small></span><span><b>Lowest impact</b><small>Live quote required</small></span><span><b>Fastest</b><small>Live quote required</small></span></div>
-              </div>}
-            </div>
-
-            <div className="sire-slippage"><span>Slippage <CircleHelp size={12}/></span><div>
-              {['Auto','0.1%','0.5%','1.0%'].map(item => <button key={item} className={slippage === item ? 'active' : ''} type="button" onClick={() => setSlippage(item)}>{item}</button>)}
-              <button className={slippage === 'Custom' ? 'active' : ''} type="button" onClick={() => setSlippage('Custom')}>Custom</button>
-            </div></div>
-            {slippage === 'Custom' && <div className="sire-custom-slippage"><input value={customSlippage} onChange={e => setCustomSlippage(e.target.value.replace(/[^0-9.]/g,''))}/><span>%</span></div>}
             <button className="sire-review-button" type="button" disabled={!indicative} onClick={() => setReviewOpen(true)}>Review Swap</button>
             <div className="sire-swap-safety"><LockKeyhole size={13}/> Quotes expire quickly and are revalidated before signing.</div>
           </section>
