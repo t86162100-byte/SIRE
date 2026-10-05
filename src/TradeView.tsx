@@ -157,7 +157,12 @@ export default function TradeView({ referencePrice = 0 }: Props) {
     setExecutionError('');
     setTxHash('');
     try {
-      const result = await executeSwap(quote, wallet, setStatus);
+      setStatus('Refreshing executable quote');
+      const freshQuote = await getSwapQuote({ fromToken: from, toToken: to, amount, wallet, slippage });
+      setQuote(freshQuote);
+      if (!freshQuote.transactionRequest?.to) throw new Error('The provider returned a non-executable quote.');
+      if (freshQuote.expiresAt && Date.now() >= freshQuote.expiresAt) throw new Error('The refreshed quote expired before execution. Please try again.');
+      const result = await executeSwap(freshQuote, wallet, setStatus);
       setTxHash(result.hash);
       setStatus('Swap confirmed');
     } catch (error) {
