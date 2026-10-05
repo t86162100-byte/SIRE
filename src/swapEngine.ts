@@ -275,12 +275,15 @@ export async function getSwapQuote(args:{
   if (!network || !EVM_SWAP_NETWORKS.some(n => n.chainId === network.chainId)) {
     throw new Error('This network requires its native wallet/router adapter and is not an EVM route.');
   }
-  if (args.fromToken.chainId !== args.toToken.chainId) throw new Error('Select tokens on the same network.');
+  const destinationNetwork = Object.values(SWAP_NETWORKS).find(n => n.chainId === args.toToken.chainId);
+  if (!destinationNetwork || !EVM_SWAP_NETWORKS.some(n => n.chainId === destinationNetwork.chainId)) {
+    throw new Error('The destination network requires its native wallet/router adapter and is not an EVM route.');
+  }
   const fromAmount = amountToBaseUnits(args.amount,args.fromToken);
   if (BigInt(fromAmount) <= 0n) throw new Error('Enter an amount greater than zero.');
   const url = new URL('https://li.quest/v1/quote');
   url.searchParams.set('fromChain',String(network.chainId));
-  url.searchParams.set('toChain',String(network.chainId));
+  url.searchParams.set('toChain',String(destinationNetwork.chainId));
   url.searchParams.set('fromToken',args.fromToken.address);
   url.searchParams.set('toToken',args.toToken.address);
   url.searchParams.set('fromAddress',args.wallet);
