@@ -162,6 +162,12 @@ const ERC20_BALANCE_OF = '0x70a08231';
 const ERC20_ALLOWANCE = '0xdd62ed3e';
 function padAddress(address:string) { return address.toLowerCase().replace(/^0x/,'').padStart(64,'0'); }
 
+const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000';
+function isNativeTokenAddress(address:string) {
+  const value = String(address || '').toLowerCase();
+  return value === NATIVE_ETH.toLowerCase() || value === ZERO_ADDRESS;
+}
+
 export async function readTokenBalance(token: SwapToken, owner: string): Promise<string> {
   if (token.native) {
     const network = Object.values(SWAP_NETWORKS).find(n => n.chainId === token.chainId);
@@ -258,14 +264,14 @@ export async function fetchNetworkTokens(network: SwapNetwork, query=''): Promis
       chainId:network.chainId,
       logoURI:t.logoURI,
       priceUSD:Number(t.priceUSD||0)||undefined,
-      native:String(t.address||'').toLowerCase()===NATIVE_ETH.toLowerCase() ||
+      native:isNativeTokenAddress(String(t.address || '')) ||
         String(t.coinKey||'').toUpperCase()===network.nativeSymbol.toUpperCase(),
     })).filter((t:SwapToken)=>t.symbol && t.address && t.chainId === network.chainId);
     const merged = [native, ...normalized].filter((t,i,a)=>a.findIndex(x=>x.address.toLowerCase()===t.address.toLowerCase())===i);
     const q=query.trim().toLowerCase();
     return (q ? merged.filter(t=>t.symbol.toLowerCase().includes(q)||t.name.toLowerCase().includes(q)||t.address.toLowerCase()===q) : merged).slice(0,2000);
   } catch {
-    return [native];
+    throw new Error('Unable to load the live token catalogue for ' + network.name + '. Please try again.');
   }
 }
 
@@ -299,7 +305,8 @@ export async function getSwapQuote(args:{
   url.searchParams.set('integrator','sire');
   // Keep the interactive quote responsive. We validate the executable transaction
   // separately in Test Mode; LI.FI documents skipSimulation as the faster quote path.
-  url.searchParams.set('skipSimulation','true');
+  url.searchParams.set('skipSimulation','false');
+  url.searchParams.set('maxPriceImpact','0.15');
   const controller = new AbortController();
   const timeout = window.setTimeout(() => controller.abort(), 12_000);
   let response: Response;
@@ -393,10 +400,14 @@ export async function executeSwap(quote:SwapQuote, owner:string, onStatus?:(s:st
   if (!network || !EVM_SWAP_NETWORKS.some(n => n.chainId === network.chainId)) throw new Error('Unsupported EVM network.');
   // SIRE Wallet uses its own RPC signer; only external wallets need an injected-provider network switch.
   if (!usesNativeWallet(owner)) await switchToNetwork(network);
+  if (quote.transactionRequest.from && quote.transactionRequest.from.toLowerCase() !== owner.toLowerCase()) throw new Error('The executable quote belongs to a different wallet. Request a fresh quote.');
+  const currentBalance = await readTokenBalance(quote.fromToken, owner);
+  if (BigInt(currentBalance) < BigInt(quote.fromAmount)) throw new Error('Insufficient ' + quote.fromToken.symbol + ' balance. The available balance changed after the quote was created.');
   if (!quote.fromToken.native && !quote.approvalAddress) throw new Error('The executable quote did not provide an approval spender.');
   await approveIfNeeded(quote.fromToken,owner,quote.approvalAddress||'',quote.fromAmount,onStatus);
   onStatus?.('Confirm swap in wallet');
   const tx=quote.transactionRequest;
+  if (!tx.chainId || Number(tx.chainId) !== network.chainId) throw new Error('The executable transaction is for the wrong network. Request a fresh quote.');
   if (provider) {
     const hash=await provider.request({method:'eth_sendTransaction',params:[{
       from:owner,
