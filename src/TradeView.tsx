@@ -385,15 +385,12 @@ export default function TradeView({ referencePrice = 0 }: Props) {
     setExecutionError('');
     setTxHash('');
     try {
-      // Use the executable quote already shown to the user. Avoid an unnecessary
-      // second LI.FI browser fetch at confirmation time; refresh only when the
-      // current quote is expired or too close to expiry.
-      let executableQuote = quote;
-      if (executableQuote.expiresAt && Date.now() >= executableQuote.expiresAt - 5000) {
-        setStatus('Refreshing expired quote');
-        executableQuote = await getSwapQuote({ fromToken: from, toToken: to, amount, wallet, slippage });
-        setQuote(executableQuote);
-      }
+      // Always obtain a fresh executable quote immediately before signing.
+      // The displayed quote is for UI feedback; the signed transaction must be
+      // built from current liquidity, balances, gas and slippage conditions.
+      setStatus('Refreshing executable quote');
+      const executableQuote = await getSwapQuote({ fromToken: from, toToken: to, amount, wallet, slippage });
+      setQuote(executableQuote);
       if (!executableQuote.transactionRequest?.to) throw new Error('The provider returned a non-executable quote.');
       if (executableQuote.expiresAt && Date.now() >= executableQuote.expiresAt) throw new Error('This quote expired before execution. Please request a new quote.');
       const result = await executeSwap(executableQuote, wallet, setStatus);
@@ -522,7 +519,7 @@ export default function TradeView({ referencePrice = 0 }: Props) {
             </button>}
             {(quoteError || executionError) && <div className="sire-swap-error"><CircleAlert size={14}/><span>{quoteError || executionError}</span></div>}
             {simulationResult && <div className="sire-swap-status sire-swap-simulation-result"><span>{simulationResult}</span></div>}
-            {status && !executionError && <div className="sire-swap-status">{status}{txHash && <a href={'https://etherscan.io/tx/' + txHash} target="_blank" rel="noreferrer">View transaction</a>}</div>}
+            {status && !executionError && <div className="sire-swap-status">{status}{txHash && <a href={(network === 'BNB Chain' ? 'https://bscscan.com/tx/' : network === 'Base' ? 'https://basescan.org/tx/' : network === 'Arbitrum' ? 'https://arbiscan.io/tx/' : network === 'Optimism' ? 'https://optimistic.etherscan.io/tx/' : network === 'Polygon' ? 'https://polygonscan.com/tx/' : network === 'Avalanche' ? 'https://snowtrace.io/tx/' : 'https://etherscan.io/tx/') + txHash} target="_blank" rel="noreferrer">View transaction</a>}</div>}
 
             <div className="sire-swap-safety"><LockKeyhole size={13}/> Quotes expire quickly and are revalidated before signing.</div>
           </section>
