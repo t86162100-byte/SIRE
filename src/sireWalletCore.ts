@@ -229,42 +229,52 @@ function isRetryableRpcError(error: any) {
 
 export async function sendNativeTransaction(network: SireEvmNetwork, request: TransactionRequest) {
   if (!unlockedWallet) throw new Error('Unlock SIRE Wallet before signing.');
-  const urls = Array.from(new Set([network.rpcUrl, ...(network.rpcUrls || [])]));
-  let signedTransaction: string | null = null;
-  let lastError: unknown = null;
-
-  for (const url of urls) {
-    const provider = new JsonRpcProvider(url, network.chainId, { staticNetwork: true });
-    try {
-      if (!signedTransaction) {
-        // Do not call signer.populateTransaction() here. Ethers populateTransaction()
-        // performs eth_estimateGas when gasLimit is missing, which is both unnecessary
-        // for an executable LI.FI quote and can fail for a zero-balance wallet.
-        // LI.FI supplies the executable gas limit/fee values in transactionRequest.
-        const nonce = request.nonce ?? await provider.getTransactionCount(unlockedWallet.address, 'pending');
-        const tx: TransactionRequest = {
-          ...request,
-          from: unlockedWallet.address,
-          chainId: network.chainId,
-          nonce,
-        };
-        if (tx.gasLimit == null && tx.gas == null) {
-          // Only fall back to estimation when the caller genuinely did not provide
-          // an executable gas limit.
-          tx.gasLimit = await provider.estimateGas(tx);
-        }
-        const signer = unlockedWallet.connect(null);
-        signedTransaction = await signer.signTransaction(tx);
-      }
-      return await provider.broadcastTransaction(signedTransaction);
-    } catch (error: any) {
-      lastError = error;
-      if (!isRetryableRpcError(error)) throw error;
+  const rpc = async (method: string, params: any[]) => {
+    if (typeof window === 'undefined') throw new Error('Browser RPC proxy unavailable.');
+    const response = await fetch('/api/sire/evm/rpc', {
+      method:'POST',
+      headers:{'content-type':'application/json','accept':'application/json'},
+      body:JSON.stringify({network:network.name,method,params}),
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok || payload?.ok === false) {
+      const detail = String(payload?.error || payload?.detail || ('HTTP ' + response.status));
+      throw new Error(detail);
     }
-  }
+    return payload?.result;
+  };
 
-  const detail = lastError instanceof Error ? lastError.message : String(lastError || '');
-  throw new Error('EVM transaction RPC unavailable. Tried all configured RPC endpoints.' + (detail ? ' Last error: ' + detail : ''));
+  try {
+    // Nonce is read through the same-origin Render proxy. The private key never
+    // leaves this browser; only the signed raw transaction is sent to the server.
+    const nonce = request.nonce ?? Number(BigInt(await rpc('eth_getTransactionCount',[unlockedWallet.address,'pending'])));
+    const tx: TransactionRequest = {
+      ...request,
+      from: unlockedWallet.address,
+      chainId: network.chainId,
+      nonce,
+    };
+    if (tx.gasLimit == null && tx.gas == null) {
+      throw new Error('Executable transaction is missing a gas limit.');
+    }
+
+    // Sign locally. The raw signed transaction is the only wallet-sensitive
+    // transaction material sent to Render for broadcast.
+    const signedTransaction = await unlockedWallet.signTransaction(tx);
+    const hash = await rpc('eth_sendRawTransaction',[signedTransaction]);
+    if (!hash) throw new Error('RPC accepted the transaction but returned no transaction hash.');
+
+    return {
+      hash: String(hash),
+      wait: async () => waitForNativeTransaction(network, String(hash)),
+    };
+  } catch (error: any) {
+    const detail = error instanceof Error ? error.message : String(error || '');
+    if (/failed to fetch|fetch failed|network|timeout|econn|enotfound|socket/i.test(detail)) {
+      throw new Error('SIRE transaction RPC proxy unavailable: ' + detail);
+    }
+    throw error;
+  }
 }
 
 export async function waitForNativeTransaction(network: SireEvmNetwork, hash: string, timeoutMs = 180000) {
