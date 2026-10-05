@@ -1,6 +1,6 @@
 import { JsonRpcProvider, Wallet, HDNodeWallet, formatEther, parseEther, Contract } from 'ethers';
 import { Connection, Keypair, PublicKey, SystemProgram, Transaction, LAMPORTS_PER_SOL, sendAndConfirmTransaction } from '@solana/web3.js';
-import TronWeb from 'tronweb';
+import { TronWeb } from 'tronweb';
 import {
   SIRE_EVM_NETWORKS,
   getNativeProvider,
