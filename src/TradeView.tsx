@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowDownUp, ChevronDown, CircleAlert, LoaderCircle, LockKeyhole, Search, WalletCards, X } from 'lucide-react';
 import './tradeSwap.css';
 import {
@@ -42,6 +42,7 @@ export default function TradeView({ referencePrice = 0 }: Props) {
   const [slippage, setSlippage] = useState(0.005);
   const [quote, setQuote] = useState<SwapQuote | null>(null);
   const [quoteLoading, setQuoteLoading] = useState(false);
+  const quoteRequestId = useRef(0);
   const [quoteError, setQuoteError] = useState('');
   const [tokenPicker, setTokenPicker] = useState<'from' | 'to' | null>(null);
   const [search, setSearch] = useState('');
@@ -222,32 +223,39 @@ export default function TradeView({ referencePrice = 0 }: Props) {
   }, [nativeUnlocked, nativeWallet, network]);
 
   useEffect(() => {
+    const requestId = ++quoteRequestId.current;
     setQuote(null);
     setQuoteError('');
+    setQuoteLoading(false);
+
     if (!wallet || !EVM_SWAP_NETWORKS.some(item => item.name === network) || tradeMode !== 'Swap' || from.address.toLowerCase() === to.address.toLowerCase()) return;
     const numeric = Number(amount);
     if (!Number.isFinite(numeric) || numeric <= 0) return;
+
     let cancelled = false;
     const timer = window.setTimeout(async () => {
+      if (requestId !== quoteRequestId.current) return;
       setQuoteLoading(true);
       try {
         const next = await getSwapQuote({ fromToken: from, toToken: to, amount, wallet, slippage });
-        if (!cancelled) {
+        if (!cancelled && requestId === quoteRequestId.current) {
           setQuote(next);
           setQuoteError('');
         }
       } catch (error) {
-        if (!cancelled) {
+        if (!cancelled && requestId === quoteRequestId.current) {
           setQuote(null);
           setQuoteError(error instanceof Error ? error.message : String(error));
         }
       } finally {
-        if (!cancelled) setQuoteLoading(false);
+        if (!cancelled && requestId === quoteRequestId.current) setQuoteLoading(false);
       }
     }, 450);
+
     return () => {
       cancelled = true;
       window.clearTimeout(timer);
+      if (requestId === quoteRequestId.current) setQuoteLoading(false);
     };
   }, [wallet, network, tradeMode, from, to, amount, slippage]);
 
