@@ -16,7 +16,7 @@ import {
   readTokenBalance,
   switchToNetwork,
 } from './swapEngine';
-import { cancelPreparedNativeWallet, finalizePreparedNativeWallet, getNativeWalletAddress, hasNativeWallet, isNativeWalletUnlocked, prepareNativeWallet } from './sireWalletCore';
+import { cancelPreparedNativeWallet, finalizePreparedNativeWallet, getNativeWalletAddress, hasNativeWallet, isNativeWalletUnlocked, prepareNativeWallet, unlockNativeWallet } from './sireWalletCore';
 
 type Props = { referencePrice?: number; referenceChange?: number };
 
@@ -51,7 +51,7 @@ export default function TradeView({ referencePrice = 0 }: Props) {
   const [nativeWallet, setNativeWallet] = useState('');
   const [nativeUnlocked, setNativeUnlocked] = useState(false);
   const [walletOnboarding, setWalletOnboarding] = useState(false);
-  const [walletStep, setWalletStep] = useState<'intro' | 'backup' | 'confirm'>('intro');
+  const [walletStep, setWalletStep] = useState<'intro' | 'backup' | 'unlock' | 'confirm'>('intro');
   const [walletPassword, setWalletPassword] = useState('');
   const [walletPasswordConfirm, setWalletPasswordConfirm] = useState('');
   const [walletMnemonic, setWalletMnemonic] = useState('');
@@ -68,7 +68,7 @@ export default function TradeView({ referencePrice = 0 }: Props) {
     const openNativeWallet = () => {
       setWalletCreationError('');
       setWalletOnboarding(true);
-      setWalletStep(hasNativeWallet() ? 'intro' : 'intro');
+      setWalletStep(hasNativeWallet() ? 'unlock' : 'intro');
     };
     syncNativeWallet();
     window.addEventListener('sire:native-wallet-state', syncNativeWallet);
@@ -90,6 +90,27 @@ export default function TradeView({ referencePrice = 0 }: Props) {
       setWalletStep('backup');
     } catch (error) {
       setWalletCreationError(error instanceof Error ? error.message : String(error));
+    }
+  };
+
+  const unlockWallet = async () => {
+    if (!walletPassword) {
+      setWalletCreationError('Enter your wallet password.');
+      return;
+    }
+    setWalletCreating(true);
+    setWalletCreationError('');
+    try {
+      const result = await unlockNativeWallet(walletPassword);
+      setWallet(result.address);
+      setWalletCreatedAddress(result.address);
+      setNativeWallet(result.address);
+      setNativeUnlocked(true);
+      setWalletStep('confirm');
+    } catch (error) {
+      setWalletCreationError(error instanceof Error ? error.message : 'Unable to unlock SIRE Wallet.');
+    } finally {
+      setWalletCreating(false);
     }
   };
 
@@ -132,7 +153,7 @@ export default function TradeView({ referencePrice = 0 }: Props) {
   };
 
   const closeWalletOnboarding = () => {
-    if (walletStep === 'backup' || walletStep === 'confirm') cancelPreparedNativeWallet();
+    if (walletStep === 'backup') cancelPreparedNativeWallet();
     setWalletOnboarding(false);
     setWalletStep('intro');
     setWalletMnemonic('');
@@ -438,7 +459,17 @@ export default function TradeView({ referencePrice = 0 }: Props) {
           <p>Your wallet is created on this device and its recovery phrase is controlled by you. Swap will use this wallet directly instead of asking you to connect an external wallet.</p>
           <div className="sire-wallet-warning"><LockKeyhole size={15}/><span>Never share your recovery phrase or password. SIRE cannot recover a lost recovery phrase.</span></div>
           <button type="button" className="sire-review-button" onClick={beginWalletCreation}>Create Wallet</button>
-          {hasNativeWallet() && <button type="button" className="sire-wallet-secondary" onClick={() => { closeWalletOnboarding(); window.dispatchEvent(new CustomEvent('sire:native-wallet-state')); }}>I already have a wallet</button>}
+        </div>}
+
+        {walletStep === 'unlock' && <div className="sire-wallet-onboarding-body">
+          <div className="sire-wallet-hero-icon"><LockKeyhole size={25}/></div>
+          <h3>Unlock SIRE Wallet</h3>
+          <p>Your SIRE Wallet already exists on this device. Enter its password to make it available to Swap.</p>
+          <div className="sire-wallet-form">
+            <label>Wallet password<input type="password" autoFocus autoComplete="current-password" value={walletPassword} onChange={e => setWalletPassword(e.target.value)} placeholder="Enter your password" onKeyDown={e => { if (e.key === 'Enter') void unlockWallet(); }}/></label>
+          </div>
+          {walletCreationError && <div className="sire-swap-error"><CircleAlert size={14}/><span>{walletCreationError}</span></div>}
+          <button type="button" className="sire-review-button" disabled={walletCreating} onClick={() => void unlockWallet()}>{walletCreating ? <><LoaderCircle className="sire-spin" size={15}/> Unlocking…</> : 'Unlock Wallet'}</button>
         </div>}
 
         {walletStep === 'backup' && <div className="sire-wallet-onboarding-body">
