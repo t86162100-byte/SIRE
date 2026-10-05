@@ -4,6 +4,7 @@ import { TronWeb } from 'tronweb';
 import {
   SIRE_EVM_NETWORKS,
   getNativeProvider,
+  getNativeBalance,
   getNativeSigner,
   getNativeWalletAddress,
   isNativeWalletUnlocked,
@@ -309,7 +310,7 @@ export async function getEvmAssets(networkName: Exclude<WalletNetwork, 'Solana' 
   const network = networkOrThrow(networkName);
   const address = getNativeWalletAddress();
   const provider = getNativeProvider(network);
-  const nativeRaw = (await provider.getBalance(address)).toString();
+  const nativeRaw = (await getNativeBalance(network, address)).toString();
   const nativeBalance = formatEther(nativeRaw);
   const assets: WalletAsset[] = [{
     id: networkName + ':native',
