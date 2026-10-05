@@ -76,7 +76,14 @@ export type Eip1193Provider = {
   removeListener?: (event: string, handler: (...args:any[]) => void) => void;
 };
 
+let externalWalletProvider: Eip1193Provider | null = null;
+
+export function setExternalWalletProvider(provider: Eip1193Provider | null) {
+  externalWalletProvider = provider;
+}
+
 export function getInjectedProvider(): Eip1193Provider | null {
+  if (externalWalletProvider) return externalWalletProvider;
   if (typeof window === 'undefined') return null;
   return (window as any).ethereum || null;
 }
