@@ -511,7 +511,7 @@ export default function TradeView({ referencePrice = 0 }: Props) {
       const result = await executeSwap(executableQuote, wallet, setStatus);
       setTxHash(result.hash);
       recordSwap(result.hash, executableQuote);
-      setStatus(isCrossChain ? 'Swap completed across ' + network + ' → ' + toNetwork : 'Swap confirmed');
+      setStatus(isCrossChain ? 'Cross-chain source transaction confirmed · destination processing' : 'Swap confirmed');
       void readTokenBalance(from, wallet).then(setFromBalance).catch(() => {});
     } catch (error) {
       setExecutionError(error instanceof Error ? error.message : String(error));
@@ -719,13 +719,13 @@ export default function TradeView({ referencePrice = 0 }: Props) {
       <section className="sire-token-modal sire-token-picker-sheet" role="dialog" aria-modal="true" aria-label="Select token" onMouseDown={e => e.stopPropagation()}>
         <div className="sire-token-sheet-handle" aria-hidden="true"><span /></div>
         <div className="sire-token-modal-head">
-          <div><b>Select token</b><small>{network} · live token catalogue</small></div>
+          <div><b>Select token</b><small>{pickerNetwork} · live token catalogue</small></div>
           <button type="button" onClick={() => setTokenPicker(null)} aria-label="Close token selector"><X size={17}/></button>
         </div>
         <div className="sire-token-search"><Search size={15}/><input autoFocus value={search} onChange={e => setSearch(e.target.value)} placeholder="Search symbol, name or address"/></div>
         <div className="sire-token-network-strip" aria-label="Networks">
           {supportedNetworks.map(item => (
-            <button key={item.name} type="button" className={item.name === network ? 'active' : ''} onClick={() => void selectNetwork(item.name)}>
+            <button key={item.name} type="button" className={item.name === pickerNetwork ? 'active' : ''} onClick={() => void selectNetwork(item.name, tokenPicker === 'to' ? 'to' : 'from')}>
               <LogoMark src={item.logoURI} fallback={item.name.slice(0, 1)} className="sire-token-network-icon" />
               <span>{item.name}</span>
             </button>
