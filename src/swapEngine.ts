@@ -90,6 +90,11 @@ export function getInjectedProvider(): Eip1193Provider | null {
   return (window as any).ethereum || null;
 }
 
+function usesNativeWallet(address?: string) {
+  const nativeAddress = getNativeWalletAddress();
+  return Boolean(address && nativeAddress && isNativeWalletUnlocked() && address.toLowerCase() === nativeAddress.toLowerCase());
+}
+
 function parseUnits(value: string, decimals: number): string {
   const clean = String(value || '').trim();
   if (!/^\d*(\.\d*)?$/.test(clean) || !clean) throw new Error('Enter a valid amount.');
@@ -143,11 +148,9 @@ export async function switchToEthereum() {
 }
 
 export async function readNetworkNativeBalance(address: string, network: SwapNetwork): Promise<string> {
+  if (usesNativeWallet(address)) return (await getNativeProvider(network).getBalance(address)).toString();
   const provider = getInjectedProvider();
   if (provider) return BigInt(await provider.request({method:'eth_getBalance', params:[address,'latest']})).toString();
-  if (isNativeWalletUnlocked() && address.toLowerCase() === getNativeWalletAddress().toLowerCase()) {
-    return (await getNativeProvider(network).getBalance(address)).toString();
-  }
   return '0';
 }
 
@@ -164,7 +167,8 @@ export async function readTokenBalance(token: SwapToken, owner: string): Promise
     const network = Object.values(SWAP_NETWORKS).find(n => n.chainId === token.chainId);
     return network ? readNetworkNativeBalance(owner, network) : '0';
   }
-  const provider = getInjectedProvider();
+  const nativeOwner = usesNativeWallet(owner);
+  const provider = nativeOwner ? null : getInjectedProvider();
   const network = Object.values(SWAP_NETWORKS).find(n => n.chainId === token.chainId);
   const data = ERC20_BALANCE_OF + padAddress(owner);
   if (provider) {
@@ -178,7 +182,8 @@ export async function readTokenBalance(token: SwapToken, owner: string): Promise
 
 export async function readAllowance(token: SwapToken, owner: string, spender: string): Promise<string> {
   if (token.native) return '0';
-  const provider = getInjectedProvider();
+  const nativeOwner = usesNativeWallet(owner);
+  const provider = nativeOwner ? null : getInjectedProvider();
   const network = Object.values(SWAP_NETWORKS).find(n => n.chainId === token.chainId);
   const data = ERC20_ALLOWANCE + padAddress(owner) + padAddress(spender);
   if (provider) {
@@ -213,7 +218,7 @@ export async function approveIfNeeded(token:SwapToken, owner:string, spender:str
   if (token.native) return;
   const allowance = await readAllowance(token, owner, spender);
   if (BigInt(allowance) >= BigInt(amount)) return;
-  const provider = getInjectedProvider();
+  const provider = usesNativeWallet(owner) ? null : getInjectedProvider();
   const network = Object.values(SWAP_NETWORKS).find(n => n.chainId === token.chainId);
   if (!network) throw new Error('Unsupported approval network.');
   onStatus?.('Approval required');
@@ -314,8 +319,60 @@ export async function getSwapQuote(args:{
   };
 }
 
+export type SwapSimulationResult = {
+  gasEstimate?: string;
+  approvalGasEstimate?: string;
+  checkedAt: number;
+};
+
+/**
+ * Safe no-money validation. This never signs, sends, approves, or broadcasts.
+ * eth_call/eth_estimateGas execute against current chain state only.
+ */
+export async function simulateSwap(quote: SwapQuote, owner: string): Promise<SwapSimulationResult> {
+  if (quote.expiresAt && Date.now() >= quote.expiresAt) {
+    throw new Error('This quote has expired. Request a fresh quote before testing.');
+  }
+  const tx = quote.transactionRequest;
+  if (!tx?.to) throw new Error('Quote did not return an executable transaction.');
+  if (!owner) throw new Error('A wallet address is required for simulation.');
+  const network = Object.values(SWAP_NETWORKS).find(n => n.chainId === quote.fromToken.chainId);
+  if (!network || !EVM_SWAP_NETWORKS.some(n => n.chainId === network.chainId)) {
+    throw new Error('Simulation currently supports EVM networks only.');
+  }
+  if (tx.chainId && Number(tx.chainId) !== network.chainId) {
+    throw new Error('Quote network does not match the selected network.');
+  }
+
+  const provider = getNativeProvider(network);
+  const call = {
+    from: owner,
+    to: tx.to,
+    data: tx.data || '0x',
+    value: tx.value ? BigInt(tx.value) : 0n,
+    ...(tx.gasLimit ? { gasLimit: BigInt(tx.gasLimit) } : tx.gas ? { gasLimit: BigInt(tx.gas) } : {}),
+  };
+
+  // For ERC-20 swaps, test the current allowance first. If allowance is insufficient,
+  // estimate the approval transaction separately, but never submit it.
+  let approvalGasEstimate: string | undefined;
+  if (!quote.fromToken.native) {
+    if (!quote.approvalAddress) throw new Error('The executable quote did not provide an approval spender.');
+    const allowance = await readAllowance(quote.fromToken, owner, quote.approvalAddress);
+    if (BigInt(allowance) < BigInt(quote.fromAmount)) {
+      const approvalData = encodeApprove(quote.approvalAddress, quote.fromAmount);
+      const approvalGas = await provider.estimateGas({ from: owner, to: quote.fromToken.address, data: approvalData, value: 0n });
+      approvalGasEstimate = approvalGas.toString();
+      throw new Error('Test reached the approval step. The swap route is valid enough to estimate approval, but the live swap cannot execute until that approval exists. No transaction was sent.');
+    }
+  }
+
+  const gas = await provider.estimateGas(call);
+  return { gasEstimate: gas.toString(), approvalGasEstimate, checkedAt: Date.now() };
+}
+
 export async function executeSwap(quote:SwapQuote, owner:string, onStatus?:(s:string)=>void) {
-  const provider=getInjectedProvider();
+  const provider=usesNativeWallet(owner) ? null : getInjectedProvider();
   if (quote.expiresAt && Date.now() >= quote.expiresAt) throw new Error('This quote has expired. Requesting a fresh quote is required.');
   if (!provider && (!isNativeWalletUnlocked() || owner.toLowerCase() !== getNativeWalletAddress().toLowerCase())) throw new Error('Connect an external wallet or unlock SIRE Wallet before signing.');
   if (!quote.transactionRequest?.to) throw new Error('Quote did not return an executable transaction.');
