@@ -23,6 +23,7 @@ export default function TradeView({ referencePrice = 0, referenceChange = 0 }: P
   const [from, setFrom] = useState<Token>(TOKENS[0]);
   const [to, setTo] = useState<Token>(TOKENS[1]);
   const [amount, setAmount] = useState('1');
+  const [tradeMode, setTradeMode] = useState<'Swap' | 'Limit'>('Swap');
   const [slippage, setSlippage] = useState('Auto');
   const [customSlippage, setCustomSlippage] = useState('0.5');
   const [tokenPicker, setTokenPicker] = useState<'from' | 'to' | null>(null);
@@ -50,6 +51,20 @@ export default function TradeView({ referencePrice = 0, referenceChange = 0 }: P
     <header className="sire-trade-productbar">
       <div className="sire-trade-product-scroll">
         {PRODUCTS.map(product => <button key={product} type="button" className={product === 'Swap' ? 'active' : ''} disabled={product !== 'Swap'}>{product}</button>)}
+      </div>
+      <div className="sire-trade-mode-pills" role="tablist" aria-label="Trade mode">
+        {(['Swap', 'Limit'] as const).map(mode => (
+          <button
+            key={mode}
+            type="button"
+            role="tab"
+            aria-selected={tradeMode === mode}
+            className={tradeMode === mode ? 'active' : ''}
+            onClick={() => setTradeMode(mode)}
+          >
+            {mode}
+          </button>
+        ))}
       </div>
       <div className="sire-trade-status"><span className="sire-status-dot" /> Aggregated execution layer</div>
     </header>
@@ -79,8 +94,6 @@ export default function TradeView({ referencePrice = 0, referenceChange = 0 }: P
 
         <div className="sire-swap-grid">
           <section className="sire-swap-card sire-swap-form-card">
-            <div className="sire-swap-mode"><button className="active" type="button">Swap</button><button type="button" disabled>Limit</button><span>Exact input</span></div>
-
             <div className="sire-swap-token-box">
               <div className="sire-swap-token-label"><span>From</span><span>Balance —</span></div>
               <div className="sire-swap-token-row">
