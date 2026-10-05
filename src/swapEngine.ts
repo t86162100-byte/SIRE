@@ -46,29 +46,58 @@ export type SwapNetwork = {
   key: string;
   nativeSymbol: string;
   nativeName: string;
+  logoURI?: string;
 };
 
-export const SWAP_NETWORKS: Record<string, SwapNetwork> = {
-  Ethereum: { name:'Ethereum', chainId:1, key:'ETH', nativeSymbol:'ETH', nativeName:'Ethereum' },
-  'BNB Chain': { name:'BNB Chain', chainId:56, key:'BSC', nativeSymbol:'BNB', nativeName:'BNB' },
-  Base: { name:'Base', chainId:8453, key:'BAS', nativeSymbol:'ETH', nativeName:'Ethereum' },
-  Arbitrum: { name:'Arbitrum', chainId:42161, key:'ARB', nativeSymbol:'ETH', nativeName:'Ethereum' },
-  Optimism: { name:'Optimism', chainId:10, key:'OPT', nativeSymbol:'ETH', nativeName:'Ethereum' },
-  Polygon: { name:'Polygon', chainId:137, key:'POL', nativeSymbol:'POL', nativeName:'Polygon' },
-  Avalanche: { name:'Avalanche', chainId:43114, key:'AVA', nativeSymbol:'AVAX', nativeName:'Avalanche' },
-  Solana: { name:'Solana', chainId:101, key:'SOL', nativeSymbol:'SOL', nativeName:'Solana' },
-  TRON: { name:'TRON', chainId:728126428, key:'TRX', nativeSymbol:'TRX', nativeName:'TRON' },
-};
+let swapNetworkCatalog: SwapNetwork[] = [];
 
-export const EVM_SWAP_NETWORKS = Object.values(SWAP_NETWORKS).filter(n => !['Solana','TRON'].includes(n.name));
+export const SWAP_NETWORKS: Record<string, SwapNetwork> = {};
 
-export const ETHEREUM_TOKENS: SwapToken[] = [
-  { symbol:'ETH', name:'Ethereum', address:NATIVE_ETH, decimals:18, chainId:1, native:true, logoURI:'https://assets.coingecko.com/coins/images/279/small/ethereum.png' },
-  { symbol:'USDT', name:'Tether', address:'0xdAC17F958D2ee523a2206206994597C13D831ec7', decimals:6, chainId:1, logoURI:'https://assets.coingecko.com/coins/images/325/small/Tether.png' },
-  { symbol:'USDC', name:'USD Coin', address:'0xA0b86991c6218b36c1d19d4a2e9eb0ce3606eb48', decimals:6, chainId:1, logoURI:'https://assets.coingecko.com/coins/images/6319/small/USD_Coin_icon.png' },
-  { symbol:'WBTC', name:'Wrapped Bitcoin', address:'0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599', decimals:8, chainId:1, logoURI:'https://assets.coingecko.com/coins/images/7598/small/wrapped_bitcoin_wbtc.png' },
-  { symbol:'DAI', name:'Dai', address:'0x6B175474E89094C44Da98b954EedeAC495271d0F', decimals:18, chainId:1, logoURI:'https://assets.coingecko.com/coins/images/9956/small/Badge_Dai.png' },
-];
+export const EVM_SWAP_NETWORKS: SwapNetwork[] = [];
+
+function replaceSwapNetworkCatalog(next: SwapNetwork[]) {
+  swapNetworkCatalog = next;
+  for (const key of Object.keys(SWAP_NETWORKS)) delete SWAP_NETWORKS[key];
+  for (const network of next) SWAP_NETWORKS[network.name] = network;
+  EVM_SWAP_NETWORKS.splice(0, EVM_SWAP_NETWORKS.length, ...next);
+}
+
+export async function fetchSupportedSwapNetworks(): Promise<SwapNetwork[]> {
+  const url = new URL('https://li.quest/v1/chains');
+  url.searchParams.set('chainTypes', 'EVM');
+  const response = await fetch(url.toString(), { headers: { accept: 'application/json' } });
+  if (!response.ok) throw new Error('Unable to load the live supported swap networks.');
+  const body = await response.json();
+  const raw = Array.isArray(body) ? body : body?.chains || [];
+  const networks = raw
+    .filter((chain:any) => chain?.mainnet !== false)
+    .map((chain:any) => {
+      const chainId = Number(chain?.id ?? chain?.chainId);
+      const native = chain?.nativeCurrency || {};
+      const nativeSymbol = String(chain?.coin || native?.symbol || '').toUpperCase();
+      return {
+        name: String(chain?.name || chain?.key || 'Unknown network'),
+        chainId,
+        key: String(chain?.key || chain?.id || chainId),
+        nativeSymbol,
+        nativeName: String(native?.name || nativeSymbol || chain?.name || 'Native'),
+        logoURI: chain?.logoURI,
+      } satisfies SwapNetwork;
+    })
+    .filter((network:SwapNetwork) => Number.isFinite(network.chainId) && network.chainId > 0 && network.nativeSymbol)
+    .filter((network:SwapNetwork, index:number, list:SwapNetwork[]) => list.findIndex(item => item.chainId === network.chainId) === index)
+    .sort((a:SwapNetwork,b:SwapNetwork) => a.name.localeCompare(b.name));
+
+  if (!networks.length) throw new Error('LI.FI returned no supported EVM mainnet networks.');
+  replaceSwapNetworkCatalog(networks);
+  return networks;
+}
+
+export function getSwapNetworkByChainId(chainId:number): SwapNetwork | undefined {
+  return swapNetworkCatalog.find(network => network.chainId === chainId);
+}
+
+export const ETHEREUM_TOKENS: SwapToken[] = [];
 
 import { getNativeProvider, getNativeWalletAddress, isNativeWalletUnlocked, sendNativeTransaction, waitForNativeTransaction } from './sireWalletCore';
 
@@ -270,7 +299,7 @@ export async function fetchNetworkTokens(network: SwapNetwork, query=''): Promis
     const merged = [native, ...normalized].filter((t,i,a)=>a.findIndex(x=>x.address.toLowerCase()===t.address.toLowerCase())===i);
     const q=query.trim().toLowerCase();
     return (q ? merged.filter(t=>t.symbol.toLowerCase().includes(q)||t.name.toLowerCase().includes(q)||t.address.toLowerCase()===q) : merged).slice(0,2000);
-  } catch {
+  } catch (error) {
     throw new Error('Unable to load the live token catalogue for ' + network.name + '. Please try again.');
   }
 }
