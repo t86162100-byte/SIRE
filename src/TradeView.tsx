@@ -324,7 +324,9 @@ export default function TradeView({ referencePrice = 0 }: Props) {
     setQuoteError('');
     setQuoteLoading(false);
 
-    if (!wallet || !EVM_SWAP_NETWORKS.some(item => item.name === network) || tradeMode !== 'Swap' || from.address.toLowerCase() === to.address.toLowerCase()) return;
+    const effectiveRecipient = recipient.trim() || wallet;
+    const recipientIsValid = /^0x[a-fA-F0-9]{40}$/.test(effectiveRecipient);
+    if (!wallet || !EVM_SWAP_NETWORKS.some(item => item.name === network) || !EVM_SWAP_NETWORKS.some(item => item.name === toNetwork) || tradeMode !== 'Swap' || tokenIdentity(from) === tokenIdentity(to) || !recipientIsValid) return;
     const numeric = Number(amount);
     if (!Number.isFinite(numeric) || numeric <= 0) return;
 
@@ -690,6 +692,15 @@ export default function TradeView({ referencePrice = 0 }: Props) {
         </div>}
       </section>
     </div>}
+    {historyOpen && <div className="sire-modal-backdrop sire-token-picker-backdrop" onMouseDown={() => setHistoryOpen(false)}>
+      <section className="sire-token-modal sire-swap-history-sheet" role="dialog" aria-modal="true" aria-label="Swap history" onMouseDown={e => e.stopPropagation()}>
+        <div className="sire-token-modal-head"><div><b>Swap history</b><small>Recent SIRE Swap executions on this device</small></div><button type="button" onClick={() => setHistoryOpen(false)} aria-label="Close history"><X size={17}/></button></div>
+        <div className="sire-swap-history-list">
+          {swapHistory.length ? swapHistory.map(item => <div className="sire-swap-history-row" key={item.hash}><div><b>{item.amount} {item.from} → {item.output} {item.to}</b><small>{item.fromNetwork}{item.fromNetwork !== item.toNetwork ? ' → ' + item.toNetwork : ''} · {new Date(item.time).toLocaleString()}</small></div><a href={(item.fromNetwork === 'BNB Chain' ? 'https://bscscan.com/tx/' : item.fromNetwork === 'Base' ? 'https://basescan.org/tx/' : item.fromNetwork === 'Arbitrum' ? 'https://arbiscan.io/tx/' : item.fromNetwork === 'Optimism' ? 'https://optimistic.etherscan.io/tx/' : item.fromNetwork === 'Polygon' ? 'https://polygonscan.com/tx/' : item.fromNetwork === 'Avalanche' ? 'https://snowtrace.io/tx/' : 'https://etherscan.io/tx/') + item.hash} target="_blank" rel="noreferrer">View</a></div>) : <div className="sire-swap-history-empty">No swaps yet.</div>}
+        </div>
+      </section>
+    </div>}
+
     {tokenPicker && <div className="sire-modal-backdrop sire-token-picker-backdrop" onMouseDown={() => setTokenPicker(null)}>
       <section className="sire-token-modal sire-token-picker-sheet" role="dialog" aria-modal="true" aria-label="Select token" onMouseDown={e => e.stopPropagation()}>
         <div className="sire-token-sheet-handle" aria-hidden="true"><span /></div>
