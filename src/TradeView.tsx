@@ -810,7 +810,7 @@ export default function TradeView({ referencePrice = 0 }: Props) {
                   {busy ? <><LoaderCircle className="sire-spin" size={15}/> {status || 'Executing'}</> : quote ? 'Confirm Swap' : quoteLoading ? 'Getting live quote…' : 'Waiting for executable quote'}
                 </button>
               )}
-            </div>}
+            </div>}}
  
             <div className="sire-slippage">
               <span>Slippage</span>
