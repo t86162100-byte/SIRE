@@ -309,7 +309,7 @@ export async function fetchEthereumTokens(query=''): Promise<SwapToken[]> {
 }
 
 export async function getSwapQuote(args:{
-  fromToken:SwapToken; toToken:SwapToken; amount:string; wallet:string; slippage:number;
+  fromToken:SwapToken; toToken:SwapToken; amount:string; wallet:string; slippage:number; toAddress?:string;
 }):Promise<SwapQuote> {
   const network = Object.values(SWAP_NETWORKS).find(n => n.chainId === args.fromToken.chainId);
   if (!network || !EVM_SWAP_NETWORKS.some(n => n.chainId === network.chainId)) {
@@ -327,7 +327,7 @@ export async function getSwapQuote(args:{
   url.searchParams.set('fromToken',args.fromToken.address);
   url.searchParams.set('toToken',args.toToken.address);
   url.searchParams.set('fromAddress',args.wallet);
-  url.searchParams.set('toAddress',args.wallet);
+  url.searchParams.set('toAddress',args.toAddress?.trim() || args.wallet);
   url.searchParams.set('fromAmount',fromAmount);
   url.searchParams.set('slippage',String(args.slippage));
   url.searchParams.set('order','CHEAPEST');
