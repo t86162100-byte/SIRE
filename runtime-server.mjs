@@ -896,6 +896,57 @@ const server = http.createServer(async (req,res) => {
       return;
     }
     if (req.method === 'POST' && pathname === '/api/sire/agent/gpt') { const parsed = body ? JSON.parse(body) : {}; if (!String(parsed.query || '').trim()) return res.writeHead(400,{ 'Access-Control-Allow-Origin':'*','Content-Type':'application/json; charset=utf-8' }).end(JSON.stringify({ error:'query is required' })); try { const response = await handleDirectGptRequest(parsed); return res.writeHead(200,{ 'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8' }).end(JSON.stringify(response)); } catch (cause) { const message = cause instanceof Error ? cause.message : String(cause); console.error('[DIRECT GPT]', message); return res.writeHead(502,{ 'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8' }).end(JSON.stringify({ error:`Direct GPT test failed: ${message}` })); } }
+    if (req.method === 'POST' && pathname === '/api/sire/evm/rpc') {
+      try {
+        const parsed = body ? JSON.parse(body) : {};
+        const networks = {
+          Ethereum: ['https://ethereum-rpc.publicnode.com','https://eth.llamarpc.com','https://cloudflare-eth.com'],
+          'BNB Chain': ['https://bsc-dataseed.binance.org','https://bsc-dataseed1.binance.org','https://bsc-rpc.publicnode.com'],
+          Base: ['https://mainnet.base.org','https://base-rpc.publicnode.com'],
+          Arbitrum: ['https://arb1.arbitrum.io/rpc','https://arbitrum-one-rpc.publicnode.com'],
+          Optimism: ['https://mainnet.optimism.io','https://optimism-rpc.publicnode.com'],
+          Polygon: ['https://polygon-rpc.com','https://polygon-bor-rpc.publicnode.com'],
+          Avalanche: ['https://api.avax.network/ext/bc/C/rpc','https://avalanche-c-chain-rpc.publicnode.com'],
+        };
+        const networkName = String(parsed.network || '');
+        const method = String(parsed.method || '');
+        const params = Array.isArray(parsed.params) ? parsed.params : [];
+        const urls = networks[networkName] || [];
+        const allowedMethods = new Set(['eth_chainId','eth_getTransactionCount','eth_sendRawTransaction','eth_getTransactionReceipt','eth_getBalance','eth_call','eth_estimateGas']);
+        if (!urls.length) return res.writeHead(400,{'Access-Control-Allow-Origin':'*','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify({ok:false,error:'Unsupported EVM network.'}));
+        if (!allowedMethods.has(method)) return res.writeHead(400,{'Access-Control-Allow-Origin':'*','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify({ok:false,error:'Unsupported EVM RPC method.'}));
+        let lastError = '';
+        for (const rpcUrl of urls) {
+          try {
+            const upstream = await fetch(rpcUrl, {
+              method:'POST',
+              headers:{'content-type':'application/json','accept':'application/json'},
+              body:JSON.stringify({jsonrpc:'2.0',id:Date.now(),method,params}),
+            });
+            const raw = await upstream.text();
+            let payload = {};
+            try { payload = raw ? JSON.parse(raw) : {}; } catch { payload = {}; }
+            if (!upstream.ok) throw new Error('HTTP ' + upstream.status);
+            if (payload?.error) {
+              const rpcMessage = String(payload.error.message || payload.error.data || 'RPC error');
+              // JSON-RPC transaction errors are authoritative and should not be
+              // masked by trying unrelated endpoints.
+              if (method === 'eth_sendRawTransaction') {
+                return res.writeHead(200,{'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify({ok:false,error:rpcMessage,code:payload.error.code ?? null}));
+              }
+              throw new Error(rpcMessage);
+            }
+            return res.writeHead(200,{'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify({ok:true,result:payload?.result ?? null}));
+          } catch (cause) {
+            lastError = cause instanceof Error ? cause.message : String(cause);
+          }
+        }
+        console.error('[EVM RPC PROXY] all endpoints failed', networkName, method, lastError);
+        return res.writeHead(502,{'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify({ok:false,error:'EVM RPC upstream unavailable.',detail:lastError,network:networkName,method}));
+      } catch (cause) {
+        return res.writeHead(400,{'Access-Control-Allow-Origin':'*','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify({ok:false,error:cause instanceof Error?cause.message:String(cause)}));
+      }
+    }
     if (req.method === 'GET' && pathname === '/api/sire/binance/live-price') {
       const u = new URL(req.url || '/', 'http://' + (req.headers.host || 'localhost'));
       const market = String(u.searchParams.get('market') || 'spot').toLowerCase();
