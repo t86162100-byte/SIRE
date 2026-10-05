@@ -21,6 +21,7 @@ import {
   switchToNetwork,
 } from './swapEngine';
 import { cancelPreparedNativeWallet, finalizePreparedNativeWallet, getNativeWalletAddress, hasNativeWallet, isNativeWalletUnlocked, prepareNativeWallet, unlockNativeWallet } from './sireWalletCore';
+import { buildLimitOrder, limitTakingAmount, signLimitOrder, submitLimitOrder, fetchLimitOrders, approveLimitOrderIfNeeded, cancelLimitOrder } from './limitOrderEngine';
 
 type Props = { referencePrice?: number; referenceChange?: number };
 
@@ -97,6 +98,11 @@ export default function TradeView({ referencePrice = 0 }: Props) {
   const [quoteSeconds, setQuoteSeconds] = useState(0);
   const [swapHistory, setSwapHistory] = useState<Array<{hash:string;from:string;to:string;amount:string;output:string;fromNetwork:string;toNetwork:string;time:number;recipient:string}>>([]);
   const [historyOpen, setHistoryOpen] = useState(false);
+  const [limitPrice, setLimitPrice] = useState('');
+  const [limitExpiry, setLimitExpiry] = useState(86400);
+  const [limitBusy, setLimitBusy] = useState(false);
+  const [limitError, setLimitError] = useState('');
+  const [limitOrders, setLimitOrders] = useState<any[]>([]);
 
   useEffect(() => {
     const syncNativeWallet = () => {
@@ -463,11 +469,142 @@ export default function TradeView({ referencePrice = 0 }: Props) {
 
   useEffect(() => {
     try {
+      const raw = window.localStorage.getItem('sire.limit.orders.v1');
+      const parsed = raw ? JSON.parse(raw) : [];
+      if (Array.isArray(parsed)) setLimitOrders(parsed.slice(0, 50));
+    } catch {}
+  }, []);
+
+  useEffect(() => {
+    if (tradeMode === 'Limit' && wallet && nativeUnlocked) void refreshLimitOrders();
+  }, [tradeMode, wallet, network, nativeUnlocked]);
+
+  useEffect(() => {
+    try {
       const raw = window.localStorage.getItem('sire.swap.history.v1');
       const parsed = raw ? JSON.parse(raw) : [];
       if (Array.isArray(parsed)) setSwapHistory(parsed.slice(0, 20));
     } catch {}
   }, []);
+
+  const refreshLimitOrders = async () => {
+    if (!wallet || !network) return;
+    try {
+      const orders = await fetchLimitOrders(SWAP_NETWORKS[network]?.chainId || from.chainId, wallet);
+      setLimitOrders(orders);
+      setLimitError('');
+    } catch (error) {
+      setLimitError(error instanceof Error ? error.message : String(error));
+    }
+  };
+
+  const placeLimitOrder = async () => {
+    if (!wallet || !nativeUnlocked) {
+      setLimitError('Unlock SIRE Wallet before placing a limit order.');
+      return;
+    }
+    if (!limitPrice || Number(limitPrice) <= 0) {
+      setLimitError('Enter a limit price.');
+      return;
+    }
+    if (from.native || to.native) {
+      setLimitError('Limit orders require ERC-20 or wrapped assets. Select the token contract instead of the native coin.');
+      return;
+    }
+    if (from.chainId !== to.chainId) {
+      setLimitError('Limit orders are single-chain. Use Swap for cross-chain trades.');
+      return;
+    }
+    setLimitBusy(true);
+    setLimitError('');
+    setExecutionError('');
+    setStatus('Preparing limit order');
+    try {
+      const makingAmount = amountToBaseUnits(amount, from);
+      if (BigInt(fromBalance || '0') < BigInt(makingAmount)) throw new Error('Insufficient ' + from.symbol + ' balance.');
+      const takingAmount = limitTakingAmount(makingAmount, from.decimals, to.decimals, limitPrice);
+      const networkInfo = SWAP_NETWORKS[network];
+      if (!networkInfo) throw new Error('Unsupported limit-order network.');
+      const built = await buildLimitOrder({
+        maker: wallet,
+        makerAsset: from,
+        takerAsset: to,
+        makingAmount,
+        takingAmount,
+        expirationSeconds: limitExpiry,
+      });
+      setStatus('Checking limit-order approval');
+      await approveLimitOrderIfNeeded(from, wallet, makingAmount, built.approvalAddress, setStatus);
+      setStatus('Sign limit order in SIRE Wallet');
+      const signature = await signLimitOrder(built.typedData, wallet, true, networkInfo);
+      setStatus('Publishing limit order');
+      const submitted = await submitLimitOrder({
+        chainId: from.chainId,
+        orderHash: built.orderHash,
+        signature,
+        data: built.orderData,
+      } as any);
+      const local = {
+        orderHash: built.orderHash,
+        makerTraits: String(built.makerTraits),
+        chainId: from.chainId,
+        makerAsset: from.address,
+        takerAsset: to.address,
+        makerSymbol: from.symbol,
+        takerSymbol: to.symbol,
+        makingAmount,
+        takingAmount,
+        limitPrice,
+        createdAt: Date.now(),
+        status: 'Open',
+      };
+      setLimitOrders(current => [local, ...current.filter(item => item.orderHash !== local.orderHash)].slice(0, 50));
+      try {
+        const stored = JSON.parse(window.localStorage.getItem('sire.limit.orders.v1') || '[]');
+        window.localStorage.setItem('sire.limit.orders.v1', JSON.stringify([local, ...(Array.isArray(stored) ? stored.filter((item:any) => item.orderHash !== local.orderHash) : [])].slice(0, 50)));
+      } catch {}
+      setStatus('Limit order live');
+      if (submitted?.orderHash) setStatus('Limit order live · ' + shortAddress(submitted.orderHash));
+      await refreshLimitOrders().catch(() => {});
+    } catch (error) {
+      setLimitError(error instanceof Error ? error.message : String(error));
+      setStatus('');
+    } finally {
+      setLimitBusy(false);
+    }
+  };
+
+  const cancelLimit = async (order: any) => {
+    if (!wallet || !nativeUnlocked) {
+      setLimitError('Unlock SIRE Wallet before cancelling a limit order.');
+      return;
+    }
+    setLimitBusy(true);
+    setLimitError('');
+    try {
+      const networkInfo = supportedNetworks.find(item => item.chainId === Number(order.chainId)) || SWAP_NETWORKS[network];
+      if (!networkInfo) throw new Error('Unsupported cancellation network.');
+      setStatus('Canceling limit order');
+      const hash = await cancelLimitOrder({
+        network: networkInfo,
+        owner: wallet,
+        makerTraits: String(order.makerTraits || order.data?.makerTraits || '0'),
+        orderHash: String(order.orderHash),
+        native: true,
+      });
+      setStatus('Limit order cancellation submitted');
+      setLimitOrders(current => current.filter(item => item.orderHash !== order.orderHash));
+      try {
+        const stored = JSON.parse(window.localStorage.getItem('sire.limit.orders.v1') || '[]');
+        window.localStorage.setItem('sire.limit.orders.v1', JSON.stringify(Array.isArray(stored) ? stored.filter((item:any) => item.orderHash !== order.orderHash) : []));
+      } catch {}
+      return hash;
+    } catch (error) {
+      setLimitError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setLimitBusy(false);
+    }
+  };
 
   const recordSwap = (hash: string, executedQuote: SwapQuote) => {
     const item = { hash, from: executedQuote.fromToken.symbol, to: executedQuote.toToken.symbol, amount, output: formatUnits(executedQuote.toAmount, executedQuote.toToken.decimals, 8), fromNetwork: network, toNetwork, time: Date.now(), recipient: effectiveRecipient };
