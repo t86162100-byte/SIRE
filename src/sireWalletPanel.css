@@ -129,3 +129,6 @@ html:has(.sire-wallet-shell-backdrop) { background:#050505 !important; }
   .sire-wallet-mode-toggle{margin-top:10px}
   .sire-wallet-mode-toggle button{min-width:88px;height:32px;padding:0 19px}
 }
+
+/* The old wallet header is removed; the portfolio content now occupies the full shell. */
+.sire-wallet-scroll{height:100% !important}
