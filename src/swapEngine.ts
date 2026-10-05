@@ -70,7 +70,7 @@ export const ETHEREUM_TOKENS: SwapToken[] = [
   { symbol:'DAI', name:'Dai', address:'0x6B175474E89094C44Da98b954EedeAC495271d0F', decimals:18, chainId:1, logoURI:'https://assets.coingecko.com/coins/images/9956/small/Badge_Dai.png' },
 ];
 
-import { getNativeProvider, getNativeSigner, getNativeWalletAddress, isNativeWalletUnlocked } from './sireWalletCore';
+import { getNativeProvider, getNativeWalletAddress, isNativeWalletUnlocked, sendNativeTransaction, waitForNativeTransaction } from './sireWalletCore';
 
 export type Eip1193Provider = {
   request(args: { method: string; params?: any[] }): Promise<any>;
@@ -231,10 +231,10 @@ export async function approveIfNeeded(token:SwapToken, owner:string, spender:str
     return;
   }
   if (!isNativeWalletUnlocked() || owner.toLowerCase() !== getNativeWalletAddress().toLowerCase()) throw new Error('Unlock SIRE Wallet before approving.');
-  const signer = getNativeSigner(network);
-  const tx = await signer.sendTransaction({to: token.address, data: encodeApprove(spender, amount), value: 0n});
+  const tx = await sendNativeTransaction(network, {to: token.address, data: encodeApprove(spender, amount), value: 0n});
   onStatus?.('Waiting for approval');
-  await tx.wait();
+  const receipt = await waitForNativeTransaction(network, tx.hash);
+  if (receipt.status === 0) throw new Error('Approval transaction reverted.');
 }
 
 export async function fetchNetworkTokens(network: SwapNetwork, query=''): Promise<SwapToken[]> {
@@ -410,8 +410,7 @@ export async function executeSwap(quote:SwapQuote, owner:string, onStatus?:(s:st
     const receipt=await waitForReceipt(hash);
     return {hash,receipt};
   }
-  const signer = getNativeSigner(network);
-  const nativeTx = await signer.sendTransaction({
+  const nativeTx = await sendNativeTransaction(network, {
     to: tx.to,
     data: tx.data || '0x',
     value: tx.value ? BigInt(tx.value) : 0n,
@@ -419,7 +418,7 @@ export async function executeSwap(quote:SwapQuote, owner:string, onStatus?:(s:st
     ...(tx.gasPrice ? {gasPrice: BigInt(tx.gasPrice)} : {}),
   });
   onStatus?.('Waiting for confirmation');
-  const receipt = await nativeTx.wait();
-  if (!receipt) throw new Error('Transaction confirmation unavailable.');
+  const receipt = await waitForNativeTransaction(network, nativeTx.hash);
+  if (receipt.status === 0) throw new Error('Swap transaction reverted.');
   return {hash:nativeTx.hash,receipt};
 }
