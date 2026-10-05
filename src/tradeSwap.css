@@ -184,3 +184,22 @@
 .sire-route-choice-row{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:10px}
 .sire-route-choice-row button{height:32px;border:1px solid rgba(255,255,255,.08);border-radius:8px;background:#0b0b0b;color:rgba(255,255,255,.48);font-size:9px;font-weight:800;cursor:pointer}
 .sire-route-choice-row button.active{background:#fff;color:#050505;border-color:#fff}
+
+.sire-limit-panel{margin-top:8px;padding:12px 0 4px;border-top:1px solid rgba(255,255,255,.07)}
+.sire-limit-field{display:flex;flex-direction:column;gap:6px;margin-bottom:9px}
+.sire-limit-field label{display:flex;justify-content:space-between;color:rgba(255,255,255,.48);font-size:9px}
+.sire-limit-field label span{color:rgba(255,255,255,.28)}
+.sire-limit-field input,.sire-limit-field select{height:38px;border:1px solid rgba(255,255,255,.1);border-radius:9px;background:#090909;color:#fff;padding:0 10px;font-size:11px;outline:0}
+.sire-limit-field input:focus,.sire-limit-field select:focus{border-color:rgba(255,255,255,.3)}
+.sire-limit-preview{display:flex;justify-content:space-between;padding:9px 0 11px;font-size:9px;color:rgba(255,255,255,.4)}
+.sire-limit-preview b{color:#fff;font-size:10px}
+.sire-limit-note{display:block;text-align:center;color:rgba(255,255,255,.28);font-size:8px;line-height:1.45;margin:8px 8px 0}
+.sire-limit-orders{margin-top:12px;border-top:1px solid rgba(255,255,255,.06);padding-top:10px}
+.sire-limit-orders-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:5px}
+.sire-limit-orders-head b{font-size:9px;color:rgba(255,255,255,.72)}
+.sire-limit-orders-head button{border:0;background:transparent;color:rgba(255,255,255,.45);font-size:8px}
+.sire-limit-order-row{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid rgba(255,255,255,.05)}
+.sire-limit-order-row>div{min-width:0;display:flex;flex-direction:column;gap:3px}
+.sire-limit-order-row b{font-size:9px;color:#fff}
+.sire-limit-order-row small{font-size:8px;color:rgba(255,255,255,.36)}
+.sire-limit-order-row button{border:1px solid rgba(255,255,255,.08);background:#0b0b0b;color:#fff;border-radius:999px;padding:5px 9px;font-size:8px;font-weight:800}
