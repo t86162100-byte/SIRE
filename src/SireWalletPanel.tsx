@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
-  ArrowDownToLine, ArrowUpFromLine, ChevronDown, Copy, ExternalLink, Eye, EyeOff,
-  Globe2, History, KeyRound, LockKeyhole, Plus, Search, Send, Settings2,
+  ChevronDown, Copy, ExternalLink, Eye, EyeOff,
+  Globe2, History, KeyRound, LockKeyhole, MoreHorizontal, Plus, Search, Send, Settings2,
   ShieldCheck, WalletCards, X
 } from 'lucide-react';
 import {
@@ -37,6 +37,7 @@ export default function SireWalletPanel() {
   const [tokenOpen, setTokenOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [networkOpen, setNetworkOpen] = useState(false);
+  const [moreOpen, setMoreOpen] = useState(false);
   const [sendTo, setSendTo] = useState('');
   const [sendAmount, setSendAmount] = useState('');
   const [sendAssetId, setSendAssetId] = useState('');
@@ -216,12 +217,28 @@ export default function SireWalletPanel() {
               </div>
               <button className="sire-wallet-deposit-pill" type="button" onClick={() => setReceiveOpen(true)}>Deposit</button>
             </div>
-            <div className="sire-wallet-quick-actions">
-              <button onClick={() => setSendOpen(true)}><span><ArrowUpFromLine size={17}/></span><b>Send</b></button>
-              <button onClick={() => setReceiveOpen(true)}><span><ArrowDownToLine size={17}/></span><b>Receive</b></button>
-              <button onClick={() => setTokenOpen(true)}><span><Plus size={17}/></span><b>Add token</b></button>
-              <button onClick={() => setNetworkOpen(v => !v)}><span><WalletCards size={17}/></span><b>Networks</b></button>
+            <div className="sire-wallet-wallet-actions">
+              <button className="sire-wallet-action-pill" type="button" onClick={() => setSendOpen(true)}>Send</button>
+              <button className="sire-wallet-action-pill" type="button" onClick={() => setReceiveOpen(true)}>Receive</button>
+              <button className="sire-wallet-action-pill" type="button" onClick={() => setHistoryOpen(true)}>History</button>
+              <button
+                className="sire-wallet-more-button"
+                type="button"
+                aria-label="More wallet actions"
+                title="More"
+                onClick={() => setMoreOpen(v => !v)}
+              >
+                <MoreHorizontal size={19}/>
+              </button>
             </div>
+            {moreOpen && <div className="sire-wallet-more-menu">
+              <button type="button" onClick={() => { setTokenOpen(true); setMoreOpen(false); }}>
+                <Plus size={15}/><span>Add token</span>
+              </button>
+              <button type="button" onClick={() => { setNetworkOpen(v => !v); setMoreOpen(false); }}>
+                <Globe2 size={15}/><span>Networks</span>
+              </button>
+            </div>}
           </section>
 
           <section className="sire-wallet-network-bar">
