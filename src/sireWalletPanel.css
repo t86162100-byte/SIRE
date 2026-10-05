@@ -342,3 +342,30 @@ html:has(.sire-wallet-shell-backdrop) { background:#050505 !important; }
   .sire-wallet-decimal{font-size:20px !important}
   .sire-wallet-account-row .sire-wallet-account b{font-size:11px !important}
 }
+
+
+/* DEPOSIT PILL BESIDE BALANCE */
+.sire-wallet-hero-row{
+  display:flex !important;
+  align-items:center !important;
+  justify-content:space-between !important;
+  width:100%;
+  gap:18px;
+}
+.sire-wallet-deposit-pill{
+  flex:0 0 auto;
+  height:36px;
+  padding:0 18px;
+  border:1px solid #fff !important;
+  border-radius:999px;
+  background:#fff !important;
+  color:#050505 !important;
+  font-size:10px;
+  font-weight:900;
+  cursor:pointer;
+}
+.sire-wallet-deposit-pill:active{transform:scale(.97)}
+@media(max-width:520px){
+  .sire-wallet-hero-row{gap:12px}
+  .sire-wallet-deposit-pill{height:34px;padding:0 16px;font-size:10px}
+}
