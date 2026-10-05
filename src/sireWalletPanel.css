@@ -95,38 +95,41 @@ html:has(.sire-wallet-shell-backdrop) { background:#050505 !important; }
   z-index:6;
   width:max-content;
   margin:14px auto 4px;
-  padding:3px;
+  padding:0;
   display:flex;
   align-items:center;
-  gap:2px;
-  border:1px solid #1f1f22;
-  border-radius:999px;
-  background:#050505;
-  box-shadow:0 0 8px rgba(255,255,255,.035);
+  justify-content:center;
+  gap:12px;
+  background:transparent;
+  border:0;
+  box-shadow:none;
 }
 .sire-wallet-mode-toggle button{
   min-width:96px;
   height:34px;
   padding:0 22px;
-  border:0;
+  border:1px solid transparent;
   border-radius:999px;
   background:#050505;
-  color:#7f7f86;
+  color:#8b8b92;
   font:700 10px/1 inherit;
   letter-spacing:.01em;
   cursor:pointer;
-  transition:background .16s ease,color .16s ease,box-shadow .16s ease;
+  box-shadow:0 0 7px rgba(255,255,255,.045);
+  transition:background .16s ease,color .16s ease,box-shadow .16s ease,border-color .16s ease;
 }
 .sire-wallet-mode-toggle button.active{
   background:#fff;
   color:#050505;
-  box-shadow:0 1px 7px rgba(255,255,255,.10);
+  border-color:#fff;
+  box-shadow:0 1px 8px rgba(255,255,255,.10);
 }
 .sire-wallet-mode-toggle button:not(.active):hover{
   color:#bdbdc3;
+  box-shadow:0 0 8px rgba(255,255,255,.06);
 }
 @media(max-width:520px){
-  .sire-wallet-mode-toggle{margin-top:10px}
+  .sire-wallet-mode-toggle{margin-top:10px;gap:10px}
   .sire-wallet-mode-toggle button{min-width:88px;height:32px;padding:0 19px}
 }
 
