@@ -643,7 +643,7 @@ export default function TradeView({ referencePrice = 0 }: Props) {
                  {recipient && !recipientValid && <small>Enter a valid EVM destination address.</small>}
                </div>}
              </div>
-            </div>
+
 
             {quote && wallet && nativeUnlocked && !busy && !simulationBusy && <button type="button" className="sire-wallet-secondary sire-test-swap-button" onClick={() => void simulate()}>
               Run no-money test
