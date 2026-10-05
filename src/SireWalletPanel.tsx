@@ -172,17 +172,24 @@ export default function SireWalletPanel() {
   return (
     <div className="sire-wallet-shell-backdrop" onMouseDown={() => setOpen(false)}>
       <section className="sire-wallet-shell" onMouseDown={e => e.stopPropagation()} role="dialog" aria-modal="true" aria-label="SIRE Wallet Portfolio">
-        <header className="sire-wallet-topbar">
-          <div className="sire-wallet-brand">
-            <div className="sire-wallet-mark"><img src="/sire-logo.svg" alt=""/></div>
-            <div><b>SIRE Wallet</b><span>Self-custody portfolio</span></div>
-          </div>
-          <div className="sire-wallet-top-actions">
-            <button onClick={() => void refresh()} aria-label="Refresh wallet"><RefreshCw size={16} className={busy ? 'spin' : ''}/></button>
-            <button onClick={() => setHistoryOpen(v => !v)} aria-label="Transaction history"><History size={16}/></button>
-            <button onClick={() => setOpen(false)} aria-label="Close"><X size={18}/></button>
-          </div>
-        </header>
+        <div className="sire-wallet-mode-toggle" role="tablist" aria-label="Portfolio mode">
+          <button
+            type="button"
+            role="tab"
+            aria-selected="true"
+            className="active"
+            onClick={() => setOpen(true)}
+          >Wallet</button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected="false"
+            onClick={() => {
+              setOpen(false);
+              window.dispatchEvent(new CustomEvent('sire:open-trade'));
+            }}
+          >Exchange</button>
+        </div>
 
         <div className="sire-wallet-scroll">
           <section className="sire-wallet-hero">
