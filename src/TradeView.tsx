@@ -7,7 +7,7 @@ import {
   EVM_SWAP_NETWORKS,
   type SwapToken,
   type SwapQuote,
-  connectWallet,
+  
   executeSwap,
   fetchNetworkTokens,
   formatUnits,
@@ -16,6 +16,7 @@ import {
   readTokenBalance,
   switchToNetwork,
 } from './swapEngine';
+import { openEvmWalletModal, reownConfigured } from './reownWallet';
 
 type Props = { referencePrice?: number; referenceChange?: number };
 
@@ -47,6 +48,16 @@ export default function TradeView({ referencePrice = 0 }: Props) {
   const [executionError, setExecutionError] = useState('');
   const [txHash, setTxHash] = useState('');
   const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    const onWalletState = (event: Event) => {
+      const detail = (event as CustomEvent).detail || {};
+      setWallet(String(detail.address || ''));
+      setWalletChain(Number(detail.chainId || 0) || null);
+    };
+    window.addEventListener('sire:wallet-state', onWalletState);
+    return () => window.removeEventListener('sire:wallet-state', onWalletState);
+  }, []);
 
   const filteredTokens = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -121,14 +132,18 @@ export default function TradeView({ referencePrice = 0 }: Props) {
   const connect = async () => {
     setExecutionError('');
     try {
-      const result = await connectWallet();
-      setWallet(result.address);
-      setWalletChain(result.chainId);
-      const selectedNetwork = SWAP_NETWORKS[network];
-      if (selectedNetwork && EVM_SWAP_NETWORKS.some(item => item.chainId === selectedNetwork.chainId) && result.chainId !== selectedNetwork.chainId) {
-        await switchToNetwork(selectedNetwork);
-        setWalletChain(selectedNetwork.chainId);
+      if (reownConfigured) {
+        openEvmWalletModal();
+        return;
       }
+      const provider = getInjectedProvider();
+      if (!provider) throw new Error('Wallet connection is not configured. Add VITE_REOWN_PROJECT_ID in Render, or open SIRE in a browser wallet with an injected EVM provider.');
+      const accounts = await provider.request({ method: 'eth_requestAccounts' });
+      const address = String(accounts?.[0] || '');
+      if (!address) throw new Error('Wallet did not return an account.');
+      const chainHex = await provider.request({ method: 'eth_chainId' });
+      setWallet(address);
+      setWalletChain(Number.parseInt(String(chainHex), 16));
     } catch (error) {
       setExecutionError(error instanceof Error ? error.message : String(error));
     }
