@@ -8,12 +8,12 @@ import {
   type WalletAsset, type WalletHistoryItem, type WalletNetwork,
   createSolanaAccount, createTronAccount, estimateEvmGas, getEvmAssets, getEvmHistory,
   getReceiveAddresses, getSolanaAssets, getSolanaHistory, getTronAssets,
-  importEvmToken, sendEvmAsset, sendSolana, sendTron, getTronHistory, getEvmTokenCatalog
+  importEvmToken, sendEvmAsset, sendSolana, sendTron, getTronHistory, getEvmTokenCatalog, loadSupportedWalletNetworks, setWalletNetworkCatalog
 } from './sireWalletMultiChain';
 import { isNativeWalletUnlocked, unlockNativeWallet } from './sireWalletCore';
 
-const EVM_NETWORKS: WalletNetwork[] = ['Ethereum','BNB Chain','Base','Arbitrum','Optimism','Polygon','Avalanche'];
-const ALL_NETWORKS: WalletNetwork[] = [...EVM_NETWORKS,'Solana','TRON'];
+const FALLBACK_evmNetworks: WalletNetwork[] = ['Ethereum','BNB Chain','Base','Arbitrum','Optimism','Polygon','Avalanche'];
+
 
 function short(value: string) { return value ? value.slice(0,6) + '…' + value.slice(-4) : 'Not created'; }
 function num(value?: string | number) {
@@ -23,6 +23,7 @@ function num(value?: string | number) {
 
 export default function SireWalletPanel() {
   const [open, setOpen] = useState(false);
+  const [evmNetworks, setEvmNetworks] = useState<WalletNetwork[]>(FALLBACK_evmNetworks);
   const [network, setNetwork] = useState<WalletNetwork>('Ethereum');
   const [assets, setAssets] = useState<WalletAsset[]>([]);
   const [history, setHistory] = useState<WalletHistoryItem[]>([]);
@@ -47,6 +48,7 @@ export default function SireWalletPanel() {
   const [search, setSearch] = useState('');
   const [tokenCatalog, setTokenCatalog] = useState<any[]>([]);
   const [tokenCatalogSearch, setTokenCatalogSearch] = useState('');
+  const allNetworks = useMemo(() => [...evmNetworks, 'Solana', 'TRON'], [evmNetworks]);
 
   useEffect(() => {
     const onOpen = () => setOpen(true);
@@ -77,12 +79,12 @@ export default function SireWalletPanel() {
     setBusy(true); setMessage('');
     try {
       setAddresses(await getReceiveAddresses());
-      const next = EVM_NETWORKS.includes(network)
+      const next = evmNetworks.includes(network)
         ? await getEvmAssets(network as Exclude<WalletNetwork,'Solana'|'TRON'>)
         : network === 'Solana' ? await getSolanaAssets() : await getTronAssets();
       setAssets(next);
       if (historyOpen) {
-        const rows = EVM_NETWORKS.includes(network)
+        const rows = evmNetworks.includes(network)
           ? await getEvmHistory(network as Exclude<WalletNetwork,'Solana'|'TRON'>)
           : network === 'Solana' ? await getSolanaHistory() : await getTronHistory();
         setHistory(rows);
@@ -92,9 +94,24 @@ export default function SireWalletPanel() {
     } finally { setBusy(false); }
   };
 
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    void loadSupportedWalletNetworks().then(networks => {
+      if (cancelled) return;
+      const names = networks.map(item => item.name);
+      setEvmNetworks(names);
+      setWalletNetworkCatalog(networks);
+      setNetwork(current => names.includes(current) ? current : (names[0] || 'Ethereum'));
+      setTokenNetwork(current => names.includes(current) ? current : (names[0] || 'Ethereum'));
+    }).catch(() => {
+      if (!cancelled) setEvmNetworks(FALLBACK_evmNetworks);
+    });
+    return () => { cancelled = true; };
+  }, [open]);
   useEffect(() => { if (open && unlocked) void refresh(); }, [open, unlocked, network, historyOpen]);
   useEffect(() => {
-    if (!tokenOpen || !EVM_NETWORKS.includes(tokenNetwork)) return;
+    if (!tokenOpen || !evmNetworks.includes(tokenNetwork)) return;
     let cancelled = false;
     setTokenCatalogSearch('');
     void getEvmTokenCatalog(tokenNetwork as Exclude<WalletNetwork,'Solana'|'TRON'>)
@@ -145,7 +162,7 @@ export default function SireWalletPanel() {
   };
 
   const previewGas = async () => {
-    if (!selectedAsset || !EVM_NETWORKS.includes(network) || !sendTo || !sendAmount) return;
+    if (!selectedAsset || !evmNetworks.includes(network) || !sendTo || !sendAmount) return;
     try {
       const gas = await estimateEvmGas(network as Exclude<WalletNetwork,'Solana'|'TRON'>, selectedAsset, sendTo.trim(), sendAmount.trim());
       setGasPreview(gas.nativeFee + ' native');
@@ -156,7 +173,7 @@ export default function SireWalletPanel() {
     if (!selectedAsset) return;
     setBusy(true); setMessage('');
     try {
-      if (EVM_NETWORKS.includes(network)) {
+      if (evmNetworks.includes(network)) {
         const result = await sendEvmAsset(network as Exclude<WalletNetwork,'Solana'|'TRON'>, selectedAsset, sendTo.trim(), sendAmount.trim());
         setMessage('Transaction confirmed · ' + result.hash);
       } else if (network === 'Solana') {
@@ -264,7 +281,7 @@ export default function SireWalletPanel() {
 
           <section className="sire-wallet-network-bar">
             <div className="sire-wallet-network-title"><span>NETWORK</span><button onClick={() => setNetworkOpen(v => !v)}>{network}<ChevronDown size={14}/></button></div>
-            {networkOpen && <div className="sire-wallet-network-menu">{ALL_NETWORKS.map(item => <button key={item} className={item === network ? 'active' : ''} onClick={() => { setNetwork(item); setNetworkOpen(false); setSearch(''); }}>{item}<span>{item === network ? '✓' : ''}</span></button>)}</div>}
+            {networkOpen && <div className="sire-wallet-network-menu">{allNetworks.map(item => <button key={item} className={item === network ? 'active' : ''} onClick={() => { setNetwork(item); setNetworkOpen(false); setSearch(''); }}>{item}<span>{item === network ? '✓' : ''}</span></button>)}</div>}
           </section>
 
           <section className="sire-wallet-assets-section">
@@ -310,7 +327,7 @@ export default function SireWalletPanel() {
           <select value={sendAssetId || assets[0]?.id || ''} onChange={e => setSendAssetId(e.target.value)}>{assets.map(a => <option key={a.id} value={a.id}>{a.symbol} · {a.balance}</option>)}</select>
           <input value={sendTo} onChange={e => setSendTo(e.target.value)} placeholder="Recipient address"/>
           <input value={sendAmount} onChange={e => setSendAmount(e.target.value)} placeholder="Amount"/>
-          {EVM_NETWORKS.includes(network) && <button className="sire-wallet-secondary" onClick={() => void previewGas()}>Estimate network fee</button>}
+          {evmNetworks.includes(network) && <button className="sire-wallet-secondary" onClick={() => void previewGas()}>Estimate network fee</button>}
           {gasPreview && <small className="sire-wallet-fee">Estimated fee: {gasPreview}</small>}
           {(network === 'Solana' || network === 'TRON') && <input type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="Wallet password to authorize"/>}
           <div className="sire-wallet-review"><ShieldCheck size={15}/><span>Review the network and destination carefully before signing.</span></div>
@@ -326,7 +343,7 @@ export default function SireWalletPanel() {
 
         {tokenOpen && <div className="sire-wallet-modal-backdrop" onMouseDown={() => setTokenOpen(false)}><div className="sire-wallet-modal" onMouseDown={e => e.stopPropagation()}>
           <div className="sire-wallet-modal-head"><div><span>MANAGE TOKENS</span><h3>Add asset</h3></div><button onClick={() => setTokenOpen(false)}><X size={17}/></button></div>
-          <select value={tokenNetwork} onChange={e => setTokenNetwork(e.target.value as WalletNetwork)}>{EVM_NETWORKS.map(n => <option key={n}>{n}</option>)}</select>
+          <select value={tokenNetwork} onChange={e => setTokenNetwork(e.target.value as WalletNetwork)}>{evmNetworks.map(n => <option key={n}>{n}</option>)}</select>
           <label className="sire-wallet-global-search"><Search size={15}/><input value={tokenCatalogSearch} onChange={e => setTokenCatalogSearch(e.target.value)} placeholder="Search live Swap tokens"/></label>
           <div className="sire-wallet-token-catalog">
             {filteredTokenCatalog.slice(0,100).map(token => <button type="button" key={String(token.address)} onClick={async () => {
