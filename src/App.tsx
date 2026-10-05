@@ -9,6 +9,7 @@ import { fetchBinanceInstruments, type BinanceInstrument } from './binanceMarket
 import { SireErrorScreen } from './SireErrorBoundary';
 import './nativeTerminal.css';
 import { MarketInstrumentCard } from './marketCardDesigns';
+import TradeView from './TradeView';
 
 type MarketProvider = 'DERIV' | 'BINANCE';
 export type Instrument = Partial<DerivInstrument> & Partial<BinanceInstrument> & {
@@ -273,6 +274,7 @@ export default function App() {
   const [instrumentSearchMode, setInstrumentSearchMode] = useState<'main' | 'multi'>('main');
   const [researchLabOpen, setResearchLabOpen] = useState(false);
   const [homeOpen, setHomeOpen] = useState(false);
+  const [tradeOpen, setTradeOpen] = useState(false);
   const [chartLayout, setChartLayout] = useState<1 | 2>(1);
   const [activeChartIndex, setActiveChartIndex] = useState(0);
   const [linked, setLinked] = useState(false);
@@ -475,6 +477,15 @@ export default function App() {
   useEffect(() => () => { linkGroupRef.current?.destroy(); linkGroupRef.current = null; }, []);
 
   useEffect(() => {
+    const onTabChanged = (event: Event) => {
+      const tab = String((event as CustomEvent).detail?.tab || '');
+      setTradeOpen(tab === 'trade');
+    };
+    window.addEventListener('sire:tab-changed', onTabChanged);
+    return () => window.removeEventListener('sire:tab-changed', onTabChanged);
+  }, []);
+
+  useEffect(() => {
     const openHome = () => setHomeOpen(true);
     const closeHome = () => setHomeOpen(false);
     window.addEventListener('sire:open-home', openHome);
@@ -619,6 +630,11 @@ export default function App() {
   };
   if (homeOpen) {
     return <HomeView instruments={liveInstruments} onSelectInstrument={item => { const match = liveInstruments.find(candidate => candidate.id === item.id); if (match) selectInstrument(match); }} />;
+  }
+
+  if (tradeOpen) {
+    const ethUsdt = liveInstruments.find(item => item.provider === 'BINANCE' && String(item.symbol || '').toUpperCase() === 'ETHUSDT');
+    return <TradeView referencePrice={Number(ethUsdt?.price || 0)} referenceChange={Number(ethUsdt?.priceChangePercent ?? ethUsdt?.change24h ?? 0)} />;
   }
 
   return <main className={`native-terminal-shell${researchLabOpen ? ' sire-research-open' : ''}`}>
