@@ -237,13 +237,25 @@ export async function sendNativeTransaction(network: SireEvmNetwork, request: Tr
     const provider = new JsonRpcProvider(url, network.chainId, { staticNetwork: true });
     try {
       if (!signedTransaction) {
-        const signer = unlockedWallet.connect(provider);
-        const populated = await signer.populateTransaction(request);
-        signedTransaction = await signer.signTransaction(populated);
+        // Do not call signer.populateTransaction() here. Ethers populateTransaction()
+        // performs eth_estimateGas when gasLimit is missing, which is both unnecessary
+        // for an executable LI.FI quote and can fail for a zero-balance wallet.
+        // LI.FI supplies the executable gas limit/fee values in transactionRequest.
+        const nonce = request.nonce ?? await provider.getTransactionCount(unlockedWallet.address, 'pending');
+        const tx: TransactionRequest = {
+          ...request,
+          from: unlockedWallet.address,
+          chainId: network.chainId,
+          nonce,
+        };
+        if (tx.gasLimit == null && tx.gas == null) {
+          // Only fall back to estimation when the caller genuinely did not provide
+          // an executable gas limit.
+          tx.gasLimit = await provider.estimateGas(tx);
+        }
+        const signer = unlockedWallet.connect(null);
+        signedTransaction = await signer.signTransaction(tx);
       }
-      // Broadcast the exact same signed transaction on the next RPC if a
-      // transport failure occurs. Re-broadcasting the same raw transaction
-      // is safe because the nonce and hash are identical.
       return await provider.broadcastTransaction(signedTransaction);
     } catch (error: any) {
       lastError = error;
