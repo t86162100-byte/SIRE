@@ -29,6 +29,7 @@ type StoredWallet = {
 type SireWalletSigner = HDNodeWallet | Wallet;
 
 let unlockedWallet: SireWalletSigner | null = null;
+let pendingWallet: HDNodeWallet | null = null;
 
 function storageAvailable() {
   return typeof window !== 'undefined' && typeof window.localStorage !== 'undefined';
@@ -79,6 +80,29 @@ export function isNativeWalletUnlocked() {
 
 export function getNativeWalletAddress() {
   return unlockedWallet?.address || loadStoredWallet()?.address || '';
+}
+
+export function prepareNativeWallet() {
+  if (hasNativeWallet()) throw new Error('A SIRE Wallet already exists on this device.');
+  pendingWallet = HDNodeWallet.createRandom();
+  return { address: pendingWallet.address, mnemonic: pendingWallet.mnemonic?.phrase || '' };
+}
+
+export async function finalizePreparedNativeWallet(password: string) {
+  validatePassword(password);
+  if (hasNativeWallet()) throw new Error('A SIRE Wallet already exists on this device.');
+  if (!pendingWallet) throw new Error('No pending wallet creation session.');
+  const wallet = pendingWallet;
+  const keystore = await wallet.encrypt(password);
+  saveStoredWallet({ version: 1, address: wallet.address, keystore, createdAt: new Date().toISOString() });
+  pendingWallet = null;
+  unlockedWallet = wallet;
+  emitState();
+  return { address: wallet.address };
+}
+
+export function cancelPreparedNativeWallet() {
+  pendingWallet = null;
 }
 
 export async function createNativeWallet(password: string) {
