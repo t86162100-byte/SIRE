@@ -10,6 +10,8 @@ import { SireErrorScreen } from './SireErrorBoundary';
 import './nativeTerminal.css';
 import { MarketInstrumentCard } from './marketCardDesigns';
 import TradeView from './TradeView';
+import SireWalletPanel from './SireWalletPanel';
+import './sireWalletPanel.css';
 
 type MarketProvider = 'DERIV' | 'BINANCE';
 export type Instrument = Partial<DerivInstrument> & Partial<BinanceInstrument> & {
@@ -899,6 +901,7 @@ export default function App() {
           </div>
         </div>}      </section>
     </div>
+    <SireWalletPanel />
     {researchLabOpen && <ResearchLab symbol={chartSymbols[activeChartIndex] || selected?.symbol || ''} instruments={instruments.map(item => ({ symbol: item.symbol, name: item.name }))} onClose={() => setResearchLabOpen(false)} onSelectInstrument={symbol => { const item = instruments.find(candidate => candidate.symbol === symbol); if (item) selectInstrument(item); }} />}
   </main>;
 }
