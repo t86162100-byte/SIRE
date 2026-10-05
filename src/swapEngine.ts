@@ -47,6 +47,8 @@ export type SwapNetwork = {
   nativeSymbol: string;
   nativeName: string;
   logoURI?: string;
+  rpcUrl?: string;
+  rpcUrls?: string[];
 };
 
 let swapNetworkCatalog: SwapNetwork[] = [];
@@ -82,6 +84,8 @@ export async function fetchSupportedSwapNetworks(): Promise<SwapNetwork[]> {
         nativeSymbol,
         nativeName: String(native?.name || nativeSymbol || chain?.name || 'Native'),
         logoURI: chain?.logoURI,
+        rpcUrl: Array.isArray(chain?.rpcUrls) ? String(chain.rpcUrls[0] || '') : String(chain?.rpcUrl || ''),
+        rpcUrls: Array.isArray(chain?.rpcUrls) ? chain.rpcUrls.map((url:any) => String(url)).filter(Boolean) : [],
       } satisfies SwapNetwork;
     })
     .filter((network:SwapNetwork) => Number.isFinite(network.chainId) && network.chainId > 0 && network.nativeSymbol)
