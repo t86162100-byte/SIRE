@@ -335,11 +335,21 @@ export default function TradeView({ referencePrice = 0 }: Props) {
   const chooseToken = (token: SwapToken) => {
     const selectedIdentity = tokenIdentity(token);
     if (tokenPicker === 'from') {
-      if (selectedIdentity === tokenIdentity(to)) return;
+      // From/To are independent, but the swap form must never end up with the
+      // same asset on both sides after a user selection. If the chosen From
+      // asset is currently the To asset, move To to the first different token
+      // instead of silently copying From into To.
       setFrom(token);
+      if (selectedIdentity === tokenIdentity(to)) {
+        const replacement = tokens.find(candidate => tokenIdentity(candidate) !== selectedIdentity);
+        if (replacement) setTo(replacement);
+      }
     } else if (tokenPicker === 'to') {
-      if (selectedIdentity === tokenIdentity(from)) return;
       setTo(token);
+      if (selectedIdentity === tokenIdentity(from)) {
+        const replacement = tokens.find(candidate => tokenIdentity(candidate) !== selectedIdentity);
+        if (replacement) setFrom(replacement);
+      }
     }
     setTokenPicker(null);
     setSearch('');
