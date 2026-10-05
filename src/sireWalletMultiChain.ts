@@ -144,6 +144,20 @@ function networkOrThrow(name: WalletNetwork) {
   return network;
 }
 
+export async function getEvmTokenCatalog(
+  networkName: Exclude<WalletNetwork, 'Solana' | 'TRON'>
+) {
+  const { fetchNetworkTokens } = await import('./swapEngine');
+  const network = networkOrThrow(networkName);
+  return fetchNetworkTokens({
+    name: network.name,
+    chainId: network.chainId,
+    key: network.name,
+    nativeSymbol: network.nativeSymbol,
+    nativeName: network.name,
+  });
+}
+
 export function getSupportedWalletNetworks(): WalletNetwork[] {
   return ['Ethereum', 'BNB Chain', 'Base', 'Arbitrum', 'Optimism', 'Polygon', 'Avalanche', 'Solana', 'TRON'];
 }
