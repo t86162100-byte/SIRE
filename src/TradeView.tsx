@@ -950,66 +950,61 @@ export default function TradeView({ referencePrice = 0 }: Props) {
                 ))}
               </div>
 
-              <div className="sire-limit-token-card">
-                <div className="sire-limit-token-label">
-                  <span>{limitSide === 'Buy' ? 'Buy token' : 'Sell token'}</span>
-                  <span>{limitSide === 'Sell' ? 'Balance ' + balanceDisplay + ' ' + from.symbol : 'Payment ' + balanceDisplay + ' ' + from.symbol}</span>
+              <div className={'sire-limit-price-card sire-limit-price-main ' + (limitSide === 'Buy' ? 'buy' : 'sell')}>
+                <div className="sire-limit-price-message">
+                  {limitSide === 'Buy' ? 'Buy ' : 'Sell '}
+                  <b>{limitMaker.symbol || 'token'}</b>
+                  {limitSide === 'Buy' ? ' when price is below ' : ' when price is above '}
+                  <strong>{limitPrice || (limitMarketPrice || '—')}</strong>
+                  {' '}{limitTaker.symbol}
                 </div>
-                <button type="button" className="sire-limit-token-select" onClick={() => setTokenPicker(limitSide === 'Sell' ? 'from' : 'to')}>
-                  <LogoMark src={limitMaker.logoURI} fallback={limitMaker.symbol.slice(0,1)} className="sire-token-mark large" />
-                  <span><b>{limitMaker.symbol || 'Select token'}</b><small>{limitMaker.name || 'Choose token'}</small></span>
-                  <ChevronDown size={15}/>
-                </button>
+                <div className="sire-limit-market-price">
+                  <span>Market price</span>
+                  <b>{limitMarketLoading ? 'Loading…' : limitMarketPrice ? limitMarketPrice + ' ' + limitTaker.symbol : '—'}</b>
+                </div>
+                <div className="sire-limit-price-options">
+                  {['Market','-1%','+5%','+10%','Custom'].map(option => (
+                    <button
+                      key={option}
+                      type="button"
+                      className={((option === 'Market' && limitPrice === limitMarketPrice) || (option !== 'Market' && option !== 'Custom' && limitPrice && limitMarketPrice && Math.abs((Number(limitPrice) / Number(limitMarketPrice) - 1) * 100 - Number(option.replace('%',''))) < 0.01) || (option === 'Custom' && limitPrice && limitMarketPrice && !['0','1'].includes(option))) ? 'selected' : ''}
+                      onClick={() => {
+                        if (!limitMarketPrice) return;
+                        const base = Number(limitMarketPrice);
+                        if (option === 'Market') setLimitPrice(String(base));
+                        else if (option === 'Custom') {
+                          const value = window.prompt('Enter target price', limitPrice || String(base));
+                          if (value && Number.isFinite(Number(value)) && Number(value) > 0) setLimitPrice(value);
+                        } else {
+                          const pct = Number(option.replace('%',''));
+                          const effective = limitSide === 'Buy' ? -Math.abs(pct) : Math.abs(pct);
+                          setLimitPrice(String(base * (1 + effective / 100)));
+                        }
+                        setLimitError('');
+                      }}
+                    >{option}</button>
+                  ))}
+                </div>
               </div>
 
-              <div className="sire-limit-price-card">
-                <div className="sire-limit-input-head">
-                  <label>Limit price</label>
-                  <span>{limitPriceLabel}</span>
-                </div>
-                <div className="sire-limit-price-row">
-                  <input
-                    inputMode="decimal"
-                    value={limitPrice}
-                    onChange={e => { setLimitPrice(e.target.value.replace(/[^0-9.]/g,'')); setLimitError(''); }}
-                    placeholder="0.00"
-                  />
-                  <button type="button" disabled={!limitMarketPrice} onClick={() => setLimitPrice(limitMarketPrice || '')}>Market</button>
-                </div>
-                <div className="sire-limit-price-shortcuts">
-                  <button type="button" disabled={!limitMarketPrice} onClick={() => setLimitPrice(limitMarketPrice || '')}>Market price</button>
-                  <button type="button" disabled={!limitMarketPrice} onClick={() => {
-                    const base = Number(limitMarketPrice);
-                    if (Number.isFinite(base) && base > 0) setLimitPrice(String(base * (limitSide === 'Buy' ? 0.9 : 1.1)));
-                  }}>{limitSide === 'Buy' ? '-10%' : '+10%'}</button>
-                </div>
-              </div>
-
-              <div className="sire-limit-token-card">
+              <div className="sire-limit-token-card sire-limit-amount-card">
                 <div className="sire-limit-token-label">
-                  <span>{limitSide === 'Buy' ? 'Pay with' : 'Amount'}</span>
+                  <span>{limitSide === 'Buy' ? 'You pay' : 'You sell'}</span>
                   <span>{limitSide === 'Buy' ? from.symbol : limitMaker.symbol}</span>
                 </div>
                 <div className="sire-limit-amount-row">
-                  <input
-                    inputMode="decimal"
-                    value={limitSide === 'Buy' ? amount : amount}
-                    onChange={e => { setAmount(e.target.value.replace(/[^0-9.]/g,'')); setLimitError(''); }}
-                    placeholder="0.00"
-                  />
-                  <span>{limitSide === 'Buy' ? limitTaker.symbol : limitMaker.symbol}</span>
+                  <input inputMode="decimal" value={amount} onChange={e => { setAmount(e.target.value.replace(/[^0-9.]/g,'')); setLimitError(''); }} placeholder="0.00" />
+                  <span>{limitSide === 'Buy' ? from.symbol : limitMaker.symbol}</span>
                 </div>
                 <div className="sire-limit-balance-bar">
                   {[25,50,75,100].map(percent => (
                     <button key={percent} type="button" onClick={() => {
-                      try {
-                        const balance = Number(balanceDisplay);
-                        const price = Number(limitPrice);
-                        if (!Number.isFinite(balance) || balance <= 0) return;
-                        if (limitSide === 'Sell') setAmount(String(balance * percent / 100));
-                        else if (Number.isFinite(price) && price > 0) setAmount(String((balance * percent / 100) / price));
-                      } catch {}
-                    }}>{percent}%</button>
+                      const balance = Number(balanceDisplay);
+                      const price = Number(limitPrice);
+                      if (!Number.isFinite(balance) || balance <= 0) return;
+                      if (limitSide === 'Sell') setAmount(String(balance * percent / 100));
+                      else if (Number.isFinite(price) && price > 0) setAmount(String(balance * percent / 100));
+                    }}>{percent === 100 ? 'MAX' : percent + '%'}</button>
                   ))}
                 </div>
               </div>
