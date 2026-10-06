@@ -254,7 +254,7 @@
 /* Dedicated Swap → Limit interface. Market-mode controls stay untouched. */
 .sire-limit-mode .sire-swap-flip{display:none}
 
-.sire-limit-price-main{background:#000!important;border-color:rgba(255,255,255,.08);transition:box-shadow .2s ease,border-color .2s ease}
+.sire-limit-price-main{background:#000!important;border-color:rgba(255,255,255,.08);border-radius:20px;transition:box-shadow .2s ease,border-color .2s ease}
 .sire-limit-price-main.buy{box-shadow:0 0 28px rgba(0,232,255,.18),inset 0 0 24px rgba(0,232,255,.025);border-color:rgba(0,232,255,.18)}
 .sire-limit-price-main.sell{box-shadow:0 0 28px rgba(255,145,160,.16),inset 0 0 24px rgba(255,145,160,.025);border-color:rgba(255,145,160,.22)}
 .sire-limit-price-message{font-size:13px;line-height:1.55;color:rgba(255,255,255,.78)}
