@@ -924,16 +924,17 @@ export default function TradeView({ referencePrice = 0 }: Props) {
             </div>
 
             {tradeMode === 'Limit' && <div className="sire-limit-panel sire-limit-interface">
-              <div className="sire-limit-head">
-                <div>
-                  <span>ON-CHAIN LIMIT ORDER</span>
-                  <strong>{limitSide === 'Buy' ? 'Buy' : 'Sell'} {limitMaker.symbol || 'TOKEN'}</strong>
-                  <small>{network} · same-network order</small>
+              <div className="sire-limit-pair-pill" aria-label={'Limit order pair: ' + (from.symbol || 'From') + ' to ' + (to.symbol || 'To')}>
+                <div className="sire-limit-pair-token">
+                  <LogoMark src={from.logoURI} fallback={from.symbol.slice(0,1) || 'F'} className="sire-token-mark" />
+                  <b>{from.symbol || 'FROM'}</b>
                 </div>
-                <div className="sire-limit-live-price">
-                  <span>Market price</span>
-                  <b>{limitMarketLoading ? 'Loading…' : limitMarketPrice ? limitMarketPrice + ' ' + limitTaker.symbol : '—'}</b>
+                <span className="sire-limit-pair-arrow" aria-hidden="true">→</span>
+                <div className="sire-limit-pair-token">
+                  <LogoMark src={to.logoURI} fallback={to.symbol.slice(0,1) || 'T'} className="sire-token-mark" />
+                  <b>{to.symbol || 'TO'}</b>
                 </div>
+                <span className="sire-limit-pair-network">{network || 'Network'} · same network</span>
               </div>
 
               <div className="sire-limit-side-toggle" role="tablist" aria-label="Limit side">
