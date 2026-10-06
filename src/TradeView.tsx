@@ -617,10 +617,46 @@ export default function TradeView({ referencePrice = 0 }: Props) {
 
   useEffect(() => {
     if (tradeMode !== 'Limit' || !wallet || !nativeUnlocked) return;
-    void refreshLimitOrders();
-    const timer = window.setInterval(() => void refreshLimitOrders(), 15000);
-    return () => window.clearInterval(timer);
-  }, [tradeMode, wallet, network, nativeUnlocked]);
+    let cancelled = false;
+    let checking = false;
+    const checkTargets = async () => {
+      if (cancelled || checking) return;
+      checking = true;
+      try {
+        const { getZeroXLimitQuote } = await loadLimitOrderEngine();
+        const active = limitOrders.filter((order:any) => order.status === 'Open' && Number(order.chainId) === Number(SWAP_NETWORKS[network]?.chainId));
+        for (const order of active) {
+          if (cancelled) break;
+          if (Number(order.order?.expiry || 0) <= Math.floor(Date.now() / 1000)) {
+            setLimitOrders(current => current.map(item => item.orderHash === order.orderHash ? { ...item, status:'Expired' } : item));
+            continue;
+          }
+          try {
+            const quote = await getZeroXLimitQuote({
+              chainId: order.chainId,
+              makerToken: order.makerAsset,
+              takerToken: order.takerAsset,
+              makerAmount: order.makingAmount,
+              takerAmount: order.takingAmount,
+            }, wallet);
+            const buyAmount = BigInt(String(quote?.buyAmount || '0'));
+            const targetAmount = BigInt(String(order.makingAmount || '0'));
+            if (buyAmount >= targetAmount) {
+              setLimitOrders(current => current.map(item => item.orderHash === order.orderHash ? { ...item, status:'Target reached', targetQuote: quote } : item));
+              setStatus('Limit target reached · review live 0x quote');
+            }
+          } catch {
+            // Keep the order open when liquidity is temporarily unavailable.
+          }
+        }
+      } finally {
+        checking = false;
+      }
+    };
+    void checkTargets();
+    const timer = window.setInterval(() => void checkTargets(), 15000);
+    return () => { cancelled = true; window.clearInterval(timer); };
+  }, [tradeMode, wallet, nativeUnlocked, network, limitOrders]);
 
 
   useEffect(() => {
