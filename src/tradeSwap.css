@@ -254,7 +254,7 @@
 /* Dedicated Swap → Limit interface. Market-mode controls stay untouched. */
 .sire-limit-mode .sire-swap-flip{display:none}
 
-.sire-limit-price-main{background:#000!important;border-color:rgba(255,255,255,.08);border-radius:30px;transition:box-shadow .2s ease,border-color .2s ease}
+.sire-limit-price-main{background:#000!important;border-color:rgba(255,255,255,.08);border-radius:52px;min-height:180px;box-sizing:border-box;padding:22px;transition:box-shadow .2s ease,border-color .2s ease}
 .sire-limit-price-main.buy{box-shadow:0 0 28px rgba(0,232,255,.18),inset 0 0 24px rgba(0,232,255,.025);border-color:rgba(0,232,255,.18)}
 .sire-limit-price-main.sell{box-shadow:0 0 28px rgba(255,145,160,.16),inset 0 0 24px rgba(255,145,160,.025);border-color:rgba(255,145,160,.22)}
 .sire-limit-price-message{font-size:13px;line-height:1.55;color:rgba(255,255,255,.78)}
@@ -280,7 +280,7 @@
 .sire-limit-token-pill b{font-size:12px;font-weight:800;color:#071014}
 .sire-limit-token-pill small{margin-top:3px;font-size:8px;color:rgba(7,16,20,.55)}
 .sire-limit-token-pill svg{margin-left:1px;color:#071014}
-.sire-limit-payment-card{display:flex;align-items:center;transition:box-shadow .2s ease,border-color .2s ease}
+.sire-limit-payment-card{display:flex;align-items:center;min-height:180px;box-sizing:border-box;padding:22px;border-radius:52px;transition:box-shadow .2s ease,border-color .2s ease}
 .sire-limit-payment-card.buy{box-shadow:0 0 28px rgba(0,232,255,.18),inset 0 0 24px rgba(0,232,255,.025);border-color:rgba(0,232,255,.18)}
 .sire-limit-payment-card.sell{box-shadow:0 0 28px rgba(255,145,160,.16),inset 0 0 24px rgba(255,145,160,.025);border-color:rgba(255,145,160,.22)}
 .sire-limit-payment-pill{cursor:pointer}
