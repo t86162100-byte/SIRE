@@ -1,5 +1,5 @@
 import http from 'node:http';
-import { randomUUID } from 'node:crypto';
+import { randomUUID, createHmac } from 'node:crypto';
 import { readFile, stat } from 'node:fs/promises';
 import { extname, join, normalize } from 'node:path';
 import { WebSocket, WebSocketServer } from 'ws';
@@ -716,11 +716,36 @@ async function universalMarketQuote({provider,symbol,marketType}){
   return {symbol,epoch,price,bid:Number(data?.bid),ask:Number(data?.ask),volume:Number(data?.volume)||0};
 }
 
+
+async function bitgetWalletRequest(path, body) {
+  const apiKey=String(process.env.BITGET_WALLET_API_KEY||'').trim();
+  const apiSecret=String(process.env.BITGET_WALLET_API_SECRET||'').trim();
+  if(!apiKey||!apiSecret) throw new Error('Bitget Wallet routing is not configured on SIRE. Add BITGET_WALLET_API_KEY and BITGET_WALLET_API_SECRET.');
+  const timestamp=String(Date.now());
+  const rawBody=JSON.stringify(body||{});
+  const content={'apiPath':path,'body':rawBody,'x-api-key':apiKey,'x-api-timestamp':timestamp};
+  const payload=JSON.stringify(Object.fromEntries(Object.keys(content).sort().map(key=>[key,content[key]])));
+  const signature=createHmac('sha256',apiSecret).update(payload).digest('base64');
+  const response=await fetch('https://bopenapi.bgwapi.io'+path,{method:'POST',headers:{'content-type':'application/json','accept':'application/json','x-api-key':apiKey,'x-api-timestamp':timestamp,'x-api-signature':signature},body:rawBody,signal:AbortSignal.timeout(12000)});
+  const raw=await response.text(); let data={}; try{data=raw?JSON.parse(raw):{};}catch{}
+  if(!response.ok||Number(data?.status)!==0){const error=new Error('Bitget Wallet '+response.status+': '+String(data?.msg||data?.message||data?.title||raw.slice(0,500)||('HTTP '+response.status))); error.status=response.status; error.code=data?.error_code??data?.code??null; throw error;}
+  return data?.data??data;
+}
 const server = http.createServer(async (req,res) => {
   if (req.method === 'OPTIONS') { res.writeHead(204,{ 'Access-Control-Allow-Origin':'*','Access-Control-Allow-Methods':'GET,POST,PUT,DELETE,OPTIONS','Access-Control-Allow-Headers':'Content-Type, Authorization' }); return res.end(); }
   if (await serveStatic(req,res)) return;
   let body=''; req.on('data',chunk=>{body+=chunk;}); req.on('end',async()=>{ try {
     const pathname = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`).pathname;
+    if(req.method==='POST' && pathname.startsWith('/api/sire/swap/bitget/')){
+      const json=(status,payload)=>res.writeHead(status,{'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify(payload));
+      try{
+        const action=pathname.slice('/api/sire/swap/bitget/'.length);
+        if(!['quote','swap'].includes(action)) return json(404,{ok:false,error:'Unknown Bitget Wallet swap endpoint.'});
+        const parsed=body?JSON.parse(body):{};
+        const data=await bitgetWalletRequest(action==='quote'?'/bgw-pro/swapx/pro/quote':'/bgw-pro/swapx/pro/swap',parsed);
+        return json(200,{ok:true,data});
+      }catch(cause){const status=Number(cause?.status)>=400&&Number(cause?.status)<600?Number(cause.status):503;return json(status,{ok:false,error:cause instanceof Error?cause.message:String(cause),code:cause?.code??null});}
+    }
     if (req.method === 'GET' && pathname === '/api/sire/market-data/history') {
       try {
         const u=new URL(req.url||'/',`http://${req.headers.host||'localhost'}`);
