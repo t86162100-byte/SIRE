@@ -926,402 +926,51 @@ const server = http.createServer(async (req,res) => {
     }
     if (req.method === 'POST' && pathname === '/api/sire/agent/gpt') { const parsed = body ? JSON.parse(body) : {}; if (!String(parsed.query || '').trim()) return res.writeHead(400,{ 'Access-Control-Allow-Origin':'*','Content-Type':'application/json; charset=utf-8' }).end(JSON.stringify({ error:'query is required' })); try { const response = await handleDirectGptRequest(parsed); return res.writeHead(200,{ 'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8' }).end(JSON.stringify(response)); } catch (cause) { const message = cause instanceof Error ? cause.message : String(cause); console.error('[DIRECT GPT]', message); return res.writeHead(502,{ 'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8' }).end(JSON.stringify({ error:`Direct GPT test failed: ${message}` })); } }
     if (pathname.startsWith('/api/sire/limit-orders')) {
-      const apiKey = String(process.env.ONEINCH_API_KEY || process.env.ONEINCH_AUTH_KEY || '').trim();
-      const json = (status, payload) => res.writeHead(status, {'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify(payload));
-      if (!apiKey) return json(503, { ok:false, error:'Limit orders are not configured yet. Add ONEINCH_API_KEY to the SIRE Render service.' });
-      const authHeaders = { Authorization:'Bearer ' + apiKey, Accept:'application/json', 'Content-Type':'application/json' };
-      try {
-        const parts = pathname.split('/').filter(Boolean);
-        if (req.method === 'POST' && pathname === '/api/sire/limit-orders/submit') {
-          const parsed = body ? JSON.parse(body) : {};
-          const orderHash = String(parsed?.orderHash || '');
-          const signature = String(parsed?.signature || '');
-          const data = parsed?.data;
-          const chainId = Number(data?.makerAsset ? parsed?.chainId : 0);
-          if (!/^0x[0-9a-fA-F]{64}$/.test(orderHash)) return json(400,{ok:false,error:'Invalid limit order hash.'});
-          if (!/^0x[0-9a-fA-F]{130,}$/.test(signature)) return json(400,{ok:false,error:'Invalid limit order signature.'});
-          if (!data || typeof data !== 'object') return json(400,{ok:false,error:'Missing limit order data.'});
-          const resolvedChain = Number(parsed?.chainId || data?.chainId || 0);
-          if (!Number.isInteger(resolvedChain) || resolvedChain <= 0) return json(400,{ok:false,error:'Missing limit order chain ID.'});
-          const upstream = await fetch('https://api.1inch.com/orderbook/v4.1/' + resolvedChain, {
-            method:'POST', headers:authHeaders,
-            body:JSON.stringify({orderHash,signature,data})
-          });
-          const raw = await upstream.text();
-          let result = {}; try { result = raw ? JSON.parse(raw) : {}; } catch { result = { raw }; }
-          if (!upstream.ok) return json(upstream.status,{ok:false,error:String(result?.message || result?.error || raw.slice(0,500) || '1inch rejected the limit order.'),upstream:result});
-          return json(201,{ok:true,orderHash,result});
-        }
-        const makerMatch = pathname.match(/^\/api\/sire\/limit-orders\/maker\/(\d+)\/(0x[a-fA-F0-9]{40})$/);
-        if (req.method === 'GET' && makerMatch) {
-          const chainId=Number(makerMatch[1]); const maker=makerMatch[2];
-          const upstream=await fetch('https://api.1inch.com/orderbook/v4.1/' + chainId + '/address/' + maker + '?statuses=1,2,3&limit=100',{headers:authHeaders});
-          const raw=await upstream.text(); let result={}; try{result=raw?JSON.parse(raw):{};}catch{result={};}
-          if(!upstream.ok) return json(upstream.status,{ok:false,error:String(result?.message||result?.error||raw.slice(0,500)||'1inch orderbook query failed.')});
-          return json(200,{ok:true,orders:Array.isArray(result?.items)?result.items:[],meta:result?.meta||{}});
-        }
-        const orderMatch=pathname.match(/^\/api\/sire\/limit-orders\/(\d+)\/(0x[0-9a-fA-F]{64})$/);
-        if(req.method==='GET' && orderMatch){
-          const chainId=Number(orderMatch[1]); const hash=orderMatch[2];
-          const upstream=await fetch('https://api.1inch.com/orderbook/v4.1/' + chainId + '/order/' + hash,{headers:authHeaders});
-          const raw=await upstream.text(); let result={}; try{result=raw?JSON.parse(raw):{};}catch{result={};}
-          if(!upstream.ok) return json(upstream.status,{ok:false,error:String(result?.message||result?.error||raw.slice(0,500)||'1inch order status query failed.')});
-          return json(200,{ok:true,order:result});
-        }
-        return json(404,{ok:false,error:'Unknown limit-order endpoint.'});
-      } catch (cause) {
-        return json(502,{ok:false,error:cause instanceof Error ? cause.message : String(cause)});
-      }
+  const apiKey = String(process.env.ZEROX_API_KEY || '').trim();
+  const json = (status, payload) => res.writeHead(status, {'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify(payload));
+  const supportedChains = new Set([1,56,137,8453,42161,43114]);
+  const chainBase = (chainId) => {
+    if (!supportedChains.has(Number(chainId))) throw new Error('0x Limit Orders are not enabled for this network.');
+    return String(process.env.ZEROX_ORDERBOOK_BASE_URL || 'https://api.0x.org/orderbook/v1').replace(/\/$/,'');
+  };
+  const authHeaders = {'0x-api-key': apiKey, '0x-version': 'v2', Accept:'application/json', 'Content-Type':'application/json'};
+  try {
+    if (!apiKey) return json(503, {ok:false, error:'0x Limit Orders are not configured yet. Add ZEROX_API_KEY to the SIRE Render service.'});
+    const makerMatch = pathname.match(/^\/api\/sire\/limit-orders\/maker\/(\d+)\/(0x[a-fA-F0-9]{40})$/);
+    if (req.method === 'GET' && makerMatch) {
+      const chainId=Number(makerMatch[1]); const maker=makerMatch[2];
+      const upstream=await fetch(chainBase(chainId) + '/orders?maker=' + encodeURIComponent(maker) + '&page=1&perPage=100',{headers:authHeaders});
+      const raw=await upstream.text(); let result={}; try{result=raw?JSON.parse(raw):{};}catch{result={raw};}
+      if(!upstream.ok) return json(upstream.status,{ok:false,error:String(result?.reason||result?.message||result?.error||raw.slice(0,500)||'0x rejected the order query.'),upstream:result});
+      return json(200,{ok:true,orders:Array.isArray(result?.records)?result.records.map((item)=>({...(item?.order||{}),orderHash:item?.metaData?.orderHash,remainingFillableTakerAmount:item?.metaData?.remainingFillableTakerAmount,createdAt:item?.metaData?.createdAt})):[]});
     }
-    if (req.method === 'POST' && pathname === '/api/sire/evm/rpc') {
-      try {
-        const parsed = body ? JSON.parse(body) : {};
-        const networks = {
-          Ethereum: ['https://ethereum-rpc.publicnode.com','https://eth.llamarpc.com','https://cloudflare-eth.com'],
-          'BNB Chain': ['https://bsc-dataseed.binance.org','https://bsc-dataseed1.binance.org','https://bsc-rpc.publicnode.com'],
-          Base: ['https://mainnet.base.org','https://base-rpc.publicnode.com'],
-          Arbitrum: ['https://arb1.arbitrum.io/rpc','https://arbitrum-one-rpc.publicnode.com'],
-          Optimism: ['https://mainnet.optimism.io','https://optimism-rpc.publicnode.com'],
-          Polygon: ['https://polygon-rpc.com','https://polygon-bor-rpc.publicnode.com'],
-          Avalanche: ['https://api.avax.network/ext/bc/C/rpc','https://avalanche-c-chain-rpc.publicnode.com'],
-        };
-        const networkName = String(parsed.network || '');
-        const method = String(parsed.method || '');
-        const params = Array.isArray(parsed.params) ? parsed.params : [];
-        const urls = networks[networkName] || [];
-        const allowedMethods = new Set(['eth_chainId','eth_getTransactionCount','eth_sendRawTransaction','eth_getTransactionReceipt','eth_getBalance','eth_call','eth_estimateGas']);
-        if (!urls.length) return res.writeHead(400,{'Access-Control-Allow-Origin':'*','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify({ok:false,error:'Unsupported EVM network.'}));
-        if (!allowedMethods.has(method)) return res.writeHead(400,{'Access-Control-Allow-Origin':'*','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify({ok:false,error:'Unsupported EVM RPC method.'}));
-        let lastError = '';
-        for (const rpcUrl of urls) {
-          try {
-            const upstream = await fetch(rpcUrl, {
-              method:'POST',
-              headers:{'content-type':'application/json','accept':'application/json'},
-              body:JSON.stringify({jsonrpc:'2.0',id:Date.now(),method,params}),
-            });
-            const raw = await upstream.text();
-            let payload = {};
-            try { payload = raw ? JSON.parse(raw) : {}; } catch { payload = {}; }
-            if (!upstream.ok) throw new Error('HTTP ' + upstream.status);
-            if (payload?.error) {
-              const rpcMessage = String(payload.error.message || payload.error.data || 'RPC error');
-              // JSON-RPC transaction errors are authoritative and should not be
-              // masked by trying unrelated endpoints.
-              if (method === 'eth_sendRawTransaction') {
-                return res.writeHead(200,{'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify({ok:false,error:rpcMessage,code:payload.error.code ?? null}));
-              }
-              throw new Error(rpcMessage);
-            }
-            return res.writeHead(200,{'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify({ok:true,result:payload?.result ?? null}));
-          } catch (cause) {
-            lastError = cause instanceof Error ? cause.message : String(cause);
-          }
-        }
-        console.error('[EVM RPC PROXY] all endpoints failed', networkName, method, lastError);
-        return res.writeHead(502,{'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify({ok:false,error:'EVM RPC upstream unavailable.',detail:lastError,network:networkName,method}));
-      } catch (cause) {
-        return res.writeHead(400,{'Access-Control-Allow-Origin':'*','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify({ok:false,error:cause instanceof Error?cause.message:String(cause)}));
-      }
+    const orderMatch=pathname.match(/^\/api\/sire\/limit-orders\/(\d+)\/(0x[0-9a-fA-F]{64})$/);
+    if(req.method==='GET' && orderMatch){
+      const chainId=Number(orderMatch[1]); const hash=orderMatch[2];
+      const upstream=await fetch(chainBase(chainId) + '/order/' + hash,{headers:authHeaders});
+      const raw=await upstream.text(); let result={}; try{result=raw?JSON.parse(raw):{};}catch{result={raw};}
+      if(!upstream.ok) return json(upstream.status,{ok:false,error:String(result?.reason||result?.message||result?.error||raw.slice(0,500)||'0x rejected the order status query.'),upstream:result});
+      return json(200,{ok:true,order:result});
     }
-    if (req.method === 'GET' && pathname === '/api/sire/binance/live-price') {
-      const u = new URL(req.url || '/', 'http://' + (req.headers.host || 'localhost'));
-      const market = String(u.searchParams.get('market') || 'spot').toLowerCase();
-      const symbol = String(u.searchParams.get('symbol') || '').trim().toUpperCase();
-      if (!/^[A-Z0-9._-]+$/.test(symbol)) {
-        return res.writeHead(400,{'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify({ok:false,error:'Invalid Binance symbol.'}));
-      }
-      const base = market === 'um' ? 'https://fapi.binance.com/fapi/v1/ticker/price'
-        : market === 'cm' ? 'https://dapi.binance.com/dapi/v1/ticker/price'
-        : 'https://api.binance.com/api/v3/ticker/price';
-      try {
-        const upstream = await fetch(base + '?symbol=' + encodeURIComponent(symbol), {cache:'no-store'});
-        const payload = await upstream.json().catch(() => null);
-        if (!upstream.ok || !payload) {
-          console.error('[BINANCE LIVE PRICE]', market, symbol, 'upstream status', upstream.status);
-          return res.writeHead(502,{'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify({ok:false,error:'Binance live price request failed.',status:upstream.status}));
-        }
-        const price = Number(payload.price);
-        if (!Number.isFinite(price)) {
-          return res.writeHead(502,{'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify({ok:false,error:'Binance returned an invalid live price.'}));
-        }
-        return res.writeHead(200,{'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify({ok:true,symbol:String(payload.symbol || symbol).toUpperCase(),price,epoch:Date.now()/1000}));
-      } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        console.error('[BINANCE LIVE PRICE]', market, symbol, message);
-        return res.writeHead(502,{'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify({ok:false,error:message}));
-      }
+    if (req.method === 'POST' && pathname === '/api/sire/limit-orders/submit') {
+      const parsed = body ? JSON.parse(body) : {};
+      const chainId=Number(parsed?.chainId||parsed?.data?.chainId||0);
+      const orderHash=String(parsed?.orderHash||''); const signature=String(parsed?.signature||''); const data=parsed?.data;
+      if(!supportedChains.has(chainId)) return json(400,{ok:false,error:'0x Limit Orders are not enabled for this network.'});
+      if(!/^0x[0-9a-fA-F]{64}$/.test(orderHash)) return json(400,{ok:false,error:'Invalid limit order hash.'});
+      if(!/^0x[0-9a-fA-F]{130}$/.test(signature)) return json(400,{ok:false,error:'Invalid limit order signature.'});
+      if(!data||typeof data!=='object') return json(400,{ok:false,error:'Missing limit order data.'});
+      const sig={signatureType:2,r:'0x'+signature.slice(2,66),s:'0x'+signature.slice(66,130),v:parseInt(signature.slice(130,132),16)};
+      if(sig.v===0||sig.v===1) sig.v+=27;
+      const signedOrder={...data,chainId,verifyingContract:'0xdef1c0ded9bec7f1a1670819833240f027b25eff',signature:sig};
+      const upstream=await fetch(chainBase(chainId) + '/order',{method:'POST',headers:authHeaders,body:JSON.stringify(signedOrder)});
+      const raw=await upstream.text(); let result={}; try{result=raw?JSON.parse(raw):{};}catch{result={raw};}
+      if(!upstream.ok) return json(upstream.status,{ok:false,error:String(result?.reason||result?.message||result?.error||raw.slice(0,500)||'0x rejected the limit order.'),upstream:result});
+      return json(201,{ok:true,orderHash,result});
     }
-    if (req.method === 'GET' && pathname === '/api/sire/binance/market-snapshot') {
-      try {
-        const snapshots=await fetchBinanceMarketSnapshotServer();
-        return res.writeHead(200,{'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify({ok:true,snapshots,updatedAt:Date.now(),count:Object.keys(snapshots).length,source:'binance-native-market-data'}));
-      } catch(cause) {
-        const message=cause instanceof Error?cause.message:String(cause);
-        console.error('[BINANCE MARKET SNAPSHOT]',message);
-        return res.writeHead(502,{'Access-Control-Allow-Origin':'*','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify({ok:false,error:message,snapshots:{}}));
-      }
-    }
-    if (req.method === 'GET' && pathname === '/api/sire/binance/history') {
-      const u=new URL(req.url||'/', 'http://'+(req.headers.host||'localhost'));
-      const market=u.searchParams.get('market')||'';
-      const symbol=u.searchParams.get('symbol')||'';
-      const interval=u.searchParams.get('interval')||'1m';
-      const fromParam=u.searchParams.get('from'); const toParam=u.searchParams.get('to');
-      const limit=Number(u.searchParams.get('limit')||500);
-      try {
-        const bars=await fetchBinanceHistoryServer({
-          market, symbol, interval,
-          from:fromParam!==null && fromParam!=='' && Number.isFinite(Number(fromParam)) ? Number(fromParam) : undefined,
-          to:toParam!==null && toParam!=='' && Number.isFinite(Number(toParam)) ? Number(toParam) : undefined,
-          limit
-        });
-        return res.writeHead(200,{'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify({ok:true,bars}));
-      } catch(cause) {
-        const message=cause instanceof Error?cause.message:String(cause);
-        const retryAfter=/Binance (?:429|418)/.test(message) ? (message.match(/(?:retry after|banned until)\\s+(\\d+)/i)?.[1] || undefined) : undefined;
-        console.error('[BINANCE HISTORY ROUTE] Failed', {market,symbol,interval,limit,error:message,retryAfter});
-        return res.writeHead(/Binance 429/.test(message)?429:/Binance 418/.test(message)?418:502,{'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8',...(retryAfter?{'Retry-After':retryAfter}: {})}).end(JSON.stringify({ok:false,error:message,bars:[]}));
-      }
-    }
-    if (req.method === 'GET' && pathname === '/api/sire/binance/catalog') {
-      console.info('[BINANCE CATALOG REQUEST]', req.url);
-      try {
-        const catalog = await fetchBinanceCatalogServer();
-        console.info('[BINANCE CATALOG RESPONSE]', { count: catalog.instruments.length, diagnostics: catalog.diagnostics });
-        return res.writeHead(200,{'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify({ok:true,instruments:catalog.instruments,diagnostics:catalog.diagnostics,source:'binance-native-market-data'}));
-      } catch (cause) {
-        const message = cause instanceof Error ? cause.message : String(cause);
-        console.error('[BINANCE CATALOG]', message);
-        return res.writeHead(502,{'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify({ok:false,error:message,instruments:[]}));
-      }
-    }
-    if (req.method === 'GET' && pathname === '/api/sire/market-history') {
-      return res.writeHead(200,{'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify({ok:true,points:[]}));
-    }
-    const response=await handler(toEvent(req,body)); const statusCode=Number.isInteger(response?.statusCode)?response.statusCode:200; const rawBody=response?.body!==undefined?response.body:response; const isString=typeof rawBody==='string'; res.writeHead(statusCode,{ 'Access-Control-Allow-Origin':'*','Cache-Control':'no-store',...(isString?{}:{'Content-Type':'application/json; charset=utf-8'}),...(response?.headers||{}) }); res.end(isString?rawBody:JSON.stringify(rawBody??{}));
-  } catch(cause) { const message=cause instanceof Error?cause.message:String(cause); console.error('[HTTP ERROR]',req.method,req.url,message); if (!res.headersSent) res.writeHead(500,{'Content-Type':'application/json','Access-Control-Allow-Origin':'*'}); res.end(JSON.stringify({error:message})); } });
-});
-
-
-const wss = new WebSocketServer({ noServer:true });
-
-server.on('upgrade',(req,socket,head)=>{
-  const url=new URL(req.url||'/',`http://${req.headers.host||'localhost'}`);
-    if(url.pathname==='/api/sire/binance/ws'){
-      const market=String(url.searchParams.get('market')||'spot').toLowerCase();
-      const symbol=String(url.searchParams.get('symbol')||'').trim().toLowerCase();
-      const interval=String(url.searchParams.get('interval')||'1m').trim();
-      const stream=String(url.searchParams.get('stream')||'combined').toLowerCase();
-      if(!symbol || !/^[a-z0-9._-]+$/.test(symbol) || !/^[0-9]+[mhdw]$/.test(interval)){ socket.destroy(); return; }
-      // Binance retired the legacy USD-M futures WebSocket paths on 2026-04-23.
-      // Use the current /public and /market routing, with /public first for the
-      // high-frequency trade stream and /market as an explicit upstream fallback.
-      const upstreamCandidates = market==='um'
-        ? [
-            'wss://fstream.binance.com/public',
-            'wss://fstream.binance.com/market'
-          ]
-        : market==='cm'
-          ? ['wss://dstream.binance.com']
-          : market==='alpha'
-            ? ['wss://nbstream.binance.com/w3w/wsa']
-            : market==='options'
-              ? ['wss://nbstream.binance.com/eoptions']
-              : ['wss://stream.binance.com:9443'];
-      const isStandardMarket = !['alpha','options'].includes(market);
-      const streams = stream==='combined' && isStandardMarket
-        ? symbol+'@trade/'+symbol+'@kline_'+interval
-        : symbol+'@kline_'+interval;
-      const buildUpstreamUrl = base => {
-        if (market==='um') return base + '/stream?streams=' + streams;
-        return isStandardMarket
-          ? base + '/stream?streams=' + streams
-          : base + '/ws/' + streams;
-      };
-
-      console.log('[BINANCE WS PROXY] Browser client connected', {
-        market, symbol, interval, streams, upstreamCandidates
-      });
-
-      wss.handleUpgrade(req,socket,head,clientSocket=>{
-        let upstream=null;
-        let candidateIndex=0;
-        let closedByClient=false;
-        let opened=false;
-        let firstMessage=false;
-        let connectTimer=null;
-
-        const closeClient=(code=1011,reason='Binance upstream unavailable.')=>{
-          if(clientSocket.readyState===WebSocket.OPEN) clientSocket.close(code,reason.slice(0,120));
-        };
-
-        const clearConnectTimer=()=>{
-          if(connectTimer!==null) clearTimeout(connectTimer);
-          connectTimer=null;
-        };
-
-        const connectUpstream=()=>{
-          if(closedByClient || candidateIndex>=upstreamCandidates.length) {
-            if(!opened) {
-              console.error('[BINANCE WS PROXY] All upstream candidates failed', {market,symbol,streams});
-              closeClient(1011,'Binance upstream unavailable.');
-            }
-            return;
-          }
-          const upstreamUrl=buildUpstreamUrl(upstreamCandidates[candidateIndex]);
-          const attempt=candidateIndex+1;
-          console.log('[BINANCE WS PROXY] Upstream connect attempt', {market,symbol,attempt,url:upstreamUrl});
-          upstream=new WebSocket(upstreamUrl,{handshakeTimeout:8000});
-          clearConnectTimer();
-          connectTimer=setTimeout(()=>{
-            if(upstream && upstream.readyState===WebSocket.CONNECTING) {
-              console.error('[BINANCE WS PROXY] Upstream connection timeout', {market,symbol,attempt,url:upstreamUrl});
-              try { upstream.terminate(); } catch {}
-            }
-          },8500);
-
-          upstream.on('open',()=>{
-            opened=true;
-            clearConnectTimer();
-            console.log('[BINANCE WS PROXY] Upstream opened', {market,symbol,attempt,url:upstreamUrl});
-            if(clientSocket.readyState===WebSocket.OPEN) {
-              clientSocket.send(JSON.stringify({
-                type:'sire.binance.connected',
-                symbol:symbol.toUpperCase(),
-                streams,
-                upstream:upstreamUrl
-              }));
-            }
-          });
-
-          upstream.on('message',data=>{
-            if(!firstMessage) {
-              firstMessage=true;
-              console.log('[BINANCE WS PROXY] First upstream message', {market,symbol,attempt,url:upstreamUrl});
-            }
-            if(clientSocket.readyState===WebSocket.OPEN) clientSocket.send(data);
-          });
-
-          upstream.on('error',error=>{
-            const message=error instanceof Error ? error.message : String(error);
-            console.error('[BINANCE WS PROXY] Upstream error', {market,symbol,attempt,url:upstreamUrl,error:message});
-          });
-
-          upstream.on('close',(code,reason)=>{
-            clearConnectTimer();
-            const detail=String(reason||'').slice(0,120);
-            console.warn('[BINANCE WS PROXY] Upstream closed', {market,symbol,attempt,url:upstreamUrl,code,reason:detail});
-            if(closedByClient) return;
-            if(!opened || !firstMessage) {
-              candidateIndex+=1;
-              connectUpstream();
-              return;
-            }
-            if(clientSocket.readyState===WebSocket.OPEN) {
-              clientSocket.close(code && code!==1000 ? 1011 : 1000,detail);
-            }
-          });
-        };
-
-        connectUpstream();
-
-        clientSocket.on('message',data=>{
-          if(upstream && upstream.readyState===WebSocket.OPEN) upstream.send(data);
-        });
-        clientSocket.on('close',()=>{
-          closedByClient=true;
-          clearConnectTimer();
-          if(upstream && (upstream.readyState===WebSocket.OPEN || upstream.readyState===WebSocket.CONNECTING)) {
-            try { upstream.close(); } catch {}
-          }
-        });
-      });
-      return;
-    }
-    if(url.pathname==='/deriv/ws'){
-      console.log('[DERIV PROXY] Browser market-data client connected');
-      wss.handleUpgrade(req,socket,head,clientSocket=>{
-        const upstream=new WebSocket('wss://api.derivws.com/trading/v1/options/ws/public');
-        const queued=[];
-        let upstreamOpen=false;
-        const fail=(message)=>{
-          const detail = String(message || 'Unknown Deriv upstream error.');
-          console.error('[DERIV PROXY] FAIL', detail);
-          if(clientSocket.readyState===WebSocket.OPEN) {
-            clientSocket.send(JSON.stringify({error:{message:detail}}));
-            clientSocket.close(1011, detail.slice(0, 120));
-          } else if(clientSocket.readyState===WebSocket.CONNECTING) {
-            clientSocket.close();
-          }
-        };
-        const upstreamTimer=setTimeout(()=>{ if(!upstreamOpen) fail('Deriv upstream connection timed out.'); },15000);
-        upstream.on('open',()=>{
-          upstreamOpen=true;
-          clearTimeout(upstreamTimer);
-          for(const data of queued) upstream.send(data);
-          queued.length=0;
-        });
-        upstream.on('message',data=>{
-          try {
-            const parsed=JSON.parse(String(data));
-            if(parsed?.error) console.error('[DERIV PROXY] upstream error', JSON.stringify(parsed.error));
-          } catch {}
-          if(clientSocket.readyState===WebSocket.OPEN) clientSocket.send(data);
-        });
-        upstream.on('error',error=>{
-          const detail = error instanceof Error ? error.message : String(error);
-          console.error('[DERIV PROXY]', detail);
-          fail(`Deriv upstream WebSocket error: ${detail}`);
-        });
-        upstream.on('close',(code,reason)=>{
-          clearTimeout(upstreamTimer);
-          const detail = reason ? String(reason) : '';
-          if(clientSocket.readyState===WebSocket.OPEN) {
-            clientSocket.close(code && code !== 1000 ? 1011 : 1000, detail.slice(0, 120));
-          }
-        });
-        clientSocket.on('message',data=>{
-          if(upstreamOpen && upstream.readyState===WebSocket.OPEN) upstream.send(data);
-          else if(!upstreamOpen) queued.push(data);
-        });
-        clientSocket.on('close',()=>{
-          clearTimeout(upstreamTimer);
-          queued.length=0;
-          if(upstream.readyState===WebSocket.OPEN || upstream.readyState===WebSocket.CONNECTING) upstream.close();
-        });
-      });
-      return;
-    }
-  
-
-  if(url.pathname!=='/ws'){socket.destroy();return;}
-  wss.handleUpgrade(req,socket,head,wsSocket=>{
-    const connectionId=url.searchParams.get('connection_id')||randomUUID();
-    ws.register(connectionId,wsSocket);
-    wsSocket.send(JSON.stringify({type:'system.connected',payload:{connection_id:connectionId}}));
-    wsSocket.on('close',async()=>{ws.unregister(connectionId); await realtime({body:JSON.stringify({type:'system.disconnected',payload:{connection_id:connectionId}})});});
-  });
-});
-
-server.listen(PORT,HOST,async()=>{ 
-  console.log(`SIRE server listening on ${HOST}:${PORT}`); 
-  console.log('[DERIV HISTORY STORE]', JSON.stringify(await historyStoreStatus()));
-  // One startup smoke-test for the Binance catalog. This is deliberately
-  // non-blocking so a regional Binance outage can never prevent SIRE startup.
-  void fetchBinanceCatalogServer().then(catalog=>{
-    console.log('[BINANCE STARTUP CATALOG]', JSON.stringify({
-      count: catalog.instruments.length,
-      counts: catalog.diagnostics?.counts,
-      tradeFi: {
-        futures: Object.fromEntries(['Stocks','ETFs','Commodities','Fx','Pre-IPO'].map(k=>[k,catalog.instruments.filter(x=>x.marketGroup==='TRADE FI'&&x.marketType==='Futures'&&x.marketSubSubcategory===k).length])),
-        spot: Object.fromEntries(['bStocks','tCommodities'].map(k=>[k,catalog.instruments.filter(x=>x.marketGroup==='TRADE FI'&&x.marketType==='Spot'&&x.marketSubSubcategory===k).length])),
-        spotBStockCandidates: catalog.instruments.filter(x=>x.marketType==='Spot' && x.marketGroup==='CRYPTO' && String(x.baseAsset||'').endsWith('B')).slice(0,20).map(x=>({symbol:x.symbol,base:x.baseAsset}))
-      },
-      stocksSource: catalog.diagnostics?.sources?.stocks,
-      tokenizedSource: catalog.diagnostics?.sources?.tokenized,
-      usdtm: catalog.diagnostics?.sources?.usdtm?.audit?.acceptedByNormalizer,
-      coinm: catalog.diagnostics?.sources?.coinm?.audit?.acceptedByNormalizer
-    }));
-  }).catch(error=>console.error('[BINANCE STARTUP CATALOG FAILED]', error instanceof Error ? error.message : String(error)));
-});
+    return json(404,{ok:false,error:'Unknown 0x limit-order endpoint.'});
+  } catch (cause) {
+    return json(502,{ok:false,error:cause instanceof Error ? cause.message : String(cause)});
+  }
+}
+;
