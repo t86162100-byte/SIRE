@@ -313,6 +313,61 @@ export async function fetchEthereumTokens(query=''): Promise<SwapToken[]> {
 }
 
 export type SwapRouteOrder = 'FASTEST' | 'CHEAPEST';
+const BITGET_CHAIN_KEYS: Record<number,string> = {
+  1:'eth', 10:'op', 56:'bnb', 137:'polygon', 8453:'base', 42161:'arb', 43114:'avax_c', 324:'zk', 59144:'linea', 534352:'scroll', 81457:'blast', 5000:'mantle', 34443:'mode'
+};
+function getBitgetChainKey(chainId:number) { return BITGET_CHAIN_KEYS[chainId]; }
+async function bitgetSwapRequest(path:string, body:any) {
+  const response = await fetch('/api/sire/swap/bitget/' + path, { method:'POST', headers:{'content-type':'application/json','accept':'application/json'}, body:JSON.stringify(body) });
+  const raw = await response.text(); let payload:any = {};
+  try { payload = raw ? JSON.parse(raw) : {}; } catch {}
+  if (!response.ok || payload?.ok === false) throw new Error(String(payload?.error || 'Bitget Wallet swap service is unavailable.'));
+  return payload?.data ?? payload;
+}
+async function getBitgetQuote(args:{fromToken:SwapToken;toToken:SwapToken;amount:string;wallet:string;slippage:number;toAddress:string}):Promise<SwapQuote> {
+  const fromChain=getBitgetChainKey(args.fromToken.chainId), toChain=getBitgetChainKey(args.toToken.chainId);
+  if (!fromChain || !toChain) throw new Error('Bitget Wallet does not support this EVM network in SIRE yet.');
+  const data=await bitgetSwapRequest('quote',{
+    fromSymbol:args.fromToken.symbol,fromContract:args.fromToken.native?'':args.fromToken.address,fromAmount:args.amount,fromChain,
+    toSymbol:args.toToken.symbol,toContract:args.toToken.native?'':args.toToken.address,toChain,
+    fromAddress:args.wallet,toAddress:args.toAddress,txOrigin:args.wallet,estimateGas:true,amountUnit:'token'
+  });
+  const toAmount=String(data?.toAmount||'0'); if (!toAmount || toAmount==='0') throw new Error('Bitget Wallet returned no output amount.');
+  const priceImpact=Number(data?.priceImpact), feeUSD=Number(data?.fee?.totalAmountInUsd), gasUSD=Number(data?.fee?.gasFee?.amountInUsd);
+  return {
+    id:String(data?.id||data?.orderId||''),tool:'bitget-wallet',toolName:'Bitget Wallet',
+    fromAmount:amountToBaseUnits(args.amount,args.fromToken),toAmount:amountToBaseUnits(toAmount,args.toToken),
+    toAmountMin:amountToBaseUnits(String(data?.toMinAmount||toAmount),args.toToken),fromToken:args.fromToken,toToken:args.toToken,
+    gasUSD:Number.isFinite(gasUSD)?String(gasUSD):(Number.isFinite(feeUSD)?String(feeUSD):undefined),
+    executionDuration:Number(data?.executionDuration||0)||undefined,
+    priceImpact:Number.isFinite(priceImpact)?priceImpact/100:undefined,
+    expiresAt:Number(data?.expiresAt||0)>0?Number(data.expiresAt)*1000:Date.now()+15000,
+    raw:{provider:'bitget-wallet',chain:{from:fromChain,to:toChain},market:data?.market,features:data?.features||[],fee:data?.fee||{},quote:data}
+  };
+}
+export async function prepareBitgetSwap(args:{quote:SwapQuote;wallet:string;slippage:number;toAddress:string}):Promise<SwapQuote> {
+  const fromChain=getBitgetChainKey(args.quote.fromToken.chainId), toChain=getBitgetChainKey(args.quote.toToken.chainId);
+  const market=String(args.quote.raw?.market||'');
+  if (!fromChain || !toChain || !market) throw new Error('Bitget Wallet quote cannot be prepared for this route.');
+  const data=await bitgetSwapRequest('swap',{
+    fromSymbol:args.quote.fromToken.symbol,fromContract:args.quote.fromToken.native?'':args.quote.fromToken.address,fromAmount:args.quote.fromAmount,fromChain,
+    toSymbol:args.quote.toToken.symbol,toContract:args.quote.toToken.native?'':args.quote.toToken.address,toChain,
+    toMinAmount:args.quote.toAmountMin,fromAddress:args.wallet,toAddress:args.toAddress,txOrigin:args.wallet,
+    slippage:args.slippage*100,market,amountUnit:'token',requestMod:'simple'
+  });
+  const tx=Array.isArray(data?.txs)?data.txs[0]:null;
+  if (!tx?.to || !tx?.calldata) throw new Error('Bitget Wallet did not return executable EVM calldata.');
+  return {
+    ...args.quote,id:String(data?.id||args.quote.id||''),
+    toAmount:amountToBaseUnits(String(data?.toAmount||formatUnits(args.quote.toAmount,args.quote.toToken.decimals,18)),args.quote.toToken),
+    toAmountMin:amountToBaseUnits(String(data?.minToAmount||data?.toMinAmount||formatUnits(args.quote.toAmountMin,args.quote.toToken.decimals,18)),args.quote.toToken),
+    approvalAddress:String(data?.contract||''),
+    transactionRequest:{from:args.wallet,to:String(data.contract||tx.to),data:String(data.calldata||tx.calldata),value:String(tx.value||'0'),gas:tx.gasLimit?String(tx.gasLimit):undefined,gasLimit:tx.gasLimit?String(tx.gasLimit):undefined,gasPrice:tx.gasPrice?String(tx.gasPrice):undefined,chainId:Number(tx.chainId||args.quote.fromToken.chainId)},
+    expiresAt:Number(data?.expiresAt||0)>0?Number(data.expiresAt)*1000:Date.now()+120000,
+    raw:{...args.quote.raw,provider:'bitget-wallet',executable:data}
+  };
+}
+
 
 export type SwapQuoteFailureReason =
   | 'INSUFFICIENT_LIQUIDITY'
@@ -364,6 +419,11 @@ export function formatSwapQuoteFailure(reason:SwapQuoteFailureReason, tokenSymbo
 export async function getSwapQuote(args:{
   fromToken:SwapToken; toToken:SwapToken; amount:string; wallet:string; slippage:number; toAddress?:string; order?:SwapRouteOrder;
 }):Promise<SwapQuote> {
+  const effectiveRecipient=args.toAddress?.trim()||args.wallet;
+  if (getBitgetChainKey(args.fromToken.chainId) && getBitgetChainKey(args.toToken.chainId)) {
+    try { return await getBitgetQuote({...args,toAddress:effectiveRecipient}); }
+    catch (error) { console.warn('[SIRE SWAP] Bitget quote unavailable; falling back to LI.FI:', error instanceof Error ? error.message : String(error)); }
+  }
   const network = Object.values(SWAP_NETWORKS).find(n => n.chainId === args.fromToken.chainId);
   if (!network || !EVM_SWAP_NETWORKS.some(n => n.chainId === network.chainId)) {
     throw new Error('This network requires its native wallet/router adapter and is not an EVM route.');
@@ -512,6 +572,29 @@ export async function fetchSwapStatus(args:{
 }
 
 export async function executeSwap(quote:SwapQuote, owner:string, onStatus?:(s:string)=>void) {
+  if (quote.tool==='bitget-wallet') {
+    const recipient=quote.raw?.quote?.toAddress||owner;
+    const prepared=quote.transactionRequest?.to ? quote : await prepareBitgetSwap({quote,wallet:owner,slippage:0.005,toAddress:recipient});
+    const tx=prepared.transactionRequest; if(!tx?.to) throw new Error('Bitget Wallet did not return an executable transaction.');
+    if(tx.from && tx.from.toLowerCase()!==owner.toLowerCase()) throw new Error('The executable Bitget quote belongs to a different wallet.');
+    const network=Object.values(SWAP_NETWORKS).find(n=>n.chainId===prepared.fromToken.chainId); if(!network) throw new Error('Unsupported Bitget Wallet network.');
+    const provider=usesNativeWallet(owner)?null:getInjectedProvider();
+    if(!provider && (!isNativeWalletUnlocked() || owner.toLowerCase()!==getNativeWalletAddress().toLowerCase())) throw new Error('Connect an external wallet or unlock SIRE Wallet before signing.');
+    if(!usesNativeWallet(owner)) await switchToNetwork(network);
+    const currentBalance=await readTokenBalance(prepared.fromToken,owner);
+    if(BigInt(currentBalance)<BigInt(prepared.fromAmount)) throw new Error('Insufficient '+prepared.fromToken.symbol+' balance.');
+    if(!prepared.fromToken.native && prepared.approvalAddress) await approveIfNeeded(prepared.fromToken,owner,prepared.approvalAddress,prepared.fromAmount,onStatus);
+    onStatus?.('Confirm swap in wallet');
+    if(provider){
+      const hash=await provider.request({method:'eth_sendTransaction',params:[{from:owner,to:tx.to,data:tx.data||'0x',value:tx.value||'0x0',...(tx.gasLimit?{gas:tx.gasLimit}:tx.gas?{gas:tx.gas}:{}),...(tx.gasPrice?{gasPrice:tx.gasPrice}:{})}]});
+      onStatus?.('Waiting for confirmation'); const receipt=await waitForReceipt(hash); return {hash,receipt};
+    }
+    const nativeTx=await sendNativeTransaction(network,{to:tx.to,data:tx.data||'0x',value:tx.value?BigInt(tx.value):0n,...(tx.gasLimit?{gasLimit:BigInt(tx.gasLimit)}:tx.gas?{gasLimit:BigInt(tx.gas)}:{}),...(tx.gasPrice?{gasPrice:BigInt(tx.gasPrice)}:{})});
+    onStatus?.('Waiting for confirmation'); const receipt=await waitForNativeTransaction(network,nativeTx.hash);
+    if(receipt.status===0) throw new Error('Swap transaction reverted.');
+    return {hash:nativeTx.hash,receipt};
+  }
+
   const provider=usesNativeWallet(owner) ? null : getInjectedProvider();
   if (quote.expiresAt && Date.now() >= quote.expiresAt) throw new Error('This quote has expired. Requesting a fresh quote is required.');
   if (!provider && (!isNativeWalletUnlocked() || owner.toLowerCase() !== getNativeWalletAddress().toLowerCase())) throw new Error('Connect an external wallet or unlock SIRE Wallet before signing.');
