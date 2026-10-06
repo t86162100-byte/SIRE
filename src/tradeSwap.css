@@ -345,3 +345,19 @@
   .sire-limit-price-row input,.sire-limit-amount-row input{font-size:19px}
 }
 
+
+
+/* Final Limit card shape overrides. */
+.sire-limit-mode .sire-limit-price-main{
+  border-radius:64px;
+  overflow:hidden;
+}
+
+.sire-limit-mode .sire-limit-payment-card{
+  min-height:180px;
+  box-sizing:border-box;
+  padding:22px;
+  align-items:flex-start;
+  border-radius:64px;
+  overflow:hidden;
+}
