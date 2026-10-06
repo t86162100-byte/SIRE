@@ -926,51 +926,56 @@ const server = http.createServer(async (req,res) => {
     }
     if (req.method === 'POST' && pathname === '/api/sire/agent/gpt') { const parsed = body ? JSON.parse(body) : {}; if (!String(parsed.query || '').trim()) return res.writeHead(400,{ 'Access-Control-Allow-Origin':'*','Content-Type':'application/json; charset=utf-8' }).end(JSON.stringify({ error:'query is required' })); try { const response = await handleDirectGptRequest(parsed); return res.writeHead(200,{ 'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8' }).end(JSON.stringify(response)); } catch (cause) { const message = cause instanceof Error ? cause.message : String(cause); console.error('[DIRECT GPT]', message); return res.writeHead(502,{ 'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8' }).end(JSON.stringify({ error:`Direct GPT test failed: ${message}` })); } }
     if (pathname.startsWith('/api/sire/limit-orders')) {
-  const apiKey = String(process.env.ZEROX_API_KEY || '').trim();
-  const json = (status, payload) => res.writeHead(status, {'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify(payload));
-  const supportedChains = new Set([1,56,137,8453,42161,43114]);
-  const chainBase = (chainId) => {
-    if (!supportedChains.has(Number(chainId))) throw new Error('0x Limit Orders are not enabled for this network.');
-    return String(process.env.ZEROX_ORDERBOOK_BASE_URL || 'https://api.0x.org/orderbook/v1').replace(/\/$/,'');
-  };
-  const authHeaders = {'0x-api-key': apiKey, '0x-version': 'v2', Accept:'application/json', 'Content-Type':'application/json'};
-  try {
-    if (!apiKey) return json(503, {ok:false, error:'0x Limit Orders are not configured yet. Add ZEROX_API_KEY to the SIRE Render service.'});
-    const makerMatch = pathname.match(/^\/api\/sire\/limit-orders\/maker\/(\d+)\/(0x[a-fA-F0-9]{40})$/);
-    if (req.method === 'GET' && makerMatch) {
-      const chainId=Number(makerMatch[1]); const maker=makerMatch[2];
-      const upstream=await fetch(chainBase(chainId) + '/orders?maker=' + encodeURIComponent(maker) + '&page=1&perPage=100',{headers:authHeaders});
-      const raw=await upstream.text(); let result={}; try{result=raw?JSON.parse(raw):{};}catch{result={raw};}
-      if(!upstream.ok) return json(upstream.status,{ok:false,error:String(result?.reason||result?.message||result?.error||raw.slice(0,500)||'0x rejected the order query.'),upstream:result});
-      return json(200,{ok:true,orders:Array.isArray(result?.records)?result.records.map((item)=>({...(item?.order||{}),orderHash:item?.metaData?.orderHash,remainingFillableTakerAmount:item?.metaData?.remainingFillableTakerAmount,createdAt:item?.metaData?.createdAt})):[]});
-    }
-    const orderMatch=pathname.match(/^\/api\/sire\/limit-orders\/(\d+)\/(0x[0-9a-fA-F]{64})$/);
-    if(req.method==='GET' && orderMatch){
-      const chainId=Number(orderMatch[1]); const hash=orderMatch[2];
-      const upstream=await fetch(chainBase(chainId) + '/order/' + hash,{headers:authHeaders});
-      const raw=await upstream.text(); let result={}; try{result=raw?JSON.parse(raw):{};}catch{result={raw};}
-      if(!upstream.ok) return json(upstream.status,{ok:false,error:String(result?.reason||result?.message||result?.error||raw.slice(0,500)||'0x rejected the order status query.'),upstream:result});
-      return json(200,{ok:true,order:result});
-    }
-    if (req.method === 'POST' && pathname === '/api/sire/limit-orders/submit') {
-      const parsed = body ? JSON.parse(body) : {};
-      const chainId=Number(parsed?.chainId||parsed?.data?.chainId||0);
-      const orderHash=String(parsed?.orderHash||''); const signature=String(parsed?.signature||''); const data=parsed?.data;
-      if(!supportedChains.has(chainId)) return json(400,{ok:false,error:'0x Limit Orders are not enabled for this network.'});
-      if(!/^0x[0-9a-fA-F]{64}$/.test(orderHash)) return json(400,{ok:false,error:'Invalid limit order hash.'});
-      if(!/^0x[0-9a-fA-F]{130}$/.test(signature)) return json(400,{ok:false,error:'Invalid limit order signature.'});
-      if(!data||typeof data!=='object') return json(400,{ok:false,error:'Missing limit order data.'});
-      const sig={signatureType:2,r:'0x'+signature.slice(2,66),s:'0x'+signature.slice(66,130),v:parseInt(signature.slice(130,132),16)};
-      if(sig.v===0||sig.v===1) sig.v+=27;
-      const signedOrder={...data,chainId,verifyingContract:'0xdef1c0ded9bec7f1a1670819833240f027b25eff',signature:sig};
-      const upstream=await fetch(chainBase(chainId) + '/order',{method:'POST',headers:authHeaders,body:JSON.stringify(signedOrder)});
-      const raw=await upstream.text(); let result={}; try{result=raw?JSON.parse(raw):{};}catch{result={raw};}
-      if(!upstream.ok) return json(upstream.status,{ok:false,error:String(result?.reason||result?.message||result?.error||raw.slice(0,500)||'0x rejected the limit order.'),upstream:result});
-      return json(201,{ok:true,orderHash,result});
-    }
-    return json(404,{ok:false,error:'Unknown 0x limit-order endpoint.'});
-  } catch (cause) {
-    return json(502,{ok:false,error:cause instanceof Error ? cause.message : String(cause)});
-  }
-}
-;
+      const apiKey = String(process.env.ZEROX_API_KEY || '').trim();
+      const json = (status, payload) => res.writeHead(status, {
+        'Access-Control-Allow-Origin':'*',
+        'Cache-Control':'no-store',
+        'Content-Type':'application/json; charset=utf-8'
+      }).end(JSON.stringify(payload));
+      const supportedChains = new Set([1,56,137,8453,42161,43114]);
+      const headers = {'0x-api-key': apiKey, '0x-version': 'v2', Accept:'application/json'};
+      const parseUpstream = async response => {
+        const raw = await response.text();
+        let payload = {};
+        try { payload = raw ? JSON.parse(raw) : {}; } catch { payload = { raw }; }
+        return { response, payload, raw };
+      };
+      try {
+        if (!apiKey) return json(503, {ok:false, error:'0x API is not configured. Add ZEROX_API_KEY to the SIRE Render service.'});
+        if (req.method === 'GET' && pathname === '/api/sire/limit-orders/health') {
+          return json(200, {ok:true, configured:true, architecture:'0x-swap-api-v2-allowance-holder'});
+        }
+        if (req.method === 'POST' && pathname === '/api/sire/limit-orders/quote') {
+          const parsed = body ? JSON.parse(body) : {};
+          const chainId = Number(parsed?.chainId || 0);
+          const sellToken = String(parsed?.sellToken || '');
+          const buyToken = String(parsed?.buyToken || '');
+          const sellAmount = String(parsed?.sellAmount || '');
+          const taker = String(parsed?.taker || '');
+          if (!supportedChains.has(chainId)) return json(400,{ok:false,error:'0x Limit monitoring is not enabled for this network.'});
+          if (!/^0x[a-fA-F0-9]{40}$/.test(sellToken) || !/^0x[a-fA-F0-9]{40}$/.test(buyToken)) return json(400,{ok:false,error:'Invalid limit-order token address.'});
+          if (!/^\d+$/.test(sellAmount) || BigInt(sellAmount) <= 0n) return json(400,{ok:false,error:'Invalid limit-order amount.'});
+          const params = new URLSearchParams({chainId:String(chainId),sellToken,buyToken,sellAmount});
+          if (/^0x[a-fA-F0-9]{40}$/.test(taker)) params.set('taker',taker);
+          const upstream = await fetch('https://api.0x.org/swap/allowance-holder/price?' + params.toString(), {headers});
+          const result = await parseUpstream(upstream);
+          if (!upstream.ok) return json(upstream.status,{ok:false,error:String(result.payload?.reason||result.payload?.message||result.payload?.error||result.raw.slice(0,500)||'0x rejected the price request.'),upstream:result.payload});
+          return json(200,{ok:true,quote:result.payload});
+        }
+        if (req.method === 'POST' && pathname === '/api/sire/limit-orders/submit') {
+          const parsed = body ? JSON.parse(body) : {};
+          const chainId = Number(parsed?.chainId || parsed?.data?.chainId || 0);
+          const orderHash = String(parsed?.orderHash || '');
+          const data = parsed?.data;
+          if (!supportedChains.has(chainId)) return json(400,{ok:false,error:'0x Limit monitoring is not enabled for this network.'});
+          if (!/^0x[0-9a-fA-F]{64}$/.test(orderHash)) return json(400,{ok:false,error:'Invalid limit intent id.'});
+          if (!data || typeof data !== 'object') return json(400,{ok:false,error:'Missing limit intent data.'});
+          const expiry = Number(data?.expiry || 0);
+          if (!Number.isFinite(expiry) || expiry <= Math.floor(Date.now()/1000)) return json(400,{ok:false,error:'Limit order has already expired.'});
+          return json(201,{ok:true,orderHash,architecture:'0x-swap-api-v2-allowance-holder'});
+        }
+        return json(404,{ok:false,error:'Unknown 0x limit-order endpoint.'});
+      } catch (cause) {
+        return json(502,{ok:false,error:cause instanceof Error ? cause.message : String(cause)});
+      }
+    };
