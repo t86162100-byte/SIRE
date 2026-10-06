@@ -110,9 +110,8 @@ export async function fetchLimitOrders(chainId: number, maker: string): Promise<
   return Array.isArray(data?.orders) ? data.orders.slice(0, 100) : [];
 }
 
-export async function fetchLimitOrder(chainId: number, orderHash: string): Promise<any> {
-  const orders = await fetchLimitOrders(chainId, '');
-  return orders.find((order: any) => order.orderHash === orderHash) || null;
+export async function fetchLimitOrder(_chainId: number, _orderHash: string): Promise<any> {
+  return null;
 }
 
 export async function cancelLimitOrder(orderHash: string, maker: string): Promise<any> {
