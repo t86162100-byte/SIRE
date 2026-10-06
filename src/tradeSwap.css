@@ -237,3 +237,15 @@
 .sire-provider-route-line strong{margin-left:auto;color:#fff;font-size:9px}
 @media(min-width:621px){.sire-provider-backdrop{align-items:center;padding:18px}.sire-provider-sheet{border:1px solid rgba(255,255,255,.12);border-radius:18px;max-height:760px}.sire-provider-list{max-height:650px}}
 @media(max-width:620px){.sire-provider-sheet{padding-left:12px;padding-right:12px}.sire-provider-head b{font-size:22px}.sire-provider-card{border-radius:16px}.sire-provider-amount b{font-size:16px}}
+
+/* Confirm-time insufficient balance sheet */
+.sire-insufficient-backdrop{align-items:end;padding:16px;background:rgba(0,0,0,.72)}
+.sire-insufficient-sheet{width:min(460px,100%);box-sizing:border-box;background:#101415;border:1px solid rgba(255,255,255,.1);border-radius:22px;padding:24px 20px 18px;box-shadow:0 -20px 70px rgba(0,0,0,.55);text-align:center}
+.sire-insufficient-icon{width:48px;height:48px;border-radius:50%;margin:0 auto 13px;display:grid;place-items:center;background:rgba(255,184,77,.12);color:#ffbf5a}
+.sire-insufficient-copy h3{margin:0 0 8px;font-size:19px;letter-spacing:-.02em}
+.sire-insufficient-copy p{margin:0 auto;color:rgba(255,255,255,.58);font-size:11px;line-height:1.5;max-width:360px}
+.sire-insufficient-copy p b{color:#fff}
+.sire-insufficient-copy .sire-insufficient-sub{margin-top:8px;color:rgba(255,255,255,.34)}
+.sire-buy-balance-button{margin-top:18px;width:100%}
+.sire-insufficient-sheet>.sire-wallet-secondary{width:100%;margin-top:7px}
+@media(min-width:621px){.sire-insufficient-backdrop{align-items:center}.sire-insufficient-sheet{border-radius:20px}}
