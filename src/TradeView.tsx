@@ -557,45 +557,50 @@ export default function TradeView({ referencePrice = 0 }: Props) {
 
     let cancelled = false;
 
-    // Show a real market price immediately from the live token USD prices
-    // already attached to the selected network catalogue, so the limit-price
-    // field is not blank while the wallet is locked.
-    const makerUSD = Number(limitMaker.priceUSD);
-    const takerUSD = Number(limitTaker.priceUSD);
-    if (Number.isFinite(makerUSD) && makerUSD > 0 && Number.isFinite(takerUSD) && takerUSD > 0) {
-      const derived = makerUSD / takerUSD;
-      if (Number.isFinite(derived) && derived > 0) setLimitMarketPrice(String(derived));
-    } else {
-      setLimitMarketPrice('');
-    }
-
-    // Once the SIRE wallet is unlocked, prefer an executable route price.
-    // This is the price the selected liquidity can actually trade against.
-    const loadExecutablePrice = async () => {
-      if (!wallet || !nativeUnlocked) return;
-      setLimitMarketLoading(true);
-      try {
-        const live = await getSwapQuote({
-          fromToken: limitMaker,
-          toToken: limitTaker,
-          amount: '1',
-          wallet,
-          toAddress: wallet,
-          slippage: 0.005,
-          order: 'CHEAPEST'
-        });
-        const price = formatUnits(live.toAmount, limitTaker.decimals, 18);
-        if (!cancelled && Number(price) > 0) setLimitMarketPrice(price);
-      } catch {
-        // Keep the live catalogue-derived price visible if the executable
-        // quote provider is temporarily unavailable.
-      } finally {
-        if (!cancelled) setLimitMarketLoading(false);
+    const setCataloguePrice = () => {
+      const makerUSD = Number(limitMaker.priceUSD);
+      const takerUSD = Number(limitTaker.priceUSD);
+      if (Number.isFinite(makerUSD) && makerUSD > 0 && Number.isFinite(takerUSD) && takerUSD > 0) {
+        const derived = makerUSD / takerUSD;
+        if (Number.isFinite(derived) && derived > 0) setLimitMarketPrice(String(derived));
       }
     };
 
-    void loadExecutablePrice();
-    const timer = window.setInterval(() => void loadExecutablePrice(), 10000);
+    // Use the server-side 0x v2 price endpoint so the top price is available
+    // even before the wallet is unlocked. Fall back to the live token catalogue.
+    const loadLimitMarketPrice = async () => {
+      setLimitMarketLoading(true);
+      try {
+        const makerUnits = (10n ** BigInt(limitMaker.decimals)).toString();
+        const response = await fetch('/api/sire/limit-orders/quote', {
+          method: 'POST',
+          headers: {'Content-Type':'application/json'},
+          body: JSON.stringify({
+            chainId: limitMaker.chainId,
+            sellToken: limitMaker.address,
+            buyToken: limitTaker.address,
+            sellAmount: makerUnits,
+            taker: wallet || ''
+          })
+        });
+        const payload = await response.json().catch(() => ({}));
+        const buyAmount = String(payload?.quote?.buyAmount || '');
+        if (response.ok && /^\d+$/.test(buyAmount)) {
+          const price = Number(formatUnits(buyAmount, limitTaker.decimals, 18));
+          if (!cancelled && Number.isFinite(price) && price > 0) setLimitMarketPrice(String(price));
+          return;
+        }
+      } catch {
+        // Fall back to catalogue pricing below.
+      } finally {
+        if (!cancelled) setLimitMarketLoading(false);
+      }
+      if (!cancelled) setCataloguePrice();
+    };
+
+    setCataloguePrice();
+    void loadLimitMarketPrice();
+    const timer = window.setInterval(() => void loadLimitMarketPrice(), 15000);
     return () => { cancelled = true; window.clearInterval(timer); };
   }, [tradeMode, wallet, nativeUnlocked, network, toNetwork, limitSide, limitMaker, limitTaker]);
 
@@ -937,16 +942,23 @@ export default function TradeView({ referencePrice = 0 }: Props) {
             </div>
 
             {tradeMode === 'Limit' && <div className="sire-limit-panel sire-limit-interface">
-              <button
-                type="button"
-                className="sire-limit-token-pill"
-                aria-label={(limitSide === 'Buy' ? 'Buy ' : 'Sell ') + (limitMaker.symbol || 'token')}
-                onClick={() => setTokenPicker(limitSide === 'Sell' ? 'from' : 'to')}
-              >
-                <LogoMark src={limitMaker.logoURI} fallback={limitMaker.symbol.slice(0,1) || 'T'} className="sire-token-mark large" />
-                <span><b>{limitMaker.symbol || 'Select token'}</b><small>{limitMaker.name || ''}</small></span>
-                <ChevronDown size={15}/>
-              </button>
+              <div className="sire-limit-top-row">
+                <button
+                  type="button"
+                  className="sire-limit-token-pill"
+                  aria-label={(limitSide === 'Buy' ? 'Buy ' : 'Sell ') + (limitMaker.symbol || 'token')}
+                  onClick={() => setTokenPicker(limitSide === 'Sell' ? 'from' : 'to')}
+                >
+                  <LogoMark src={limitMaker.logoURI} fallback={limitMaker.symbol.slice(0,1) || 'T'} className="sire-token-mark large" />
+                  <span><b>{limitMaker.symbol || 'Select token'}</b><small>{limitMaker.name || ''}</small></span>
+                  <ChevronDown size={15}/>
+                </button>
+                <div className="sire-limit-live-price" aria-live="polite">
+                  <span>Price</span>
+                  <strong>{limitMarketPrice || '—'}</strong>
+                  <small>{limitTaker.symbol || ''} per {limitMaker.symbol || ''}</small>
+                </div>
+              </div>
 
               <div className="sire-limit-side-toggle" role="tablist" aria-label="Limit side">
                 {(['Buy','Sell'] as const).map(side => (
