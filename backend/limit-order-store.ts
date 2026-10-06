@@ -58,7 +58,7 @@ function assertRecord(record: any) {
   if (!record.makerAsset || !record.takerAsset || !/^0x[a-fA-F0-9]{40}$/.test(String(record.makerAsset)) || !/^0x[a-fA-F0-9]{40}$/.test(String(record.takerAsset))) {
     throw new Error('Limit order is missing valid token addresses.');
   }
-  if (!/^\\d+$/.test(String(record.makingAmount || '')) || !/^\\d+$/.test(String(record.takingAmount || ''))) {
+  if (!/^\d+$/.test(String(record.makingAmount || '')) || !/^\d+$/.test(String(record.takingAmount || ''))) {
     throw new Error('Limit order is missing valid token amounts.');
   }
 }
