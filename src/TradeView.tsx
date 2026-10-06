@@ -69,7 +69,6 @@ export default function TradeView({ referencePrice = 0 }: Props) {
   const [tradeMode, setTradeMode] = useState<'Swap' | 'Limit'>('Swap');
   const [slippage, setSlippage] = useState(0.005);
   const [routeOrder, setRouteOrder] = useState<SwapRouteOrder>('CHEAPEST');
-  const [routeOpen, setRouteOpen] = useState(false);
   const [quote, setQuote] = useState<SwapQuote | null>(null);
   const [providerQuotes, setProviderQuotes] = useState<SwapQuote[]>([]);
   const [providerOpen, setProviderOpen] = useState(false);
