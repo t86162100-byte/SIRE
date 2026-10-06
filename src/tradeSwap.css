@@ -249,3 +249,64 @@
 .sire-buy-balance-button{margin-top:18px;width:100%}
 .sire-insufficient-sheet>.sire-wallet-secondary{width:100%;margin-top:7px}
 @media(min-width:621px){.sire-insufficient-backdrop{align-items:center}.sire-insufficient-sheet{border-radius:20px}}
+
+
+/* Dedicated Swap → Limit interface. Market-mode controls stay untouched. */
+.sire-limit-mode .sire-swap-token-box{display:none}
+.sire-limit-mode .sire-swap-route,
+.sire-limit-mode .sire-slippage,
+.sire-limit-mode .sire-swap-details,
+.sire-limit-mode .sire-swap-recipient,
+.sire-limit-mode .sire-test-swap-button,
+.sire-limit-mode .sire-swap-safety,
+.sire-limit-mode .sire-history-trigger{display:none}
+.sire-limit-mode .sire-limit-panel{border-top:0;margin-top:0;padding-top:0}
+.sire-limit-interface{display:flex;flex-direction:column;gap:10px}
+.sire-limit-head{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;padding:4px 1px 2px}
+.sire-limit-head>div:first-child{display:flex;flex-direction:column;gap:4px}
+.sire-limit-head span{font-size:9px;letter-spacing:.12em;color:rgba(255,255,255,.36);font-weight:800}
+.sire-limit-head strong{font-size:20px;letter-spacing:-.02em}
+.sire-limit-head small{font-size:9px;color:rgba(255,255,255,.34)}
+.sire-limit-live-price{text-align:right;display:flex;flex-direction:column;gap:4px}
+.sire-limit-live-price span{font-size:8px;letter-spacing:.08em}
+.sire-limit-live-price b{font-size:12px;font-variant-numeric:tabular-nums}
+.sire-limit-side-toggle{display:grid;grid-template-columns:1fr 1fr;padding:3px;border:1px solid rgba(255,255,255,.09);border-radius:10px;background:#090909;gap:3px}
+.sire-limit-side-toggle button{height:38px;border:0;border-radius:8px;background:transparent;color:rgba(255,255,255,.46);font-size:11px;font-weight:900}
+.sire-limit-side-toggle button.active{background:#fff;color:#050505}
+.sire-limit-side-toggle button.active.buy{box-shadow:inset 0 -2px 0 rgba(85,214,155,.85)}
+.sire-limit-side-toggle button.active.sell{box-shadow:inset 0 -2px 0 rgba(255,100,112,.85)}
+.sire-limit-token-card,.sire-limit-price-card{border:1px solid rgba(255,255,255,.09);border-radius:13px;background:#0a0a0a;padding:13px}
+.sire-limit-token-label,.sire-limit-input-head{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:9px}
+.sire-limit-token-label span,.sire-limit-input-head label{font-size:9px;color:rgba(255,255,255,.42)}
+.sire-limit-token-label span:last-child,.sire-limit-input-head span{font-size:8px;color:rgba(255,255,255,.25)}
+.sire-limit-token-select{width:100%;height:46px;border:1px solid rgba(255,255,255,.10);border-radius:11px;background:#111;color:#fff;display:flex;align-items:center;gap:8px;padding:0 10px;text-align:left}
+.sire-limit-token-select span{display:flex;flex-direction:column;gap:3px;min-width:0}
+.sire-limit-token-select b{font-size:12px}
+.sire-limit-token-select small{font-size:8px;color:rgba(255,255,255,.34)}
+.sire-limit-token-select svg{margin-left:auto;color:rgba(255,255,255,.45)}
+.sire-limit-price-row,.sire-limit-amount-row{display:flex;align-items:center;gap:8px;border:1px solid rgba(255,255,255,.10);border-radius:11px;background:#050505;padding:0 11px}
+.sire-limit-price-row input,.sire-limit-amount-row input{min-width:0;flex:1;height:48px;background:transparent;border:0;outline:0;color:#fff;font-size:22px;font-weight:800;font-variant-numeric:tabular-nums}
+.sire-limit-amount-row input{font-size:20px}
+.sire-limit-price-row button{border:1px solid rgba(255,255,255,.1);background:#111;color:#fff;border-radius:7px;padding:7px 8px;font-size:8px;font-weight:800}
+.sire-limit-price-shortcuts{display:flex;gap:6px;margin-top:7px}
+.sire-limit-price-shortcuts button{flex:1;height:28px;border:1px solid rgba(255,255,255,.07);border-radius:7px;background:#0d0d0d;color:rgba(255,255,255,.58);font-size:8px;font-weight:800}
+.sire-limit-price-shortcuts button:disabled{opacity:.28}
+.sire-limit-amount-row>span{font-size:11px;font-weight:800;color:rgba(255,255,255,.58)}
+.sire-limit-balance-bar{display:grid;grid-template-columns:repeat(4,1fr);gap:5px;margin-top:8px}
+.sire-limit-balance-bar button{height:25px;border:1px solid rgba(255,255,255,.07);border-radius:6px;background:#0d0d0d;color:rgba(255,255,255,.45);font-size:8px;font-weight:800}
+.sire-limit-receive-card{display:flex;flex-direction:column;gap:9px;padding:2px 2px 4px}
+.sire-limit-receive-card div{display:flex;justify-content:space-between;gap:14px;font-size:9px}
+.sire-limit-receive-card span{color:rgba(255,255,255,.38)}
+.sire-limit-receive-card b{text-align:right;color:#fff;font-weight:700}
+.sire-limit-expiry{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 0;border-top:1px solid rgba(255,255,255,.07)}
+.sire-limit-expiry label{font-size:9px;color:rgba(255,255,255,.42)}
+.sire-limit-expiry select{height:34px;border:1px solid rgba(255,255,255,.1);border-radius:8px;background:#090909;color:#fff;padding:0 9px;font-size:9px;outline:0}
+.sire-limit-submit{margin-top:2px}
+.sire-limit-submit.buy{background:#f4f4f4}
+.sire-limit-submit.sell{background:#f4f4f4}
+.sire-limit-empty{padding:18px 4px;text-align:center;color:rgba(255,255,255,.28);font-size:9px}
+@media(max-width:620px){
+  .sire-limit-head strong{font-size:18px}
+  .sire-limit-price-row input,.sire-limit-amount-row input{font-size:19px}
+}
+
