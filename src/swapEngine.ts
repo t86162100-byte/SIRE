@@ -300,7 +300,11 @@ export async function fetchNetworkTokens(network: SwapNetwork, query=''): Promis
       native:isNativeTokenAddress(String(t.address || '')) ||
         String(t.coinKey||'').toUpperCase()===network.nativeSymbol.toUpperCase(),
     })).filter((t:SwapToken)=>t.symbol && t.address && t.chainId === network.chainId);
-    const merged = [native, ...normalized].filter((t,i,a)=>a.findIndex(x=>x.address.toLowerCase()===t.address.toLowerCase())===i);
+    const catalogueNative = normalized.find(token => token.native && token.address.toLowerCase() === NATIVE_ETH.toLowerCase());
+    const nativeWithPrice: SwapToken = catalogueNative
+      ? { ...native, logoURI: catalogueNative.logoURI || native.logoURI, priceUSD: catalogueNative.priceUSD }
+      : native;
+    const merged = [nativeWithPrice, ...normalized.filter(token => token.address.toLowerCase() !== NATIVE_ETH.toLowerCase())];
     const q=query.trim().toLowerCase();
     return (q ? merged.filter(t=>t.symbol.toLowerCase().includes(q)||t.name.toLowerCase().includes(q)||t.address.toLowerCase()===q) : merged).slice(0,2000);
   } catch (error) {
