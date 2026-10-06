@@ -1,4 +1,4 @@
-import pg from 'pg';
+import pg from 'pg';\nimport { randomUUID } from 'node:crypto';
 
 const { Pool } = pg;
 const pool = process.env.DATABASE_URL
@@ -70,7 +70,7 @@ export async function saveLimitOrder(input: any) {
   await db.query(
     `INSERT INTO ${TABLE}
       (id, order_hash, maker, chain_id, status, expiry, record, next_check_at, updated_at)
-     VALUES (gen_random_uuid(), $1, lower($2), $3, $4, $5, $6::jsonb, now(), now())
+     VALUES ($1, lower($2), $3, $4, $5, $6::jsonb, now(), now())
      ON CONFLICT (order_hash) DO UPDATE SET
        maker = EXCLUDED.maker,
        chain_id = EXCLUDED.chain_id,
@@ -79,7 +79,7 @@ export async function saveLimitOrder(input: any) {
        record = EXCLUDED.record,
        next_check_at = CASE WHEN ${TABLE}.status = 'Canceled' THEN ${TABLE}.next_check_at ELSE now() END,
        updated_at = now()`,
-    [record.orderHash, record.maker, record.chainId, record.status, Math.floor(record.expiry), JSON.stringify(record)]
+    [crypto.randomUUID(), record.orderHash, record.maker, record.chainId, record.status, Math.floor(record.expiry), JSON.stringify(record)]
   );
   return record;
 }
