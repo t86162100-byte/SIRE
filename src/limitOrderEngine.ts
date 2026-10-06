@@ -129,37 +129,3 @@ export async function getZeroXLimitQuote(order: any, taker: string): Promise<any
   if (!response.ok || data?.ok === false) throw new Error(String(data?.error || '0x quote unavailable.'));
   return data.quote;
 }
-
-export async function executeZeroXLimitQuote(quote: any, network: SwapNetwork, owner: string, onStatus?: (s: string) => void): Promise<string> {
-  if (!quote?.transaction?.to || !quote?.transaction?.data) throw new Error('0x returned no executable transaction.');
-  const spender = quote?.issues?.allowance?.spender || quote?.allowanceTarget || '';
-  const sellToken = String(quote?.sellToken || '');
-  const sellAmount = String(quote?.sellAmount || '');
-  if (spender && sellToken && sellAmount && spender.toLowerCase() !== ZERO_ADDRESS) {
-    const token = {
-      address: sellToken,
-      decimals: Number(quote?.sellTokenDecimals || 18),
-      chainId: Number(network.chainId),
-      symbol: '',
-      name: '',
-    } as SwapToken;
-    const signer = getNativeSigner(network);
-    const erc20 = new Interface(['function allowance(address,address) view returns (uint256)', 'function approve(address,uint256) returns (bool)']);
-    const provider = signer.provider;
-    const allowance = await provider.call({ to: token.address, data: erc20.encodeFunctionData('allowance', [owner, spender]) });
-    const current = BigInt(allowance);
-    if (current < BigInt(sellAmount)) {
-      onStatus?.('Approving 0x AllowanceHolder');
-      const tx = await signer.sendTransaction({ to: token.address, data: erc20.encodeFunctionData('approve', [spender, BigInt(sellAmount)]), value: 0n });
-      await tx.wait();
-    }
-  }
-  onStatus?.('Executing 0x limit swap');
-  const tx = await getNativeSigner(network).sendTransaction({
-    to: quote.transaction.to,
-    data: quote.transaction.data,
-    value: BigInt(quote.transaction.value || '0'),
-    gasLimit: quote.transaction.gas ? BigInt(quote.transaction.gas) : undefined,
-  });
-  return String(tx.hash);
-}
