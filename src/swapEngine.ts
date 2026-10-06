@@ -340,7 +340,7 @@ export async function getSwapQuote(args:{
   url.searchParams.set('integrator','sire');
   // Keep the interactive quote responsive. We validate the executable transaction
   // separately in Test Mode; LI.FI documents skipSimulation as the faster quote path.
-  url.searchParams.set('skipSimulation','false');
+  url.searchParams.set('skipSimulation','true');
   url.searchParams.set('maxPriceImpact','0.15');
   const controller = new AbortController();
   const timeout = window.setTimeout(() => controller.abort(), 12_000);
