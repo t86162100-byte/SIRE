@@ -280,6 +280,8 @@
 .sire-limit-token-pill b{font-size:12px;font-weight:800;color:#071014}
 .sire-limit-token-pill small{margin-top:3px;font-size:8px;color:rgba(7,16,20,.55)}
 .sire-limit-token-pill svg{margin-left:1px;color:#071014}
+.sire-limit-payment-card{display:flex;align-items:center}
+.sire-limit-payment-pill{cursor:default}
 @media(max-width:620px){.sire-limit-pair-pill{width:100%;box-sizing:border-box}.sire-limit-pair-network{display:none}}
 
 
