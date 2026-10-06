@@ -541,13 +541,38 @@ export default function TradeView({ referencePrice = 0 }: Props) {
   const canExecute = Boolean(nativeUnlocked && nativeWallet && recipientValid && quote?.transactionRequest && !busy && EVM_SWAP_NETWORKS.some(item => item.name === network) && EVM_SWAP_NETWORKS.some(item => item.name === toNetwork));
 
   useEffect(() => {
-    if (tradeMode !== 'Limit' || !wallet || !nativeUnlocked || !network || network !== toNetwork || limitMaker.native || limitTaker.native || limitMaker.chainId !== limitTaker.chainId || tokenIdentity(limitMaker) === tokenIdentity(limitTaker)) {
+    if (
+      tradeMode !== 'Limit' ||
+      !network ||
+      network !== toNetwork ||
+      limitMaker.native ||
+      limitTaker.native ||
+      limitMaker.chainId !== limitTaker.chainId ||
+      tokenIdentity(limitMaker) === tokenIdentity(limitTaker)
+    ) {
       setLimitMarketPrice('');
       setLimitMarketLoading(false);
       return;
     }
+
     let cancelled = false;
-    const load = async () => {
+
+    // Show a real market price immediately from the live token USD prices
+    // already attached to the selected network catalogue, so the limit-price
+    // field is not blank while the wallet is locked.
+    const makerUSD = Number(limitMaker.priceUSD);
+    const takerUSD = Number(limitTaker.priceUSD);
+    if (Number.isFinite(makerUSD) && makerUSD > 0 && Number.isFinite(takerUSD) && takerUSD > 0) {
+      const derived = makerUSD / takerUSD;
+      if (Number.isFinite(derived) && derived > 0) setLimitMarketPrice(String(derived));
+    } else {
+      setLimitMarketPrice('');
+    }
+
+    // Once the SIRE wallet is unlocked, prefer an executable route price.
+    // This is the price the selected liquidity can actually trade against.
+    const loadExecutablePrice = async () => {
+      if (!wallet || !nativeUnlocked) return;
       setLimitMarketLoading(true);
       try {
         const live = await getSwapQuote({
@@ -562,13 +587,15 @@ export default function TradeView({ referencePrice = 0 }: Props) {
         const price = formatUnits(live.toAmount, limitTaker.decimals, 18);
         if (!cancelled && Number(price) > 0) setLimitMarketPrice(price);
       } catch {
-        if (!cancelled) setLimitMarketPrice('');
+        // Keep the live catalogue-derived price visible if the executable
+        // quote provider is temporarily unavailable.
       } finally {
         if (!cancelled) setLimitMarketLoading(false);
       }
     };
-    void load();
-    const timer = window.setInterval(() => void load(), 20000);
+
+    void loadExecutablePrice();
+    const timer = window.setInterval(() => void loadExecutablePrice(), 10000);
     return () => { cancelled = true; window.clearInterval(timer); };
   }, [tradeMode, wallet, nativeUnlocked, network, toNetwork, limitSide, limitMaker, limitTaker]);
 
@@ -1041,7 +1068,7 @@ export default function TradeView({ referencePrice = 0 }: Props) {
                   <button
                     key={percent}
                     type="button"
-                    onClick={() => setAmount(String((Number(fromBalance) * percent) / 100))}
+                    onClick={() => setAmount(String((Number(formatUnits(fromBalance, from.decimals, 18)) * percent) / 100))}
                   >{percent}%</button>
                 ))}
               </div>
