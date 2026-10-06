@@ -994,11 +994,17 @@ export default function TradeView({ referencePrice = 0 }: Props) {
                 ))}
               </div>
 
-              <div className="sire-limit-token-card sire-limit-payment-card">
-                <div className="sire-limit-token-pill sire-limit-payment-pill" aria-label={'Payment ' + (from.symbol || 'token')}>
+              <div className={'sire-limit-token-card sire-limit-payment-card ' + (limitSide === 'Buy' ? 'buy' : 'sell')}>
+                <button
+                  type="button"
+                  className="sire-limit-token-pill sire-limit-payment-pill"
+                  aria-label={'Payment ' + (from.symbol || 'token')}
+                  onClick={() => setTokenPicker('from')}
+                >
                   <LogoMark src={from.logoURI} fallback={from.symbol.slice(0,1) || 'T'} className="sire-token-mark large" />
                   <span><b>{from.symbol || 'Select token'}</b><small>{from.name || ''}</small></span>
-                </div>
+                  <ChevronDown size={15}/>
+                </button>
               </div>
 
               <div className="sire-limit-receive-card">
