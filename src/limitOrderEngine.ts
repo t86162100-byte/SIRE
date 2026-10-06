@@ -1,13 +1,12 @@
-import { TypedDataEncoder } from 'ethers';
-import { approveIfNeeded, getInjectedProvider, type SwapNetwork, type SwapToken } from './swapEngine';
-import { getNativeSigner } from './sireWalletCore';
+import { TypedDataEncoder, Interface } from 'ethers';
+import { getNativeSigner, type SwapNetwork } from './sireWalletCore';
+import type { SwapToken } from './swapEngine';
 
-export type LimitOrderPayload = { chainId: number; orderHash: string; signature: string; data: Record<string, any> };
+export type LimitOrderPayload = { chainId: number; orderHash: string; signature?: string; data: Record<string, any> };
 
 const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000';
-const ZERO_POOL = '0x0000000000000000000000000000000000000000000000000000000000000000';
-const ZERO_EX_EXCHANGE_PROXY = '0xdef1c0ded9bec7f1a1670819833240f027b25eff';
-const ZEROX_LIMIT_ORDERBOOK_CHAINS = new Set([1, 56, 137, 8453, 42161, 43114]);
+const ZERO_POOL = '0x' + '0'.repeat(64);
+const SUPPORTED_CHAINS = new Set([1, 56, 137, 8453, 42161, 43114]);
 
 const LIMIT_ORDER_TYPES = {
   LimitOrder: [
@@ -27,9 +26,7 @@ const LIMIT_ORDER_TYPES = {
 };
 
 function assertSupportedChain(chainId: number) {
-  if (!ZEROX_LIMIT_ORDERBOOK_CHAINS.has(Number(chainId))) {
-    throw new Error('0x Limit Orders are not enabled for this network yet. Use Swap on this network or select a supported 0x Limit Order network.');
-  }
+  if (!SUPPORTED_CHAINS.has(Number(chainId))) throw new Error('0x Limit monitoring is not enabled for this network.');
 }
 
 function parseDecimal(value: string, decimals: number): bigint {
@@ -56,79 +53,113 @@ function jsonSafe(value: any): any {
   return value;
 }
 
+/**
+ * Current 0x architecture used by SIRE:
+ * the public 0x API is Swap API v2, not the legacy /orderbook/v1 REST API.
+ * SIRE therefore treats a Limit order as a conditional 0x Swap intent and
+ * only requests a firm quote when its target price is reached.
+ */
 export async function buildLimitOrder(args: { maker: string; makerAsset: SwapToken; takerAsset: SwapToken; makingAmount: string; takingAmount: string; expirationSeconds: number }) {
   if (!args.makerAsset?.address || !args.takerAsset?.address) throw new Error('Select both limit-order assets.');
-  if (args.makerAsset.native || args.takerAsset.native) throw new Error('Limit orders currently require ERC-20 or wrapped assets. Select the token contract rather than the native coin.');
+  if (args.makerAsset.native || args.takerAsset.native) throw new Error('Limit orders currently require ERC-20 or wrapped assets.');
   if (args.makerAsset.chainId !== args.takerAsset.chainId) throw new Error('Limit orders are single-chain. Use Swap for cross-chain execution.');
   assertSupportedChain(args.makerAsset.chainId);
-  const expiration = Math.floor(Date.now() / 1000) + Math.max(60, Math.floor(args.expirationSeconds));
+  const expiry = Math.floor(Date.now() / 1000) + Math.max(60, Math.floor(args.expirationSeconds));
   const order = {
-    makerToken: args.makerAsset.address, takerToken: args.takerAsset.address,
-    makerAmount: String(args.makingAmount), takerAmount: String(args.takingAmount),
-    takerTokenFeeAmount: '0', maker: args.maker, taker: ZERO_ADDRESS, sender: ZERO_ADDRESS,
-    feeRecipient: ZERO_ADDRESS, pool: ZERO_POOL, expiry: String(expiration),
+    makerToken: args.makerAsset.address,
+    takerToken: args.takerAsset.address,
+    makerAmount: String(args.makingAmount),
+    takerAmount: String(args.takingAmount),
+    takerTokenFeeAmount: '0',
+    maker: args.maker,
+    taker: ZERO_ADDRESS,
+    sender: ZERO_ADDRESS,
+    feeRecipient: ZERO_ADDRESS,
+    pool: ZERO_POOL,
+    expiry: String(expiry),
     salt: String(BigInt(Date.now()) * 1000n + BigInt(Math.floor(Math.random() * 1000))),
-    chainId: Number(args.makerAsset.chainId), verifyingContract: ZERO_EX_EXCHANGE_PROXY,
   };
-  const domain = { name: 'ZeroEx', version: '1.0.0', chainId: order.chainId, verifyingContract: ZERO_EX_EXCHANGE_PROXY };
-  const typedData = { domain, types: LIMIT_ORDER_TYPES, primaryType: 'LimitOrder', message: order };
+  const domain = { name: 'SIRE Conditional Limit', version: '1', chainId: Number(args.makerAsset.chainId), verifyingContract: ZERO_ADDRESS };
   const orderHash = TypedDataEncoder.hash(domain, LIMIT_ORDER_TYPES, order);
-  return { typedData: jsonSafe(typedData), orderData: jsonSafe(order), orderHash, makerTraits: '0', approvalAddress: ZERO_EX_EXCHANGE_PROXY };
+  return { typedData: jsonSafe({ domain, types: LIMIT_ORDER_TYPES, primaryType: 'LimitOrder', message: order }), orderData: jsonSafe({ ...order, chainId: Number(args.makerAsset.chainId) }), orderHash };
 }
 
-export async function signLimitOrder(typedData: any, maker: string, native: boolean, network: SwapNetwork): Promise<string> {
-  if (native) {
-    const signer = getNativeSigner(network);
-    return signer.signTypedData(typedData.domain, typedData.types, typedData.message);
-  }
-  const provider = getInjectedProvider();
-  if (!provider) throw new Error('No external wallet provider detected.');
-  return String(await provider.request({ method: 'eth_signTypedData_v4', params: [maker, JSON.stringify(typedData)] }));
+export async function signLimitOrder(_typedData: any, _maker: string, _native: boolean, _network: SwapNetwork): Promise<string> {
+  return '';
 }
 
 export async function submitLimitOrder(payload: LimitOrderPayload): Promise<any> {
-  const response = await fetch('/api/sire/limit-orders/submit', { method: 'POST', headers: { 'content-type': 'application/json', accept: 'application/json' }, body: JSON.stringify(payload) });
+  const response = await fetch('/api/sire/limit-orders/submit', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', accept: 'application/json' },
+    body: JSON.stringify(payload),
+  });
   const data = await response.json().catch(() => ({}));
-  if (!response.ok || data?.ok === false) throw new Error(String(data?.error || 'Limit order submission failed.'));
+  if (!response.ok || data?.ok === false) throw new Error(String(data?.error || 'Limit order could not be armed.'));
   return data;
 }
 
-export async function fetchLimitOrders(chainId: number, maker: string): Promise<any[]> {
-  assertSupportedChain(chainId);
-  const response = await fetch('/api/sire/limit-orders/maker/' + chainId + '/' + encodeURIComponent(maker), { cache: 'no-store' });
+export async function fetchLimitOrders(_chainId: number, _maker: string): Promise<any[]> {
+  try {
+    const raw = window.localStorage.getItem('sire.limit.orders.v1');
+    const parsed = raw ? JSON.parse(raw) : [];
+    return Array.isArray(parsed) ? parsed.slice(0, 50) : [];
+  } catch {
+    return [];
+  }
+}
+
+export async function fetchLimitOrder(_chainId: number, _orderHash: string): Promise<any> {
+  return null;
+}
+
+export async function getZeroXLimitQuote(order: any, taker: string): Promise<any> {
+  const response = await fetch('/api/sire/limit-orders/quote', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', accept: 'application/json' },
+    body: JSON.stringify({
+      chainId: Number(order.chainId),
+      sellToken: order.takerToken,
+      buyToken: order.makerToken,
+      sellAmount: String(order.takerAmount),
+      taker,
+    }),
+  });
   const data = await response.json().catch(() => ({}));
-  if (!response.ok || data?.ok === false) throw new Error(String(data?.error || 'Unable to load limit orders.'));
-  return Array.isArray(data?.orders) ? data.orders : [];
+  if (!response.ok || data?.ok === false) throw new Error(String(data?.error || '0x quote unavailable.'));
+  return data.quote;
 }
 
-export async function fetchLimitOrder(chainId: number, orderHash: string): Promise<any> {
-  assertSupportedChain(chainId);
-  const response = await fetch('/api/sire/limit-orders/' + chainId + '/' + encodeURIComponent(orderHash), { cache: 'no-store' });
-  const data = await response.json().catch(() => ({}));
-  if (!response.ok || data?.ok === false) throw new Error(String(data?.error || 'Unable to load limit order status.'));
-  return data.order;
-}
-
-export async function cancelLimitOrder(args: { network: SwapNetwork; owner: string; order: Record<string, any>; native: boolean }) {
-  assertSupportedChain(args.network.chainId);
-  const { Interface } = await import('ethers');
-  const iface = new Interface(['function cancelLimitOrder((address makerToken,address takerToken,uint128 makerAmount,uint128 takerAmount,uint128 takerTokenFeeAmount,address maker,address taker,address sender,address feeRecipient,bytes32 pool,uint64 expiry,uint256 salt) order)']);
-  const order = {
-    makerToken: args.order.makerToken, takerToken: args.order.takerToken,
-    makerAmount: BigInt(args.order.makerAmount), takerAmount: BigInt(args.order.takerAmount),
-    takerTokenFeeAmount: BigInt(args.order.takerTokenFeeAmount || 0), maker: args.order.maker,
-    taker: args.order.taker || ZERO_ADDRESS, sender: args.order.sender || ZERO_ADDRESS,
-    feeRecipient: args.order.feeRecipient || ZERO_ADDRESS, pool: args.order.pool || ZERO_POOL,
-    expiry: BigInt(args.order.expiry), salt: BigInt(args.order.salt),
-  };
-  const data = iface.encodeFunctionData('cancelLimitOrder', [order]);
-  const tx = { to: ZERO_EX_EXCHANGE_PROXY, data, value: 0n, gasLimit: 180000n };
-  if (args.native) return String((await getNativeSigner(args.network).sendTransaction(tx)).hash);
-  const provider = getInjectedProvider();
-  if (!provider) throw new Error('No external wallet provider detected.');
-  return String(await provider.request({ method: 'eth_sendTransaction', params: [{ from: args.owner, to: ZERO_EX_EXCHANGE_PROXY, data, value: '0x0', gas: '0x2bf20' }] }));
-}
-
-export async function approveLimitOrderIfNeeded(token: SwapToken, owner: string, amount: string, spender: string, onStatus?: (s: string) => void) {
-  await approveIfNeeded(token, owner, spender, amount, onStatus);
+export async function executeZeroXLimitQuote(quote: any, network: SwapNetwork, owner: string, onStatus?: (s: string) => void): Promise<string> {
+  if (!quote?.transaction?.to || !quote?.transaction?.data) throw new Error('0x returned no executable transaction.');
+  const spender = quote?.issues?.allowance?.spender || quote?.allowanceTarget || '';
+  const sellToken = String(quote?.sellToken || '');
+  const sellAmount = String(quote?.sellAmount || '');
+  if (spender && sellToken && sellAmount && spender.toLowerCase() !== ZERO_ADDRESS) {
+    const token = {
+      address: sellToken,
+      decimals: Number(quote?.sellTokenDecimals || 18),
+      chainId: Number(network.chainId),
+      symbol: '',
+      name: '',
+    } as SwapToken;
+    const signer = getNativeSigner(network);
+    const erc20 = new Interface(['function allowance(address,address) view returns (uint256)', 'function approve(address,uint256) returns (bool)']);
+    const provider = signer.provider;
+    const allowance = await provider.call({ to: token.address, data: erc20.encodeFunctionData('allowance', [owner, spender]) });
+    const current = BigInt(allowance);
+    if (current < BigInt(sellAmount)) {
+      onStatus?.('Approving 0x AllowanceHolder');
+      const tx = await signer.sendTransaction({ to: token.address, data: erc20.encodeFunctionData('approve', [spender, BigInt(sellAmount)]), value: 0n });
+      await tx.wait();
+    }
+  }
+  onStatus?.('Executing 0x limit swap');
+  const tx = await getNativeSigner(network).sendTransaction({
+    to: quote.transaction.to,
+    data: quote.transaction.data,
+    value: BigInt(quote.transaction.value || '0'),
+    gasLimit: quote.transaction.gas ? BigInt(quote.transaction.gas) : undefined,
+  });
+  return String(tx.hash);
 }
