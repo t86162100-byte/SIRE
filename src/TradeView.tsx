@@ -397,8 +397,7 @@ export default function TradeView({ referencePrice = 0 }: Props) {
             .filter((item): item is PromiseRejectedResult => item.status === 'rejected')
             .map(item => item.reason);
           const classified = failures.filter((reason): reason is SwapQuoteUnavailableError => reason instanceof SwapQuoteUnavailableError);
-          const priority: SwapQuoteUnavailableError['reason'][] = [            'INSUFFICIENT_FUNDS',            'AMOUNT_UNSUPPORTED',
-            'INSUFFICIENT_LIQUIDITY',
+          const priority: SwapQuoteUnavailableError['reason'][] = [            'INSUFFICIENT_FUNDS',            'AMOUNT_UNSUPPORTED',            'INSUFFICIENT_LIQUIDITY',
             'TOOL_UNAVAILABLE',
             'PRICE_IMPACT_TOO_HIGH',
             'WALLET_RESTRICTION',
@@ -797,8 +796,7 @@ export default function TradeView({ referencePrice = 0 }: Props) {
         executableQuote = await getSwapQuote({ fromToken: from, toToken: to, amount, wallet, toAddress: effectiveRecipient, slippage, order: routeOrder });
         setQuote(executableQuote);      }
       if (!executableQuote.transactionRequest?.to) throw new Error('The provider returned a non-executable quote.');      if (executableQuote.expiresAt && Date.now() >= executableQuote.expiresAt) throw new Error('This quote expired before execution. Please request a new quote.');
-      const result = await executeSwap(executableQuote, wallet, setStatus);
-      setTxHash(result.hash);
+      const result = await executeSwap(executableQuote, wallet, setStatus);      setTxHash(result.hash);
       recordSwap(result.hash, executableQuote);
       if (isCrossChain) {
         setStatus('Cross-chain source transaction confirmed · destination processing');
@@ -1033,7 +1031,7 @@ export default function TradeView({ referencePrice = 0 }: Props) {
                 </button>
               </div>
 
-              <div className="sire-limit-price-options sire-limit-payment-percentages aria-label="Payment amount percentage">
+              <div className="sire-limit-price-options sire-limit-payment-percentages" aria-label="Payment amount percentage">
                 {[25, 50, 75, 100].map(percent => (
                   <button
                     key={percent}
@@ -1197,8 +1195,7 @@ export default function TradeView({ referencePrice = 0 }: Props) {
                   <span>{usd > 0 ? '$' + money(usd, 2) : '—'}</span>
                 </div>
                 <div className="sire-provider-metrics">
-                  <span><b>{candidate.executionDuration ? '~' + Math.max(1, Math.round(candidate.executionDuration)) + 's' : '—'}</b><small>Est. time</small></span>
-                  <span><b>{candidate.gasUSD ? '$' + Number(candidate.gasUSD).toFixed(4) : '—'}</b><small>Gas fee</small></span>
+                  <span><b>{candidate.executionDuration ? '~' + Math.max(1, Math.round(candidate.executionDuration)) + 's' : '—'}</b><small>Est. time</small></span>                  <span><b>{candidate.gasUSD ? '$' + Number(candidate.gasUSD).toFixed(4) : '—'}</b><small>Gas fee</small></span>
                   <span><b>{candidate.priceImpact != null ? (candidate.priceImpact * 100).toFixed(2) + '%' : '—'}</b><small>Price impact</small></span>
                 </div>
                 <div className="sire-provider-route-line">
