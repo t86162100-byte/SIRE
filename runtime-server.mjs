@@ -13,7 +13,8 @@ import { getStoredHistory, persistHistoryBars, historyStoreStatus } from './back
 import { signup, login, logout, currentUser, googleStart, googleCallback } from './backend/auth.ts';
 import { runSireDiagnostics } from './backend/sire-diagnostics.ts';
 import { runAutonomousCycle } from './autonomous/sire-autonomous-cycle.ts';
-import { recordIssue, getRecentIssues } from './backend/sire-issue-tracker.ts';\nimport { saveLimitOrder, listLimitOrders, cancelLimitOrder, runLimitOrderMonitorBatch, limitOrderStoreStatus } from './backend/limit-order-store.ts';
+import { recordIssue, getRecentIssues } from './backend/sire-issue-tracker.ts';
+import { saveLimitOrder, listLimitOrders, cancelLimitOrder, runLimitOrderMonitorBatch, limitOrderStoreStatus } from './backend/limit-order-store.ts';
 import { fetchBinanceCatalogServer, fetchBinanceMarketSnapshotServer, fetchBinanceHistoryServer } from './backend/binance-catalog.ts';
 
 const PORT = Number(process.env.PORT || 10000);
