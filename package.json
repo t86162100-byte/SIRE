@@ -28,7 +28,7 @@
     "@reown/appkit-adapter-ethers": "^1.8.4",
     "ethers": "^6.15.0",
     "@solana/web3.js": "^1.98.4",
-    "tronweb": "^6.5.1",
+    "tronweb": "^6.5.1"
   },
   "optionalDependencies": {
     "@rollup/rollup-linux-x64-gnu": "^4.0.0"
