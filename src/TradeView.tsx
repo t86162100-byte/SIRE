@@ -1005,6 +1005,23 @@ export default function TradeView({ referencePrice = 0 }: Props) {
                   <span><b>{from.symbol || 'Select token'}</b><small>{from.name || ''}</small></span>
                   <ChevronDown size={15}/>
                 </button>
+              <div className={'sire-limit-token-card sire-limit-payment-card ' + (limitSide === 'Buy' ? 'buy' : 'sell')}>
+                <button
+                  type="button"
+                  className="sire-limit-token-pill sire-limit-payment-pill"
+                  aria-label={'Payment ' + (from.symbol || 'token')}
+                  onClick={() => setTokenPicker('from')}
+                >
+                  <LogoMark src={from.logoURI} fallback={from.symbol.slice(0,1) || 'T'} className="sire-token-mark large" />
+                  <span><b>{from.symbol || 'Select token'}</b><small>{from.name || ''}</small></span>
+                  <ChevronDown size={15}/>
+                </button>
+              
+                <div className="sire-limit-payment-summary">
+                  <strong>{amount || '0'} {from.symbol || ''}</strong>
+                  <small>{from.priceUSD && Number.isFinite(Number(amount)) ? '$' + money(Number(amount) * from.priceUSD, 2) : '—'}</small>
+                  <div><span>Receive</span><b>{limitTargetAmount ? limitTargetAmount + ' ' + limitTaker.symbol : '—'}</b></div>
+                </div>
               </div>
               <div className="sire-limit-price-options sire-limit-payment-percentages" aria-label="Payment amount percentage">
                 {[25, 50, 75, 100].map(percent => (
