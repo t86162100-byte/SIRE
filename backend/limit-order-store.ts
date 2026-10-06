@@ -1,4 +1,5 @@
-import pg from 'pg';\nimport { randomUUID } from 'node:crypto';
+import pg from 'pg';
+import { randomUUID } from 'node:crypto';
 
 const { Pool } = pg;
 const pool = process.env.DATABASE_URL
