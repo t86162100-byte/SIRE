@@ -350,12 +350,7 @@ export default function TradeView({ referencePrice = 0 }: Props) {
       if (requestId !== quoteRequestId.current) return;
       setQuoteLoading(true);
       try {
-        // Quote first, even when the wallet cannot currently fund the input.
-        // Balance is checked only when the user confirms, matching the exchange
-        // flow where users can inspect the live price, route, fees and output first.
-
-        // Ask the live routing API for both ranking strategies. These are
-        // executable quotes, not hard-coded provider names.
+        // Quote first: balance is intentionally checked only when Confirm Swap is pressed.
         const orders: SwapRouteOrder[] = routeOrder === 'CHEAPEST'
           ? ['CHEAPEST', 'FASTEST']
           : ['FASTEST', 'CHEAPEST'];
@@ -388,24 +383,14 @@ export default function TradeView({ referencePrice = 0 }: Props) {
             unique.push(candidate);
           }
         }
-
         if (!unique.length) {
           const firstFailure = settled.find((item): item is PromiseRejectedResult => item.status === 'rejected');
-          throw (firstFailure?.reason instanceof Error
-            ? firstFailure.reason
-            : new Error('No executable swap route was returned.'));
+          throw (firstFailure?.reason instanceof Error ? firstFailure.reason : new Error('No executable swap route was returned.'));
         }
-
-        unique.sort((a, b) => {
-          try {
-            const aa = BigInt(a.toAmount || '0');
-            const bb = BigInt(b.toAmount || '0');
-            return bb > aa ? 1 : bb < aa ? -1 : 0;
-          } catch {
-            return 0;
-          }
+        unique.sort((a,b) => {
+          try { return BigInt(b.toAmount || '0') > BigInt(a.toAmount || '0') ? 1 : BigInt(b.toAmount || '0') < BigInt(a.toAmount || '0') ? -1 : 0; }
+          catch { return 0; }
         });
-
         if (!cancelled && requestId === quoteRequestId.current) {
           setProviderQuotes(unique);
           setQuote(unique[0]);
@@ -427,7 +412,7 @@ export default function TradeView({ referencePrice = 0 }: Props) {
       window.clearTimeout(timer);
       if (requestId === quoteRequestId.current) setQuoteLoading(false);
     };
-  }, [wallet, network, toNetwork, tradeMode, from, to, amount, fromBalance, slippage, recipient, routeOrder]);
+  }, [wallet, network, toNetwork, tradeMode, from, to, amount, slippage, recipient, routeOrder]);
 
   const connect = async () => {
     setExecutionError('');
@@ -690,8 +675,8 @@ export default function TradeView({ referencePrice = 0 }: Props) {
   const execute = async () => {
     if (!quote || !wallet || !nativeUnlocked) return;
 
-    // Do not block quote calculation for an unfunded wallet. The final balance
-    // check belongs at Confirm Swap so users can inspect the complete quote first.
+    // Match the exchange UX: let the user inspect a live quote first, then check
+    // funding only when they actually press Confirm Swap.
     try {
       const requestedAmount = BigInt(amountToBaseUnits(amount, from));
       const availableBalance = BigInt(fromBalance || '0');
@@ -706,12 +691,14 @@ export default function TradeView({ referencePrice = 0 }: Props) {
     setExecutionError('');
     setTxHash('');
     try {
-      // Always obtain a fresh executable quote immediately before signing.
-      // The displayed quote is for UI feedback; the signed transaction must be
-      // built from current liquidity, balances, gas and slippage conditions.
-      setStatus('Refreshing executable quote');
-      const executableQuote = await getSwapQuote({ fromToken: from, toToken: to, amount, wallet, toAddress: effectiveRecipient, slippage, order: routeOrder });
-      setQuote(executableQuote);
+      // Execute the route the user selected. Only refresh if that exact quote expired
+      // or is missing its executable transaction.
+      let executableQuote = quote;
+      if (!executableQuote.transactionRequest?.to || (executableQuote.expiresAt && Date.now() >= executableQuote.expiresAt)) {
+        setStatus('Refreshing executable quote');
+        executableQuote = await getSwapQuote({ fromToken: from, toToken: to, amount, wallet, toAddress: effectiveRecipient, slippage, order: routeOrder });
+        setQuote(executableQuote);
+      }
       if (!executableQuote.transactionRequest?.to) throw new Error('The provider returned a non-executable quote.');
       if (executableQuote.expiresAt && Date.now() >= executableQuote.expiresAt) throw new Error('This quote expired before execution. Please request a new quote.');
       const result = await executeSwap(executableQuote, wallet, setStatus);
@@ -881,9 +868,10 @@ export default function TradeView({ referencePrice = 0 }: Props) {
                 <small>{providerQuotes.length ? providerQuotes.length + ' live route' + (providerQuotes.length === 1 ? '' : 's') + ' · Compare' : 'Waiting for live routes'}</small>
               </button>
               {quote && <div className="sire-route-metrics">
-                <span><b>{quote.toolName || quote.tool || 'Aggregator'}</b><small>Selected provider</small></span>
+                <span><b>{quote.toolName || quote.tool || 'Router'}</b><small>Selected provider</small></span>
                 <span><b>{quote.executionDuration ? '~' + Math.max(1, Math.round(quote.executionDuration)) + 's' : '—'}</b><small>Estimated time</small></span>
                 <span><b>{quote.gasUSD ? '
+
             {tradeMode === 'Swap' && <div className="sire-swap-confirm-wrap">
               {!wallet ? (
                 <button type="button" className="sire-review-button sire-connect-button" onClick={() => void connect()}>
@@ -959,54 +947,6 @@ export default function TradeView({ referencePrice = 0 }: Props) {
       </section>
     </div>}
 
-    {walletOnboarding && <div className="sire-modal-backdrop" onMouseDown={closeWalletOnboarding}>
-      <section className="sire-token-modal sire-wallet-onboarding" role="dialog" aria-modal="true" aria-label="Create SIRE Wallet" onMouseDown={e => e.stopPropagation()}>
-        <div className="sire-token-modal-head">
-          <div><b>{walletStep === 'intro' ? 'Create SIRE Wallet' : walletStep === 'backup' ? 'Secure your wallet' : 'Wallet created'}</b><small>Native self-custody wallet · no external wallet required</small></div>
-          {walletStep !== 'confirm' && <button type="button" onClick={closeWalletOnboarding} aria-label="Close wallet setup"><X size={17}/></button>}
-        </div>
-
-        {walletStep === 'intro' && <div className="sire-wallet-onboarding-body">
-          <div className="sire-wallet-hero-icon"><WalletCards size={25}/></div>
-          <h3>Create your SIRE Wallet</h3>
-          <p>Your wallet is created on this device and its recovery phrase is controlled by you. Swap will use this wallet directly instead of asking you to connect an external wallet.</p>
-          <div className="sire-wallet-warning"><LockKeyhole size={15}/><span>Never share your recovery phrase or password. SIRE cannot recover a lost recovery phrase.</span></div>
-          <button type="button" className="sire-review-button" onClick={beginWalletCreation}>Create Wallet</button>
-        </div>}
-
-        {walletStep === 'unlock' && <div className="sire-wallet-onboarding-body">
-          <div className="sire-wallet-hero-icon"><LockKeyhole size={25}/></div>
-          <h3>Unlock SIRE Wallet</h3>
-          <p>Your SIRE Wallet already exists on this device. Enter its password to make it available to Swap.</p>
-          <div className="sire-wallet-form">
-            <label>Wallet password<input type="password" autoFocus autoComplete="current-password" value={walletPassword} onChange={e => setWalletPassword(e.target.value)} placeholder="Enter your password" onKeyDown={e => { if (e.key === 'Enter') void unlockWallet(); }}/></label>
-          </div>
-          {walletCreationError && <div className="sire-swap-error"><CircleAlert size={14}/><span>{walletCreationError}</span></div>}
-          <button type="button" className="sire-review-button" disabled={walletCreating} onClick={() => void unlockWallet()}>{walletCreating ? <><LoaderCircle className="sire-spin" size={15}/> Unlocking…</> : 'Unlock Wallet'}</button>
-        </div>}
-
-        {walletStep === 'backup' && <div className="sire-wallet-onboarding-body">
-          <h3>Back up your recovery phrase</h3>
-          <p>Write these words down offline, in the exact order. This phrase is the recovery key for the wallet.</p>
-          <div className="sire-wallet-mnemonic">{walletMnemonic.split(' ').map((word, index) => <span key={word + index}><i>{index + 1}</i><b>{word}</b></span>)}</div>
-          <div className="sire-wallet-form">
-            <label>Set wallet password<input type="password" autoComplete="new-password" value={walletPassword} onChange={e => setWalletPassword(e.target.value)} placeholder="At least 8 characters"/></label>
-            <label>Confirm password<input type="password" autoComplete="new-password" value={walletPasswordConfirm} onChange={e => setWalletPasswordConfirm(e.target.value)} placeholder="Repeat password"/></label>
-            <label>Confirm recovery phrase<input value={walletConfirmPhrase} onChange={e => setWalletConfirmPhrase(e.target.value)} placeholder="Type all words in order"/></label>
-          </div>
-          {walletCreationError && <div className="sire-swap-error"><CircleAlert size={14}/><span>{walletCreationError}</span></div>}
-          <button type="button" className="sire-review-button" disabled={walletCreating || !walletMnemonic} onClick={() => void finishWalletCreation()}>{walletCreating ? <><LoaderCircle className="sire-spin" size={15}/> Creating wallet…</> : 'Confirm & Create Wallet'}</button>
-          <button type="button" className="sire-wallet-secondary" onClick={closeWalletOnboarding}>Cancel</button>
-        </div>}
-
-        {walletStep === 'confirm' && <div className="sire-wallet-onboarding-body sire-wallet-created">
-          <div className="sire-wallet-success">✓</div>
-          <h3>SIRE Wallet created</h3>
-          <p>Your native wallet is unlocked and ready for Swap.</p>
-          <code>{shortAddress(walletCreatedAddress)}</code>
-        </div>}
-      </section>
-    </div>}
     {providerOpen && <div className="sire-modal-backdrop sire-provider-backdrop" onMouseDown={() => setProviderOpen(false)}>
       <section className="sire-provider-sheet" role="dialog" aria-modal="true" aria-label="Swap providers" onMouseDown={e => e.stopPropagation()}>
         <div className="sire-provider-handle" aria-hidden="true"><span /></div>
@@ -1020,12 +960,9 @@ export default function TradeView({ referencePrice = 0 }: Props) {
             const receive = formatUnits(candidate.toAmount, candidate.toToken.decimals, 8);
             const usd = candidate.toToken.priceUSD ? Number(receive) * Number(candidate.toToken.priceUSD) : 0;
             return (
-              <button
-                type="button"
-                className={'sire-provider-card' + (selected ? ' selected' : '')}
-                key={(candidate.id || '') + ':' + (candidate.toolName || candidate.tool || 'route') + ':' + candidate.toAmount + ':' + (candidate.transactionRequest?.data || '')}
-                onClick={() => { setQuote(candidate); setProviderOpen(false); }}
-              >
+              <button type="button" className={'sire-provider-card' + (selected ? ' selected' : '')}
+                key={(candidate.toolName || candidate.tool || 'route') + ':' + candidate.toAmount + ':' + (candidate.transactionRequest?.data || '')}
+                onClick={() => { setQuote(candidate); setProviderOpen(false); }}>
                 <div className="sire-provider-card-top">
                   <div className="sire-provider-name">
                     <span className="sire-provider-icon">{(candidate.toolName || candidate.tool || 'R').slice(0,1).toUpperCase()}</span>
@@ -1035,7 +972,55 @@ export default function TradeView({ referencePrice = 0 }: Props) {
                 </div>
                 <div className="sire-provider-amount">
                   <b>{receive} {candidate.toToken.symbol}</b>
-                  <span>{usd > 0 ? ' onMouseDown={() => setHistoryOpen(false)}>
+                  <span>{usd > 0 ? ' onMouseDown={closeWalletOnboarding}>
+      <section className="sire-token-modal sire-wallet-onboarding" role="dialog" aria-modal="true" aria-label="Create SIRE Wallet" onMouseDown={e => e.stopPropagation()}>
+        <div className="sire-token-modal-head">
+          <div><b>{walletStep === 'intro' ? 'Create SIRE Wallet' : walletStep === 'backup' ? 'Secure your wallet' : 'Wallet created'}</b><small>Native self-custody wallet · no external wallet required</small></div>
+          {walletStep !== 'confirm' && <button type="button" onClick={closeWalletOnboarding} aria-label="Close wallet setup"><X size={17}/></button>}
+        </div>
+
+        {walletStep === 'intro' && <div className="sire-wallet-onboarding-body">
+          <div className="sire-wallet-hero-icon"><WalletCards size={25}/></div>
+          <h3>Create your SIRE Wallet</h3>
+          <p>Your wallet is created on this device and its recovery phrase is controlled by you. Swap will use this wallet directly instead of asking you to connect an external wallet.</p>
+          <div className="sire-wallet-warning"><LockKeyhole size={15}/><span>Never share your recovery phrase or password. SIRE cannot recover a lost recovery phrase.</span></div>
+          <button type="button" className="sire-review-button" onClick={beginWalletCreation}>Create Wallet</button>
+        </div>}
+
+        {walletStep === 'unlock' && <div className="sire-wallet-onboarding-body">
+          <div className="sire-wallet-hero-icon"><LockKeyhole size={25}/></div>
+          <h3>Unlock SIRE Wallet</h3>
+          <p>Your SIRE Wallet already exists on this device. Enter its password to make it available to Swap.</p>
+          <div className="sire-wallet-form">
+            <label>Wallet password<input type="password" autoFocus autoComplete="current-password" value={walletPassword} onChange={e => setWalletPassword(e.target.value)} placeholder="Enter your password" onKeyDown={e => { if (e.key === 'Enter') void unlockWallet(); }}/></label>
+          </div>
+          {walletCreationError && <div className="sire-swap-error"><CircleAlert size={14}/><span>{walletCreationError}</span></div>}
+          <button type="button" className="sire-review-button" disabled={walletCreating} onClick={() => void unlockWallet()}>{walletCreating ? <><LoaderCircle className="sire-spin" size={15}/> Unlocking…</> : 'Unlock Wallet'}</button>
+        </div>}
+
+        {walletStep === 'backup' && <div className="sire-wallet-onboarding-body">
+          <h3>Back up your recovery phrase</h3>
+          <p>Write these words down offline, in the exact order. This phrase is the recovery key for the wallet.</p>
+          <div className="sire-wallet-mnemonic">{walletMnemonic.split(' ').map((word, index) => <span key={word + index}><i>{index + 1}</i><b>{word}</b></span>)}</div>
+          <div className="sire-wallet-form">
+            <label>Set wallet password<input type="password" autoComplete="new-password" value={walletPassword} onChange={e => setWalletPassword(e.target.value)} placeholder="At least 8 characters"/></label>
+            <label>Confirm password<input type="password" autoComplete="new-password" value={walletPasswordConfirm} onChange={e => setWalletPasswordConfirm(e.target.value)} placeholder="Repeat password"/></label>
+            <label>Confirm recovery phrase<input value={walletConfirmPhrase} onChange={e => setWalletConfirmPhrase(e.target.value)} placeholder="Type all words in order"/></label>
+          </div>
+          {walletCreationError && <div className="sire-swap-error"><CircleAlert size={14}/><span>{walletCreationError}</span></div>}
+          <button type="button" className="sire-review-button" disabled={walletCreating || !walletMnemonic} onClick={() => void finishWalletCreation()}>{walletCreating ? <><LoaderCircle className="sire-spin" size={15}/> Creating wallet…</> : 'Confirm & Create Wallet'}</button>
+          <button type="button" className="sire-wallet-secondary" onClick={closeWalletOnboarding}>Cancel</button>
+        </div>}
+
+        {walletStep === 'confirm' && <div className="sire-wallet-onboarding-body sire-wallet-created">
+          <div className="sire-wallet-success">✓</div>
+          <h3>SIRE Wallet created</h3>
+          <p>Your native wallet is unlocked and ready for Swap.</p>
+          <code>{shortAddress(walletCreatedAddress)}</code>
+        </div>}
+      </section>
+    </div>}
+    {historyOpen && <div className="sire-modal-backdrop sire-token-picker-backdrop" onMouseDown={() => setHistoryOpen(false)}>
       <section className="sire-token-modal sire-swap-history-sheet" role="dialog" aria-modal="true" aria-label="Swap history" onMouseDown={e => e.stopPropagation()}>
         <div className="sire-token-modal-head"><div><b>Swap history</b><small>Recent SIRE Swap executions on this device</small></div><button type="button" onClick={() => setHistoryOpen(false)} aria-label="Close history"><X size={17}/></button></div>
         <div className="sire-swap-history-list">
@@ -1240,11 +1225,59 @@ export default function TradeView({ referencePrice = 0 }: Props) {
 
   </div>;
 }
- + usd.toFixed(2) : 'USD unavailable'}</span>
+ + money(usd, 2) : '—'}</span>
                 </div>
-                <div className="sire-provider-meta">
-                  <span><b>{candidate.executionDuration ? Math.max(1, Math.round(candidate.executionDuration)) + ' secs' : '—'}</b><small>Estimated time</small></span>
-                  <span><b>{candidate.gasUSD ? ' onMouseDown={() => setHistoryOpen(false)}>
+                <div className="sire-provider-metrics">
+                  <span><b>{candidate.executionDuration ? '~' + Math.max(1, Math.round(candidate.executionDuration)) + 's' : '—'}</b><small>Est. time</small></span>
+                  <span><b>{candidate.gasUSD ? ' onMouseDown={closeWalletOnboarding}>
+      <section className="sire-token-modal sire-wallet-onboarding" role="dialog" aria-modal="true" aria-label="Create SIRE Wallet" onMouseDown={e => e.stopPropagation()}>
+        <div className="sire-token-modal-head">
+          <div><b>{walletStep === 'intro' ? 'Create SIRE Wallet' : walletStep === 'backup' ? 'Secure your wallet' : 'Wallet created'}</b><small>Native self-custody wallet · no external wallet required</small></div>
+          {walletStep !== 'confirm' && <button type="button" onClick={closeWalletOnboarding} aria-label="Close wallet setup"><X size={17}/></button>}
+        </div>
+
+        {walletStep === 'intro' && <div className="sire-wallet-onboarding-body">
+          <div className="sire-wallet-hero-icon"><WalletCards size={25}/></div>
+          <h3>Create your SIRE Wallet</h3>
+          <p>Your wallet is created on this device and its recovery phrase is controlled by you. Swap will use this wallet directly instead of asking you to connect an external wallet.</p>
+          <div className="sire-wallet-warning"><LockKeyhole size={15}/><span>Never share your recovery phrase or password. SIRE cannot recover a lost recovery phrase.</span></div>
+          <button type="button" className="sire-review-button" onClick={beginWalletCreation}>Create Wallet</button>
+        </div>}
+
+        {walletStep === 'unlock' && <div className="sire-wallet-onboarding-body">
+          <div className="sire-wallet-hero-icon"><LockKeyhole size={25}/></div>
+          <h3>Unlock SIRE Wallet</h3>
+          <p>Your SIRE Wallet already exists on this device. Enter its password to make it available to Swap.</p>
+          <div className="sire-wallet-form">
+            <label>Wallet password<input type="password" autoFocus autoComplete="current-password" value={walletPassword} onChange={e => setWalletPassword(e.target.value)} placeholder="Enter your password" onKeyDown={e => { if (e.key === 'Enter') void unlockWallet(); }}/></label>
+          </div>
+          {walletCreationError && <div className="sire-swap-error"><CircleAlert size={14}/><span>{walletCreationError}</span></div>}
+          <button type="button" className="sire-review-button" disabled={walletCreating} onClick={() => void unlockWallet()}>{walletCreating ? <><LoaderCircle className="sire-spin" size={15}/> Unlocking…</> : 'Unlock Wallet'}</button>
+        </div>}
+
+        {walletStep === 'backup' && <div className="sire-wallet-onboarding-body">
+          <h3>Back up your recovery phrase</h3>
+          <p>Write these words down offline, in the exact order. This phrase is the recovery key for the wallet.</p>
+          <div className="sire-wallet-mnemonic">{walletMnemonic.split(' ').map((word, index) => <span key={word + index}><i>{index + 1}</i><b>{word}</b></span>)}</div>
+          <div className="sire-wallet-form">
+            <label>Set wallet password<input type="password" autoComplete="new-password" value={walletPassword} onChange={e => setWalletPassword(e.target.value)} placeholder="At least 8 characters"/></label>
+            <label>Confirm password<input type="password" autoComplete="new-password" value={walletPasswordConfirm} onChange={e => setWalletPasswordConfirm(e.target.value)} placeholder="Repeat password"/></label>
+            <label>Confirm recovery phrase<input value={walletConfirmPhrase} onChange={e => setWalletConfirmPhrase(e.target.value)} placeholder="Type all words in order"/></label>
+          </div>
+          {walletCreationError && <div className="sire-swap-error"><CircleAlert size={14}/><span>{walletCreationError}</span></div>}
+          <button type="button" className="sire-review-button" disabled={walletCreating || !walletMnemonic} onClick={() => void finishWalletCreation()}>{walletCreating ? <><LoaderCircle className="sire-spin" size={15}/> Creating wallet…</> : 'Confirm & Create Wallet'}</button>
+          <button type="button" className="sire-wallet-secondary" onClick={closeWalletOnboarding}>Cancel</button>
+        </div>}
+
+        {walletStep === 'confirm' && <div className="sire-wallet-onboarding-body sire-wallet-created">
+          <div className="sire-wallet-success">✓</div>
+          <h3>SIRE Wallet created</h3>
+          <p>Your native wallet is unlocked and ready for Swap.</p>
+          <code>{shortAddress(walletCreatedAddress)}</code>
+        </div>}
+      </section>
+    </div>}
+    {historyOpen && <div className="sire-modal-backdrop sire-token-picker-backdrop" onMouseDown={() => setHistoryOpen(false)}>
       <section className="sire-token-modal sire-swap-history-sheet" role="dialog" aria-modal="true" aria-label="Swap history" onMouseDown={e => e.stopPropagation()}>
         <div className="sire-token-modal-head"><div><b>Swap history</b><small>Recent SIRE Swap executions on this device</small></div><button type="button" onClick={() => setHistoryOpen(false)} aria-label="Close history"><X size={17}/></button></div>
         <div className="sire-swap-history-list">
@@ -1449,7 +1482,7 @@ export default function TradeView({ referencePrice = 0 }: Props) {
 
   </div>;
 }
- + Number(candidate.gasUSD).toFixed(4) : '—'}</b><small>Est. gas fee</small></span>
+ + Number(candidate.gasUSD).toFixed(4) : '—'}</b><small>Gas fee</small></span>
                   <span><b>{candidate.priceImpact != null ? (candidate.priceImpact * 100).toFixed(2) + '%' : '—'}</b><small>Price impact</small></span>
                 </div>
                 <div className="sire-provider-route-line">
@@ -1463,6 +1496,54 @@ export default function TradeView({ referencePrice = 0 }: Props) {
       </section>
     </div>}
 
+    {walletOnboarding && <div className="sire-modal-backdrop" onMouseDown={closeWalletOnboarding}>
+      <section className="sire-token-modal sire-wallet-onboarding" role="dialog" aria-modal="true" aria-label="Create SIRE Wallet" onMouseDown={e => e.stopPropagation()}>
+        <div className="sire-token-modal-head">
+          <div><b>{walletStep === 'intro' ? 'Create SIRE Wallet' : walletStep === 'backup' ? 'Secure your wallet' : 'Wallet created'}</b><small>Native self-custody wallet · no external wallet required</small></div>
+          {walletStep !== 'confirm' && <button type="button" onClick={closeWalletOnboarding} aria-label="Close wallet setup"><X size={17}/></button>}
+        </div>
+
+        {walletStep === 'intro' && <div className="sire-wallet-onboarding-body">
+          <div className="sire-wallet-hero-icon"><WalletCards size={25}/></div>
+          <h3>Create your SIRE Wallet</h3>
+          <p>Your wallet is created on this device and its recovery phrase is controlled by you. Swap will use this wallet directly instead of asking you to connect an external wallet.</p>
+          <div className="sire-wallet-warning"><LockKeyhole size={15}/><span>Never share your recovery phrase or password. SIRE cannot recover a lost recovery phrase.</span></div>
+          <button type="button" className="sire-review-button" onClick={beginWalletCreation}>Create Wallet</button>
+        </div>}
+
+        {walletStep === 'unlock' && <div className="sire-wallet-onboarding-body">
+          <div className="sire-wallet-hero-icon"><LockKeyhole size={25}/></div>
+          <h3>Unlock SIRE Wallet</h3>
+          <p>Your SIRE Wallet already exists on this device. Enter its password to make it available to Swap.</p>
+          <div className="sire-wallet-form">
+            <label>Wallet password<input type="password" autoFocus autoComplete="current-password" value={walletPassword} onChange={e => setWalletPassword(e.target.value)} placeholder="Enter your password" onKeyDown={e => { if (e.key === 'Enter') void unlockWallet(); }}/></label>
+          </div>
+          {walletCreationError && <div className="sire-swap-error"><CircleAlert size={14}/><span>{walletCreationError}</span></div>}
+          <button type="button" className="sire-review-button" disabled={walletCreating} onClick={() => void unlockWallet()}>{walletCreating ? <><LoaderCircle className="sire-spin" size={15}/> Unlocking…</> : 'Unlock Wallet'}</button>
+        </div>}
+
+        {walletStep === 'backup' && <div className="sire-wallet-onboarding-body">
+          <h3>Back up your recovery phrase</h3>
+          <p>Write these words down offline, in the exact order. This phrase is the recovery key for the wallet.</p>
+          <div className="sire-wallet-mnemonic">{walletMnemonic.split(' ').map((word, index) => <span key={word + index}><i>{index + 1}</i><b>{word}</b></span>)}</div>
+          <div className="sire-wallet-form">
+            <label>Set wallet password<input type="password" autoComplete="new-password" value={walletPassword} onChange={e => setWalletPassword(e.target.value)} placeholder="At least 8 characters"/></label>
+            <label>Confirm password<input type="password" autoComplete="new-password" value={walletPasswordConfirm} onChange={e => setWalletPasswordConfirm(e.target.value)} placeholder="Repeat password"/></label>
+            <label>Confirm recovery phrase<input value={walletConfirmPhrase} onChange={e => setWalletConfirmPhrase(e.target.value)} placeholder="Type all words in order"/></label>
+          </div>
+          {walletCreationError && <div className="sire-swap-error"><CircleAlert size={14}/><span>{walletCreationError}</span></div>}
+          <button type="button" className="sire-review-button" disabled={walletCreating || !walletMnemonic} onClick={() => void finishWalletCreation()}>{walletCreating ? <><LoaderCircle className="sire-spin" size={15}/> Creating wallet…</> : 'Confirm & Create Wallet'}</button>
+          <button type="button" className="sire-wallet-secondary" onClick={closeWalletOnboarding}>Cancel</button>
+        </div>}
+
+        {walletStep === 'confirm' && <div className="sire-wallet-onboarding-body sire-wallet-created">
+          <div className="sire-wallet-success">✓</div>
+          <h3>SIRE Wallet created</h3>
+          <p>Your native wallet is unlocked and ready for Swap.</p>
+          <code>{shortAddress(walletCreatedAddress)}</code>
+        </div>}
+      </section>
+    </div>}
     {historyOpen && <div className="sire-modal-backdrop sire-token-picker-backdrop" onMouseDown={() => setHistoryOpen(false)}>
       <section className="sire-token-modal sire-swap-history-sheet" role="dialog" aria-modal="true" aria-label="Swap history" onMouseDown={e => e.stopPropagation()}>
         <div className="sire-token-modal-head"><div><b>Swap history</b><small>Recent SIRE Swap executions on this device</small></div><button type="button" onClick={() => setHistoryOpen(false)} aria-label="Close history"><X size={17}/></button></div>
