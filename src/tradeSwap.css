@@ -368,6 +368,32 @@
   align-items:flex-start;
   border-radius:42px;
   overflow:hidden;
+  position:relative;
+}
+.sire-limit-mode .sire-limit-payment-summary{
+  position:absolute;
+  inset:0;
+  width:100%;
+  height:100%;
+  margin:0;
+  box-sizing:border-box;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  text-align:center;
+  pointer-events:none;
+  z-index:1;
+}
+.sire-limit-mode .sire-limit-payment-pill{
+  position:relative;
+  z-index:2;
+}
+.sire-limit-mode .sire-limit-payment-summary strong,
+.sire-limit-mode .sire-limit-payment-summary>small,
+.sire-limit-mode .sire-limit-payment-summary>div{
+  width:100%;
+  justify-content:center;
+  text-align:center;
 }
 /* Limit payment percentage shortcuts: same pill pattern, always white. */
 .sire-limit-payment-percentages{margin-top:0}
