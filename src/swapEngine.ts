@@ -314,6 +314,53 @@ export async function fetchEthereumTokens(query=''): Promise<SwapToken[]> {
 
 export type SwapRouteOrder = 'FASTEST' | 'CHEAPEST';
 
+export type SwapQuoteFailureReason =
+  | 'INSUFFICIENT_LIQUIDITY'
+  | 'AMOUNT_UNSUPPORTED'
+  | 'TOOL_UNAVAILABLE'
+  | 'PRICE_IMPACT_TOO_HIGH'
+  | 'INSUFFICIENT_FUNDS'
+  | 'WALLET_RESTRICTION'
+  | 'NO_ROUTE';
+
+export class SwapQuoteUnavailableError extends Error {
+  reason: SwapQuoteFailureReason;
+  providerCode?: number | string;
+  providerMessage?: string;
+
+  constructor(reason:SwapQuoteFailureReason, message:string, providerCode?:number|string, providerMessage?:string) {
+    super(message);
+    this.name = 'SwapQuoteUnavailableError';
+    this.reason = reason;
+    this.providerCode = providerCode;
+    this.providerMessage = providerMessage;
+  }
+}
+
+function classifySwapQuoteFailure(status:number, code:any, message:string):SwapQuoteFailureReason {
+  const text = String(message || '').toLowerCase();
+  const numericCode = Number(code);
+  if (numericCode === 1001 || /insufficient.*fund|not enough.*fund|balance.*low|wallet.*fund/.test(text)) return 'INSUFFICIENT_FUNDS';
+  if (/price.?impact|impact.*threshold|price impact/.test(text)) return 'PRICE_IMPACT_TOO_HIGH';
+  if (/amount.*(too small|too large)|too small|too large|min(imum)?.*amount|max(imum)?.*amount/.test(text)) return 'AMOUNT_UNSUPPORTED';
+  if (/liquidity|no liquidity|insufficient liquidity/.test(text)) return 'INSUFFICIENT_LIQUIDITY';
+  if (/bridge|dex|exchange|temporarily unavailable|service unavailable|unavailable/.test(text)) return 'TOOL_UNAVAILABLE';
+  if (/wallet|contract|account.*restrict|not supported.*wallet|restriction/.test(text)) return 'WALLET_RESTRICTION';
+  return 'NO_ROUTE';
+}
+
+export function formatSwapQuoteFailure(reason:SwapQuoteFailureReason, tokenSymbol?:string) {
+  switch (reason) {
+    case 'INSUFFICIENT_FUNDS': return 'The selected route requires ' + (tokenSymbol || 'the source token') + ' balance before LI.FI can return an executable transaction. SIRE does not fake a funded wallet or substitute another address.';
+    case 'INSUFFICIENT_LIQUIDITY': return 'No live route has enough liquidity for this amount right now.';
+    case 'AMOUNT_UNSUPPORTED': return 'This amount is outside the currently supported range for the available pools or bridge.';
+    case 'TOOL_UNAVAILABLE': return 'The available bridge or DEX is temporarily unavailable. Try again in a moment.';
+    case 'PRICE_IMPACT_TOO_HIGH': return 'Available routes exceed SIRE’s maximum price-impact threshold.';
+    case 'WALLET_RESTRICTION': return 'The selected wallet or contract has a route-specific restriction.';
+    default: return 'No executable route is available for this token pair right now.';
+  }
+}
+
 export async function getSwapQuote(args:{
   fromToken:SwapToken; toToken:SwapToken; amount:string; wallet:string; slippage:number; toAddress?:string; order?:SwapRouteOrder;
 }):Promise<SwapQuote> {
@@ -356,8 +403,19 @@ export async function getSwapQuote(args:{
   const rawText = await response.text();
   if (!response.ok) {
     let message = rawText;
-    try { const body=JSON.parse(rawText); message=body?.message || body?.error || message; } catch {}
-    throw new Error(`Swap quote unavailable (${response.status}): ${message.slice(0,180)}`);
+    let providerCode:any;
+    try {
+      const body=JSON.parse(rawText);
+      message=body?.message || body?.error || body?.details || message;
+      providerCode=body?.code ?? body?.errorCode ?? body?.statusCode;
+    } catch {}
+    const reason = classifySwapQuoteFailure(response.status, providerCode, message);
+    throw new SwapQuoteUnavailableError(
+      reason,
+      formatSwapQuoteFailure(reason, args.fromToken.symbol),
+      providerCode,
+      String(message).slice(0, 240)
+    );
   }
   const body = JSON.parse(rawText);
   const estimate=body?.estimate||{};
