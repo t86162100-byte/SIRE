@@ -349,7 +349,7 @@
 
 /* Final Limit card shape overrides. */
 .sire-limit-mode .sire-limit-price-main{
-  border-radius:54px;
+  border-radius:42px;
   overflow:hidden;
 }
 
@@ -358,7 +358,7 @@
   box-sizing:border-box;
   padding:22px;
   align-items:flex-start;
-  border-radius:54px;
+  border-radius:42px;
   overflow:hidden;
 }
 /* Limit payment percentage shortcuts: same pill pattern, always white. */
