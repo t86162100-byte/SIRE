@@ -13,7 +13,7 @@ import { getStoredHistory, persistHistoryBars, historyStoreStatus } from './back
 import { signup, login, logout, currentUser, googleStart, googleCallback } from './backend/auth.ts';
 import { runSireDiagnostics } from './backend/sire-diagnostics.ts';
 import { runAutonomousCycle } from './autonomous/sire-autonomous-cycle.ts';
-import { recordIssue, getRecentIssues } from './backend/sire-issue-tracker.ts';
+import { recordIssue, getRecentIssues } from './backend/sire-issue-tracker.ts';\nimport { saveLimitOrder, listLimitOrders, cancelLimitOrder, runLimitOrderMonitorBatch, limitOrderStoreStatus } from './backend/limit-order-store.ts';
 import { fetchBinanceCatalogServer, fetchBinanceMarketSnapshotServer, fetchBinanceHistoryServer } from './backend/binance-catalog.ts';
 
 const PORT = Number(process.env.PORT || 10000);
@@ -941,11 +941,25 @@ const server = http.createServer(async (req,res) => {
         return { response, payload, raw };
       };
       try {
-        if (!apiKey) return json(503, {ok:false, error:'0x API is not configured. Add ZEROX_API_KEY to the SIRE Render service.'});
         if (req.method === 'GET' && pathname === '/api/sire/limit-orders/health') {
-          return json(200, {ok:true, configured:true, architecture:'0x-swap-api-v2-allowance-holder'});
+          const store = await limitOrderStoreStatus();
+          return json(200, {
+            ok:true,
+            configured:Boolean(apiKey),
+            persistentStore:store,
+            architecture:'0x-swap-api-v2-allowance-holder-server-monitor'
+          });
+        }
+        if (req.method === 'GET' && pathname === '/api/sire/limit-orders') {
+          const url = new URL(req.url || '/', `http://sire.local`);
+          const maker = String(url.searchParams.get('maker') || '').trim();
+          const chainIdRaw = Number(url.searchParams.get('chainId') || 0);
+          if (!/^0x[a-fA-F0-9]{40}$/.test(maker)) return json(400,{ok:false,error:'Valid maker wallet address is required.'});
+          const orders = await listLimitOrders({ maker, chainId:Number.isFinite(chainIdRaw) && chainIdRaw > 0 ? chainIdRaw : undefined });
+          return json(200,{ok:true,orders});
         }
         if (req.method === 'POST' && pathname === '/api/sire/limit-orders/quote') {
+          if (!apiKey) return json(503,{ok:false,error:'0x API is not configured. Add ZEROX_API_KEY to the SIRE Render service.'});
           const parsed = body ? JSON.parse(body) : {};
           const chainId = Number(parsed?.chainId || 0);
           const sellToken = String(parsed?.sellToken || '');
@@ -964,18 +978,119 @@ const server = http.createServer(async (req,res) => {
         }
         if (req.method === 'POST' && pathname === '/api/sire/limit-orders/submit') {
           const parsed = body ? JSON.parse(body) : {};
-          const chainId = Number(parsed?.chainId || parsed?.data?.chainId || 0);
+          const data = parsed?.data && typeof parsed.data === 'object' ? parsed.data : {};
+          const chainId = Number(parsed?.chainId || data?.chainId || 0);
           const orderHash = String(parsed?.orderHash || '');
-          const data = parsed?.data;
           if (!supportedChains.has(chainId)) return json(400,{ok:false,error:'0x Limit monitoring is not enabled for this network.'});
           if (!/^0x[0-9a-fA-F]{64}$/.test(orderHash)) return json(400,{ok:false,error:'Invalid limit intent id.'});
-          if (!data || typeof data !== 'object') return json(400,{ok:false,error:'Missing limit intent data.'});
+          const maker = String(data?.maker || '');
           const expiry = Number(data?.expiry || 0);
+          if (!/^0x[a-fA-F0-9]{40}$/.test(maker)) return json(400,{ok:false,error:'Invalid limit maker address.'});
           if (!Number.isFinite(expiry) || expiry <= Math.floor(Date.now()/1000)) return json(400,{ok:false,error:'Limit order has already expired.'});
-          return json(201,{ok:true,orderHash,architecture:'0x-swap-api-v2-allowance-holder'});
+          const record = {
+            ...(parsed?.record && typeof parsed.record === 'object' ? parsed.record : {}),
+            orderHash,
+            chainId,
+            maker,
+            makerAsset: String(data?.makerToken || parsed?.record?.makerAsset || ''),
+            takerAsset: String(data?.takerToken || parsed?.record?.takerAsset || ''),
+            makingAmount: String(data?.makerAmount || parsed?.record?.makingAmount || ''),
+            takingAmount: String(data?.takerAmount || parsed?.record?.takingAmount || ''),
+            order:data,
+            status:'Open',
+            createdAt:Number(parsed?.record?.createdAt || Date.now()),
+          };
+          const saved = await saveLimitOrder(record);
+          return json(201,{ok:true,orderHash,architecture:'0x-swap-api-v2-allowance-holder-server-monitor',order:saved});
+        }
+        if (req.method === 'POST' && pathname === '/api/sire/limit-orders/cancel') {
+          const parsed = body ? JSON.parse(body) : {};
+          const maker = String(parsed?.maker || '');
+          const orderHash = String(parsed?.orderHash || '');
+          if (!/^0x[a-fA-F0-9]{40}$/.test(maker) || !/^0x[0-9a-fA-F]{64}$/.test(orderHash)) return json(400,{ok:false,error:'Invalid cancellation request.'});
+          const canceled = await cancelLimitOrder(orderHash,maker);
+          if (!canceled) return json(404,{ok:false,error:'Limit order not found or already closed.'});
+          return json(200,{ok:true,order:canceled});
         }
         return json(404,{ok:false,error:'Unknown 0x limit-order endpoint.'});
       } catch (cause) {
         return json(502,{ok:false,error:cause instanceof Error ? cause.message : String(cause)});
       }
-    };
+    }
+        const response=await handler(toEvent(req,body)); const statusCode=Number.isInteger(response?.statusCode)?response.statusCode:200; const rawBody=response?.body!==undefined?response.body:response; const isString=typeof rawBody==='string'; res.writeHead(statusCode,{ 'Access-Control-Allow-Origin':'*','Cache-Control':'no-store',...(isString?{}:{'Content-Type':'application/json; charset=utf-8'}),...(response?.headers||{}) }); res.end(isString?rawBody:JSON.stringify(rawBody??{}));
+  } catch(cause) { const message=cause instanceof Error?cause.message:String(cause); console.error('[HTTP ERROR]',req.method,req.url,message); if (!res.headersSent) res.writeHead(500,{'Content-Type':'application/json','Access-Control-Allow-Origin':'*'}); res.end(JSON.stringify({error:message})); } });
+});
+
+const wss = new WebSocketServer({ noServer:true });
+server.on('upgrade',(req,socket,head)=>{
+  const url=new URL(req.url||'/',`http://${req.headers.host||'localhost'}`);
+  if(url.pathname==='/deriv/ws'){
+    console.log('[DERIV PROXY] Browser market-data client connected');
+    wss.handleUpgrade(req,socket,head,clientSocket=>{
+      const upstream=new WebSocket('wss://api.derivws.com/trading/v1/options/ws/public');
+      const queued=[];
+      let upstreamOpen=false;
+      const fail=(message)=>{
+        const detail = String(message || 'Unknown Deriv upstream error.');
+        console.error('[DERIV PROXY] FAIL', detail);
+        if(clientSocket.readyState===WebSocket.OPEN) {
+          clientSocket.send(JSON.stringify({error:{message:detail}}));
+          clientSocket.close(1011, detail.slice(0, 120));
+        } else if(clientSocket.readyState===WebSocket.CONNECTING) {
+          clientSocket.close();
+        }
+      };
+      const upstreamTimer=setTimeout(()=>{ if(!upstreamOpen) fail('Deriv upstream connection timed out.'); },15000);
+      upstream.on('open',()=>{
+        upstreamOpen=true;
+        clearTimeout(upstreamTimer);
+        for(const data of queued) upstream.send(data);
+        queued.length=0;
+      });
+      upstream.on('message',data=>{
+        try {
+          const parsed=JSON.parse(String(data));
+          if(parsed?.error) console.error('[DERIV PROXY] upstream error', JSON.stringify(parsed.error));
+        } catch {}
+        if(clientSocket.readyState===WebSocket.OPEN) clientSocket.send(data);
+      });
+      upstream.on('error',error=>{
+        const detail = error instanceof Error ? error.message : String(error);
+        console.error('[DERIV PROXY]', detail);
+        fail(`Deriv upstream WebSocket error: ${detail}`);
+      });
+      upstream.on('close',(code,reason)=>{
+        clearTimeout(upstreamTimer);
+        const detail = reason ? String(reason) : '';
+        if(clientSocket.readyState===WebSocket.OPEN) {
+          clientSocket.close(code && code !== 1000 ? 1011 : 1000, detail.slice(0, 120));
+        }
+      });
+      clientSocket.on('message',data=>{
+        if(upstreamOpen && upstream.readyState===WebSocket.OPEN) upstream.send(data);
+        else if(!upstreamOpen) queued.push(data);
+      });
+      clientSocket.on('close',()=>{
+        clearTimeout(upstreamTimer);
+        queued.length=0;
+        if(upstream.readyState===WebSocket.OPEN || upstream.readyState===WebSocket.CONNECTING) upstream.close();
+      });
+    });
+    return;
+  }
+  if(url.pathname!=='/ws'){socket.destroy();return;}
+  wss.handleUpgrade(req,socket,head,wsSocket=>{
+    const connectionId=url.searchParams.get('connection_id')||randomUUID();
+    ws.register(connectionId,wsSocket);
+    wsSocket.send(JSON.stringify({type:'system.connected',payload:{connection_id:connectionId}}));
+    wsSocket.on('close',async()=>{ws.unregister(connectionId); await realtime({body:JSON.stringify({type:'system.disconnected',payload:{connection_id:connectionId}})});});
+  });
+});
+
+server.listen(PORT,HOST,async()=>{ 
+  console.log(`SIRE server listening on ${HOST}:${PORT}`);
+  console.log('[DERIV HISTORY STORE]', JSON.stringify(await historyStoreStatus()));
+  console.log('[LIMIT ORDER MONITOR] server-side 0x monitor starting');
+  void runLimitOrderMonitorBatch(20).catch(error => console.warn('[LIMIT ORDER MONITOR]', error instanceof Error ? error.message : String(error)));
+  setInterval(() => void runLimitOrderMonitorBatch(20).catch(error => console.warn('[LIMIT ORDER MONITOR]', error instanceof Error ? error.message : String(error))), 5000);
+});
