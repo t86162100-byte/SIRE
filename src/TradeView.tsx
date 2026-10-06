@@ -755,7 +755,7 @@ export default function TradeView({ referencePrice = 0 }: Props) {
       const hash = await cancelLimitOrder({
         network: networkInfo,
         owner: wallet,
-        order: order.order || order.data || {},
+        order: order.order || order.data || order,
         native: true,
       });
       setStatus('Limit order cancellation submitted');
