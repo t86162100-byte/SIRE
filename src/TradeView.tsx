@@ -105,6 +105,7 @@ export default function TradeView({ referencePrice = 0 }: Props) {
   const [swapHistory, setSwapHistory] = useState<Array<{hash:string;from:string;to:string;amount:string;output:string;fromNetwork:string;toNetwork:string;time:number;recipient:string}>>([]);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [limitPrice, setLimitPrice] = useState('');
+  const [limitPricePreset, setLimitPricePreset] = useState('Market');
   const [limitSide, setLimitSide] = useState<'Buy' | 'Sell'>('Buy');
   const [limitMarketPrice, setLimitMarketPrice] = useState('');
   const [limitMarketLoading, setLimitMarketLoading] = useState(false);
@@ -943,7 +944,7 @@ export default function TradeView({ referencePrice = 0 }: Props) {
                     role="tab"
                     aria-selected={limitSide === side}
                     className={limitSide === side ? 'active ' + side.toLowerCase() : ''}
-                    onClick={() => { setLimitSide(side); setLimitPrice(''); setLimitError(''); setAmount('1'); }}
+                    onClick={() => { setLimitSide(side); setLimitPrice(''); setLimitPricePreset('Market'); setLimitError(''); setAmount('1'); }}
                   >
                     {side}
                   </button>
@@ -955,36 +956,41 @@ export default function TradeView({ referencePrice = 0 }: Props) {
                   {limitSide === 'Buy' ? 'Buy ' : 'Sell '}
                   <b>{limitMaker.symbol || 'token'}</b>
                   {limitSide === 'Buy' ? ' when price is below ' : ' when price is above '}
-                  <strong>{limitPrice || (limitMarketPrice || '—')}</strong>
-                  {' '}{limitTaker.symbol}
+                  <strong>{limitPricePreset}</strong>
                 </div>
-                <div className="sire-limit-market-price">
-                  <span>Market price</span>
-                  <b>{limitMarketLoading ? 'Loading…' : limitMarketPrice ? limitMarketPrice + ' ' + limitTaker.symbol : '—'}</b>
+                <div className="sire-limit-target-price">
+                  <span>{limitPrice || (limitMarketPrice || '—')}</span>
+                  <small>{limitTaker.symbol}</small>
                 </div>
-                <div className="sire-limit-price-options">
-                  {['Market','-1%','+5%','+10%','Custom'].map(option => (
-                    <button
-                      key={option}
-                      type="button"
-                      className={((option === 'Market' && limitPrice === limitMarketPrice) || (option !== 'Market' && option !== 'Custom' && limitPrice && limitMarketPrice && Math.abs((Number(limitPrice) / Number(limitMarketPrice) - 1) * 100 - Number(option.replace('%',''))) < 0.01) || (option === 'Custom' && limitPrice && limitMarketPrice && !['0','1'].includes(option))) ? 'selected' : ''}
-                      onClick={() => {
-                        if (!limitMarketPrice) return;
-                        const base = Number(limitMarketPrice);
-                        if (option === 'Market') setLimitPrice(String(base));
-                        else if (option === 'Custom') {
-                          const value = window.prompt('Enter target price', limitPrice || String(base));
-                          if (value && Number.isFinite(Number(value)) && Number(value) > 0) setLimitPrice(value);
-                        } else {
-                          const pct = Number(option.replace('%',''));
-                          const effective = limitSide === 'Buy' ? -Math.abs(pct) : Math.abs(pct);
-                          setLimitPrice(String(base * (1 + effective / 100)));
+              </div>
+              <div className={'sire-limit-price-options sire-limit-price-options-' + limitSide.toLowerCase()}>
+                {['Market','-1%','+5%','+10%','Custom'].map(option => (
+                  <button
+                    key={option}
+                    type="button"
+                    className={limitPricePreset === option ? 'selected' : ''}
+                    onClick={() => {
+                      if (!limitMarketPrice) return;
+                      const base = Number(limitMarketPrice);
+                      if (option === 'Market') {
+                        setLimitPrice(String(base));
+                        setLimitPricePreset('Market');
+                      } else if (option === 'Custom') {
+                        const value = window.prompt('Enter target price', limitPrice || String(base));
+                        if (value && Number.isFinite(Number(value)) && Number(value) > 0) {
+                          setLimitPrice(value);
+                          setLimitPricePreset('Custom');
                         }
-                        setLimitError('');
-                      }}
-                    >{option}</button>
-                  ))}
-                </div>
+                      } else {
+                        const pct = Number(option.replace('%',''));
+                        const effective = limitSide === 'Buy' ? -Math.abs(pct) : Math.abs(pct);
+                        setLimitPrice(String(base * (1 + effective / 100)));
+                        setLimitPricePreset(option);
+                      }
+                      setLimitError('');
+                    }}
+                  >{option}</button>
+                ))}
               </div>
 
               <div className="sire-limit-token-card sire-limit-amount-card">
