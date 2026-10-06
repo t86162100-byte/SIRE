@@ -73,6 +73,8 @@ export default function TradeView({ referencePrice = 0 }: Props) {
   const [quote, setQuote] = useState<SwapQuote | null>(null);
   const [providerQuotes, setProviderQuotes] = useState<SwapQuote[]>([]);
   const [providerOpen, setProviderOpen] = useState(false);
+  const [insufficientBalanceOpen, setInsufficientBalanceOpen] = useState(false);
+  const [insufficientBalanceAmount, setInsufficientBalanceAmount] = useState('0');
   const [quoteLoading, setQuoteLoading] = useState(false);
   const quoteRequestId = useRef(0);
   const [quoteError, setQuoteError] = useState('');
@@ -348,15 +350,9 @@ export default function TradeView({ referencePrice = 0 }: Props) {
       if (requestId !== quoteRequestId.current) return;
       setQuoteLoading(true);
       try {
-        const requestedAmount = amountToBaseUnits(amount, from);
-        const availableBalance = BigInt(fromBalance || '0');
-        if (availableBalance < BigInt(requestedAmount)) {
-          throw new Error(
-            'Insufficient ' + from.symbol + ' balance. You have ' +
-            formatUnits(fromBalance || '0', from.decimals, 6) + ' ' + from.symbol +
-            ' but entered ' + amount + ' ' + from.symbol + '.'
-          );
-        }
+        // Quote first, even when the wallet cannot currently fund the input.
+        // Balance is checked only when the user confirms, matching the exchange
+        // flow where users can inspect the live price, route, fees and output first.
 
         // Ask the live routing API for both ranking strategies. These are
         // executable quotes, not hard-coded provider names.
@@ -693,6 +689,19 @@ export default function TradeView({ referencePrice = 0 }: Props) {
 
   const execute = async () => {
     if (!quote || !wallet || !nativeUnlocked) return;
+
+    // Do not block quote calculation for an unfunded wallet. The final balance
+    // check belongs at Confirm Swap so users can inspect the complete quote first.
+    try {
+      const requestedAmount = BigInt(amountToBaseUnits(amount, from));
+      const availableBalance = BigInt(fromBalance || '0');
+      if (availableBalance < requestedAmount) {
+        setInsufficientBalanceAmount(formatUnits(fromBalance || '0', from.decimals, 6));
+        setInsufficientBalanceOpen(true);
+        return;
+      }
+    } catch {}
+
     setBusy(true);
     setExecutionError('');
     setTxHash('');
@@ -933,6 +942,22 @@ export default function TradeView({ referencePrice = 0 }: Props) {
         </div>
       </main>
     </div>
+
+    {insufficientBalanceOpen && <div className="sire-modal-backdrop sire-insufficient-backdrop" onMouseDown={() => setInsufficientBalanceOpen(false)}>
+      <section className="sire-insufficient-sheet" role="dialog" aria-modal="true" aria-label="Insufficient balance" onMouseDown={e => e.stopPropagation()}>
+        <div className="sire-insufficient-icon"><CircleAlert size={22}/></div>
+        <div className="sire-insufficient-copy">
+          <h3>Insufficient {from.symbol} balance</h3>
+          <p>You have <b>{insufficientBalanceAmount} {from.symbol}</b>, but this swap requires <b>{amount} {from.symbol}</b>.</p>
+          <p className="sire-insufficient-sub">Your quote is still available to review. Add funds to continue with this swap.</p>
+        </div>
+        <button type="button" className="sire-review-button sire-buy-balance-button" onClick={() => {
+          setInsufficientBalanceOpen(false);
+          window.dispatchEvent(new CustomEvent('sire:buy-token', { detail: { symbol: from.symbol, network, token: from } }));
+        }}>Buy {from.symbol}</button>
+        <button type="button" className="sire-wallet-secondary" onClick={() => setInsufficientBalanceOpen(false)}>Not now</button>
+      </section>
+    </div>}
 
     {walletOnboarding && <div className="sire-modal-backdrop" onMouseDown={closeWalletOnboarding}>
       <section className="sire-token-modal sire-wallet-onboarding" role="dialog" aria-modal="true" aria-label="Create SIRE Wallet" onMouseDown={e => e.stopPropagation()}>
