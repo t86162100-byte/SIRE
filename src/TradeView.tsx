@@ -105,6 +105,9 @@ export default function TradeView({ referencePrice = 0 }: Props) {
   const [swapHistory, setSwapHistory] = useState<Array<{hash:string;from:string;to:string;amount:string;output:string;fromNetwork:string;toNetwork:string;time:number;recipient:string}>>([]);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [limitPrice, setLimitPrice] = useState('');
+  const [limitSide, setLimitSide] = useState<'Buy' | 'Sell'>('Buy');
+  const [limitMarketPrice, setLimitMarketPrice] = useState('');
+  const [limitMarketLoading, setLimitMarketLoading] = useState(false);
   const [limitExpiry, setLimitExpiry] = useState(86400);
   const [limitBusy, setLimitBusy] = useState(false);
   const [limitError, setLimitError] = useState('');
@@ -518,7 +521,51 @@ export default function TradeView({ referencePrice = 0 }: Props) {
   const pickerNetwork = tokenPicker === 'to' ? toNetwork : network;
   const minimum = quote ? formatUnits(quote.toAmountMin, quote.toToken.decimals, 6) : '';
   const balanceDisplay = formatUnits(fromBalance, from.decimals, 6);
+  const limitMaker = limitSide === 'Sell' ? from : to;
+  const limitTaker = limitSide === 'Sell' ? to : from;
+  const limitPriceLabel = limitTaker.symbol + ' per ' + limitMaker.symbol;
+  const limitTargetAmount = (() => {
+    try {
+      if (!limitPrice || !amount) return '';
+      const makerUnits = amountToBaseUnits(amount, limitMaker);
+      return formatUnits(limitTakingAmount(makerUnits, limitMaker.decimals, limitTaker.decimals, limitPrice), limitTaker.decimals, 8);
+    } catch {
+      return '';
+    }
+  })();
   const canExecute = Boolean(nativeUnlocked && nativeWallet && recipientValid && quote?.transactionRequest && !busy && EVM_SWAP_NETWORKS.some(item => item.name === network) && EVM_SWAP_NETWORKS.some(item => item.name === toNetwork));
+
+  useEffect(() => {
+    if (tradeMode !== 'Limit' || !wallet || !nativeUnlocked || !network || network !== toNetwork || limitMaker.native || limitTaker.native || limitMaker.chainId !== limitTaker.chainId || tokenIdentity(limitMaker) === tokenIdentity(limitTaker)) {
+      setLimitMarketPrice('');
+      setLimitMarketLoading(false);
+      return;
+    }
+    let cancelled = false;
+    const load = async () => {
+      setLimitMarketLoading(true);
+      try {
+        const live = await getSwapQuote({
+          fromToken: limitMaker,
+          toToken: limitTaker,
+          amount: '1',
+          wallet,
+          toAddress: wallet,
+          slippage: 0.005,
+          order: 'CHEAPEST'
+        });
+        const price = formatUnits(live.toAmount, limitTaker.decimals, 18);
+        if (!cancelled && Number(price) > 0) setLimitMarketPrice(price);
+      } catch {
+        if (!cancelled) setLimitMarketPrice('');
+      } finally {
+        if (!cancelled) setLimitMarketLoading(false);
+      }
+    };
+    void load();
+    const timer = window.setInterval(() => void load(), 20000);
+    return () => { cancelled = true; window.clearInterval(timer); };
+  }, [tradeMode, wallet, nativeUnlocked, network, toNetwork, limitSide, limitMaker, limitTaker]);
 
   useEffect(() => {
     if (!quote?.expiresAt) { setQuoteSeconds(0); return; }
@@ -537,8 +584,12 @@ export default function TradeView({ referencePrice = 0 }: Props) {
   }, []);
 
   useEffect(() => {
-    if (tradeMode === 'Limit' && wallet && nativeUnlocked) void refreshLimitOrders();
+    if (tradeMode !== 'Limit' || !wallet || !nativeUnlocked) return;
+    void refreshLimitOrders();
+    const timer = window.setInterval(() => void refreshLimitOrders(), 15000);
+    return () => window.clearInterval(timer);
   }, [tradeMode, wallet, network, nativeUnlocked]);
+
 
   useEffect(() => {
     try {
@@ -569,55 +620,73 @@ export default function TradeView({ referencePrice = 0 }: Props) {
       setLimitError('Enter a limit price.');
       return;
     }
-    if (from.native || to.native) {
+
+    // A Swap → Limit order is an on-chain 1inch order. The side changes which
+    // token is the maker asset: Sell = sell "from"; Buy = buy "to".
+    const makerAsset = limitSide === 'Sell' ? from : to;
+    const takerAsset = limitSide === 'Sell' ? to : from;
+    if (makerAsset.native || takerAsset.native) {
       setLimitError('Limit orders require ERC-20 or wrapped assets. Select the token contract instead of the native coin.');
       return;
     }
-    if (from.chainId !== to.chainId) {
+    if (makerAsset.chainId !== takerAsset.chainId) {
       setLimitError('Limit orders are single-chain. Use Swap for cross-chain trades.');
       return;
     }
+
     setLimitBusy(true);
     setLimitError('');
     setExecutionError('');
     setStatus('Preparing limit order');
     try {
-      const makingAmount = amountToBaseUnits(amount, from);
-      if (BigInt(fromBalance || '0') < BigInt(makingAmount)) throw new Error('Insufficient ' + from.symbol + ' balance.');
-      const { buildLimitOrder, limitTakingAmount, signLimitOrder, submitLimitOrder, approveLimitOrderIfNeeded } = await loadLimitOrderEngine();
-      const takingAmount = limitTakingAmount(makingAmount, from.decimals, to.decimals, limitPrice);
+      const makingAmount = amountToBaseUnits(amount, makerAsset);
+      const takingAmount = limitTakingAmount(makingAmount, makerAsset.decimals, takerAsset.decimals, limitPrice);
+
+      // The wallet must have the token that will actually be paid.
+      const paymentAmount = limitSide === 'Sell' ? makingAmount : takingAmount;
+      if (BigInt(fromBalance || '0') < BigInt(paymentAmount)) {
+        throw new Error('Insufficient ' + from.symbol + ' balance for this limit order.');
+      }
+
+      const { buildLimitOrder, signLimitOrder, submitLimitOrder, approveLimitOrderIfNeeded } = await loadLimitOrderEngine();
       const networkInfo = SWAP_NETWORKS[network];
       if (!networkInfo) throw new Error('Unsupported limit-order network.');
+
       const built = await buildLimitOrder({
         maker: wallet,
-        makerAsset: from,
-        takerAsset: to,
+        makerAsset,
+        takerAsset,
         makingAmount,
         takingAmount,
         expirationSeconds: limitExpiry,
       });
+
       setStatus('Checking limit-order approval');
-      await approveLimitOrderIfNeeded(from, wallet, makingAmount, built.approvalAddress, setStatus);
+      await approveLimitOrderIfNeeded(makerAsset, wallet, makingAmount, built.approvalAddress, setStatus);
+
       setStatus('Sign limit order in SIRE Wallet');
       const signature = await signLimitOrder(built.typedData, wallet, true, networkInfo);
+
       setStatus('Publishing limit order');
       const submitted = await submitLimitOrder({
-        chainId: from.chainId,
+        chainId: makerAsset.chainId,
         orderHash: built.orderHash,
         signature,
         data: built.orderData,
       } as any);
+
       const local = {
         orderHash: built.orderHash,
         makerTraits: String(built.makerTraits),
-        chainId: from.chainId,
-        makerAsset: from.address,
-        takerAsset: to.address,
-        makerSymbol: from.symbol,
-        takerSymbol: to.symbol,
+        chainId: makerAsset.chainId,
+        makerAsset: makerAsset.address,
+        takerAsset: takerAsset.address,
+        makerSymbol: makerAsset.symbol,
+        takerSymbol: takerAsset.symbol,
         makingAmount,
         takingAmount,
         limitPrice,
+        side: limitSide,
         createdAt: Date.now(),
         status: 'Open',
       };
@@ -626,8 +695,10 @@ export default function TradeView({ referencePrice = 0 }: Props) {
         const stored = JSON.parse(window.localStorage.getItem('sire.limit.orders.v1') || '[]');
         window.localStorage.setItem('sire.limit.orders.v1', JSON.stringify([local, ...(Array.isArray(stored) ? stored.filter((item:any) => item.orderHash !== local.orderHash) : [])].slice(0, 50)));
       } catch {}
-      setStatus('Limit order live');
-      if (submitted?.orderHash) setStatus('Limit order live · ' + shortAddress(submitted.orderHash));
+
+      setStatus(submitted?.orderHash ? 'Limit order live · ' + shortAddress(submitted.orderHash) : 'Limit order live');
+      setLimitPrice('');
+      setAmount('1');
       await refreshLimitOrders().catch(() => {});
     } catch (error) {
       setLimitError(error instanceof Error ? error.message : String(error));
@@ -818,7 +889,7 @@ export default function TradeView({ referencePrice = 0 }: Props) {
 
       <main className="sire-swap-main">
         <div className="sire-swap-grid">
-          <section className="sire-swap-card sire-swap-form-card">
+          <section className={"sire-swap-card sire-swap-form-card" + (tradeMode === "Limit" ? " sire-limit-mode" : "")}>
             <div className="sire-swap-token-box">
               <div className="sire-swap-token-label"><span>From</span><span>Balance {wallet ? balanceDisplay + ' ' + from.symbol : '—'}</span></div>
               <div className="sire-swap-token-row">
@@ -852,13 +923,105 @@ export default function TradeView({ referencePrice = 0 }: Props) {
               </small>
             </div>
 
-            {tradeMode === 'Limit' && <div className="sire-limit-panel">
-              <div className="sire-limit-field">
-                <label>Limit price <span>{to.symbol} per {from.symbol}</span></label>
-                <input inputMode="decimal" value={limitPrice} onChange={e => { setLimitPrice(e.target.value.replace(/[^0-9.]/g,'')); setLimitError(''); }} placeholder="0.00" />
+            {tradeMode === 'Limit' && <div className="sire-limit-panel sire-limit-interface">
+              <div className="sire-limit-head">
+                <div>
+                  <span>ON-CHAIN LIMIT ORDER</span>
+                  <strong>{limitSide === 'Buy' ? 'Buy' : 'Sell'} {limitMaker.symbol || 'TOKEN'}</strong>
+                  <small>{network} · same-network order</small>
+                </div>
+                <div className="sire-limit-live-price">
+                  <span>Market price</span>
+                  <b>{limitMarketLoading ? 'Loading…' : limitMarketPrice ? limitMarketPrice + ' ' + limitTaker.symbol : '—'}</b>
+                </div>
               </div>
-              <div className="sire-limit-field">
-                <label>Expires in</label>
+
+              <div className="sire-limit-side-toggle" role="tablist" aria-label="Limit side">
+                {(['Buy','Sell'] as const).map(side => (
+                  <button
+                    key={side}
+                    type="button"
+                    role="tab"
+                    aria-selected={limitSide === side}
+                    className={limitSide === side ? 'active ' + side.toLowerCase() : ''}
+                    onClick={() => { setLimitSide(side); setLimitPrice(''); setLimitError(''); setAmount('1'); }}
+                  >
+                    {side}
+                  </button>
+                ))}
+              </div>
+
+              <div className="sire-limit-token-card">
+                <div className="sire-limit-token-label">
+                  <span>{limitSide === 'Buy' ? 'Buy token' : 'Sell token'}</span>
+                  <span>{limitSide === 'Sell' ? 'Balance ' + balanceDisplay + ' ' + from.symbol : 'Payment ' + balanceDisplay + ' ' + from.symbol}</span>
+                </div>
+                <button type="button" className="sire-limit-token-select" onClick={() => setTokenPicker(limitSide === 'Sell' ? 'from' : 'to')}>
+                  <LogoMark src={limitMaker.logoURI} fallback={limitMaker.symbol.slice(0,1)} className="sire-token-mark large" />
+                  <span><b>{limitMaker.symbol || 'Select token'}</b><small>{limitMaker.name || 'Choose token'}</small></span>
+                  <ChevronDown size={15}/>
+                </button>
+              </div>
+
+              <div className="sire-limit-price-card">
+                <div className="sire-limit-input-head">
+                  <label>Limit price</label>
+                  <span>{limitPriceLabel}</span>
+                </div>
+                <div className="sire-limit-price-row">
+                  <input
+                    inputMode="decimal"
+                    value={limitPrice}
+                    onChange={e => { setLimitPrice(e.target.value.replace(/[^0-9.]/g,'')); setLimitError(''); }}
+                    placeholder="0.00"
+                  />
+                  <button type="button" disabled={!limitMarketPrice} onClick={() => setLimitPrice(limitMarketPrice || '')}>Market</button>
+                </div>
+                <div className="sire-limit-price-shortcuts">
+                  <button type="button" disabled={!limitMarketPrice} onClick={() => setLimitPrice(limitMarketPrice || '')}>Market price</button>
+                  <button type="button" disabled={!limitMarketPrice} onClick={() => {
+                    const base = Number(limitMarketPrice);
+                    if (Number.isFinite(base) && base > 0) setLimitPrice(String(base * (limitSide === 'Buy' ? 0.9 : 1.1)));
+                  }}>{limitSide === 'Buy' ? '-10%' : '+10%'}</button>
+                </div>
+              </div>
+
+              <div className="sire-limit-token-card">
+                <div className="sire-limit-token-label">
+                  <span>{limitSide === 'Buy' ? 'Pay with' : 'Amount'}</span>
+                  <span>{limitSide === 'Buy' ? from.symbol : limitMaker.symbol}</span>
+                </div>
+                <div className="sire-limit-amount-row">
+                  <input
+                    inputMode="decimal"
+                    value={limitSide === 'Buy' ? amount : amount}
+                    onChange={e => { setAmount(e.target.value.replace(/[^0-9.]/g,'')); setLimitError(''); }}
+                    placeholder="0.00"
+                  />
+                  <span>{limitSide === 'Buy' ? limitTaker.symbol : limitMaker.symbol}</span>
+                </div>
+                <div className="sire-limit-balance-bar">
+                  {[25,50,75,100].map(percent => (
+                    <button key={percent} type="button" onClick={() => {
+                      try {
+                        const balance = Number(balanceDisplay);
+                        const price = Number(limitPrice);
+                        if (!Number.isFinite(balance) || balance <= 0) return;
+                        if (limitSide === 'Sell') setAmount(String(balance * percent / 100));
+                        else if (Number.isFinite(price) && price > 0) setAmount(String((balance * percent / 100) / price));
+                      } catch {}
+                    }}>{percent}%</button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="sire-limit-receive-card">
+                <div><span>Estimated receive</span><b>{limitTargetAmount ? limitTargetAmount + ' ' + limitTaker.symbol : '—'}</b></div>
+                <div><span>Execution</span><b>Only when target is reached</b></div>
+              </div>
+
+              <div className="sire-limit-expiry">
+                <label>Expiration</label>
                 <select value={limitExpiry} onChange={e => setLimitExpiry(Number(e.target.value))}>
                   <option value={3600}>1 hour</option>
                   <option value={86400}>24 hours</option>
@@ -866,24 +1029,26 @@ export default function TradeView({ referencePrice = 0 }: Props) {
                   <option value={2592000}>30 days</option>
                 </select>
               </div>
-              <div className="sire-limit-preview">
-                <span>Receive at target</span>
-                <b>{limitPrice && amount ? (() => { try { return formatUnits(limitTakingAmount(amountToBaseUnits(amount, from), from.decimals, to.decimals, limitPrice), to.decimals, 6) + ' ' + to.symbol; } catch { return '—'; } })() : '—'}</b>
-              </div>
-              <button type="button" className="sire-review-button" disabled={limitBusy || !wallet || !nativeUnlocked} onClick={() => void placeLimitOrder()}>
-                {limitBusy ? <><LoaderCircle className="sire-spin" size={15}/> {status || 'Placing order'}</> : 'Place Limit Order'}
+
+              <button type="button" className={'sire-review-button sire-limit-submit ' + (limitSide === 'Buy' ? 'buy' : 'sell')} disabled={limitBusy || !wallet || !nativeUnlocked || !limitPrice || !amount} onClick={() => void placeLimitOrder()}>
+                {limitBusy ? <><LoaderCircle className="sire-spin" size={15}/> {status || 'Placing order'}</> : (wallet ? (limitSide === 'Buy' ? 'Buy ' + limitMaker.symbol : 'Sell ' + limitMaker.symbol) : 'Unlock SIRE Wallet')}
               </button>
-              <small className="sire-limit-note">Your order is signed locally and published to the 1inch Orderbook. Funds remain in your wallet until a resolver fills the order.</small>
+
+              <small className="sire-limit-note">Your limit order is signed locally and published to the 1inch Orderbook. On EVM networks, the assets remain in your wallet until a resolver fills the order.</small>
               {limitError && <div className="sire-swap-error"><CircleAlert size={14}/><span>{limitError}</span></div>}
-              {limitOrders.length > 0 && <div className="sire-limit-orders">
-                <div className="sire-limit-orders-head"><b>Open limit orders</b><button type="button" onClick={() => void refreshLimitOrders()}>Refresh</button></div>
-                {limitOrders.slice(0, 8).map((order:any) => (
+
+              <div className="sire-limit-orders">
+                <div className="sire-limit-orders-head"><b>Open orders</b><button type="button" onClick={() => void refreshLimitOrders()}>Refresh</button></div>
+                {limitOrders.length > 0 ? limitOrders.slice(0, 8).map((order:any) => (
                   <div className="sire-limit-order-row" key={order.orderHash}>
-                    <div><b>{order.makerSymbol || from.symbol} → {order.takerSymbol || to.symbol}</b><small>{order.limitPrice || 'Limit'} · {order.orderStatus === 1 || order.status === 'Open' ? 'Open' : String(order.orderStatus || order.status || 'Pending')}</small></div>
+                    <div>
+                      <b>{order.side === 'Buy' ? 'Buy' : 'Sell'} {order.makerSymbol || 'Token'}</b>
+                      <small>{order.limitPrice || 'Limit'} {order.takerSymbol ? order.takerSymbol : ''} · {order.orderStatus === 1 || order.status === 'Open' ? 'Open' : String(order.orderStatus || order.status || 'Pending')}</small>
+                    </div>
                     <button type="button" disabled={limitBusy} onClick={() => void cancelLimit(order)}>Cancel</button>
                   </div>
-                ))}
-              </div>}
+                )) : <div className="sire-limit-empty">No open limit orders.</div>}
+              </div>
             </div>}
 
             <div className="sire-swap-route">
