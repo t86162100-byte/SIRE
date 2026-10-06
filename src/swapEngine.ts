@@ -355,7 +355,8 @@ export async function prepareBitgetSwap(args:{quote:SwapQuote;wallet:string;slip
     toMinAmount:args.quote.toAmountMin,fromAddress:args.wallet,toAddress:args.toAddress,txOrigin:args.wallet,
     slippage:args.slippage*100,market,amountUnit:'token',requestMod:'simple'
   });
-  const tx=Array.isArray(data?.txs)?data.txs[0]:null;
+  const txs=Array.isArray(data?.txs)?data.txs:[];
+  const tx=txs.length===1 && txs[0]?.data ? {...txs[0].data, chainId:txs[0]?.chainId||txs[0]?.data?.chainId} : txs[txs.length-1];
   if (!tx?.to || !tx?.calldata) throw new Error('Bitget Wallet did not return executable EVM calldata.');
   return {
     ...args.quote,id:String(data?.id||args.quote.id||''),
