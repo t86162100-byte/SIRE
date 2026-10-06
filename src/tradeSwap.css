@@ -252,6 +252,8 @@
 
 
 /* Dedicated Swap → Limit interface. Market-mode controls stay untouched. */
+.sire-limit-mode .sire-swap-flip{display:none}
+
 .sire-limit-mode .sire-swap-token-box{display:none}
 .sire-limit-mode .sire-swap-route,
 .sire-limit-mode .sire-slippage,
