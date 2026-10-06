@@ -253,12 +253,12 @@
 
 /* Dedicated Swap → Limit interface. Market-mode controls stay untouched. */
 .sire-limit-mode .sire-swap-flip{display:none}
-.sire-limit-pair-pill{display:flex;align-items:center;gap:9px;min-height:42px;padding:5px 11px;border:1px solid rgba(0,240,255,.42);border-radius:999px;background:rgba(0,240,255,.08);box-shadow:inset 0 0 18px rgba(0,240,255,.06),0 0 18px rgba(0,240,255,.06);overflow:hidden}
-.sire-limit-pair-token{display:flex;align-items:center;gap:6px;min-width:0}
-.sire-limit-pair-token .sire-token-mark{width:25px;height:25px;flex:0 0 25px;background:#111;border-color:rgba(0,240,255,.24)}
-.sire-limit-pair-token b{font-size:11px;color:#fff}
-.sire-limit-pair-arrow{color:#00f0ff;font-size:15px;font-weight:900;line-height:1}
-.sire-limit-pair-network{margin-left:auto;font-size:8px;color:rgba(255,255,255,.42);white-space:nowrap}
+.sire-limit-token-pill{display:flex;align-items:center;gap:8px;width:max-content;min-height:42px;padding:5px 12px 5px 7px;border:1px solid rgba(0,240,255,.45);border-radius:999px;background:#00dff0;color:#071014;box-shadow:0 0 20px rgba(0,240,255,.28);cursor:pointer}
+.sire-limit-token-pill .sire-token-mark{width:29px;height:29px;flex:0 0 29px;background:#111;border:2px solid rgba(255,255,255,.18)}
+.sire-limit-token-pill span{display:flex;flex-direction:column;align-items:flex-start;line-height:1}
+.sire-limit-token-pill b{font-size:12px;font-weight:800;color:#071014}
+.sire-limit-token-pill small{margin-top:3px;font-size:8px;color:rgba(7,16,20,.55)}
+.sire-limit-token-pill svg{margin-left:1px;color:#071014}
 @media(max-width:620px){.sire-limit-pair-pill{width:100%;box-sizing:border-box}.sire-limit-pair-network{display:none}}
 
 
