@@ -1011,6 +1011,7 @@ export default function TradeView({ referencePrice = 0 }: Props) {
                   <small>{from.priceUSD && Number.isFinite(Number(amount)) ? '$' + money(Number(amount) * from.priceUSD, 2) : '—'}</small>
                   <div><span>Receive</span><b>{limitTargetAmount ? limitTargetAmount : '—'}</b><em>{limitTaker.symbol || ''}</em></div>
                 </div>
+              </div>
 
               <div className="sire-limit-price-options sire-limit-payment-percentages" aria-label="Payment amount percentage">
                 {[25, 50, 75, 100].map(percent => (
