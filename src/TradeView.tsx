@@ -653,8 +653,9 @@ export default function TradeView({ referencePrice = 0 }: Props) {
       return;
     }
 
-    // A Swap → Limit order is an on-chain 1inch order. The side changes which
-    // token is the maker asset: Sell = sell "from"; Buy = buy "to".
+    // A Limit intent uses the current 0x Swap API v2 as its pricing source.
+    // Sell = sell "from"; Buy = buy "to". Tokens remain in the wallet until
+    // the user chooses to execute a firm quote.
     const makerAsset = limitSide === 'Sell' ? from : to;
     const takerAsset = limitSide === 'Sell' ? to : from;
     if (makerAsset.native || takerAsset.native) {
@@ -680,10 +681,7 @@ export default function TradeView({ referencePrice = 0 }: Props) {
         throw new Error('Insufficient ' + from.symbol + ' balance for this limit order.');
       }
 
-      const { buildLimitOrder, signLimitOrder, submitLimitOrder, approveLimitOrderIfNeeded } = await loadLimitOrderEngine();
-      const networkInfo = SWAP_NETWORKS[network];
-      if (!networkInfo) throw new Error('Unsupported limit-order network.');
-
+      const { buildLimitOrder, submitLimitOrder } = await loadLimitOrderEngine();
       const built = await buildLimitOrder({
         maker: wallet,
         makerAsset,
@@ -693,19 +691,12 @@ export default function TradeView({ referencePrice = 0 }: Props) {
         expirationSeconds: limitExpiry,
       });
 
-      setStatus('Checking limit-order approval');
-      await approveLimitOrderIfNeeded(makerAsset, wallet, makingAmount, built.approvalAddress, setStatus);
-
-      setStatus('Sign limit order in SIRE Wallet');
-      const signature = await signLimitOrder(built.typedData, wallet, true, networkInfo);
-
-      setStatus('Publishing limit order');
+      setStatus('Arming 0x limit monitor');
       const submitted = await submitLimitOrder({
         chainId: makerAsset.chainId,
         orderHash: built.orderHash,
-        signature,
         data: built.orderData,
-      } as any);
+      });
 
       const local = {
         orderHash: built.orderHash,
@@ -728,7 +719,7 @@ export default function TradeView({ referencePrice = 0 }: Props) {
         window.localStorage.setItem('sire.limit.orders.v1', JSON.stringify([local, ...(Array.isArray(stored) ? stored.filter((item:any) => item.orderHash !== local.orderHash) : [])].slice(0, 50)));
       } catch {}
 
-      setStatus(submitted?.orderHash ? 'Limit order live · ' + shortAddress(submitted.orderHash) : 'Limit order live');
+      setStatus(submitted?.orderHash ? 'Limit order armed · ' + shortAddress(submitted.orderHash) : 'Limit order armed');
       setLimitPrice('');
       setAmount('1');
       await refreshLimitOrders().catch(() => {});
@@ -748,17 +739,9 @@ export default function TradeView({ referencePrice = 0 }: Props) {
     setLimitBusy(true);
     setLimitError('');
     try {
-      const networkInfo = supportedNetworks.find(item => item.chainId === Number(order.chainId)) || SWAP_NETWORKS[network];
-      if (!networkInfo) throw new Error('Unsupported cancellation network.');
       setStatus('Canceling limit order');
-      const { cancelLimitOrder } = await loadLimitOrderEngine();
-      const hash = await cancelLimitOrder({
-        network: networkInfo,
-        owner: wallet,
-        order: order.order || order.data || order,
-        native: true,
-      });
-      setStatus('Limit order cancellation submitted');
+      const hash = order.orderHash;
+      setStatus('Limit order canceled');
       setLimitOrders(current => current.filter(item => item.orderHash !== order.orderHash));
       try {
         const stored = JSON.parse(window.localStorage.getItem('sire.limit.orders.v1') || '[]');
@@ -1076,7 +1059,7 @@ export default function TradeView({ referencePrice = 0 }: Props) {
                 {limitBusy ? <><LoaderCircle className="sire-spin" size={15}/> {status || 'Placing order'}</> : (wallet ? (limitSide === 'Buy' ? 'Buy ' + limitMaker.symbol : 'Sell ' + limitMaker.symbol) : 'Unlock SIRE Wallet')}
               </button>
 
-              <small className="sire-limit-note">Your limit order is signed locally and published to the 1inch Orderbook. On EVM networks, the assets remain in your wallet until a resolver fills the order.</small>
+              <small className="sire-limit-note">Your limit order is monitored through 0x Swap API v2. Your tokens remain in SIRE Wallet until the target is reached and you review the live quote.</small>
               {limitError && <div className="sire-swap-error"><CircleAlert size={14}/><span>{limitError}</span></div>}
 
               <div className="sire-limit-orders">
