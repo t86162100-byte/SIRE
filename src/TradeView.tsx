@@ -709,7 +709,7 @@ export default function TradeView({ referencePrice = 0 }: Props) {
 
       const local = {
         orderHash: built.orderHash,
-        makerTraits: String(built.makerTraits),
+        order: built.orderData,
         chainId: makerAsset.chainId,
         makerAsset: makerAsset.address,
         takerAsset: takerAsset.address,
@@ -755,8 +755,7 @@ export default function TradeView({ referencePrice = 0 }: Props) {
       const hash = await cancelLimitOrder({
         network: networkInfo,
         owner: wallet,
-        makerTraits: String(order.makerTraits || order.data?.makerTraits || '0'),
-        orderHash: String(order.orderHash),
+        order: order.order || order.data || {},
         native: true,
       });
       setStatus('Limit order cancellation submitted');
