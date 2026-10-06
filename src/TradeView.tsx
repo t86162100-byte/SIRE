@@ -954,6 +954,7 @@ export default function TradeView({ referencePrice = 0 }: Props) {
               <div className={'sire-limit-price-card sire-limit-price-main ' + (limitSide === 'Buy' ? 'buy' : 'sell')}>
                 <div className="sire-limit-price-message">
                   {limitSide === 'Buy' ? 'Buy ' : 'Sell '}
+                  <LogoMark src={limitMaker.logoURI} fallback={limitMaker.symbol.slice(0,1) || 'T'} className="sire-limit-inline-logo" />
                   <b>{limitMaker.symbol || 'token'}</b>
                   {limitSide === 'Buy' ? ' when price is below ' : ' when price is above '}
                   <strong>{limitPricePreset}</strong>
