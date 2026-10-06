@@ -994,28 +994,6 @@ export default function TradeView({ referencePrice = 0 }: Props) {
                 ))}
               </div>
 
-              <div className="sire-limit-token-card sire-limit-amount-card">
-                <div className="sire-limit-token-label">
-                  <span>{limitSide === 'Buy' ? 'You pay' : 'You sell'}</span>
-                  <span>{limitSide === 'Buy' ? from.symbol : limitMaker.symbol}</span>
-                </div>
-                <div className="sire-limit-amount-row">
-                  <input inputMode="decimal" value={amount} onChange={e => { setAmount(e.target.value.replace(/[^0-9.]/g,'')); setLimitError(''); }} placeholder="0.00" />
-                  <span>{limitSide === 'Buy' ? from.symbol : limitMaker.symbol}</span>
-                </div>
-                <div className="sire-limit-balance-bar">
-                  {[25,50,75,100].map(percent => (
-                    <button key={percent} type="button" onClick={() => {
-                      const balance = Number(balanceDisplay);
-                      const price = Number(limitPrice);
-                      if (!Number.isFinite(balance) || balance <= 0) return;
-                      if (limitSide === 'Sell') setAmount(String(balance * percent / 100));
-                      else if (Number.isFinite(price) && price > 0) setAmount(String(balance * percent / 100));
-                    }}>{percent === 100 ? 'MAX' : percent + '%'}</button>
-                  ))}
-                </div>
-              </div>
-
               <div className="sire-limit-receive-card">
                 <div><span>Estimated receive</span><b>{limitTargetAmount ? limitTargetAmount + ' ' + limitTaker.symbol : '—'}</b></div>
                 <div><span>Execution</span><b>Only when target is reached</b></div>
