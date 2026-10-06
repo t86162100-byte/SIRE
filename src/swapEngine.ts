@@ -328,9 +328,9 @@ async function getBitgetQuote(args:{fromToken:SwapToken;toToken:SwapToken;amount
   const fromChain=getBitgetChainKey(args.fromToken.chainId), toChain=getBitgetChainKey(args.toToken.chainId);
   if (!fromChain || !toChain) throw new Error('Bitget Wallet does not support this EVM network in SIRE yet.');
   const data=await bitgetSwapRequest('quote',{
-    fromSymbol:args.fromToken.symbol,fromContract:args.fromToken.native?'':args.fromToken.address,fromAmount:args.amount,fromChain,
-    toSymbol:args.toToken.symbol,toContract:args.toToken.native?'':args.toToken.address,toChain,
-    fromAddress:args.wallet,toAddress:args.toAddress,txOrigin:args.wallet,estimateGas:true,amountUnit:'token'
+    fromChain,fromContract:args.fromToken.native?'':args.fromToken.address,fromAmount:args.amount,
+    toChain,toContract:args.toToken.native?'':args.toToken.address,
+    fromAddress:args.wallet,toAddress:args.toAddress
   });
   const toAmount=String(data?.toAmount||'0'); if (!toAmount || toAmount==='0') throw new Error('Bitget Wallet returned no output amount.');
   const priceImpact=Number(data?.priceImpact), feeUSD=Number(data?.fee?.totalAmountInUsd), gasUSD=Number(data?.fee?.gasFee?.amountInUsd);
@@ -350,10 +350,12 @@ export async function prepareBitgetSwap(args:{quote:SwapQuote;wallet:string;slip
   const market=String(args.quote.raw?.market||'');
   if (!fromChain || !toChain || !market) throw new Error('Bitget Wallet quote cannot be prepared for this route.');
   const data=await bitgetSwapRequest('swap',{
-    fromSymbol:args.quote.fromToken.symbol,fromContract:args.quote.fromToken.native?'':args.quote.fromToken.address,fromAmount:args.quote.fromAmount,fromChain,
-    toSymbol:args.quote.toToken.symbol,toContract:args.quote.toToken.native?'':args.quote.toToken.address,toChain,
-    toMinAmount:args.quote.toAmountMin,fromAddress:args.wallet,toAddress:args.toAddress,txOrigin:args.wallet,
-    slippage:args.slippage*100,market,amountUnit:'token',requestMod:'simple'
+    fromChain,fromContract:args.quote.fromToken.native?'':args.quote.fromToken.address,
+    fromAmount:formatUnits(args.quote.fromAmount,args.quote.fromToken.decimals,18),
+    toChain,toContract:args.quote.toToken.native?'':args.quote.toToken.address,
+    fromAddress:args.wallet,toAddress:args.toAddress,market,
+    slippage:String(args.slippage),
+    toMinAmount:formatUnits(args.quote.toAmountMin,args.quote.toToken.decimals,18)
   });
   const txs=Array.isArray(data?.txs)?data.txs:[];
   const tx=txs.length===1 && txs[0]?.data ? {...txs[0].data, chainId:txs[0]?.chainId||txs[0]?.data?.chainId} : txs[txs.length-1];
