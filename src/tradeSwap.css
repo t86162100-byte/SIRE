@@ -361,3 +361,6 @@
   border-radius:54px;
   overflow:hidden;
 }
+/* Limit payment percentage shortcuts: same pill pattern, always white. */
+.sire-limit-payment-percentages{margin-top:0}
+.sire-limit-payment-percentages button{height:32px;border-color:rgba(255,255,255,.09);background:#080808;color:#fff}
