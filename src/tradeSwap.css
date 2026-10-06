@@ -280,8 +280,8 @@
 .sire-limit-live-price{text-align:right;display:flex;flex-direction:column;gap:4px}
 .sire-limit-live-price span{font-size:8px;letter-spacing:.08em}
 .sire-limit-live-price b{font-size:12px;font-variant-numeric:tabular-nums}
-.sire-limit-side-toggle{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:0;background:transparent}
-.sire-limit-side-toggle button{flex:1;height:42px;border:0;border-radius:999px;background:#080808;color:rgba(255,255,255,.48);font-size:12px;font-weight:900;box-shadow:0 0 0 1px rgba(255,255,255,.09),0 8px 20px rgba(0,0,0,.24);transition:background .18s ease,color .18s ease,box-shadow .18s ease}
+.sire-limit-side-toggle{display:flex;align-items:center;justify-content:center;gap:12px;padding:0;background:transparent}
+.sire-limit-side-toggle button{width:78px;flex:0 0 78px;height:42px;border:0;border-radius:999px;background:#080808;color:rgba(255,255,255,.48);font-size:12px;font-weight:900;box-shadow:0 0 0 1px rgba(255,255,255,.09),0 8px 20px rgba(0,0,0,.24);transition:background .18s ease,color .18s ease,box-shadow .18s ease}
 .sire-limit-side-toggle button.active.buy{background:rgba(53,214,130,.16);color:#55d69b;box-shadow:0 0 0 1px rgba(85,214,155,.35),0 0 18px rgba(85,214,155,.14)}
 .sire-limit-side-toggle button.active.sell{background:rgba(255,74,91,.16);color:#ff6470;box-shadow:0 0 0 1px rgba(255,100,112,.35),0 0 18px rgba(255,100,112,.14)}
 .sire-limit-side-toggle button:not(.active):hover{color:rgba(255,255,255,.72)}
