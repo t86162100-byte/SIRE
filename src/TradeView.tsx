@@ -994,6 +994,13 @@ export default function TradeView({ referencePrice = 0 }: Props) {
                 ))}
               </div>
 
+              <div className="sire-limit-token-card sire-limit-payment-card">
+                <div className="sire-limit-token-pill sire-limit-payment-pill" aria-label={'Payment ' + (from.symbol || 'token')}>
+                  <LogoMark src={from.logoURI} fallback={from.symbol.slice(0,1) || 'T'} className="sire-token-mark large" />
+                  <span><b>{from.symbol || 'Select token'}</b><small>{from.name || ''}</small></span>
+                </div>
+              </div>
+
               <div className="sire-limit-receive-card">
                 <div><span>Estimated receive</span><b>{limitTargetAmount ? limitTargetAmount + ' ' + limitTaker.symbol : '—'}</b></div>
                 <div><span>Execution</span><b>Only when target is reached</b></div>
