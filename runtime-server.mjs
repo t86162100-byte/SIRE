@@ -1091,6 +1091,6 @@ server.listen(PORT,HOST,async()=>{
   console.log(`SIRE server listening on ${HOST}:${PORT}`);
   console.log('[DERIV HISTORY STORE]', JSON.stringify(await historyStoreStatus()));
   console.log('[LIMIT ORDER MONITOR] server-side 0x monitor starting');
-  void runLimitOrderMonitorBatch(20).catch(error => console.warn('[LIMIT ORDER MONITOR]', error instanceof Error ? error.message : String(error)));
-  setInterval(() => void runLimitOrderMonitorBatch(20).catch(error => console.warn('[LIMIT ORDER MONITOR]', error instanceof Error ? error.message : String(error))), 5000);
+  void runLimitOrderMonitorBatch(2).catch(error => console.warn('[LIMIT ORDER MONITOR]', error instanceof Error ? error.message : String(error)));
+  setInterval(() => void runLimitOrderMonitorBatch(2).catch(error => console.warn('[LIMIT ORDER MONITOR]', error instanceof Error ? error.message : String(error))), 5000);
 });
