@@ -340,7 +340,7 @@ async function getBitgetQuote(args:{fromToken:SwapToken;toToken:SwapToken;amount
     toAmountMin:amountToBaseUnits(String(data?.toMinAmount||toAmount),args.toToken),fromToken:args.fromToken,toToken:args.toToken,
     gasUSD:Number.isFinite(gasUSD)?String(gasUSD):(Number.isFinite(feeUSD)?String(feeUSD):undefined),
     executionDuration:Number(data?.executionDuration||0)||undefined,
-    priceImpact:Number.isFinite(priceImpact)?priceImpact/100:undefined,
+    priceImpact:Number.isFinite(priceImpact)?priceImpact:undefined,
     expiresAt:Number(data?.expiresAt||0)>0?Number(data.expiresAt)*1000:Date.now()+15000,
     raw:{provider:'bitget-wallet',chain:{from:fromChain,to:toChain},market:data?.market,features:data?.features||[],fee:data?.fee||{},quote:data}
   };
