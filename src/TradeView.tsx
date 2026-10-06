@@ -924,18 +924,16 @@ export default function TradeView({ referencePrice = 0 }: Props) {
             </div>
 
             {tradeMode === 'Limit' && <div className="sire-limit-panel sire-limit-interface">
-              <div className="sire-limit-pair-pill" aria-label={'Limit order pair: ' + (from.symbol || 'From') + ' to ' + (to.symbol || 'To')}>
-                <div className="sire-limit-pair-token">
-                  <LogoMark src={from.logoURI} fallback={from.symbol.slice(0,1) || 'F'} className="sire-token-mark" />
-                  <b>{from.symbol || 'FROM'}</b>
-                </div>
-                <span className="sire-limit-pair-arrow" aria-hidden="true">→</span>
-                <div className="sire-limit-pair-token">
-                  <LogoMark src={to.logoURI} fallback={to.symbol.slice(0,1) || 'T'} className="sire-token-mark" />
-                  <b>{to.symbol || 'TO'}</b>
-                </div>
-                <span className="sire-limit-pair-network">{network || 'Network'} · same network</span>
-              </div>
+              <button
+                type="button"
+                className="sire-limit-token-pill"
+                aria-label={(limitSide === 'Buy' ? 'Buy ' : 'Sell ') + (limitMaker.symbol || 'token')}
+                onClick={() => setTokenPicker(limitSide === 'Sell' ? 'from' : 'to')}
+              >
+                <LogoMark src={limitMaker.logoURI} fallback={limitMaker.symbol.slice(0,1) || 'T'} className="sire-token-mark large" />
+                <span><b>{limitMaker.symbol || 'Select token'}</b><small>{limitMaker.name || ''}</small></span>
+                <ChevronDown size={15}/>
+              </button>
 
               <div className="sire-limit-side-toggle" role="tablist" aria-label="Limit side">
                 {(['Buy','Sell'] as const).map(side => (
