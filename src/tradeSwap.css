@@ -349,7 +349,7 @@
 
 /* Final Limit card shape overrides. */
 .sire-limit-mode .sire-limit-price-main{
-  border-radius:64px;
+  border-radius:54px;
   overflow:hidden;
 }
 
@@ -358,6 +358,6 @@
   box-sizing:border-box;
   padding:22px;
   align-items:flex-start;
-  border-radius:64px;
+  border-radius:54px;
   overflow:hidden;
 }
