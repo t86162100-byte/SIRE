@@ -399,3 +399,180 @@
 /* Limit payment percentage shortcuts: same pill pattern, always white. */
 .sire-limit-payment-percentages{margin-top:0}
 .sire-limit-payment-percentages button{height:32px;border-color:rgba(255,255,255,.09);background:#080808;color:#fff}
+
+
+/* Swap → Limit controls: expiry pill and dedicated numeric keypad. */
+.sire-limit-topbar{
+  display:flex;
+  align-items:center;
+  justify-content:flex-end;
+  min-height:34px;
+  margin-bottom:-2px;
+}
+.sire-limit-topbar>span{
+  margin-right:auto;
+  font-size:9px;
+  color:rgba(255,255,255,.34);
+  letter-spacing:.08em;
+  text-transform:uppercase;
+  font-weight:800;
+}
+.sire-limit-expiry-pill{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  gap:6px;
+  min-height:34px;
+  padding:0 13px;
+  border:1px solid rgba(255,255,255,.88);
+  border-radius:999px;
+  background:#fff;
+  color:#050505;
+  font-size:9px;
+  font-weight:900;
+  box-shadow:0 6px 18px rgba(0,0,0,.22);
+}
+.sire-limit-expiry-pill svg{flex:0 0 auto}
+
+.sire-limit-mode .sire-limit-target-price{
+  width:100%;
+  border:0;
+  outline:0;
+  background:transparent;
+  color:inherit;
+  cursor:pointer;
+  text-align:left;
+  font:inherit;
+  padding-left:0;
+  padding-right:0;
+}
+.sire-limit-mode .sire-limit-payment-summary{
+  border:0;
+  outline:0;
+  background:transparent;
+  color:inherit;
+  cursor:pointer;
+  font:inherit;
+  pointer-events:auto;
+  appearance:none;
+  -webkit-appearance:none;
+}
+.sire-limit-mode .sire-limit-payment-summary:focus-visible,
+.sire-limit-mode .sire-limit-target-price:focus-visible{
+  outline:2px solid rgba(255,255,255,.55);
+  outline-offset:3px;
+  border-radius:12px;
+}
+
+.sire-limit-expiry-sheet,
+.sire-limit-keypad-sheet{
+  width:min(440px,100%);
+  box-sizing:border-box;
+}
+.sire-limit-expiry-options{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:8px;
+  margin-bottom:12px;
+}
+.sire-limit-expiry-options button{
+  height:42px;
+  border:1px solid rgba(255,255,255,.09);
+  border-radius:10px;
+  background:#101010;
+  color:rgba(255,255,255,.72);
+  font-size:10px;
+  font-weight:800;
+}
+.sire-limit-expiry-options button.active{
+  background:#fff;
+  color:#050505;
+  border-color:#fff;
+}
+.sire-limit-custom-date{
+  display:flex;
+  flex-direction:column;
+  gap:7px;
+  margin:4px 0 13px;
+}
+.sire-limit-custom-date span{
+  font-size:9px;
+  color:rgba(255,255,255,.42);
+}
+.sire-limit-custom-date input{
+  width:100%;
+  height:42px;
+  box-sizing:border-box;
+  border:1px solid rgba(255,255,255,.1);
+  border-radius:10px;
+  background:#050505;
+  color:#fff;
+  padding:0 10px;
+  font-size:11px;
+  outline:0;
+  color-scheme:dark;
+}
+.sire-limit-keypad-display{
+  min-height:78px;
+  display:flex;
+  align-items:baseline;
+  justify-content:center;
+  gap:7px;
+  padding:10px 12px 16px;
+  border:1px solid rgba(255,255,255,.08);
+  border-radius:14px;
+  background:#050505;
+  margin-bottom:10px;
+}
+.sire-limit-keypad-display strong{
+  max-width:100%;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  font-size:30px;
+  line-height:1;
+  font-weight:900;
+  font-variant-numeric:tabular-nums;
+}
+.sire-limit-keypad-display span{
+  font-size:10px;
+  color:rgba(255,255,255,.42);
+  font-weight:800;
+}
+.sire-limit-keypad-grid{
+  display:grid;
+  grid-template-columns:repeat(3,1fr);
+  gap:8px;
+}
+.sire-limit-keypad-grid button{
+  height:52px;
+  border:1px solid rgba(255,255,255,.08);
+  border-radius:12px;
+  background:#111;
+  color:#fff;
+  font-size:18px;
+  font-weight:800;
+  font-variant-numeric:tabular-nums;
+}
+.sire-limit-keypad-grid button:active{background:#1b1b1b}
+.sire-limit-keypad-actions{
+  display:grid;
+  grid-template-columns:1fr 1.5fr;
+  gap:8px;
+  margin-top:9px;
+}
+.sire-limit-keypad-actions>button:first-child{
+  height:46px;
+  border:1px solid rgba(255,255,255,.08);
+  border-radius:999px;
+  background:#111;
+  color:rgba(255,255,255,.72);
+  font-size:10px;
+  font-weight:800;
+}
+.sire-limit-keypad-actions .sire-review-button{margin:0;height:46px}
+@media(max-width:620px){
+  .sire-limit-topbar{min-height:38px}
+  .sire-limit-expiry-pill{min-height:36px;padding:0 12px}
+  .sire-limit-keypad-sheet{padding-bottom:12px}
+  .sire-limit-keypad-grid button{height:56px;font-size:19px}
+}
