@@ -17,6 +17,8 @@ import {
   formatUnits,
   getInjectedProvider,
   getSwapQuote,
+  SwapQuoteUnavailableError,
+  formatSwapQuoteFailure,
   amountToBaseUnits,
   readTokenBalance,
   switchToNetwork,
@@ -383,8 +385,28 @@ export default function TradeView({ referencePrice = 0 }: Props) {
           }
         }
         if (!unique.length) {
-          const firstFailure = settled.find((item): item is PromiseRejectedResult => item.status === 'rejected');
-          throw (firstFailure?.reason instanceof Error ? firstFailure.reason : new Error('No executable swap route was returned.'));
+          const failures = settled
+            .filter((item): item is PromiseRejectedResult => item.status === 'rejected')
+            .map(item => item.reason);
+          const classified = failures.filter((reason): reason is SwapQuoteUnavailableError => reason instanceof SwapQuoteUnavailableError);
+          const priority: SwapQuoteUnavailableError['reason'][] = [
+            'INSUFFICIENT_FUNDS',
+            'AMOUNT_UNSUPPORTED',
+            'INSUFFICIENT_LIQUIDITY',
+            'TOOL_UNAVAILABLE',
+            'PRICE_IMPACT_TOO_HIGH',
+            'WALLET_RESTRICTION',
+            'NO_ROUTE'
+          ];
+          const selected = classified.sort((a,b) => priority.indexOf(a.reason) - priority.indexOf(b.reason))[0];
+          if (selected) throw new SwapQuoteUnavailableError(
+            selected.reason,
+            formatSwapQuoteFailure(selected.reason, from.symbol),
+            selected.providerCode,
+            classified.map(item => item.providerMessage).filter(Boolean).join(' | ')
+          );
+          const firstFailure = failures[0];
+          throw (firstFailure instanceof Error ? firstFailure : new Error('No executable swap route was returned.'));
         }
         unique.sort((a, b) => {
           try {
