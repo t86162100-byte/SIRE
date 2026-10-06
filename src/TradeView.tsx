@@ -1006,6 +1006,15 @@ export default function TradeView({ referencePrice = 0 }: Props) {
                   <ChevronDown size={15}/>
                 </button>
               </div>
+              <div className="sire-limit-price-options sire-limit-payment-percentages" aria-label="Payment amount percentage">
+                {[25, 50, 75, 100].map(percent => (
+                  <button
+                    key={percent}
+                    type="button"
+                    onClick={() => setAmount(String((Number(fromBalance) * percent) / 100))}
+                  >{percent}%</button>
+                ))}
+              </div>
 
               <div className="sire-limit-receive-card">
                 <div><span>Estimated receive</span><b>{limitTargetAmount ? limitTargetAmount + ' ' + limitTaker.symbol : '—'}</b></div>
