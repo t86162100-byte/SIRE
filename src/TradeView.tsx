@@ -545,8 +545,6 @@ export default function TradeView({ referencePrice = 0 }: Props) {
       tradeMode !== 'Limit' ||
       !network ||
       network !== toNetwork ||
-      limitMaker.native ||
-      limitTaker.native ||
       limitMaker.chainId !== limitTaker.chainId ||
       tokenIdentity(limitMaker) === tokenIdentity(limitTaker)
     ) {
