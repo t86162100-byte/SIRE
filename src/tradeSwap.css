@@ -284,12 +284,14 @@
 .sire-limit-payment-card.buy{box-shadow:0 0 28px rgba(0,232,255,.18),inset 0 0 24px rgba(0,232,255,.025);border-color:rgba(0,232,255,.18)}
 .sire-limit-payment-card.sell{box-shadow:0 0 28px rgba(255,145,160,.16),inset 0 0 24px rgba(255,145,160,.025);border-color:rgba(255,145,160,.22)}
 .sire-limit-payment-pill{cursor:pointer}
-.sire-limit-payment-summary{width:100%;margin-top:auto;margin-bottom:auto;text-align:center;display:flex;flex-direction:column;align-items:center;gap:4px}
-.sire-limit-payment-summary strong{font-size:25px;line-height:1.05;font-weight:900;color:#fff;font-variant-numeric:tabular-nums}
+.sire-limit-payment-summary{width:100%;margin-top:auto;margin-bottom:auto;text-align:center;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px}
+.sire-limit-payment-summary strong{display:flex;align-items:baseline;justify-content:center;gap:4px;font-size:25px;line-height:1.05;font-weight:900;color:#fff;font-variant-numeric:tabular-nums}
+.sire-limit-payment-summary strong em{font-style:normal;font-size:10px;font-weight:800;color:rgba(255,255,255,.58)}
 .sire-limit-payment-summary>small{font-size:12px;font-weight:700;color:rgba(255,255,255,.52)}
-.sire-limit-payment-summary>div{display:flex;align-items:baseline;justify-content:center;gap:6px;margin-top:3px}
+.sire-limit-payment-summary>div{display:flex;align-items:baseline;justify-content:center;gap:5px;margin-top:3px}
 .sire-limit-payment-summary>div span{font-size:9px;color:rgba(255,255,255,.38)}
 .sire-limit-payment-summary>div b{font-size:14px;font-weight:800;color:#fff;font-variant-numeric:tabular-nums}
+.sire-limit-payment-summary>div em{font-style:normal;font-size:9px;font-weight:800;color:rgba(255,255,255,.52)}
 @media(max-width:620px){.sire-limit-pair-pill{width:100%;box-sizing:border-box}.sire-limit-pair-network{display:none}}
 
 
