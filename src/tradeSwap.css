@@ -404,7 +404,7 @@
 /* Swap → Limit controls: expiry pill and dedicated numeric keypad. */
 .sire-limit-payment-expiry{
   position:absolute;
-  top:50%;
+  top:42%;
   right:22px;
   transform:translateY(-50%);
   z-index:4;
