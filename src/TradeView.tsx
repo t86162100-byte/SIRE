@@ -929,14 +929,6 @@ export default function TradeView({ referencePrice = 0 }: Props) {
             </div>
 
             {tradeMode === 'Limit' && <div className="sire-limit-panel sire-limit-interface">
-              <div className="sire-limit-topbar">
-                <span>Order expiry</span>
-                <button type="button" className="sire-limit-expiry-pill" onClick={() => setLimitExpiryOpen(true)}>
-                  {limitExpiryCustom ? new Date(limitExpiryCustom).toLocaleString([], {month:'short', day:'numeric', hour:'numeric', minute:'2-digit'}) : limitExpiry === 3600 ? '1 hour' : limitExpiry === 86400 ? '24 hours' : limitExpiry === 604800 ? '7 days' : '30 days'}
-                  <ChevronDown size={13}/>
-                </button>
-              </div>
-
               <button
                 type="button"
                 className="sire-limit-token-pill"
@@ -1014,6 +1006,13 @@ export default function TradeView({ referencePrice = 0 }: Props) {
               </div>
 
               <div className={'sire-limit-token-card sire-limit-payment-card ' + (limitSide === 'Buy' ? 'buy' : 'sell')}>
+                <div className="sire-limit-payment-expiry">
+                  <span>Expiry</span>
+                  <button type="button" className="sire-limit-expiry-pill" onClick={() => setLimitExpiryOpen(true)}>
+                    {limitExpiryCustom ? new Date(limitExpiryCustom).toLocaleString([], {month:'short', day:'numeric', hour:'numeric', minute:'2-digit'}) : limitExpiry === 3600 ? '1 hour' : limitExpiry === 86400 ? '24 hours' : limitExpiry === 604800 ? '7 days' : '30 days'}
+                    <ChevronDown size={13}/>
+                  </button>
+                </div>
                 <button
                   type="button"
                   className="sire-limit-token-pill sire-limit-payment-pill"
@@ -1045,11 +1044,6 @@ export default function TradeView({ referencePrice = 0 }: Props) {
                     onClick={() => setAmount(String((Number(fromBalance) * percent) / 100))}
                   >{percent}%</button>
                 ))}
-              </div>
-
-              <div className="sire-limit-receive-card">
-                <div><span>Estimated receive</span><b>{limitTargetAmount ? limitTargetAmount + ' ' + limitTaker.symbol : '—'}</b></div>
-                <div><span>Execution</span><b>Only when target is reached</b></div>
               </div>
 
               <button type="button" className={'sire-review-button sire-limit-submit ' + (limitSide === 'Buy' ? 'buy' : 'sell')} disabled={limitBusy || !wallet || !nativeUnlocked || !limitPrice || !amount} onClick={() => void placeLimitOrder()}>
@@ -1300,22 +1294,24 @@ export default function TradeView({ referencePrice = 0 }: Props) {
         <div className="sire-limit-keypad-grid">
           {['1','2','3','4','5','6','7','8','9','.','0','⌫'].map(key => (
             <button key={key} type="button" onClick={() => {
-              if (key === '⌫') setLimitKeypadDraft(value => value.slice(0,-1));
-              else if (key === '.' && limitKeypadDraft.includes('.')) return;
-              else setLimitKeypadDraft(value => value + key);
+              let next = limitKeypadDraft;
+              if (key === '⌫') {
+                next = next.slice(0, -1);
+              } else if (key === '.' && next.includes('.')) {
+                return;
+              } else {
+                next += key;
+              }
+              setLimitKeypadDraft(next);
+              if (limitKeypad === 'amount') {
+                setAmount(next);
+              } else {
+                setLimitPrice(next);
+                setLimitPricePreset('Custom');
+              }
+              setLimitError('');
             }}>{key}</button>
           ))}
-        </div>
-        <div className="sire-limit-keypad-actions">
-          <button type="button" onClick={() => setLimitKeypadDraft('')}>Clear</button>
-          <button type="button" className="sire-review-button" onClick={() => {
-            const value = limitKeypadDraft;
-            if (!Number.isFinite(Number(value)) || Number(value) <= 0) return;
-            if (limitKeypad === 'amount') setAmount(value);
-            else { setLimitPrice(value); setLimitPricePreset('Custom'); }
-            setLimitKeypad(null);
-            setLimitError('');
-          }}>Done</button>
         </div>
       </section>
     </div>}
