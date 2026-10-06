@@ -742,7 +742,11 @@ const server = http.createServer(async (req,res) => {
         const action=pathname.slice('/api/sire/swap/bitget/'.length);
         if(!['quote','swap'].includes(action)) return json(404,{ok:false,error:'Unknown Bitget Wallet swap endpoint.'});
         const parsed=body?JSON.parse(body):{};
-        const data=await bitgetWalletRequest(action==='quote'?'/bgw-pro/swapx/pro/quote':'/bgw-pro/swapx/pro/swap',parsed);
+        const crossChain=String(parsed?.fromChain||'')!==String(parsed?.toChain||'');
+        const apiPath=action==='quote'
+          ? (crossChain?'/bgw-pro/swapx/order/getSwapPrice':'/bgw-pro/swapx/pro/quote')
+          : (crossChain?'/bgw-pro/swapx/order/makeSwapOrder':'/bgw-pro/swapx/pro/swap');
+        const data=await bitgetWalletRequest(apiPath,parsed);
         return json(200,{ok:true,data});
       }catch(cause){const status=Number(cause?.status)>=400&&Number(cause?.status)<600?Number(cause.status):503;return json(status,{ok:false,error:cause instanceof Error?cause.message:String(cause),code:cause?.code??null});}
     }
