@@ -1,5 +1,5 @@
-import { TypedDataEncoder, Interface } from 'ethers';
-import { getNativeSigner, type SwapNetwork } from './sireWalletCore';
+import { TypedDataEncoder } from 'ethers';
+
 import type { SwapToken } from './swapEngine';
 
 export type LimitOrderPayload = { chainId: number; orderHash: string; signature?: string; data: Record<string, any> };
@@ -88,7 +88,7 @@ export async function signLimitOrder(_typedData: any, _maker: string, _native: b
   return '';
 }
 
-export async function submitLimitOrder(payload: LimitOrderPayload): Promise<any> {
+export async function submitLimitOrder(payload: LimitOrderPayload & { record?: Record<string, any> }): Promise<any> {
   const response = await fetch('/api/sire/limit-orders/submit', {
     method: 'POST',
     headers: { 'content-type': 'application/json', accept: 'application/json' },
@@ -99,18 +99,31 @@ export async function submitLimitOrder(payload: LimitOrderPayload): Promise<any>
   return data;
 }
 
-export async function fetchLimitOrders(_chainId: number, _maker: string): Promise<any[]> {
-  try {
-    const raw = window.localStorage.getItem('sire.limit.orders.v1');
-    const parsed = raw ? JSON.parse(raw) : [];
-    return Array.isArray(parsed) ? parsed.slice(0, 50) : [];
-  } catch {
-    return [];
-  }
+export async function fetchLimitOrders(chainId: number, maker: string): Promise<any[]> {
+  const params = new URLSearchParams({ chainId: String(chainId || 0), maker: String(maker || '') });
+  const response = await fetch('/api/sire/limit-orders?' + params.toString(), {
+    headers: { accept: 'application/json' },
+    cache: 'no-store',
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok || data?.ok === false) throw new Error(String(data?.error || 'Limit orders could not be loaded.'));
+  return Array.isArray(data?.orders) ? data.orders.slice(0, 100) : [];
 }
 
-export async function fetchLimitOrder(_chainId: number, _orderHash: string): Promise<any> {
-  return null;
+export async function fetchLimitOrder(chainId: number, orderHash: string): Promise<any> {
+  const orders = await fetchLimitOrders(chainId, '');
+  return orders.find((order: any) => order.orderHash === orderHash) || null;
+}
+
+export async function cancelLimitOrder(orderHash: string, maker: string): Promise<any> {
+  const response = await fetch('/api/sire/limit-orders/cancel', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', accept: 'application/json' },
+    body: JSON.stringify({ orderHash, maker }),
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok || data?.ok === false) throw new Error(String(data?.error || 'Limit order could not be canceled.'));
+  return data;
 }
 
 export async function getZeroXLimitQuote(order: any, taker: string): Promise<any> {
