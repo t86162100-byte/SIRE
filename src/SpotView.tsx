@@ -131,7 +131,7 @@ export default function SpotView({ wallet, onConnect }: Props) {
         <div className="sire-spot-chart-card">
           <div className="sire-spot-card-head">
             <div><strong>{base || 'Asset'}/USDT</strong><span>Price chart</span></div>
-            <div className="sire-spot-timeframes"><button className="active" type="button>1m</button><button type="button">5m</button><button type="button">15m</button><button type="button">1H</button><button type="button">4H</button><button type="button">1D</button></div>
+            <div className="sire-spot-timeframes"><button className="active" type="button">1m</button><button type="button">5m</button><button type="button">15m</button><button type="button">1H</button><button type="button">4H</button><button type="button">1D</button></div>
             <button className="sire-spot-chart-tool" type="button"><CandlestickChart size={16}/></button>
           </div>
           <div className="sire-spot-chart-placeholder">
