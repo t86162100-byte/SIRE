@@ -141,3 +141,7 @@
 .sire-spot-book-side div:after{left:0;right:0;width:auto}
 .sire-spot-book-step{width:58px;height:22px;margin:10px 0 7px 4px}
 .sire-spot-book-step span{font-variant-numeric:tabular-nums}
+
+/* Keep the order-book geometry identical in every display mode. Hidden side still reserves its full row height. */
+.sire-spot-book-side.is-hidden{visibility:hidden}
+.sire-spot-book-side.asks,.sire-spot-book-side.bids{flex:none}
