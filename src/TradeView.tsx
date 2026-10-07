@@ -1468,9 +1468,6 @@ export default function TradeView({ referencePrice = 0 }: Props) {
         </div>
       </section>
     </div>}
-
-
-    </div>
     </>}
   </div>;
 }
