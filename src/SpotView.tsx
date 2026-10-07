@@ -38,7 +38,6 @@ export default function SpotView({ wallet, onConnect }: Props) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [mobilePanel, setMobilePanel] = useState<'Trade'|'Chart'>('Trade');
-  const [bookMode, setBookMode] = useState<'Order book'|'Trades'>('Order book');
 
   useEffect(() => {
     let cancelled = false;
@@ -152,11 +151,7 @@ export default function SpotView({ wallet, onConnect }: Props) {
       </section>
 
       <aside className="sire-spot-book-card">
-        <div className="sire-spot-book-tabs">
-          <button className={bookMode === 'Order book' ? 'active' : ''} type="button" onClick={() => setBookMode('Order book')}>Order book</button>
-          <button className={bookMode === 'Trades' ? 'active' : ''} type="button" onClick={() => setBookMode('Trades')}>Trades</button>
-        </div>
-        {bookMode === 'Order book' ? <div className="sire-spot-book">
+        <div className="sire-spot-book">
           <div className="sire-spot-book-head"><span>Price (USDT)</span><span>Amount ({base || 'BTC'})</span></div>
           <div className="sire-spot-book-side asks">
             {[4,3,2,1].map((n,i) => <div key={n}><span>{formatPrice(ask + (i+1)*spread)}</span><b>{(0.00006*n).toFixed(5)}</b></div>)}
@@ -166,7 +161,7 @@ export default function SpotView({ wallet, onConnect }: Props) {
             {[1,2,3,4,5].map((n,i) => <div key={n}><span>{formatPrice(Math.max(0, bid - (i+1)*spread))}</span><b>{(0.00007*n).toFixed(5)}</b></div>)}
           </div>
           <div className="sire-spot-depth"><span>Buy 31%</span><i><b></b></i><span>Sell 69%</span></div>
-        </div> : <div className="sire-spot-trades-empty">Recent trades will appear here.</div>}
+        </div>
       </aside>
     </main>
 
