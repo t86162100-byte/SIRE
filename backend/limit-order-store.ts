@@ -127,11 +127,31 @@ async function markExpired(db: pg.PoolClient | any) {
 
 async function checkOrder(db: pg.PoolClient | any, row: any, apiKey: string) {
   const record = row.record || {};
+  const side = String(record.side || '').toLowerCase();
+  const isBuy = side === 'buy';
+  const isSell = side === 'sell';
+  if (!isBuy && !isSell) {
+    await db.query(
+      'UPDATE ' + TABLE + ` SET status='Rejected',
+             record=jsonb_set(record, '{status}', '"Rejected"'::jsonb, true),
+             updated_at=now()
+       WHERE order_hash=$1`,
+      [row.order_hash]
+    );
+    return { ok: false, rejected: true, error: 'Limit order is missing a valid Buy/Sell side.' };
+  }
+
+  // Buy: fixed payment -> minimum maker tokens received.
+  // Sell: fixed maker tokens sold -> minimum taker tokens received.
+  const sellToken = isBuy ? record.takerAsset : record.makerAsset;
+  const buyToken = isBuy ? record.makerAsset : record.takerAsset;
+  const sellAmount = isBuy ? record.takingAmount : record.makingAmount;
+  const targetAmount = isBuy ? record.makingAmount : record.takingAmount;
   const params = new URLSearchParams({
     chainId: String(row.chain_id),
-    sellToken: String(record.takerAsset),
-    buyToken: String(record.makerAsset),
-    sellAmount: String(record.takingAmount),
+    sellToken: String(sellToken),
+    buyToken: String(buyToken),
+    sellAmount: String(sellAmount),
     taker: String(row.maker),
   });
   try {
@@ -148,9 +168,18 @@ async function checkOrder(db: pg.PoolClient | any, row: any, apiKey: string) {
     }
 
     const buyAmount = BigInt(String(quote?.buyAmount || '0'));
-    const targetAmount = BigInt(String(record.makingAmount || '0'));
-    if (buyAmount >= targetAmount) {
-      const next = { ...record, status: 'Target reached', targetQuote: quote, targetReachedAt: Date.now() };
+    const target = BigInt(String(targetAmount || '0'));
+    if (buyAmount >= target) {
+      const next = {
+        ...record,
+        status: 'Target reached',
+        targetQuote: quote,
+        targetReachedAt: Date.now(),
+        triggeredSellToken: sellToken,
+        triggeredBuyToken: buyToken,
+        triggeredSellAmount: String(sellAmount),
+        triggeredBuyAmount: String(buyAmount),
+      };
       await db.query(
         `UPDATE ${TABLE} SET status='Target reached', record=$2::jsonb, last_checked_at=now(), next_check_at='infinity', updated_at=now() WHERE order_hash=$1`,
         [row.order_hash, JSON.stringify(next)]
