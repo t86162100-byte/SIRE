@@ -1027,7 +1027,10 @@ export default function TradeView({ referencePrice = 0 }: Props) {
                 </button>
               </div>
               <div className={'sire-limit-price-options sire-limit-price-options-' + limitSide.toLowerCase()}>
-                {['Market','-1%','+5%','+10%','Custom'].map(option => (
+                {(limitSide === 'Buy'
+                  ? ['Market','-1%','-5%','-10%','Custom']
+                  : ['Market','+1%','+5%','+10%','Custom']
+                ).map(option => (
                   <button
                     key={option}
                     type="button"
