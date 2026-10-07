@@ -1,6 +1,6 @@
 /* SIRE Spot terminal — focused trading workspace */
 .sire-spot-shell{min-height:100%;box-sizing:border-box;background:#0b0e12;color:#eef2f7;font-family:inherit;padding-bottom:24px}
-.sire-spot-workspace{display:grid;grid-template-columns:60% 40%;min-height:620px;max-width:1240px;margin:0 auto;background:#20252d;gap:1px}
+.sire-spot-workspace{display:grid;grid-template-columns:66% 34%;min-height:620px;max-width:1240px;margin:0 auto;background:#20252d;gap:1px}
 .sire-spot-trade-panel,.sire-spot-book-card{min-width:0;background:#0d1015}
 .sire-spot-trade-panel{display:flex;flex-direction:column}
 .sire-spot-panel-head{height:54px;box-sizing:border-box;display:flex;align-items:center;justify-content:space-between;padding:0 18px;border-bottom:1px solid #20252d}
@@ -80,5 +80,5 @@
 .sire-spot-loading{position:fixed;right:18px;bottom:18px;z-index:80;display:flex;align-items:center;gap:7px;padding:9px 11px;background:#151a21;border:1px solid #2a3039;border-radius:7px;color:#89929e;font-size:8px;box-shadow:0 10px 30px rgba(0,0,0,.35)}
 .sire-spin{animation:sire-spot-spin 1s linear infinite}
 @keyframes sire-spot-spin{to{transform:rotate(360deg)}}
-@media(max-width:900px){.sire-spot-workspace{grid-template-columns:60% 40%;min-height:560px}.sire-spot-panel-head{padding:0 12px}.sire-spot-trade-content{padding-left:14px;padding-right:14px}.sire-spot-book{padding-left:12px;padding-right:12px}}
+@media(max-width:900px){.sire-spot-workspace{grid-template-columns:66% 34%;min-height:560px}.sire-spot-panel-head{padding:0 12px}.sire-spot-trade-content{padding-left:14px;padding-right:14px}.sire-spot-book{padding-left:12px;padding-right:12px}}
 @media(max-width:640px){.sire-spot-workspace{display:grid;grid-template-columns:1fr 1fr;min-height:520px}.sire-spot-panel-head{height:48px;padding:0 9px}.sire-spot-order-tabs{gap:8px}.sire-spot-order-tabs button{font-size:9px}.sire-spot-settings{font-size:0}.sire-spot-trade-content{padding:0 10px 18px}.sire-spot-pair-row{padding:13px 0 10px}.sire-spot-pair-trigger strong{font-size:10px}.sire-spot-side-row{gap:5px;padding-top:12px}.sire-spot-side-row button{height:36px;font-size:9px}.sire-spot-input{height:48px;padding:0 9px}.sire-spot-input span{left:9px}.sire-spot-input em{right:9px}.sire-spot-book-tabs{height:48px;padding:0 9px;gap:9px}.sire-spot-book-tabs button{font-size:9px}.sire-spot-book{padding:9px 8px}.sire-spot-book-head{font-size:6px}.sire-spot-book-side div{font-size:7px;padding:4px 2px}.sire-spot-book-mid{padding:10px 2px}.sire-spot-book-mid strong{font-size:11px}.sire-spot-depth{font-size:6px;gap:4px}}
