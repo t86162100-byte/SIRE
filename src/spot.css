@@ -123,3 +123,5 @@
 .sire-spot-book-mid span{display:block}
 .sire-spot-book-step{display:flex;align-items:center;justify-content:center;gap:4px;width:72px;height:24px;margin:10px auto 8px;padding:0;border:1px solid #252b34;border-radius:5px;background:#0b0b0b;color:#aeb7c3;font-size:9px;font-weight:800;cursor:pointer}
 .sire-spot-book-step svg{color:#68717e}
+
+.sire-spot-book-controls{display:flex;align-items:center;gap:4px;height:20px;margin:0 0 8px 4px}.sire-spot-book-controls button{width:20px;height:18px;padding:3px;border:1px solid #252b34;border-radius:4px;background:#0b0b0b;display:grid;grid-template-columns:1fr 1fr;gap:2px;cursor:pointer;box-sizing:border-box}.sire-spot-book-controls button i{display:block;border-radius:1px;background:#3a2024}.sire-spot-book-controls button.asks i{background:#f05d68}.sire-spot-book-controls button.bids i{background:#2ecb8b}.sire-spot-book-controls button.both i:first-child{background:#f05d68}.sire-spot-book-controls button.both i:last-child{background:#2ecb8b}.sire-spot-book-controls button.active{border-color:#59636f;box-shadow:0 0 8px rgba(255,255,255,.08)}
