@@ -583,6 +583,15 @@ export default function TradeView({ referencePrice = 0 }: Props) {
         });
         const payload = await response.json().catch(() => ({}));
         const buyAmount = String(payload?.quote?.buyAmount || '');
+        // The server requests exactly 1 whole maker token, so buyAmount is
+        // already the market price in taker-token base units.  Prefer a
+        // server-normalized price when available, then derive it from the
+        // 0x v2 base-unit response as a fallback.
+        const serverPrice = Number(payload?.price || payload?.quote?.price || 0);
+        if (response.ok && Number.isFinite(serverPrice) && serverPrice > 0) {
+          if (!cancelled) setLimitMarketPrice(String(serverPrice));
+          return;
+        }
         if (response.ok && /^\d+$/.test(buyAmount)) {
           const price = Number(formatUnits(buyAmount, limitTaker.decimals, 18));
           if (!cancelled && Number.isFinite(price) && price > 0) setLimitMarketPrice(String(price));
