@@ -18,6 +18,7 @@ import { saveLimitOrder, listLimitOrders, cancelLimitOrder, runLimitOrderMonitor
 import { fetchBinanceCatalogServer, fetchBinanceMarketSnapshotServer, fetchBinanceHistoryServer } from './backend/binance-catalog.ts';
 import { fetchSireSpotCatalogServer, sireSpotCatalogStatus } from './backend/sire-spot-catalog.ts';
 import { ensureSireSpotTables, getSpotBook, placeSpotOrder, cancelSpotOrder, getSpotAccount, getSpotOrders, getSpotTrades, spotEngineStatus, spotSubscribe, spotUnsubscribe, spotDisconnect } from './backend/sire-spot-engine.ts';
+import { getRoutedSpotLiquidity, spotLiquidityStatus } from './backend/sire-spot-liquidity.ts';
 
 const PORT = Number(process.env.PORT || 10000);
 const HOST = '0.0.0.0';
@@ -933,7 +934,7 @@ const server = http.createServer(async (req,res) => {
         const url = new URL(req.url || '/', 'http://sire.local');
         const symbol = String(url.searchParams.get('symbol') || 'BTCUSDT').toUpperCase();
         const depth = Number(url.searchParams.get('depth') || 25);
-        const book = await getSpotBook(symbol, depth);
+        const book = await getRoutedSpotLiquidity(symbol, depth);
         return res.writeHead(200,{'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify(book));
       } catch (cause) {
         return res.writeHead(400,{'Access-Control-Allow-Origin':'*','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify({ok:false,error:cause instanceof Error ? cause.message : String(cause)}));
@@ -968,6 +969,9 @@ const server = http.createServer(async (req,res) => {
     }
     if (req.method === 'GET' && pathname === '/api/sire/spot/engine/status') {
       return res.writeHead(200,{'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify(await spotEngineStatus()));
+    }
+    if (req.method === 'GET' && pathname === '/api/sire/spot/liquidity/status') {
+      return res.writeHead(200,{'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify(spotLiquidityStatus()));
     }
     if (req.method === 'POST' && pathname === '/api/sire/spot/orders') {
       try {
