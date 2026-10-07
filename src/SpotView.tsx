@@ -95,24 +95,18 @@ export default function SpotView({ wallet, onConnect }: Props) {
   return <div className="sire-spot-shell">
     <main className="sire-spot-workspace">
       <section className="sire-spot-trade-panel">
-        <div className="sire-spot-panel-head">
-          <div className="sire-spot-order-tabs">
-            <button className={orderType === 'Market' ? 'active' : ''} type="button" onClick={() => setOrderType('Market')}>Market</button>
-            <button className={orderType === 'Limit' ? 'active' : ''} type="button" onClick={() => setOrderType('Limit')}>Limit</button>
-            <button type="button">Stop-limit</button>
-          </div>
-          <button className="sire-spot-settings" type="button"><SlidersHorizontal size={15}/> Order settings</button>
-        </div>
-
         <div className="sire-spot-trade-content">
-          <div className="sire-spot-pair-row">
-            <span>Spot</span>
-            <button type="button" className="sire-spot-pair-trigger" onClick={() => setPickerOpen(true)}>
-              <span className="sire-spot-logo"><img src={selected?.logoUrl || ''} alt="" onError={e => { e.currentTarget.style.display='none'; }} /></span>
-              <strong>{selected ? base + '/' + selected.quote : 'Select pair'}</strong>
-              <ChevronDown size={14}/>
-            </button>
-          </div>
+          <button type="button" className="sire-spot-instrument-pill" onClick={() => setPickerOpen(true)} aria-label="Select spot instrument">
+            <span className="sire-spot-instrument-logo">
+              <img src={selected?.logoUrl || ''} alt="" onError={e => { e.currentTarget.style.display='none'; }} />
+              {!selected?.logoUrl && <span>{base.slice(0,1) || '?'}</span>}
+            </span>
+            <span className="sire-spot-instrument-copy">
+              <b>{selected ? base + '/' + selected.quote : 'Select pair'}</b>
+              <small>{selected?.name || 'Choose instrument'}</small>
+            </span>
+            <ChevronDown size={15}/>
+          </button>
 
           <div className="sire-spot-side-row">
             <button type="button" className={side === 'Buy' ? 'active buy' : ''} onClick={() => setSide('Buy')}>Buy</button>
