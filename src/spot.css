@@ -115,3 +115,11 @@
 .sire-spot-trade-panel:has(.sire-spot-side-row button.active.sell) .sire-spot-total-card{box-shadow:0 0 18px rgba(240,93,104,.28),inset 0 0 10px rgba(240,93,104,.06);border-color:rgba(240,93,104,.45)}
 .sire-spot-submit{border-radius:999px;background:#fff;color:#000}
 .sire-spot-order-summary{padding:6px 0 8px}
+
+.sire-spot-book{padding-top:58px}
+.sire-spot-book-head-spacer{display:block;height:0}
+.sire-spot-book-mid{justify-content:center;flex-direction:column;align-items:center;gap:4px;text-align:center}
+.sire-spot-book-mid strong{display:block}
+.sire-spot-book-mid span{display:block}
+.sire-spot-book-step{display:flex;align-items:center;justify-content:center;gap:4px;width:72px;height:24px;margin:10px auto 8px;padding:0;border:1px solid #252b34;border-radius:5px;background:#0b0b0b;color:#aeb7c3;font-size:9px;font-weight:800;cursor:pointer}
+.sire-spot-book-step svg{color:#68717e}
