@@ -1077,16 +1077,20 @@ export default function TradeView({ referencePrice = 0 }: Props) {
                     className={limitPricePreset === option ? 'selected' : ''}
                     onClick={() => {
                       const baseDisplay = Number(limitMarketPrice);
+                      const baseExecution = Number(limitExecutionMarketPrice);
                       const takerUSD = Number(limitTaker.priceUSD);
                       if (!Number.isFinite(baseDisplay) || baseDisplay <= 0 || !Number.isFinite(takerUSD) || takerUSD <= 0) return;
-                      const setDisplayAndExecutionPrice = (display: number) => {
-                        const execution = display / takerUSD;
-                        if (!Number.isFinite(execution) || execution <= 0) return;
+                      const setDisplayAndExecutionPrice = (display: number, execution?: number) => {
+                        const nextExecution = execution ?? (display / takerUSD);
+                        if (!Number.isFinite(nextExecution) || nextExecution <= 0) return;
                         setLimitDisplayPrice(String(display));
-                        setLimitPrice(String(execution));
+                        setLimitPrice(String(nextExecution));
                       };
                       if (option === 'Market') {
-                        setDisplayAndExecutionPrice(baseDisplay);
+                        setDisplayAndExecutionPrice(
+                          baseDisplay,
+                          Number.isFinite(baseExecution) && baseExecution > 0 ? baseExecution : undefined
+                        );
                         setLimitPricePreset('Market');
                       } else if (option === 'Custom') {
                         setLimitKeypadDraft(limitDisplayPrice || String(baseDisplay));
