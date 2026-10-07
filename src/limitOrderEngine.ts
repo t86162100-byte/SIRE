@@ -46,6 +46,20 @@ export function limitTakingAmount(makingAmount: string, makerDecimals: number, t
   return result.toString();
 }
 
+export function limitMakingAmount(takingAmount: string, takerDecimals: number, makerDecimals: number, price: string): string {
+  const priceScaled = parseDecimal(price, 18);
+  if (BigInt(takingAmount) <= 0n) throw new Error('The limit amount must be greater than zero.');
+  // Price is taker-token units per one maker token:
+  // maker = taker / price. Integer division floors the maker amount so the
+  // order never promises more maker tokens than the user's payment can buy.
+  const numerator = BigInt(takingAmount) * (10n ** BigInt(makerDecimals)) * (10n ** 18n);
+  const denominator = (10n ** BigInt(takerDecimals)) * priceScaled;
+  const result = numerator / denominator;
+  if (result <= 0n) throw new Error('The limit price and amount produce a zero receive amount.');
+  return result.toString();
+}
+
+
 function jsonSafe(value: any): any {
   if (typeof value === 'bigint') return value.toString();
   if (Array.isArray(value)) return value.map(jsonSafe);
