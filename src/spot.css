@@ -8,7 +8,7 @@
 .sire-spot-order-tabs button{height:100%;border:0;border-bottom:2px solid transparent;background:transparent;color:#727c89;font-size:11px;font-weight:700;cursor:pointer}
 .sire-spot-order-tabs button.active{color:#fff;border-color:#2ecb8b}
 .sire-spot-settings{border:0;background:transparent;color:#69727e;font-size:9px;display:flex;align-items:center;gap:5px;cursor:pointer}
-.sire-spot-trade-content{width:min(620px,100%);padding:0 22px 28px}
+.sire-spot-trade-content{width:min(620px,100%);padding:18px 22px 28px;box-sizing:border-box}
 .sire-spot-instrument-pill{display:flex;align-items:center;gap:8px;width:max-content;max-width:100%;min-height:46px;padding:5px 12px 5px 7px;border:1px solid rgba(0,240,255,.45);border-radius:999px;background:#00F0FF;color:#071014;box-shadow:inset 0 1px 0 rgba(255,255,255,.28),0 0 20px rgba(0,240,255,.28);cursor:pointer;box-sizing:border-box}
 .sire-spot-instrument-pill:hover{filter:brightness(1.03)}
 .sire-spot-instrument-pill:active{transform:scale(.99)}
@@ -26,7 +26,7 @@
 .sire-spot-pair-trigger svg{color:#69727e}
 .sire-spot-logo{width:26px;height:26px;border-radius:50%;background:#171c23;display:grid;place-items:center;overflow:hidden}
 .sire-spot-logo img{width:100%;height:100%;object-fit:cover}
-.sire-spot-side-row{display:grid;grid-template-columns:1fr 1fr;gap:8px;padding:18px 0 10px}
+.sire-spot-side-row{display:grid;grid-template-columns:1fr 1fr;gap:8px;padding:20px 0 10px}
 .sire-spot-side-row button{height:42px;border:1px solid #252b34;background:#151a21;color:#89919d;border-radius:6px;font-size:11px;font-weight:800;cursor:pointer}
 .sire-spot-side-row button.active.buy{background:#17372b;border-color:#238b62;color:#2ecb8b}
 .sire-spot-side-row button.active.sell{background:#3a2024;border-color:#9b404b;color:#f05d68}
@@ -90,4 +90,4 @@
 .sire-spin{animation:sire-spot-spin 1s linear infinite}
 @keyframes sire-spot-spin{to{transform:rotate(360deg)}}
 @media(max-width:900px){.sire-spot-workspace{grid-template-columns:60% 40%;min-height:560px;gap:0}.sire-spot-panel-head{padding:0 12px}.sire-spot-trade-content{padding-left:14px;padding-right:14px}.sire-spot-book{padding-left:12px;padding-right:12px}}
-@media(max-width:640px){.sire-spot-workspace{display:grid;grid-template-columns:60% 40%;min-height:520px;gap:0}.sire-spot-panel-head{height:48px;padding:0 9px}.sire-spot-order-tabs{gap:8px}.sire-spot-order-tabs button{font-size:9px}.sire-spot-settings{font-size:0}.sire-spot-trade-content{padding:0 10px 18px}.sire-spot-pair-row{padding:13px 0 10px}.sire-spot-pair-trigger strong{font-size:10px}.sire-spot-side-row{gap:5px;padding-top:12px}.sire-spot-side-row button{height:36px;font-size:9px}.sire-spot-input{height:48px;padding:0 9px}.sire-spot-input span{left:9px}.sire-spot-input em{right:9px}.sire-spot-book-tabs{height:48px;flex-basis:48px;padding:0 9px;gap:9px}.sire-spot-book-tabs button{font-size:9px}.sire-spot-book{padding:9px 8px}.sire-spot-book-head{font-size:6px}.sire-spot-book-side div{font-size:7px;padding:4px 2px}.sire-spot-book-mid{padding:10px 2px}.sire-spot-book-mid strong{font-size:11px}.sire-spot-depth{font-size:6px;gap:4px}}
+@media(max-width:640px){.sire-spot-workspace{display:grid;grid-template-columns:60% 40%;min-height:520px;gap:0}.sire-spot-panel-head{height:48px;padding:0 9px}.sire-spot-order-tabs{gap:8px}.sire-spot-order-tabs button{font-size:9px}.sire-spot-settings{font-size:0}.sire-spot-trade-content{padding:14px 10px 18px}.sire-spot-pair-row{padding:13px 0 10px}.sire-spot-pair-trigger strong{font-size:10px}.sire-spot-side-row{gap:5px;padding-top:12px}.sire-spot-side-row button{height:36px;font-size:9px}.sire-spot-input{height:48px;padding:0 9px}.sire-spot-input span{left:9px}.sire-spot-input em{right:9px}.sire-spot-book-tabs{height:48px;flex-basis:48px;padding:0 9px;gap:9px}.sire-spot-book-tabs button{font-size:9px}.sire-spot-book{padding:9px 8px}.sire-spot-book-head{font-size:6px}.sire-spot-book-side div{font-size:7px;padding:4px 2px}.sire-spot-book-mid{padding:10px 2px}.sire-spot-book-mid strong{font-size:11px}.sire-spot-depth{font-size:6px;gap:4px}}
