@@ -4,7 +4,7 @@ import './spot.css';
 
 type Props = { wallet?: string; onConnect?: () => void };
 type Side = 'Buy' | 'Sell';
-type OrderType = 'Market' | 'Limit';
+type OrderType = 'Market' | 'Limit' | 'Stop-limit' | 'Trigger';
 
 type SireSpotMarket = {
   symbol:string; name:string; baseAsset:string; quote:string; status:string;
@@ -31,6 +31,7 @@ export default function SpotView({ wallet, onConnect }: Props) {
   const [pickerOpen, setPickerOpen] = useState(false);
   const [side, setSide] = useState<Side>('Buy');
   const [orderType, setOrderType] = useState<OrderType>('Market');
+  const [orderTypeOpen, setOrderTypeOpen] = useState(false);
   const [quantity, setQuantity] = useState('');
   const [price, setPrice] = useState('');
   const [snapshot, setSnapshot] = useState<Snapshot>({});
@@ -114,9 +115,12 @@ export default function SpotView({ wallet, onConnect }: Props) {
           </div>
 
           <div className="sire-spot-order-type-wrap">
-            <button type="button" className="sire-spot-order-type-select" aria-label="Select order type" onClick={() => setPickerOpen(false)}>
+            <button type="button" className="sire-spot-order-type-select" aria-label="Select order type" onClick={() => setOrderTypeOpen(v => !v)}>
               <span>{orderType}</span><ChevronDown size={14}/>
             </button>
+            {orderTypeOpen && <div className="sire-spot-order-type-menu">
+              {(['Market','Limit','Stop-limit','Trigger'] as OrderType[]).map(type => <button key={type} type="button" className={orderType === type ? 'active' : ''} onClick={() => { setOrderType(type); setOrderTypeOpen(false); }}>{type}</button>)}
+            </div>}
           </div>
 
           <div className="sire-spot-total-card">
