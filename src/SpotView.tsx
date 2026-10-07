@@ -113,6 +113,13 @@ export default function SpotView({ wallet, onConnect }: Props) {
             <button type="button" className={side === 'Sell' ? 'active sell' : ''} onClick={() => setSide('Sell')}>Sell</button>
           </div>
 
+          <div className="sire-spot-order-type-tabs" role="tablist" aria-label="Order type">
+            <button type="button" className={orderType === 'Market' ? 'active' : ''} onClick={() => setOrderType('Market')}>Market</button>
+            <button type="button" className={orderType === 'Limit' ? 'active' : ''} onClick={() => setOrderType('Limit')}>Limit</button>
+            <button type="button">Stop-limit</button>
+            <button type="button">Trigger</button>
+          </div>
+
           <div className="sire-spot-balance"><span>Available</span><b>0.00 USDT</b><button type="button" onClick={onConnect}>+</button></div>
 
           {orderType === 'Limit' && <label className="sire-spot-input">
