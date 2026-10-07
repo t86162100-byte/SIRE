@@ -1,3 +1,5 @@
+import { externalSpotQuote, externalSpotExecute, bitgetExecutionHealth } from './sire-provider-execution.ts';
+
 export type AssetClass = 'CRYPTO'|'TRADFI'|'ALPHA'|'TOKENIZED'|'OTHER';
 export type InstrumentType =
   | 'SPOT'|'PERPETUAL'|'FUTURE'|'MARGIN'
@@ -102,7 +104,33 @@ function externalProvider(id:string,priority:number,envUrl:string,supports:(i:Li
   };
 }
 
+const bitget:LiquidityProvider = {
+  id:'BITGET',
+  priority:110,
+  supports:(i)=>validInstrument(i).assetClass==='CRYPTO' && cryptoTypes.has(i.instrumentType),
+  health:bitgetExecutionHealth,
+  quote:async(instrument,depth)=>{
+    if(instrument.instrumentType!=='SPOT') return null;
+    const q=await externalSpotQuote({provider:'BITGET',symbol:instrument.symbol,side:'BUY',quantity:1,orderType:'MARKET',clientOrderId:`ROUTE_${Date.now()}`});
+    return {provider:'BITGET',symbol:instrument.symbol,bids:[{price:q.price,quantity:depth}],asks:[{price:q.price,quantity:depth}],receivedAt:Date.now(),mode:'RFQ'};
+  },
+  execute:async(request)=>{
+    const fills=await externalSpotExecute({
+      provider:'BITGET',symbol:request.symbol,side:request.side,quantity:request.quantity,
+      orderType:request.orderType,limitPrice:request.limitPrice,clientOrderId:request.clientOrderId
+    });
+    return {
+      provider:'BITGET',
+      externalOrderId:fills[0]?.externalOrderId,
+      fills:fills.map(f=>({price:f.price,quantity:f.quantity,fee:f.fee,feeAsset:f.feeAsset})),
+      status:fills.some(f=>f.status==='PARTIAL')?'PARTIAL':'FILLED',
+      receivedAt:Date.now()
+    };
+  }
+};
+
 const providers:LiquidityProvider[] = [
+  bitget,
   wintermute,
   externalProvider('TRADFI_INSTITUTIONAL',80,'SIRE_LIQUIDITY_TRADFI_URL',i=>validInstrument(i).assetClass==='TRADFI' && tradFiTypes.has(i.instrumentType)),
   externalProvider('ALPHA_DEFI',70,'SIRE_LIQUIDITY_ALPHA_URL',i=>validInstrument(i).assetClass==='ALPHA' && alphaTypes.has(i.instrumentType)),
@@ -129,7 +157,7 @@ export async function universalLiquidityStatus(){
   }));
   return {
     ok:true,
-    bootstrapProvider:'WINTERMUTE',
+    bootstrapProvider:'BITGET',
     architecture:'SIRE_UNIVERSAL_LIQUIDITY_ROUTER',
     executionAuthority:'SIRE',
     providers:rows,
