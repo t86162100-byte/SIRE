@@ -41,9 +41,9 @@
 .sire-spot-total-card>span{color:#8b949e;font-size:9px;font-weight:700}
 .sire-spot-total-card button{display:flex;align-items:center;gap:4px;border:0;background:transparent;color:#fff;font-size:9px;font-weight:800;cursor:pointer}
 .sire-spot-total-card button svg{color:#8b949e}
-.sire-spot-balance{display:flex;align-items:center;gap:7px;padding:4px 0 10px;color:#68717e;font-size:8px}
+.sire-spot-balance{display:flex;align-items:center;gap:7px;padding:10px 0 16px;color:#68717e;font-size:8px}
 .sire-spot-balance b{margin-left:auto;color:#9da5b0;font-size:9px}
-.sire-spot-balance button{width:18px;height:18px;border:0;border-radius:50%;background:#2ecb8b;color:#07100c;font-weight:900;cursor:pointer}
+.sire-spot-balance button{width:18px;height:18px;border:0;border-radius:50%;background:#fff;color:#000;font-weight:900;cursor:pointer}
 .sire-spot-input{position:relative;display:flex;align-items:center;height:54px;margin:8px 0 0;padding:0 13px;border:1px solid #252b34;border-radius:6px;background:#0b0b0b}
 .sire-spot-input:focus-within{border-color:#4a5664}
 .sire-spot-input span{position:absolute;top:7px;left:13px;color:#68717e;font-size:7px}
