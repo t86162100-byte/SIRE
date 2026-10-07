@@ -133,12 +133,11 @@ export default function SpotView({ wallet, onConnect }: Props) {
             <span>Price</span><input inputMode="decimal" value={price} onChange={e => setPrice(e.target.value.replace(/[^0-9.]/g,''))} placeholder={marketPrice ? String(marketPrice) : '0.00'} /><em>USDT</em>
           </label>}
 
-          <label className="sire-spot-input">
-            <span>Amount</span><input inputMode="decimal" value={quantity} onChange={e => setQuantity(e.target.value.replace(/[^0-9.]/g,''))} placeholder="0.00" /><em>{base || 'BTC'}</em>
-          </label>
-
-          <div className="sire-spot-percentages">
-            {[25,50,75,100].map(p => <button key={p} type="button" onClick={() => setQuantity(String(Math.max(0, p / 100)))}>{p}%</button>)}
+          <div className="sire-spot-amount-progress" aria-label="Amount">
+            <div className="sire-spot-amount-track"><span style={{width: `${Math.min(100, Math.max(0, Number(quantity) * 100))}%`}} /></div>
+            <div className="sire-spot-amount-diamonds">
+              {[0,25,50,75,100].map(p => <button key={p} type="button" aria-label={`${p}%`} className={Number(quantity) * 100 >= p ? 'active' : ''} onClick={() => setQuantity(String(p / 100))}><i /></button>)}
+            </div>
           </div>
 
           {orderType === 'Limit' && <div className="sire-spot-price-shortcuts">{[-1,0,1].map(p => <button key={p} type="button" onClick={() => setPercent(p)}>{p === 0 ? 'Market' : (p > 0 ? '+' : '') + p + '%'}</button>)}</div>}
