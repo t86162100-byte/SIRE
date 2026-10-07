@@ -1,3 +1,4 @@
+import { externalSpotQuote, externalSpotExecute } from './sire-provider-execution.ts';
 import pg from 'pg';
 import { randomUUID, createHash } from 'node:crypto';
 import { ws } from '@appdeploy/sdk';
@@ -95,6 +96,92 @@ export async function placeSpotOrder(input:any){
   const quantity=positive(input.quantity,'quantity');
   const price=type==='LIMIT'?positive(input.price,'price'):null;
   const clientOrderId=String(input.clientOrderId||randomUUID()).trim().slice(0,100);
+  const externalMode=String(process.env.SIRE_SPOT_EXECUTION_MODE||'SIRE').toUpperCase()==='EXTERNAL';
+  const externalProvider=String(process.env.SIRE_SPOT_EXTERNAL_PROVIDER||'WINTERMUTE').toUpperCase();
+
+  // External market execution is opt-in. SIRE remains the account/ledger authority.
+  if(externalMode && type==='MARKET'){
+    const quotePreview=await externalSpotQuote({
+      provider:externalProvider,symbol,side,quantity,orderType:'MARKET',clientOrderId
+    });
+    const p=db(),c=await p.connect();
+    let orderId=randomUUID();
+    try{
+      await c.query('BEGIN');
+      await c.query('SELECT pg_advisory_xact_lock($1)',[advisoryKey(`sire-spot:${symbol}`)]);
+      await c.query(`INSERT INTO ${ACCOUNTS}(wallet) VALUES($1) ON CONFLICT DO NOTHING`,[wallet]);
+      const duplicate=await c.query(`SELECT * FROM ${ORDERS} WHERE wallet=$1 AND client_order_id=$2`,[wallet,clientOrderId]);
+      if(duplicate.rows[0]){ await c.query('COMMIT'); return serializeOrder(duplicate.rows[0]); }
+
+      const reserve=side==='BUY'
+        ? quotePreview.total+feeOnQuote(quotePreview.total)
+        : quantity;
+      const asset=side==='BUY'?quote:base;
+      const bal=await ensureBalance(c,wallet,asset);
+      if(bal.available+1e-12<reserve) throw new Error(`Insufficient ${asset} balance.`);
+      await delta(c,wallet,asset,-reserve,reserve,'EXTERNAL_ORDER_LOCK',orderId);
+      await c.query(`INSERT INTO ${ORDERS}(id,client_order_id,wallet,symbol,base_asset,quote_asset,side,type,price,quantity,remaining,status) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$10,'OPEN')`,
+        [orderId,clientOrderId,wallet,symbol,base,quote,side,type,price,quantity]);
+      await c.query('COMMIT');
+    }catch(e){await c.query('ROLLBACK').catch(()=>{});c.release();throw e;}
+    c.release();
+
+    let fills:any[];
+    try{
+      fills=await externalSpotExecute({
+        provider:externalProvider,symbol,side,quantity,orderType:'MARKET',clientOrderId
+      });
+    }catch(e){
+      const rollbackPool=db(),rollback=await rollbackPool.connect();
+      try{
+        await rollback.query('BEGIN');
+        const asset=side==='BUY'?quote:base;
+        const row=await rollback.query(`SELECT remaining FROM ${ORDERS} WHERE id=$1 FOR UPDATE`,[orderId]);
+        const remaining=Number(row.rows[0]?.remaining||0);
+        if(remaining>0) await delta(rollback,wallet,asset,side==='BUY'?quotePreview.total+feeOnQuote(quotePreview.total):remaining,-(side==='BUY'?quotePreview.total+feeOnQuote(quotePreview.total):remaining),'EXTERNAL_ORDER_UNLOCK',orderId);
+        await rollback.query(`UPDATE ${ORDERS} SET status='CANCELED',remaining=$2,updated_at=now() WHERE id=$1`,[orderId,String(remaining)]);
+        await rollback.query('COMMIT');
+      }catch(err){await rollback.query('ROLLBACK').catch(()=>{});}finally{rollback.release();}
+      throw e;
+    }
+
+    const settlementPool=db(),s=await settlementPool.connect();
+    try{
+      await s.query('BEGIN');
+      await s.query('SELECT pg_advisory_xact_lock($1)',[advisoryKey(`sire-spot:${symbol}`)]);
+      let filled=0,avgNumerator=0,spent=0,fees=0;
+      for(const fill of fills){
+        if(fill.status==='REJECTED'||fill.status==='PENDING') continue;
+        const take=Math.min(quantity-filled,Number(fill.quantity));
+        if(take<=1e-12) continue;
+        const gross=take*Number(fill.price);
+        const fee=feeOnQuote(gross);
+        const tradeId=randomUUID();
+        if(side==='BUY'){
+          await delta(s,wallet,quote,0,-(gross+fee),'EXTERNAL_TRADE_QUOTE_SPENT',tradeId);
+          await delta(s,wallet,base,take,0,'EXTERNAL_TRADE_BASE_CREDIT',tradeId);
+        }else{
+          await delta(s,wallet,base,0,-take,'EXTERNAL_TRADE_BASE_SPENT',tradeId);
+          await delta(s,wallet,quote,gross-fee,0,'EXTERNAL_TRADE_QUOTE_CREDIT',tradeId);
+        }
+        await s.query(`INSERT INTO ${TRADES}(id,symbol,maker_order_id,taker_order_id,price,quantity,buyer_wallet,seller_wallet) VALUES($1,$2,NULL,$3,$4,$5,$6,$7)`,
+          [tradeId,symbol,orderId,String(fill.price),String(take),side==='BUY'?wallet:null,side==='SELL'?wallet:null]);
+        filled+=take;avgNumerator+=take*Number(fill.price);spent+=gross;fees+=fee;
+      }
+      const remaining=Math.max(0,quantity-filled);
+      const reservedAsset=side==='BUY'?quote:base;
+      const reserved=side==='BUY'?quotePreview.total+feeOnQuote(quotePreview.total):quantity;
+      const used=side==='BUY'?spent+fees:filled;
+      const release=Math.max(0,reserved-used);
+      if(release>0) await delta(s,wallet,reservedAsset,release,-release,'EXTERNAL_ORDER_UNLOCK_REMAINDER',orderId);
+      const status=remaining<=1e-12?'FILLED':'CANCELED';
+      await s.query(`UPDATE ${ORDERS} SET remaining=$2,status=$3,updated_at=now() WHERE id=$1`,[orderId,String(remaining),status]);
+      await s.query('COMMIT');
+      await publishSpot(symbol,filled?{symbol,quantity:filled,price:avgNumerator/filled,time:Date.now()}:null);
+      return {...serializeOrder({id:orderId,client_order_id:clientOrderId,wallet,symbol,side,type,price,quantity,remaining,status}),filledQuantity:filled,averagePrice:filled?avgNumerator/filled:null,externalProvider,externalFills:fills};
+    }catch(e){await s.query('ROLLBACK').catch(()=>{});throw e;}finally{s.release();}
+  }
+
   const p=db(),c=await p.connect();
   try{
     await c.query('BEGIN');
@@ -171,7 +258,6 @@ export async function placeSpotOrder(input:any){
     return {...serializeOrder({id:orderId,client_order_id:clientOrderId,wallet,symbol,side,type,price,quantity,remaining:Math.max(0,remaining),status}),filledQuantity:filled,averagePrice:filled?avgNumerator/filled:null};
   }catch(e){await c.query('ROLLBACK').catch(()=>{});throw e;}finally{c.release();}
 }
-
 export async function cancelSpotOrder(input:any){
   await ensureSireSpotTables();
   const wallet=normWallet(input.wallet),id=String(input.orderId||'').trim();if(!id)throw new Error('orderId is required.');
