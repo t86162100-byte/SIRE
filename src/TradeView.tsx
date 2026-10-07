@@ -24,6 +24,7 @@ import {
   switchToNetwork,
 } from './swapEngine';
 import { cancelPreparedNativeWallet, finalizePreparedNativeWallet, getNativeWalletAddress, hasNativeWallet, isNativeWalletUnlocked, prepareNativeWallet, unlockNativeWallet } from './sireWalletCore';
+import { limitMakingAmount, limitTakingAmount } from './limitOrderEngine';
 const loadLimitOrderEngine = () => import('./limitOrderEngine');
 
 type Props = { referencePrice?: number; referenceChange?: number };
@@ -529,11 +530,24 @@ export default function TradeView({ referencePrice = 0 }: Props) {
   const limitMaker = limitSide === 'Sell' ? from : to;
   const limitTaker = limitSide === 'Sell' ? to : from;
   const limitPriceLabel = limitTaker.symbol + ' per ' + limitMaker.symbol;
+  const limitReceiveToken = limitSide === 'Buy' ? limitMaker : limitTaker;
   const limitTargetAmount = (() => {
     try {
       if (!limitPrice || !amount) return '';
+      const paymentUnits = amountToBaseUnits(amount, from);
+      if (limitSide === 'Buy') {
+        return formatUnits(
+          limitMakingAmount(paymentUnits, from.decimals, limitMaker.decimals, limitPrice),
+          limitMaker.decimals,
+          8
+        );
+      }
       const makerUnits = amountToBaseUnits(amount, limitMaker);
-      return formatUnits(limitTakingAmount(makerUnits, limitMaker.decimals, limitTaker.decimals, limitPrice), limitTaker.decimals, 8);
+      return formatUnits(
+        limitTakingAmount(makerUnits, limitMaker.decimals, limitTaker.decimals, limitPrice),
+        limitTaker.decimals,
+        8
+      );
     } catch {
       return '';
     }
@@ -685,11 +699,16 @@ export default function TradeView({ referencePrice = 0 }: Props) {
     setExecutionError('');
     setStatus('Preparing limit order');
     try {
-      const makingAmount = amountToBaseUnits(amount, makerAsset);
-      const takingAmount = limitTakingAmount(makingAmount, makerAsset.decimals, takerAsset.decimals, limitPrice);
+      const paymentAmount = amountToBaseUnits(amount, from);
+      const makingAmount = limitSide === 'Buy'
+        ? limitMakingAmount(paymentAmount, takerAsset.decimals, makerAsset.decimals, limitPrice)
+        : paymentAmount;
+      const takingAmount = limitSide === 'Buy'
+        ? paymentAmount
+        : limitTakingAmount(makingAmount, makerAsset.decimals, takerAsset.decimals, limitPrice);
 
-      // The wallet must have the token that will actually be paid.
-      const paymentAmount = limitSide === 'Sell' ? makingAmount : takingAmount;
+      // The wallet must have the token that will actually be paid. The amount
+      // input is the From token on both Buy and Sell.
       if (BigInt(fromBalance || '0') < BigInt(paymentAmount)) {
         throw new Error('Insufficient ' + from.symbol + ' balance for this limit order.');
       }
@@ -1062,7 +1081,7 @@ export default function TradeView({ referencePrice = 0 }: Props) {
                 >
                   <strong><span>{amount || '0'}</span><em>{from.symbol || ''}</em></strong>
                   <small>{from.priceUSD && Number.isFinite(Number(amount)) ? '$' + money(Number(amount) * from.priceUSD, 2) : '—'}</small>
-                  <div><span>Receive</span><b>{limitTargetAmount ? limitTargetAmount : '—'}</b><em>{limitTaker.symbol || ''}</em></div>
+                  <div><span>Receive</span><b>{limitTargetAmount ? limitTargetAmount : '—'}</b><em>{limitReceiveToken.symbol || ''}</em></div>
                 </button>
               </div>
 
