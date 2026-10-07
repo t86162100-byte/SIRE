@@ -68,24 +68,22 @@
 .sire-spot-submit.sell{background:#f05d68;color:#fff}
 .sire-spot-submit:hover{filter:brightness(1.06)}
 .sire-spot-error{margin-top:9px;padding:9px;border-radius:5px;background:#28171a;color:#f59aa2;font-size:8px;line-height:1.4}
-.sire-spot-book-card{display:flex;flex-direction:column;align-items:stretch;gap:0;padding:0;background:#000;overflow:hidden}
-.sire-spot-book-tabs{height:54px;flex:0 0 54px;display:flex;align-items:center;gap:18px;padding:0 18px;border-bottom:1px solid #20252d;box-sizing:border-box}.sire-spot-book-tabs button{height:100%;border:0;border-bottom:2px solid transparent;background:transparent;color:#6d7683;font-size:11px;font-weight:700;cursor:pointer}
-.sire-spot-book-tabs button.active{color:#fff;border-color:#2ecb8b}
-.sire-spot-book{flex:1 1 auto;min-height:0;padding:14px 18px 20px;overflow:hidden}
-.sire-spot-book-head{display:flex;justify-content:space-between;color:#555f6d;font-size:8px;padding:0 4px 9px}
-.sire-spot-book-side{display:flex;flex-direction:column;gap:2px}
-.sire-spot-book-side div{position:relative;display:flex;justify-content:space-between;padding:5px 4px;font-size:9px;font-variant-numeric:tabular-nums;overflow:hidden}
+.sire-spot-book-card{display:flex;flex-direction:column;align-items:stretch;min-height:100%;height:100%;padding:0;background:#000;overflow:hidden}
+.sire-spot-book{flex:1 1 auto;min-height:0;height:100%;padding:20px 18px 20px;overflow:hidden;box-sizing:border-box}
+.sire-spot-book-head{display:flex;justify-content:space-between;color:#aeb7c3;font-size:11px;font-weight:900;padding:0 4px 12px;letter-spacing:.01em}
+.sire-spot-book-side{display:flex;flex-direction:column;gap:3px}
+.sire-spot-book-side div{position:relative;display:flex;justify-content:space-between;padding:7px 4px;font-size:11px;font-weight:800;font-variant-numeric:tabular-nums;overflow:hidden}
 .sire-spot-book-side div:after{content:"";position:absolute;right:0;top:0;bottom:0;width:35%;z-index:0}
 .sire-spot-book-side span,.sire-spot-book-side b{position:relative;z-index:1}
 .sire-spot-book-side.asks span{color:#f05d68}
 .sire-spot-book-side.asks div:after{background:rgba(240,93,104,.08)}
 .sire-spot-book-side.bids span{color:#2ecb8b}
 .sire-spot-book-side.bids div:after{background:rgba(46,203,139,.08)}
-.sire-spot-book-side b{font-weight:500;color:#aab2bd}
+.sire-spot-book-side b{font-weight:800;color:#d9dee5}
 .sire-spot-book-mid{display:flex;align-items:baseline;gap:7px;padding:13px 4px;border-top:1px solid #20252d;border-bottom:1px solid #20252d}
-.sire-spot-book-mid strong{font-size:16px;color:#f05d68;font-variant-numeric:tabular-nums}
-.sire-spot-book-mid span{font-size:8px;color:#f05d68}
-.sire-spot-depth{display:flex;align-items:center;gap:7px;padding:15px 4px 4px;font-size:8px}
+.sire-spot-book-mid strong{font-size:18px;font-weight:900;color:#f05d68;font-variant-numeric:tabular-nums}
+.sire-spot-book-mid span{font-size:10px;font-weight:800;color:#f05d68}
+.sire-spot-depth{display:flex;align-items:center;gap:7px;padding:18px 4px 4px;font-size:9px;font-weight:800}
 .sire-spot-depth span:first-child{color:#2ecb8b}
 .sire-spot-depth span:last-child{color:#f05d68;margin-left:auto}
 .sire-spot-depth i{height:4px;flex:1;display:flex;background:#f05d68;border-radius:2px;overflow:hidden}
@@ -107,8 +105,8 @@
 .sire-spot-loading{position:fixed;right:18px;bottom:18px;z-index:80;display:flex;align-items:center;gap:7px;padding:9px 11px;background:#151a21;border:1px solid #2a3039;border-radius:7px;color:#89929e;font-size:8px;box-shadow:0 10px 30px rgba(0,0,0,.35)}
 .sire-spin{animation:sire-spot-spin 1s linear infinite}
 @keyframes sire-spot-spin{to{transform:rotate(360deg)}}
-@media(max-width:900px){.sire-spot-workspace{grid-template-columns:60% 40%;min-height:560px;gap:0}.sire-spot-panel-head{padding:0 12px}.sire-spot-trade-content{padding-left:14px;padding-right:14px}.sire-spot-book{padding-left:12px;padding-right:12px}}
-@media(max-width:640px){.sire-spot-workspace{display:grid;grid-template-columns:60% 40%;min-height:520px;gap:0}.sire-spot-panel-head{height:48px;padding:0 9px}.sire-spot-order-tabs{gap:8px}.sire-spot-order-tabs button{font-size:9px}.sire-spot-settings{font-size:0}.sire-spot-trade-content{padding:14px 10px 18px}.sire-spot-pair-row{padding:13px 0 10px}.sire-spot-pair-trigger strong{font-size:10px}.sire-spot-side-row{gap:8px;padding-top:14px}.sire-spot-side-row button{width:76px;flex-basis:76px;height:36px;font-size:9px}.sire-spot-order-type-select{height:36px}.sire-spot-order-type-wrap{margin-bottom:12px}.sire-spot-total-card{height:42px}.sire-spot-amount-progress{margin-bottom:6px}.sire-spot-input{height:48px;padding:0 9px}.sire-spot-input span{left:9px}.sire-spot-input em{right:9px}.sire-spot-book-tabs{height:48px;flex-basis:48px;padding:0 9px;gap:9px}.sire-spot-book-tabs button{font-size:9px}.sire-spot-book{padding:9px 8px}.sire-spot-book-head{font-size:6px}.sire-spot-book-side div{font-size:7px;padding:4px 2px}.sire-spot-book-mid{padding:10px 2px}.sire-spot-book-mid strong{font-size:11px}.sire-spot-depth{font-size:6px;gap:4px}}
+@media(max-width:900px){.sire-spot-workspace{grid-template-columns:60% 40%;min-height:560px;height:100%;gap:0}.sire-spot-panel-head{padding:0 12px}.sire-spot-trade-content{padding-left:14px;padding-right:14px}.sire-spot-book{padding-left:12px;padding-right:12px}}
+@media(max-width:640px){.sire-spot-workspace{display:grid;grid-template-columns:60% 40%;min-height:520px;gap:0}.sire-spot-panel-head{height:48px;padding:0 9px}.sire-spot-order-tabs{gap:8px}.sire-spot-order-tabs button{font-size:9px}.sire-spot-settings{font-size:0}.sire-spot-trade-content{padding:14px 10px 18px}.sire-spot-pair-row{padding:13px 0 10px}.sire-spot-pair-trigger strong{font-size:10px}.sire-spot-side-row{gap:8px;padding-top:14px}.sire-spot-side-row button{width:76px;flex-basis:76px;height:36px;font-size:9px}.sire-spot-order-type-select{height:36px}.sire-spot-order-type-wrap{margin-bottom:12px}.sire-spot-total-card{height:42px}.sire-spot-amount-progress{margin-bottom:6px}.sire-spot-input{height:48px;padding:0 9px}.sire-spot-input span{left:9px}.sire-spot-input em{right:9px}.sire-spot-book{padding:14px 8px}.sire-spot-book-head{font-size:9px;padding-bottom:10px}.sire-spot-book-side div{font-size:9px;padding:6px 2px}.sire-spot-book-mid{padding:10px 2px}.sire-spot-book-mid strong{font-size:13px}.sire-spot-depth{font-size:7px;gap:4px}}
 
 .sire-spot-order-type-select,.sire-spot-total-card{transition:box-shadow .18s ease,border-color .18s ease}
 .sire-spot-trade-panel:has(.sire-spot-side-row button.active.buy) .sire-spot-order-type-select,
