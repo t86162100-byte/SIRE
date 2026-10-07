@@ -117,6 +117,7 @@ export default function TradeView({ referencePrice = 0 }: Props) {
   const [limitKeypadDraft, setLimitKeypadDraft] = useState('');
   const [limitBusy, setLimitBusy] = useState(false);
   const [limitError, setLimitError] = useState('');
+  const [limitPreviewError, setLimitPreviewError] = useState('');
   const [limitOrders, setLimitOrders] = useState<any[]>([]);
 
   useEffect(() => {
@@ -531,27 +532,39 @@ export default function TradeView({ referencePrice = 0 }: Props) {
   const limitTaker = limitSide === 'Sell' ? to : from;
   const limitPriceLabel = limitTaker.symbol + ' per ' + limitMaker.symbol;
   const limitReceiveToken = limitSide === 'Buy' ? limitMaker : limitTaker;
-  const limitTargetAmount = (() => {
+  const limitTargetCalculation = (() => {
+    if (!limitPrice || !amount) return { value: '', error: '' };
     try {
-      if (!limitPrice || !amount) return '';
-      const paymentUnits = amountToBaseUnits(amount, from);
       if (limitSide === 'Buy') {
-        return formatUnits(
-          limitMakingAmount(paymentUnits, from.decimals, limitMaker.decimals, limitPrice),
-          limitMaker.decimals,
-          8
-        );
+        const paymentUnits = amountToBaseUnits(amount, from);
+        return {
+          value: formatUnits(
+            limitMakingAmount(paymentUnits, from.decimals, limitMaker.decimals, limitPrice),
+            limitMaker.decimals,
+            8
+          ),
+          error: ''
+        };
       }
+
       const makerUnits = amountToBaseUnits(amount, limitMaker);
-      return formatUnits(
-        limitTakingAmount(makerUnits, limitMaker.decimals, limitTaker.decimals, limitPrice),
-        limitTaker.decimals,
-        8
-      );
-    } catch {
-      return '';
+      return {
+        value: formatUnits(
+          limitTakingAmount(makerUnits, limitMaker.decimals, limitTaker.decimals, limitPrice),
+          limitTaker.decimals,
+          8
+        ),
+        error: ''
+      };
+    } catch (error) {
+      return {
+        value: '',
+        error: error instanceof Error ? error.message : 'Unable to calculate the receive amount.'
+      };
     }
   })();
+  const limitTargetAmount = limitTargetCalculation.value;
+  const limitPreviewError = limitTargetCalculation.error;
   const canExecute = Boolean(nativeUnlocked && nativeWallet && recipientValid && quote?.transactionRequest && !busy && EVM_SWAP_NETWORKS.some(item => item.name === network) && EVM_SWAP_NETWORKS.some(item => item.name === toNetwork));
 
   useEffect(() => {
@@ -1068,7 +1081,7 @@ export default function TradeView({ referencePrice = 0 }: Props) {
                 <button
                   type="button"
                   className="sire-limit-token-pill sire-limit-payment-pill"
-                  aria-label={'Payment ' + (limitTaker.symbol || 'token')}
+                  aria-label={(limitSide === 'Buy' ? 'Payment ' : 'Receive ') + (limitTaker.symbol || 'token')}
                   onClick={() => setTokenPicker(limitSide === 'Sell' ? 'to' : 'from')}
                 >
                   <LogoMark src={limitTaker.logoURI} fallback={limitTaker.symbol.slice(0,1) || 'T'} className="sire-token-mark large" />
@@ -1079,12 +1092,13 @@ export default function TradeView({ referencePrice = 0 }: Props) {
                 <button
                   type="button"
                   className="sire-limit-payment-summary"
-                  aria-label="Enter payment amount"
+                  aria-label={limitSide === 'Buy' ? 'Enter payment amount' : 'Enter sell amount'}
                   onClick={() => { setLimitKeypadDraft(amount || ''); setLimitKeypad('amount'); }}
                 >
                   <strong><span>{amount || '0'}</span><em>{from.symbol || ''}</em></strong>
                   <small>{from.priceUSD && Number.isFinite(Number(amount)) ? '$' + money(Number(amount) * from.priceUSD, 2) : '—'}</small>
                   <div><span>Receive</span><b>{limitTargetAmount ? limitTargetAmount : '—'}</b><em>{limitReceiveToken.symbol || ''}</em></div>
+                  {limitPreviewError && <div className="sire-swap-error" role="alert"><CircleAlert size={14}/><span>{limitPreviewError}</span></div>}
                 </button>
               </div>
 
@@ -1098,7 +1112,7 @@ export default function TradeView({ referencePrice = 0 }: Props) {
                 ))}
               </div>
 
-              <button type="button" className={'sire-review-button sire-limit-submit ' + (limitSide === 'Buy' ? 'buy' : 'sell')} disabled={limitBusy || !wallet || !nativeUnlocked || !limitPrice || !amount} onClick={() => void placeLimitOrder()}>
+              <button type="button" className={'sire-review-button sire-limit-submit ' + (limitSide === 'Buy' ? 'buy' : 'sell')} disabled={limitBusy || !wallet || !nativeUnlocked || !limitPrice || !amount || Boolean(limitPreviewError)} onClick={() => void placeLimitOrder()}>
                 {limitBusy ? <><LoaderCircle className="sire-spin" size={15}/> {status || 'Placing order'}</> : (wallet ? (limitSide === 'Buy' ? 'Buy ' + limitMaker.symbol : 'Sell ' + limitMaker.symbol) : 'Unlock SIRE Wallet')}
               </button>
 
