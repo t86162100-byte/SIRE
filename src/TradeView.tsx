@@ -117,7 +117,6 @@ export default function TradeView({ referencePrice = 0 }: Props) {
   const [limitKeypadDraft, setLimitKeypadDraft] = useState('');
   const [limitBusy, setLimitBusy] = useState(false);
   const [limitError, setLimitError] = useState('');
-  const [limitPreviewError, setLimitPreviewError] = useState('');
   const [limitOrders, setLimitOrders] = useState<any[]>([]);
 
   useEffect(() => {
