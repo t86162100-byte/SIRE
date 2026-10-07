@@ -1013,6 +1013,7 @@ export default function TradeView({ referencePrice = 0 }: Props) {
                   <small>USD per {limitMaker.symbol || ''}</small>
                   {limitExecutionMarketPrice && <em>Execution: {limitExecutionMarketPrice} {limitTaker.symbol || ''} per {limitMaker.symbol || ''}</em>}
                 </div>
+              </div>
 
               <div className="sire-limit-side-toggle" role="tablist" aria-label="Limit side">
                 {(['Buy','Sell'] as const).map(side => (
