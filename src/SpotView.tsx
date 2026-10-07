@@ -143,11 +143,10 @@ export default function SpotView({ wallet, onConnect }: Props) {
           {orderType === 'Limit' && <div className="sire-spot-price-shortcuts">{[-1,0,1].map(p => <button key={p} type="button" onClick={() => setPercent(p)}>{p === 0 ? 'Market' : (p > 0 ? '+' : '') + p + '%'}</button>)}</div>}
 
           <div className="sire-spot-order-summary">
-            <div><span>Total</span><b>{total ? money(total,2) + ' USDT' : '—'}</b></div>
             <div><span>Est. fee</span><b>— USDT</b></div>
           </div>
 
-          <button type="button" className={'sire-spot-submit ' + side.toLowerCase()} onClick={submit}>{wallet ? side + ' ' + (base || 'Asset') : 'Connect wallet'}</button>
+          <button type="button" className="sire-spot-submit" onClick={submit}>Connect wallet</button>
           {error && <div className="sire-spot-error">{error}</div>}
         </div>
       </section>
