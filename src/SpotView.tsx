@@ -93,63 +93,25 @@ export default function SpotView({ wallet, onConnect }: Props) {
   };
 
   return <div className="sire-spot-shell">
-    <nav className="sire-spot-topnav">
-      {['Swap','Spot','Margin','Futures','Options','Alpha'].map(item =>
-        <button key={item} className={item === 'Spot' ? 'active' : ''} type="button">{item}</button>
-      )}
-      <button className="sire-spot-more" type="button"><MoreHorizontal size={18}/></button>
-    </nav>
-
-    <header className="sire-spot-market-head">
-      <div className="sire-spot-symbol">
-        <button type="button" className="sire-spot-star" aria-label="Favorite"><Star size={17}/></button>
-        <button type="button" className="sire-spot-pair-trigger" onClick={() => setPickerOpen(true)}>
-          <span className="sire-spot-logo"><img src={selected?.logoUrl || ''} alt="" onError={e => { e.currentTarget.style.display='none'; }} /></span>
-          <span>
-            <strong>{selected ? base + '/' + selected.quote : 'Select pair'}</strong>
-            <small>{selected?.name || 'USDT spot market'} <ChevronDown size={13}/></small>
-          </span>
-        </button>
-        <span className="sire-spot-badge">SPOT</span>
-      </div>
-
-      <div className="sire-spot-stats">
-        <div><span>Last price</span><b>{marketPrice ? formatPrice(marketPrice) : '—'}</b></div>
-        <div><span>24h Change</span><b className={isUp ? 'up' : 'down'}>{Number.isFinite(change) ? (change >= 0 ? '+' : '') + money(change,2) + '%' : '—'}</b></div>
-        <div className="sire-spot-stat-wide"><span>Best bid / ask</span><b>{formatPrice(bid)} / {formatPrice(ask)}</b></div>
-        <div className="sire-spot-connection"><span className={wallet ? 'online' : ''}></span>{wallet ? wallet.slice(0,6) + '…' + wallet.slice(-4) : 'Exchange not connected'}</div>
-      </div>
-    </header>
-
-    <div className="sire-spot-mobile-tabs">
-      <button className={mobilePanel === 'Trade' ? 'active' : ''} type="button" onClick={() => setMobilePanel('Trade')}>Trade</button>
-      <button className={mobilePanel === 'Chart' ? 'active' : ''} type="button" onClick={() => setMobilePanel('Chart')}>Chart</button>
-    </div>
-
     <main className="sire-spot-workspace">
-      <section className="sire-spot-left">
-        <div className="sire-spot-chart-card">
-          <div className="sire-spot-card-head">
-            <div><strong>{base || 'Asset'}/USDT</strong><span>Price chart</span></div>
-            <div className="sire-spot-timeframes"><button className="active" type="button">1m</button><button type="button">5m</button><button type="button">15m</button><button type="button">1H</button><button type="button">4H</button><button type="button">1D</button></div>
-            <button className="sire-spot-chart-tool" type="button"><CandlestickChart size={16}/></button>
+      <section className="sire-spot-trade-panel">
+        <div className="sire-spot-panel-head">
+          <div className="sire-spot-order-tabs">
+            <button className={orderType === 'Market' ? 'active' : ''} type="button" onClick={() => setOrderType('Market')}>Market</button>
+            <button className={orderType === 'Limit' ? 'active' : ''} type="button" onClick={() => setOrderType('Limit')}>Limit</button>
+            <button type="button">Stop-limit</button>
           </div>
-          <div className="sire-spot-chart-placeholder">
-            <div className="sire-spot-chart-grid"></div>
-            <div className="sire-spot-chart-line"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
-            <span className="sire-spot-chart-label">{marketPrice ? formatPrice(marketPrice) : 'Live market'}</span>
-            <small>Market chart</small>
-          </div>
+          <button className="sire-spot-settings" type="button"><SlidersHorizontal size={15}/> Order settings</button>
         </div>
 
-        <section className="sire-spot-trade-card">
-          <div className="sire-spot-card-head sire-spot-trade-head">
-            <div className="sire-spot-order-tabs">
-              <button className={orderType === 'Market' ? 'active' : ''} type="button" onClick={() => setOrderType('Market')}>Market</button>
-              <button className={orderType === 'Limit' ? 'active' : ''} type="button" onClick={() => setOrderType('Limit')}>Limit</button>
-              <button type="button">Stop-limit</button>
-            </div>
-            <button className="sire-spot-settings" type="button"><SlidersHorizontal size={15}/> Order settings</button>
+        <div className="sire-spot-trade-content">
+          <div className="sire-spot-pair-row">
+            <span>Spot</span>
+            <button type="button" className="sire-spot-pair-trigger" onClick={() => setPickerOpen(true)}>
+              <span className="sire-spot-logo"><img src={selected?.logoUrl || ''} alt="" onError={e => { e.currentTarget.style.display='none'; }} /></span>
+              <strong>{selected ? base + '/' + selected.quote : 'Select pair'}</strong>
+              <ChevronDown size={14}/>
+            </button>
           </div>
 
           <div className="sire-spot-side-row">
@@ -180,12 +142,7 @@ export default function SpotView({ wallet, onConnect }: Props) {
 
           <button type="button" className={'sire-spot-submit ' + side.toLowerCase()} onClick={submit}>{wallet ? side + ' ' + (base || 'Asset') : 'Connect wallet'}</button>
           {error && <div className="sire-spot-error">{error}</div>}
-        </section>
-
-        <section className="sire-spot-orders-card">
-          <div className="sire-spot-bottom-tabs"><button className="active" type="button">Open Orders (0)</button><button type="button">Order History</button><button type="button">Trade History</button><button type="button">Assets</button></div>
-          <div className="sire-spot-empty"><strong>No open orders</strong><span>Your active spot orders will appear here.</span></div>
-        </section>
+        </div>
       </section>
 
       <aside className="sire-spot-book-card">
@@ -206,18 +163,6 @@ export default function SpotView({ wallet, onConnect }: Props) {
         </div> : <div className="sire-spot-trades-empty">Recent trades will appear here.</div>}
       </aside>
     </main>
-
-    <div className="sire-spot-mobile-book">
-      <div className="sire-spot-book-card">
-        <div className="sire-spot-book-tabs"><button className="active" type="button">Order book</button><button type="button">Trades</button></div>
-        <div className="sire-spot-book">
-          <div className="sire-spot-book-head"><span>Price (USDT)</span><span>Amount ({base || 'BTC'})</span></div>
-          <div className="sire-spot-book-side asks">{[3,2,1].map((n,i)=><div key={n}><span>{formatPrice(ask + (i+1)*spread)}</span><b>{(0.00006*n).toFixed(5)}</b></div>)}</div>
-          <div className="sire-spot-book-mid"><strong>{formatPrice(marketPrice)}</strong><span>{isUp ? '▲' : '▼'} {Math.abs(change).toFixed(2)}%</span></div>
-          <div className="sire-spot-book-side bids">{[1,2,3].map((n,i)=><div key={n}><span>{formatPrice(Math.max(0,bid-(i+1)*spread))}</span><b>{(0.00007*n).toFixed(5)}</b></div>)}</div>
-        </div>
-      </div>
-    </div>
 
     {pickerOpen && <div className="sire-spot-picker-backdrop" onClick={() => setPickerOpen(false)}>
       <section className="sire-spot-picker" onClick={e => e.stopPropagation()}>
