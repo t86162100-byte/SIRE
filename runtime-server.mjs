@@ -972,10 +972,23 @@ const server = http.createServer(async (req,res) => {
           if (!/^\d+$/.test(sellAmount) || BigInt(sellAmount) <= 0n) return json(400,{ok:false,error:'Invalid limit-order amount.'});
           const params = new URLSearchParams({chainId:String(chainId),sellToken,buyToken,sellAmount});
           if (/^0x[a-fA-F0-9]{40}$/.test(taker)) params.set('taker',taker);
-          const upstream = await fetch('https://api.0x.org/swap/allowance-holder/price?' + params.toString(), {headers});
+          const upstream = await fetch('https://api.0x.org/swap/allowance-holder/price?' + params.toString(), {headers,signal:AbortSignal.timeout(12000)});
           const result = await parseUpstream(upstream);
           if (!upstream.ok) return json(upstream.status,{ok:false,error:String(result.payload?.reason||result.payload?.message||result.payload?.error||result.raw.slice(0,500)||'0x rejected the price request.'),upstream:result.payload});
-          return json(200,{ok:true,quote:result.payload});
+          const buyAmount = String(result.payload?.buyAmount || '');
+          // The client deliberately asks 0x for exactly one whole maker token.
+          // Normalize the returned base-unit amount here so the UI does not
+          // depend on token-catalogue USD metadata being present.
+          let price = null;
+          if (/^\d+$/.test(buyAmount)) {
+            const buyDecimals = Number(parsed?.buyDecimals ?? 0);
+            if (Number.isInteger(buyDecimals) && buyDecimals >= 0 && buyDecimals <= 36) {
+              const scale = 10 ** buyDecimals;
+              const numeric = Number(buyAmount) / scale;
+              if (Number.isFinite(numeric) && numeric > 0) price = numeric;
+            }
+          }
+          return json(200,{ok:true,quote:result.payload,price});
         }
         if (req.method === 'POST' && pathname === '/api/sire/limit-orders/submit') {
           const parsed = body ? JSON.parse(body) : {};
