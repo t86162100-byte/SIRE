@@ -88,6 +88,7 @@ export async function externalSpotExecute(request:ExternalSpotRequest):Promise<E
   return fills.map((fill:any)=>{
     const status=String(fill?.status||data?.status||'FILLED').toUpperCase();
     if(!['FILLED','PARTIAL','REJECTED','PENDING'].includes(status)) throw new Error('Invalid external execution status.');
+    if(status==='PENDING') throw new Error('External provider returned a pending order; synchronous SIRE settlement requires a final fill or explicit cancel before settlement.');
     return {
       provider:request.provider,
       externalOrderId:String(fill?.externalOrderId||data?.externalOrderId||''),
