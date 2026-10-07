@@ -1011,7 +1011,7 @@ export default function TradeView({ referencePrice = 0 }: Props) {
                   <span>Price</span>
                   <strong>{limitMarketPrice ? "$" + money(Number(limitMarketPrice), 2) : '—'}</strong>
                   <small>USD per {limitMaker.symbol || ''}</small>
-                  {limitExecutionMarketPrice && <em>Execution: {limitExecutionMarketPrice} {limitTaker.symbol || ''} per {limitMaker.symbol || ''}</em>}
+                  {limitExecutionMarketPrice && <em><span>Exec.</span> {money(Number(limitExecutionMarketPrice), 2)} {limitTaker.symbol || ''} / {limitMaker.symbol || ''}</em>}
                 </div>
               </div>
 
