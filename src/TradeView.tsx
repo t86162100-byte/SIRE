@@ -715,6 +715,8 @@ export default function TradeView({ referencePrice = 0 }: Props) {
         takerSymbol: takerAsset.symbol,
         makingAmount,
         takingAmount,
+        paymentAmount,
+        receiveAmount: makingAmount,
         limitPrice,
         side: limitSide,
         createdAt: Date.now(),
