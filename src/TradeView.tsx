@@ -108,7 +108,11 @@ export default function TradeView({ referencePrice = 0 }: Props) {
   const [limitPrice, setLimitPrice] = useState('');
   const [limitPricePreset, setLimitPricePreset] = useState('Market');
   const [limitSide, setLimitSide] = useState<'Buy' | 'Sell'>('Buy');
+  // Display price is the selected instrument's USD market price.
+  // Execution price remains the pair-denominated price used by the order engine.
   const [limitMarketPrice, setLimitMarketPrice] = useState('');
+  const [limitExecutionMarketPrice, setLimitExecutionMarketPrice] = useState('');
+  const [limitDisplayPrice, setLimitDisplayPrice] = useState('');
   const [limitMarketLoading, setLimitMarketLoading] = useState(false);
   const [limitExpiry, setLimitExpiry] = useState(86400);
   const [limitExpiryCustom, setLimitExpiryCustom] = useState('');
@@ -575,6 +579,8 @@ export default function TradeView({ referencePrice = 0 }: Props) {
       tokenIdentity(limitMaker) === tokenIdentity(limitTaker)
     ) {
       setLimitMarketPrice('');
+      setLimitExecutionMarketPrice('');
+      setLimitDisplayPrice('');
       setLimitMarketLoading(false);
       return;
     }
@@ -584,9 +590,14 @@ export default function TradeView({ referencePrice = 0 }: Props) {
     const setCataloguePrice = () => {
       const makerUSD = Number(limitMaker.priceUSD);
       const takerUSD = Number(limitTaker.priceUSD);
+      if (Number.isFinite(makerUSD) && makerUSD > 0) {
+        if (!cancelled) setLimitMarketPrice(String(makerUSD));
+      }
       if (Number.isFinite(makerUSD) && makerUSD > 0 && Number.isFinite(takerUSD) && takerUSD > 0) {
         const derived = makerUSD / takerUSD;
-        if (Number.isFinite(derived) && derived > 0) setLimitMarketPrice(String(derived));
+        if (!cancelled && Number.isFinite(derived) && derived > 0) {
+          setLimitExecutionMarketPrice(String(derived));
+        }
       }
     };
 
@@ -616,12 +627,12 @@ export default function TradeView({ referencePrice = 0 }: Props) {
         // 0x v2 base-unit response as a fallback.
         const serverPrice = Number(payload?.price || payload?.quote?.price || 0);
         if (response.ok && Number.isFinite(serverPrice) && serverPrice > 0) {
-          if (!cancelled) setLimitMarketPrice(String(serverPrice));
+          if (!cancelled) setLimitExecutionMarketPrice(String(serverPrice));
           return;
         }
         if (response.ok && /^\d+$/.test(buyAmount)) {
           const price = Number(formatUnits(buyAmount, limitTaker.decimals, 18));
-          if (!cancelled && Number.isFinite(price) && price > 0) setLimitMarketPrice(String(price));
+          if (!cancelled && Number.isFinite(price) && price > 0) setLimitExecutionMarketPrice(String(price));
           return;
         }
       } catch {
@@ -692,7 +703,8 @@ export default function TradeView({ referencePrice = 0 }: Props) {
       return;
     }
 
-    // A Limit intent uses the current 0x Swap API v2 as its pricing source.
+    // The UI displays the selected instrument's USD price, while the
+    // executable order keeps the pair-denominated price in limitPrice.
     // Sell = sell "from"; Buy = buy "to". Tokens remain in the wallet until
     // the user chooses to execute a firm quote.
     const makerAsset = limitSide === 'Sell' ? from : to;
@@ -749,6 +761,7 @@ export default function TradeView({ referencePrice = 0 }: Props) {
         paymentAmount,
         receiveAmount: makingAmount,
         limitPrice,
+        displayPrice: limitDisplayPrice,
         side: limitSide,
         createdAt: Date.now(),
         status: 'Open',
@@ -996,8 +1009,458 @@ export default function TradeView({ referencePrice = 0 }: Props) {
                 </button>
                 <div className="sire-limit-live-price" aria-live="polite">
                   <span>Price</span>
-                  <strong>{limitMarketPrice || '—'}</strong>
-                  <small>{limitTaker.symbol || ''} per {limitMaker.symbol || ''}</small>
+                  <strong>{limitMarketPrice ? '
+              </div>
+
+              <div className="sire-limit-side-toggle" role="tablist" aria-label="Limit side">
+                {(['Buy','Sell'] as const).map(side => (
+                  <button
+                    key={side}
+                    type="button"
+                    role="tab"
+                    aria-selected={limitSide === side}
+                    className={limitSide === side ? 'active ' + side.toLowerCase() : ''}
+                    onClick={() => {
+                      if (side !== limitSide) {
+                        // Keep the selected trading pair, but reverse its direction.
+                        // Buy WBTC with USDCE -> Sell WBTC for USDCE.
+                        const currentFrom = from;
+                        const currentTo = to;
+                        setFrom(currentTo);
+                        setTo(currentFrom);
+                      }
+                      setLimitSide(side);
+                      setLimitPrice('');
+                      setLimitDisplayPrice('');
+                      setLimitPricePreset('Market');
+                      setLimitError('');
+                      setAmount('1');
+                    }}
+                  >
+                    {side}
+                  </button>
+                ))}
+              </div>
+
+              <div className={'sire-limit-price-card sire-limit-price-main ' + (limitSide === 'Buy' ? 'buy' : 'sell')}>
+                <div className="sire-limit-price-message">
+                  {limitSide === 'Buy' ? 'Buy ' : 'Sell '}
+                  <LogoMark src={limitMaker.logoURI} fallback={limitMaker.symbol.slice(0,1) || 'T'} className="sire-limit-inline-logo" />
+                  <b>{limitMaker.symbol || 'token'}</b>
+                  {limitSide === 'Buy' ? ' when price is below ' : ' when price is above '}
+                  <strong>{limitPricePreset}</strong>
+                </div>
+                <button
+                  type="button"
+                  className="sire-limit-target-price"
+                  aria-label="Enter limit price"
+                  onClick={() => {
+                    setLimitKeypadDraft(limitDisplayPrice || limitMarketPrice || '');
+                    setLimitKeypad('price');
+                    setLimitPricePreset('Custom');
+                  }}
+                >
+                  <span>{limitDisplayPrice ? '
+                </button>
+              </div>
+              <div className={'sire-limit-price-options sire-limit-price-options-' + limitSide.toLowerCase()}>
+                {(limitSide === 'Buy'
+                  ? ['Market','-1%','-5%','-10%','Custom']
+                  : ['Market','+1%','+5%','+10%','Custom']
+                ).map(option => (
+                  <button
+                    key={option}
+                    type="button"
+                    className={limitPricePreset === option ? 'selected' : ''}
+                    onClick={() => {
+                      const baseDisplay = Number(limitMarketPrice);
+                      const takerUSD = Number(limitTaker.priceUSD);
+                      if (!Number.isFinite(baseDisplay) || baseDisplay <= 0 || !Number.isFinite(takerUSD) || takerUSD <= 0) return;
+                      const setDisplayAndExecutionPrice = (display: number) => {
+                        const execution = display / takerUSD;
+                        if (!Number.isFinite(execution) || execution <= 0) return;
+                        setLimitDisplayPrice(String(display));
+                        setLimitPrice(String(execution));
+                      };
+                      if (option === 'Market') {
+                        setDisplayAndExecutionPrice(baseDisplay);
+                        setLimitPricePreset('Market');
+                      } else if (option === 'Custom') {
+                        setLimitKeypadDraft(limitDisplayPrice || String(baseDisplay));
+                        setLimitKeypad('price');
+                        setLimitPricePreset('Custom');
+                      } else {
+                        const pct = Number(option.replace('%',''));
+                        const effective = limitSide === 'Buy' ? -Math.abs(pct) : Math.abs(pct);
+                        setDisplayAndExecutionPrice(baseDisplay * (1 + effective / 100));
+                        setLimitPricePreset(option);
+                      }
+                      setLimitError('');
+                    }}
+                  >{option}</button>
+                ))}
+              </div>
+
+              <div className={'sire-limit-token-card sire-limit-payment-card ' + (limitSide === 'Buy' ? 'buy' : 'sell')}>
+                <div className="sire-limit-payment-expiry">
+                  <span>Expiry</span>
+                  <button type="button" className="sire-limit-expiry-pill" onClick={() => setLimitExpiryOpen(true)}>
+                    {limitExpiryCustom ? new Date(limitExpiryCustom).toLocaleString([], {month:'short', day:'numeric', hour:'numeric', minute:'2-digit'}) : limitExpiry === 3600 ? '1 hour' : limitExpiry === 86400 ? '24 hours' : limitExpiry === 604800 ? '7 days' : '30 days'}
+                    <ChevronDown size={13}/>
+                  </button>
+                </div>
+                <button
+                  type="button"
+                  className="sire-limit-token-pill sire-limit-payment-pill"
+                  aria-label={(limitSide === 'Buy' ? 'Payment ' : 'Receive ') + (limitTaker.symbol || 'token')}
+                  onClick={() => setTokenPicker(limitSide === 'Sell' ? 'to' : 'from')}
+                >
+                  <LogoMark src={limitTaker.logoURI} fallback={limitTaker.symbol.slice(0,1) || 'T'} className="sire-token-mark large" />
+                  <span><b>{limitTaker.symbol || 'Select token'}</b><small>{limitTaker.name || ''}</small></span>
+                  <ChevronDown size={15}/>
+                </button>
+              
+                <button
+                  type="button"
+                  className="sire-limit-payment-summary"
+                  aria-label={limitSide === 'Buy' ? 'Enter payment amount' : 'Enter sell amount'}
+                  onClick={() => { setLimitKeypadDraft(amount || ''); setLimitKeypad('amount'); }}
+                >
+                  <strong><span>{amount || '0'}</span><em>{from.symbol || ''}</em></strong>
+                  <small>{from.priceUSD && Number.isFinite(Number(amount)) ? '$' + money(Number(amount) * from.priceUSD, 2) : '—'}</small>
+                  <div><span>Receive</span><b>{limitTargetAmount ? limitTargetAmount : '—'}</b><em>{limitReceiveToken.symbol || ''}</em></div>
+                </button>
+                {limitPreviewError && <div className="sire-swap-error" role="alert"><CircleAlert size={14}/><span>{limitPreviewError}</span></div>}
+              </div>
+
+              <div className="sire-limit-price-options sire-limit-payment-percentages" aria-label="Payment amount percentage">
+                {[25, 50, 75, 100].map(percent => (
+                  <button
+                    key={percent}
+                    type="button"
+                    onClick={() => setAmount(String((Number(formatUnits(fromBalance, from.decimals, 18)) * percent) / 100))}
+                  >{percent}%</button>
+                ))}
+              </div>
+
+              <button type="button" className={'sire-review-button sire-limit-submit ' + (limitSide === 'Buy' ? 'buy' : 'sell')} disabled={limitBusy || !wallet || !nativeUnlocked || !limitPrice || !limitDisplayPrice || !amount || Boolean(limitPreviewError)} onClick={() => void placeLimitOrder()}>
+                {limitBusy ? <><LoaderCircle className="sire-spin" size={15}/> {status || 'Placing order'}</> : (wallet ? (limitSide === 'Buy' ? 'Buy ' + limitMaker.symbol : 'Sell ' + limitMaker.symbol) : 'Unlock SIRE Wallet')}
+              </button>
+
+              <small className="sire-limit-note">Your limit order is monitored through 0x Swap API v2. Your tokens remain in SIRE Wallet until the target is reached and you review the live quote.</small>
+              {limitError && <div className="sire-swap-error"><CircleAlert size={14}/><span>{limitError}</span></div>}
+
+              <div className="sire-limit-orders">
+                <div className="sire-limit-orders-head"><b>Open orders</b><button type="button" onClick={() => void refreshLimitOrders()}>Refresh</button></div>
+                {limitOrders.length > 0 ? limitOrders.slice(0, 8).map((order:any) => (
+                  <div className="sire-limit-order-row" key={order.orderHash}>
+                    <div>
+                      <b>{order.side === 'Buy' ? 'Buy' : 'Sell'} {order.makerSymbol || 'Token'}</b>
+                      <small>{order.limitPrice || 'Limit'} {order.takerSymbol ? order.takerSymbol : ''} · {order.orderStatus === 1 || order.status === 'Open' ? 'Open' : String(order.orderStatus || order.status || 'Pending')}</small>
+                    </div>
+                    <button type="button" disabled={limitBusy} onClick={() => void cancelLimit(order)}>Cancel</button>
+                  </div>
+                )) : <div className="sire-limit-empty">No open limit orders.</div>}
+              </div>
+            </div>}
+
+            <div className="sire-swap-route">
+              <button type="button" onClick={() => setProviderOpen(true)} disabled={!providerQuotes.length}>
+                <span>Providers</span>
+                <small>{providerQuotes.length ? providerQuotes.length + ' live route' + (providerQuotes.length === 1 ? '' : 's') + ' · Compare' : 'Waiting for live routes'}</small>
+              </button>
+              {quote && <div className="sire-route-metrics">
+                <span><b>{quote.toolName || quote.tool || 'Router'}</b><small>Selected provider</small></span>
+                <span><b>{quote.executionDuration ? '~' + Math.max(1, Math.round(quote.executionDuration)) + 's' : '—'}</b><small>Estimated time</small></span>
+                <span><b>{quote.gasUSD ? '$' + Number(quote.gasUSD).toFixed(2) : '—'}</b><small>Network fee</small></span>
+              </div>}
+            </div>
+
+            {tradeMode === 'Swap' && <div className="sire-swap-confirm-wrap">
+              {!wallet ? (
+                <button type="button" className="sire-review-button sire-connect-button" onClick={() => void connect()}>
+                  <WalletCards size={15}/> {hasNativeWallet() ? 'Unlock SIRE Wallet' : 'Create SIRE Wallet'}
+                </button>
+              ) : walletChain !== (SWAP_NETWORKS[network]?.chainId ?? 1) ? (
+                <button type="button" className="sire-review-button" onClick={() => void selectNetwork(network)}>Switch to {network}</button>
+              ) : (
+                <button type="button" className="sire-review-button" disabled={!canExecute} onClick={() => void execute()}>
+                  {busy ? <><LoaderCircle className="sire-spin" size={15}/> {status || 'Executing'}</> : quote ? 'Confirm Swap' : quoteLoading ? 'Getting live quote…' : 'Waiting for executable quote'}
+                </button>
+              )}
+            </div>}
+ 
+            <div className="sire-slippage">
+              <span>Slippage</span>
+              <div>
+                {[0.001, 0.005, 0.01].map(value => (
+                  <button key={value} type="button" className={slippage === value ? 'active' : ''} onClick={() => setSlippage(value)}>
+                    {(value * 100).toFixed(1)}%
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="sire-swap-details">
+               <div><span>Price impact</span><b>{quote?.priceImpact != null ? (quote.priceImpact * 100).toFixed(2) + '%' : '—'}</b></div>
+               <div><span>Network fee</span><b>{quote?.gasUSD ? '$' + Number(quote.gasUSD).toFixed(2) : '—'}</b></div>
+               <div><span>Minimum received</span><b>{quote ? minimum + ' ' + to.symbol : '—'}</b></div>
+               <div><span>{isCrossChain ? 'Destination' : 'Recipient'}</span><b>{recipient ? shortAddress(recipient) : 'You'}</b></div>
+               {quote && <div><span>Quote refresh</span><b>{quoteSeconds > 0 ? quoteSeconds + 's' : 'Refresh required'}</b></div>}
+             </div>
+
+             <div className="sire-swap-recipient">
+               <button type="button" className={recipientOpen ? 'active' : ''} onClick={() => setRecipientOpen(value => !value)}>
+                 <span>Send to</span><b>{recipient ? shortAddress(recipient) : 'My wallet'}</b>
+               </button>
+               {recipientOpen && <div className="sire-recipient-editor">
+                 <input value={recipient} onChange={e => { setRecipient(e.target.value.trim()); setRecipientError(''); }} placeholder="0x… destination address" spellCheck={false} />
+                 <button type="button" onClick={() => { setRecipient(''); setRecipientError(''); }}>Use my wallet</button>
+                 {recipient && !recipientValid && <small>Enter a valid EVM destination address.</small>}
+               </div>}
+             </div>
+
+
+            {quote && wallet && nativeUnlocked && !busy && !simulationBusy && <button type="button" className="sire-wallet-secondary sire-test-swap-button" onClick={() => void simulate()}>
+              Run no-money test
+            </button>}
+            {(quoteError || executionError) && <div className="sire-swap-error"><CircleAlert size={14}/><span>{quoteError || executionError}</span></div>}
+            {simulationResult && <div className="sire-swap-status sire-swap-simulation-result"><span>{simulationResult}</span></div>}
+            {status && !executionError && <div className="sire-swap-status">{status}{txHash && <a href={(network === 'BNB Chain' ? 'https://bscscan.com/tx/' : network === 'Base' ? 'https://basescan.org/tx/' : network === 'Arbitrum' ? 'https://arbiscan.io/tx/' : network === 'Optimism' ? 'https://optimistic.etherscan.io/tx/' : network === 'Polygon' ? 'https://polygonscan.com/tx/' : network === 'Avalanche' ? 'https://snowtrace.io/tx/' : 'https://etherscan.io/tx/') + txHash} target="_blank" rel="noreferrer">View transaction</a>}</div>}
+
+            <div className="sire-swap-safety"><LockKeyhole size={13}/> Quotes expire quickly and are revalidated before signing.</div>
+             <button type="button" className="sire-wallet-secondary sire-history-trigger" onClick={() => setHistoryOpen(true)}>View swap history ({swapHistory.length})</button>
+          </section>
+        </div>
+      </main>
+    </div>
+
+    {insufficientBalanceOpen && <div className="sire-modal-backdrop sire-insufficient-backdrop" onMouseDown={() => setInsufficientBalanceOpen(false)}>
+      <section className="sire-insufficient-sheet" role="dialog" aria-modal="true" aria-label="Insufficient balance" onMouseDown={e => e.stopPropagation()}>
+        <div className="sire-insufficient-icon"><CircleAlert size={22}/></div>
+        <div className="sire-insufficient-copy">
+          <h3>Insufficient {from.symbol} balance</h3>
+          <p>You have <b>{insufficientBalanceAmount} {from.symbol}</b>, but this swap requires <b>{amount} {from.symbol}</b>.</p>
+          <p className="sire-insufficient-sub">Your quote is still available to review. Add funds to continue with this swap.</p>
+        </div>
+        <button type="button" className="sire-review-button sire-buy-balance-button" onClick={() => {
+          setInsufficientBalanceOpen(false);
+          window.dispatchEvent(new CustomEvent('sire:buy-token', { detail: { symbol: from.symbol, network, token: from } }));
+        }}>Buy {from.symbol}</button>
+        <button type="button" className="sire-wallet-secondary" onClick={() => setInsufficientBalanceOpen(false)}>Not now</button>
+      </section>
+    </div>}
+
+    {providerOpen && <div className="sire-modal-backdrop sire-provider-backdrop" onMouseDown={() => setProviderOpen(false)}>
+      <section className="sire-provider-sheet" role="dialog" aria-modal="true" aria-label="Swap providers" onMouseDown={e => e.stopPropagation()}>
+        <div className="sire-provider-handle" aria-hidden="true"><span /></div>
+        <div className="sire-provider-head">
+          <div><b>Providers</b><small>Live executable routes · sorted by received amount</small></div>
+          <button type="button" onClick={() => setProviderOpen(false)} aria-label="Close providers"><X size={18}/></button>
+        </div>
+        <div className="sire-provider-list">
+          {providerQuotes.map((candidate, index) => {
+            const selected = quote === candidate;
+            const receive = formatUnits(candidate.toAmount, candidate.toToken.decimals, 8);
+            const usd = candidate.toToken.priceUSD ? Number(receive) * Number(candidate.toToken.priceUSD) : 0;
+            return (
+              <button
+                type="button"
+                className={'sire-provider-card' + (selected ? ' selected' : '')}
+                key={(candidate.toolName || candidate.tool || 'route') + ':' + candidate.toAmount + ':' + (candidate.transactionRequest?.data || '')}
+                onClick={() => { setQuote(candidate); setProviderOpen(false); }}
+              >
+                <div className="sire-provider-card-top">
+                  <div className="sire-provider-name">
+                    <span className="sire-provider-icon">{(candidate.toolName || candidate.tool || 'R').slice(0,1).toUpperCase()}</span>
+                    <span><b>{candidate.toolName || candidate.tool || 'Router'}</b><small>Live executable route</small></span>
+                  </div>
+                  {index === 0 && <em>Best</em>}
+                </div>
+                <div className="sire-provider-amount">
+                  <b>{receive} {candidate.toToken.symbol}</b>
+                  <span>{usd > 0 ? '$' + money(usd, 2) : '—'}</span>
+                </div>
+                <div className="sire-provider-metrics">
+                  <span><b>{candidate.executionDuration ? '~' + Math.max(1, Math.round(candidate.executionDuration)) + 's' : '—'}</b><small>Est. time</small></span>
+                  <span><b>{candidate.gasUSD ? '$' + Number(candidate.gasUSD).toFixed(4) : '—'}</b><small>Gas fee</small></span>
+                  <span><b>{candidate.priceImpact != null ? (candidate.priceImpact * 100).toFixed(2) + '%' : '—'}</b><small>Price impact</small></span>
+                </div>
+                <div className="sire-provider-route-line">
+                  <span>{candidate.fromToken.symbol} · {network}</span><i>→</i><span>{candidate.toToken.symbol} · {toNetwork}</span>
+                  <strong>{selected ? 'Selected' : 'Use route'}</strong>
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      </section>
+    </div>}
+
+    {walletOnboarding && <div className="sire-modal-backdrop" onMouseDown={closeWalletOnboarding}>
+      <section className="sire-token-modal sire-wallet-onboarding" role="dialog" aria-modal="true" aria-label="Create SIRE Wallet" onMouseDown={e => e.stopPropagation()}>
+        <div className="sire-token-modal-head">
+          <div><b>{walletStep === 'intro' ? 'Create SIRE Wallet' : walletStep === 'backup' ? 'Secure your wallet' : 'Wallet created'}</b><small>Native self-custody wallet · no external wallet required</small></div>
+          {walletStep !== 'confirm' && <button type="button" onClick={closeWalletOnboarding} aria-label="Close wallet setup"><X size={17}/></button>}
+        </div>
+
+        {walletStep === 'intro' && <div className="sire-wallet-onboarding-body">
+          <div className="sire-wallet-hero-icon"><WalletCards size={25}/></div>
+          <h3>Create your SIRE Wallet</h3>
+          <p>Your wallet is created on this device and its recovery phrase is controlled by you. Swap will use this wallet directly instead of asking you to connect an external wallet.</p>
+          <div className="sire-wallet-warning"><LockKeyhole size={15}/><span>Never share your recovery phrase or password. SIRE cannot recover a lost recovery phrase.</span></div>
+          <button type="button" className="sire-review-button" onClick={beginWalletCreation}>Create Wallet</button>
+        </div>}
+
+        {walletStep === 'unlock' && <div className="sire-wallet-onboarding-body">
+          <div className="sire-wallet-hero-icon"><LockKeyhole size={25}/></div>
+          <h3>Unlock SIRE Wallet</h3>
+          <p>Your SIRE Wallet already exists on this device. Enter its password to make it available to Swap.</p>
+          <div className="sire-wallet-form">
+            <label>Wallet password<input type="password" autoFocus autoComplete="current-password" value={walletPassword} onChange={e => setWalletPassword(e.target.value)} placeholder="Enter your password" onKeyDown={e => { if (e.key === 'Enter') void unlockWallet(); }}/></label>
+          </div>
+          {walletCreationError && <div className="sire-swap-error"><CircleAlert size={14}/><span>{walletCreationError}</span></div>}
+          <button type="button" className="sire-review-button" disabled={walletCreating} onClick={() => void unlockWallet()}>{walletCreating ? <><LoaderCircle className="sire-spin" size={15}/> Unlocking…</> : 'Unlock Wallet'}</button>
+        </div>}
+
+        {walletStep === 'backup' && <div className="sire-wallet-onboarding-body">
+          <h3>Back up your recovery phrase</h3>
+          <p>Write these words down offline, in the exact order. This phrase is the recovery key for the wallet.</p>
+          <div className="sire-wallet-mnemonic">{walletMnemonic.split(' ').map((word, index) => <span key={word + index}><i>{index + 1}</i><b>{word}</b></span>)}</div>
+          <div className="sire-wallet-form">
+            <label>Set wallet password<input type="password" autoComplete="new-password" value={walletPassword} onChange={e => setWalletPassword(e.target.value)} placeholder="At least 8 characters"/></label>
+            <label>Confirm password<input type="password" autoComplete="new-password" value={walletPasswordConfirm} onChange={e => setWalletPasswordConfirm(e.target.value)} placeholder="Repeat password"/></label>
+            <label>Confirm recovery phrase<input value={walletConfirmPhrase} onChange={e => setWalletConfirmPhrase(e.target.value)} placeholder="Type all words in order"/></label>
+          </div>
+          {walletCreationError && <div className="sire-swap-error"><CircleAlert size={14}/><span>{walletCreationError}</span></div>}
+          <button type="button" className="sire-review-button" disabled={walletCreating || !walletMnemonic} onClick={() => void finishWalletCreation()}>{walletCreating ? <><LoaderCircle className="sire-spin" size={15}/> Creating wallet…</> : 'Confirm & Create Wallet'}</button>
+          <button type="button" className="sire-wallet-secondary" onClick={closeWalletOnboarding}>Cancel</button>
+        </div>}
+
+        {walletStep === 'confirm' && <div className="sire-wallet-onboarding-body sire-wallet-created">
+          <div className="sire-wallet-success">✓</div>
+          <h3>SIRE Wallet created</h3>
+          <p>Your native wallet is unlocked and ready for Swap.</p>
+          <code>{shortAddress(walletCreatedAddress)}</code>
+        </div>}
+      </section>
+    </div>}
+    {historyOpen && <div className="sire-modal-backdrop sire-token-picker-backdrop" onMouseDown={() => setHistoryOpen(false)}>
+      <section className="sire-token-modal sire-swap-history-sheet" role="dialog" aria-modal="true" aria-label="Swap history" onMouseDown={e => e.stopPropagation()}>
+        <div className="sire-token-modal-head"><div><b>Swap history</b><small>Recent SIRE Swap executions on this device</small></div><button type="button" onClick={() => setHistoryOpen(false)} aria-label="Close history"><X size={17}/></button></div>
+        <div className="sire-swap-history-list">
+          {swapHistory.length ? swapHistory.map(item => <div className="sire-swap-history-row" key={item.hash}><div><b>{item.amount} {item.from} → {item.output} {item.to}</b><small>{item.fromNetwork}{item.fromNetwork !== item.toNetwork ? ' → ' + item.toNetwork : ''} · {new Date(item.time).toLocaleString()}</small></div><a href={(item.fromNetwork === 'BNB Chain' ? 'https://bscscan.com/tx/' : item.fromNetwork === 'Base' ? 'https://basescan.org/tx/' : item.fromNetwork === 'Arbitrum' ? 'https://arbiscan.io/tx/' : item.fromNetwork === 'Optimism' ? 'https://optimistic.etherscan.io/tx/' : item.fromNetwork === 'Polygon' ? 'https://polygonscan.com/tx/' : item.fromNetwork === 'Avalanche' ? 'https://snowtrace.io/tx/' : 'https://etherscan.io/tx/') + item.hash} target="_blank" rel="noreferrer">View</a></div>) : <div className="sire-swap-history-empty">No swaps yet.</div>}
+        </div>
+      </section>
+    </div>}
+
+    {limitExpiryOpen && <div className="sire-modal-backdrop sire-token-picker-backdrop" onMouseDown={() => setLimitExpiryOpen(false)}>
+      <section className="sire-token-modal sire-limit-expiry-sheet" role="dialog" aria-modal="true" aria-label="Order expiration" onMouseDown={e => e.stopPropagation()}>
+        <div className="sire-token-modal-head">
+          <div><b>Order expiration</b><small>Choose how long this limit order stays active</small></div>
+          <button type="button" onClick={() => setLimitExpiryOpen(false)} aria-label="Close expiration"><X size={17}/></button>
+        </div>
+        <div className="sire-limit-expiry-options">
+          {[['1 hour',3600],['24 hours',86400],['7 days',604800],['30 days',2592000]].map(([label,value]) => (
+            <button key={String(value)} type="button" className={!limitExpiryCustom && limitExpiry === Number(value) ? 'active' : ''} onClick={() => { setLimitExpiry(Number(value)); setLimitExpiryCustom(''); setLimitExpiryOpen(false); }}>{label}</button>
+          ))}
+        </div>
+        <label className="sire-limit-custom-date">
+          <span>Custom date & time</span>
+          <input type="datetime-local" value={limitExpiryCustom} min={new Date(Date.now() + 60000).toISOString().slice(0,16)} onChange={e => {
+            const value = e.target.value;
+            setLimitExpiryCustom(value);
+            const timestamp = new Date(value).getTime();
+            if (Number.isFinite(timestamp) && timestamp > Date.now()) setLimitExpiry(Math.max(60, Math.ceil((timestamp - Date.now()) / 1000)));
+          }} />
+        </label>
+        <button type="button" className="sire-review-button" onClick={() => setLimitExpiryOpen(false)}>Done</button>
+      </section>
+    </div>}
+
+    {limitKeypad && <div className="sire-modal-backdrop sire-token-picker-backdrop" onMouseDown={() => setLimitKeypad(null)}>
+      <section className="sire-token-modal sire-limit-keypad-sheet" role="dialog" aria-modal="true" aria-label={limitKeypad === 'amount' ? 'Enter payment amount' : 'Enter limit price'} onMouseDown={e => e.stopPropagation()}>
+        <div className="sire-token-modal-head">
+          <div><b>{limitKeypad === 'amount' ? 'Payment amount' : 'Limit price'}</b><small>Use the SIRE numeric keypad</small></div>
+          <button type="button" onClick={() => setLimitKeypad(null)} aria-label="Close keypad"><X size={17}/></button>
+        </div>
+        <div className="sire-limit-keypad-display">
+          <strong>{limitKeypadDraft || '0'}</strong>
+          <span>{limitKeypad === 'amount' ? from.symbol : limitTaker.symbol}</span>
+        </div>
+        <div className="sire-limit-keypad-grid">
+          {['1','2','3','4','5','6','7','8','9','.','0','⌫'].map(key => (
+            <button key={key} type="button" onClick={() => {
+              let next = limitKeypadDraft;
+              if (key === '⌫') {
+                next = next.slice(0, -1);
+              } else if (key === '.' && next.includes('.')) {
+                return;
+              } else {
+                next += key;
+              }
+              setLimitKeypadDraft(next);
+              if (limitKeypad === 'amount') {
+                setAmount(next);
+              } else {
+                setLimitDisplayPrice(next);
+                const display = Number(next);
+                const takerUSD = Number(limitTaker.priceUSD);
+                if (Number.isFinite(display) && display > 0 && Number.isFinite(takerUSD) && takerUSD > 0) {
+                  setLimitPrice(String(display / takerUSD));
+                } else {
+                  setLimitPrice('');
+                }
+                setLimitPricePreset('Custom');
+              }
+              setLimitError('');
+            }}>{key}</button>
+          ))}
+        </div>
+      </section>
+    </div>}
+
+    {tokenPicker && <div className="sire-modal-backdrop sire-token-picker-backdrop" onMouseDown={() => setTokenPicker(null)}>
+      <section className="sire-token-modal sire-token-picker-sheet" role="dialog" aria-modal="true" aria-label="Select token" onMouseDown={e => e.stopPropagation()}>
+        <div className="sire-token-sheet-handle" aria-hidden="true"><span /></div>
+        <div className="sire-token-modal-head">
+          <div><b>Select token</b><small>{pickerNetwork} · live token catalogue</small></div>
+          <button type="button" onClick={() => setTokenPicker(null)} aria-label="Close token selector"><X size={17}/></button>
+        </div>
+        <div className="sire-token-search"><Search size={15}/><input autoFocus value={search} onChange={e => setSearch(e.target.value)} placeholder="Search symbol, name or address"/></div>
+        <div className="sire-token-network-strip" aria-label="Networks">
+          {supportedNetworks.map(item => (
+            <button key={item.name} type="button" className={item.name === pickerNetwork ? 'active' : ''} onClick={() => void selectNetwork(item.name, tokenPicker === 'to' ? 'to' : 'from')}>
+              <LogoMark src={item.logoURI} fallback={item.name.slice(0, 1)} className="sire-token-network-icon" />
+              <span>{item.name}</span>
+            </button>
+          ))}
+        </div>
+        <div className="sire-token-list" aria-label="Instruments">
+          {filteredTokens.map(token => (
+            <button key={token.address} type="button" onClick={() => chooseToken(token)}>
+              <span className="sire-token-list-logo">
+                <LogoMark src={token.logoURI} fallback={token.symbol.slice(0,1)} className="sire-token-mark" />
+                <LogoMark
+                  src={supportedNetworks.find(item => item.chainId === token.chainId)?.logoURI}
+                  fallback={supportedNetworks.find(item => item.chainId === token.chainId)?.name.slice(0,1) || network.slice(0,1)}
+                  className="sire-token-chain-badge"
+                />
+              </span>
+              <span><b>{token.symbol}</b><small>{token.name}</small></span>
+              <span className="sire-token-address">{token.address.slice(0,6) + '…' + token.address.slice(-4)}</span>
+            </button>
+          ))}
+        </div>
+      </section>
+    </div>}
+
+
+  </div>;
+}
+ + money(Number(limitMarketPrice), 2) : '—'}</strong>
+                  <small>USD per {limitMaker.symbol || ''}</small>
+                  {limitExecutionMarketPrice && <em>Execution: {limitExecutionMarketPrice} {limitTaker.symbol || ''} per {limitMaker.symbol || ''}</em>}
                 </div>
               </div>
 
@@ -1020,6 +1483,1654 @@ export default function TradeView({ referencePrice = 0 }: Props) {
                       }
                       setLimitSide(side);
                       setLimitPrice('');
+                      setLimitDisplayPrice('');
+                      setLimitPricePreset('Market');
+                      setLimitError('');
+                      setAmount('1');
+                    }}
+                  >
+                    {side}
+                  </button>
+                ))}
+              </div>
+
+              <div className={'sire-limit-price-card sire-limit-price-main ' + (limitSide === 'Buy' ? 'buy' : 'sell')}>
+                <div className="sire-limit-price-message">
+                  {limitSide === 'Buy' ? 'Buy ' : 'Sell '}
+                  <LogoMark src={limitMaker.logoURI} fallback={limitMaker.symbol.slice(0,1) || 'T'} className="sire-limit-inline-logo" />
+                  <b>{limitMaker.symbol || 'token'}</b>
+                  {limitSide === 'Buy' ? ' when price is below ' : ' when price is above '}
+                  <strong>{limitPricePreset}</strong>
+                </div>
+                <button
+                  type="button"
+                  className="sire-limit-target-price"
+                  aria-label="Enter limit price"
+                  onClick={() => {
+                    setLimitKeypadDraft(limitPrice || limitMarketPrice || '');
+                    setLimitKeypad('price');
+                    setLimitPricePreset('Custom');
+                  }}
+                >
+                  <span>{limitPrice || (limitMarketPrice || '—')}</span>
+                  <small>{limitTaker.symbol}</small>
+                </button>
+              </div>
+              <div className={'sire-limit-price-options sire-limit-price-options-' + limitSide.toLowerCase()}>
+                {(limitSide === 'Buy'
+                  ? ['Market','-1%','-5%','-10%','Custom']
+                  : ['Market','+1%','+5%','+10%','Custom']
+                ).map(option => (
+                  <button
+                    key={option}
+                    type="button"
+                    className={limitPricePreset === option ? 'selected' : ''}
+                    onClick={() => {
+                      if (!limitMarketPrice) return;
+                      const base = Number(limitMarketPrice);
+                      if (option === 'Market') {
+                        setLimitPrice(String(base));
+                        setLimitPricePreset('Market');
+                      } else if (option === 'Custom') {
+                        setLimitKeypadDraft(limitPrice || String(base));
+                        setLimitKeypad('price');
+                        setLimitPricePreset('Custom');
+                      } else {
+                        const pct = Number(option.replace('%',''));
+                        const effective = limitSide === 'Buy' ? -Math.abs(pct) : Math.abs(pct);
+                        setLimitPrice(String(base * (1 + effective / 100)));
+                        setLimitPricePreset(option);
+                      }
+                      setLimitError('');
+                    }}
+                  >{option}</button>
+                ))}
+              </div>
+
+              <div className={'sire-limit-token-card sire-limit-payment-card ' + (limitSide === 'Buy' ? 'buy' : 'sell')}>
+                <div className="sire-limit-payment-expiry">
+                  <span>Expiry</span>
+                  <button type="button" className="sire-limit-expiry-pill" onClick={() => setLimitExpiryOpen(true)}>
+                    {limitExpiryCustom ? new Date(limitExpiryCustom).toLocaleString([], {month:'short', day:'numeric', hour:'numeric', minute:'2-digit'}) : limitExpiry === 3600 ? '1 hour' : limitExpiry === 86400 ? '24 hours' : limitExpiry === 604800 ? '7 days' : '30 days'}
+                    <ChevronDown size={13}/>
+                  </button>
+                </div>
+                <button
+                  type="button"
+                  className="sire-limit-token-pill sire-limit-payment-pill"
+                  aria-label={(limitSide === 'Buy' ? 'Payment ' : 'Receive ') + (limitTaker.symbol || 'token')}
+                  onClick={() => setTokenPicker(limitSide === 'Sell' ? 'to' : 'from')}
+                >
+                  <LogoMark src={limitTaker.logoURI} fallback={limitTaker.symbol.slice(0,1) || 'T'} className="sire-token-mark large" />
+                  <span><b>{limitTaker.symbol || 'Select token'}</b><small>{limitTaker.name || ''}</small></span>
+                  <ChevronDown size={15}/>
+                </button>
+              
+                <button
+                  type="button"
+                  className="sire-limit-payment-summary"
+                  aria-label={limitSide === 'Buy' ? 'Enter payment amount' : 'Enter sell amount'}
+                  onClick={() => { setLimitKeypadDraft(amount || ''); setLimitKeypad('amount'); }}
+                >
+                  <strong><span>{amount || '0'}</span><em>{from.symbol || ''}</em></strong>
+                  <small>{from.priceUSD && Number.isFinite(Number(amount)) ? '$' + money(Number(amount) * from.priceUSD, 2) : '—'}</small>
+                  <div><span>Receive</span><b>{limitTargetAmount ? limitTargetAmount : '—'}</b><em>{limitReceiveToken.symbol || ''}</em></div>
+                </button>
+                {limitPreviewError && <div className="sire-swap-error" role="alert"><CircleAlert size={14}/><span>{limitPreviewError}</span></div>}
+              </div>
+
+              <div className="sire-limit-price-options sire-limit-payment-percentages" aria-label="Payment amount percentage">
+                {[25, 50, 75, 100].map(percent => (
+                  <button
+                    key={percent}
+                    type="button"
+                    onClick={() => setAmount(String((Number(formatUnits(fromBalance, from.decimals, 18)) * percent) / 100))}
+                  >{percent}%</button>
+                ))}
+              </div>
+
+              <button type="button" className={'sire-review-button sire-limit-submit ' + (limitSide === 'Buy' ? 'buy' : 'sell')} disabled={limitBusy || !wallet || !nativeUnlocked || !limitPrice || !amount || Boolean(limitPreviewError)} onClick={() => void placeLimitOrder()}>
+                {limitBusy ? <><LoaderCircle className="sire-spin" size={15}/> {status || 'Placing order'}</> : (wallet ? (limitSide === 'Buy' ? 'Buy ' + limitMaker.symbol : 'Sell ' + limitMaker.symbol) : 'Unlock SIRE Wallet')}
+              </button>
+
+              <small className="sire-limit-note">Your limit order is monitored through 0x Swap API v2. Your tokens remain in SIRE Wallet until the target is reached and you review the live quote.</small>
+              {limitError && <div className="sire-swap-error"><CircleAlert size={14}/><span>{limitError}</span></div>}
+
+              <div className="sire-limit-orders">
+                <div className="sire-limit-orders-head"><b>Open orders</b><button type="button" onClick={() => void refreshLimitOrders()}>Refresh</button></div>
+                {limitOrders.length > 0 ? limitOrders.slice(0, 8).map((order:any) => (
+                  <div className="sire-limit-order-row" key={order.orderHash}>
+                    <div>
+                      <b>{order.side === 'Buy' ? 'Buy' : 'Sell'} {order.makerSymbol || 'Token'}</b>
+                      <small>{order.limitPrice || 'Limit'} {order.takerSymbol ? order.takerSymbol : ''} · {order.orderStatus === 1 || order.status === 'Open' ? 'Open' : String(order.orderStatus || order.status || 'Pending')}</small>
+                    </div>
+                    <button type="button" disabled={limitBusy} onClick={() => void cancelLimit(order)}>Cancel</button>
+                  </div>
+                )) : <div className="sire-limit-empty">No open limit orders.</div>}
+              </div>
+            </div>}
+
+            <div className="sire-swap-route">
+              <button type="button" onClick={() => setProviderOpen(true)} disabled={!providerQuotes.length}>
+                <span>Providers</span>
+                <small>{providerQuotes.length ? providerQuotes.length + ' live route' + (providerQuotes.length === 1 ? '' : 's') + ' · Compare' : 'Waiting for live routes'}</small>
+              </button>
+              {quote && <div className="sire-route-metrics">
+                <span><b>{quote.toolName || quote.tool || 'Router'}</b><small>Selected provider</small></span>
+                <span><b>{quote.executionDuration ? '~' + Math.max(1, Math.round(quote.executionDuration)) + 's' : '—'}</b><small>Estimated time</small></span>
+                <span><b>{quote.gasUSD ? '$' + Number(quote.gasUSD).toFixed(2) : '—'}</b><small>Network fee</small></span>
+              </div>}
+            </div>
+
+            {tradeMode === 'Swap' && <div className="sire-swap-confirm-wrap">
+              {!wallet ? (
+                <button type="button" className="sire-review-button sire-connect-button" onClick={() => void connect()}>
+                  <WalletCards size={15}/> {hasNativeWallet() ? 'Unlock SIRE Wallet' : 'Create SIRE Wallet'}
+                </button>
+              ) : walletChain !== (SWAP_NETWORKS[network]?.chainId ?? 1) ? (
+                <button type="button" className="sire-review-button" onClick={() => void selectNetwork(network)}>Switch to {network}</button>
+              ) : (
+                <button type="button" className="sire-review-button" disabled={!canExecute} onClick={() => void execute()}>
+                  {busy ? <><LoaderCircle className="sire-spin" size={15}/> {status || 'Executing'}</> : quote ? 'Confirm Swap' : quoteLoading ? 'Getting live quote…' : 'Waiting for executable quote'}
+                </button>
+              )}
+            </div>}
+ 
+            <div className="sire-slippage">
+              <span>Slippage</span>
+              <div>
+                {[0.001, 0.005, 0.01].map(value => (
+                  <button key={value} type="button" className={slippage === value ? 'active' : ''} onClick={() => setSlippage(value)}>
+                    {(value * 100).toFixed(1)}%
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="sire-swap-details">
+               <div><span>Price impact</span><b>{quote?.priceImpact != null ? (quote.priceImpact * 100).toFixed(2) + '%' : '—'}</b></div>
+               <div><span>Network fee</span><b>{quote?.gasUSD ? '$' + Number(quote.gasUSD).toFixed(2) : '—'}</b></div>
+               <div><span>Minimum received</span><b>{quote ? minimum + ' ' + to.symbol : '—'}</b></div>
+               <div><span>{isCrossChain ? 'Destination' : 'Recipient'}</span><b>{recipient ? shortAddress(recipient) : 'You'}</b></div>
+               {quote && <div><span>Quote refresh</span><b>{quoteSeconds > 0 ? quoteSeconds + 's' : 'Refresh required'}</b></div>}
+             </div>
+
+             <div className="sire-swap-recipient">
+               <button type="button" className={recipientOpen ? 'active' : ''} onClick={() => setRecipientOpen(value => !value)}>
+                 <span>Send to</span><b>{recipient ? shortAddress(recipient) : 'My wallet'}</b>
+               </button>
+               {recipientOpen && <div className="sire-recipient-editor">
+                 <input value={recipient} onChange={e => { setRecipient(e.target.value.trim()); setRecipientError(''); }} placeholder="0x… destination address" spellCheck={false} />
+                 <button type="button" onClick={() => { setRecipient(''); setRecipientError(''); }}>Use my wallet</button>
+                 {recipient && !recipientValid && <small>Enter a valid EVM destination address.</small>}
+               </div>}
+             </div>
+
+
+            {quote && wallet && nativeUnlocked && !busy && !simulationBusy && <button type="button" className="sire-wallet-secondary sire-test-swap-button" onClick={() => void simulate()}>
+              Run no-money test
+            </button>}
+            {(quoteError || executionError) && <div className="sire-swap-error"><CircleAlert size={14}/><span>{quoteError || executionError}</span></div>}
+            {simulationResult && <div className="sire-swap-status sire-swap-simulation-result"><span>{simulationResult}</span></div>}
+            {status && !executionError && <div className="sire-swap-status">{status}{txHash && <a href={(network === 'BNB Chain' ? 'https://bscscan.com/tx/' : network === 'Base' ? 'https://basescan.org/tx/' : network === 'Arbitrum' ? 'https://arbiscan.io/tx/' : network === 'Optimism' ? 'https://optimistic.etherscan.io/tx/' : network === 'Polygon' ? 'https://polygonscan.com/tx/' : network === 'Avalanche' ? 'https://snowtrace.io/tx/' : 'https://etherscan.io/tx/') + txHash} target="_blank" rel="noreferrer">View transaction</a>}</div>}
+
+            <div className="sire-swap-safety"><LockKeyhole size={13}/> Quotes expire quickly and are revalidated before signing.</div>
+             <button type="button" className="sire-wallet-secondary sire-history-trigger" onClick={() => setHistoryOpen(true)}>View swap history ({swapHistory.length})</button>
+          </section>
+        </div>
+      </main>
+    </div>
+
+    {insufficientBalanceOpen && <div className="sire-modal-backdrop sire-insufficient-backdrop" onMouseDown={() => setInsufficientBalanceOpen(false)}>
+      <section className="sire-insufficient-sheet" role="dialog" aria-modal="true" aria-label="Insufficient balance" onMouseDown={e => e.stopPropagation()}>
+        <div className="sire-insufficient-icon"><CircleAlert size={22}/></div>
+        <div className="sire-insufficient-copy">
+          <h3>Insufficient {from.symbol} balance</h3>
+          <p>You have <b>{insufficientBalanceAmount} {from.symbol}</b>, but this swap requires <b>{amount} {from.symbol}</b>.</p>
+          <p className="sire-insufficient-sub">Your quote is still available to review. Add funds to continue with this swap.</p>
+        </div>
+        <button type="button" className="sire-review-button sire-buy-balance-button" onClick={() => {
+          setInsufficientBalanceOpen(false);
+          window.dispatchEvent(new CustomEvent('sire:buy-token', { detail: { symbol: from.symbol, network, token: from } }));
+        }}>Buy {from.symbol}</button>
+        <button type="button" className="sire-wallet-secondary" onClick={() => setInsufficientBalanceOpen(false)}>Not now</button>
+      </section>
+    </div>}
+
+    {providerOpen && <div className="sire-modal-backdrop sire-provider-backdrop" onMouseDown={() => setProviderOpen(false)}>
+      <section className="sire-provider-sheet" role="dialog" aria-modal="true" aria-label="Swap providers" onMouseDown={e => e.stopPropagation()}>
+        <div className="sire-provider-handle" aria-hidden="true"><span /></div>
+        <div className="sire-provider-head">
+          <div><b>Providers</b><small>Live executable routes · sorted by received amount</small></div>
+          <button type="button" onClick={() => setProviderOpen(false)} aria-label="Close providers"><X size={18}/></button>
+        </div>
+        <div className="sire-provider-list">
+          {providerQuotes.map((candidate, index) => {
+            const selected = quote === candidate;
+            const receive = formatUnits(candidate.toAmount, candidate.toToken.decimals, 8);
+            const usd = candidate.toToken.priceUSD ? Number(receive) * Number(candidate.toToken.priceUSD) : 0;
+            return (
+              <button
+                type="button"
+                className={'sire-provider-card' + (selected ? ' selected' : '')}
+                key={(candidate.toolName || candidate.tool || 'route') + ':' + candidate.toAmount + ':' + (candidate.transactionRequest?.data || '')}
+                onClick={() => { setQuote(candidate); setProviderOpen(false); }}
+              >
+                <div className="sire-provider-card-top">
+                  <div className="sire-provider-name">
+                    <span className="sire-provider-icon">{(candidate.toolName || candidate.tool || 'R').slice(0,1).toUpperCase()}</span>
+                    <span><b>{candidate.toolName || candidate.tool || 'Router'}</b><small>Live executable route</small></span>
+                  </div>
+                  {index === 0 && <em>Best</em>}
+                </div>
+                <div className="sire-provider-amount">
+                  <b>{receive} {candidate.toToken.symbol}</b>
+                  <span>{usd > 0 ? '$' + money(usd, 2) : '—'}</span>
+                </div>
+                <div className="sire-provider-metrics">
+                  <span><b>{candidate.executionDuration ? '~' + Math.max(1, Math.round(candidate.executionDuration)) + 's' : '—'}</b><small>Est. time</small></span>
+                  <span><b>{candidate.gasUSD ? '$' + Number(candidate.gasUSD).toFixed(4) : '—'}</b><small>Gas fee</small></span>
+                  <span><b>{candidate.priceImpact != null ? (candidate.priceImpact * 100).toFixed(2) + '%' : '—'}</b><small>Price impact</small></span>
+                </div>
+                <div className="sire-provider-route-line">
+                  <span>{candidate.fromToken.symbol} · {network}</span><i>→</i><span>{candidate.toToken.symbol} · {toNetwork}</span>
+                  <strong>{selected ? 'Selected' : 'Use route'}</strong>
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      </section>
+    </div>}
+
+    {walletOnboarding && <div className="sire-modal-backdrop" onMouseDown={closeWalletOnboarding}>
+      <section className="sire-token-modal sire-wallet-onboarding" role="dialog" aria-modal="true" aria-label="Create SIRE Wallet" onMouseDown={e => e.stopPropagation()}>
+        <div className="sire-token-modal-head">
+          <div><b>{walletStep === 'intro' ? 'Create SIRE Wallet' : walletStep === 'backup' ? 'Secure your wallet' : 'Wallet created'}</b><small>Native self-custody wallet · no external wallet required</small></div>
+          {walletStep !== 'confirm' && <button type="button" onClick={closeWalletOnboarding} aria-label="Close wallet setup"><X size={17}/></button>}
+        </div>
+
+        {walletStep === 'intro' && <div className="sire-wallet-onboarding-body">
+          <div className="sire-wallet-hero-icon"><WalletCards size={25}/></div>
+          <h3>Create your SIRE Wallet</h3>
+          <p>Your wallet is created on this device and its recovery phrase is controlled by you. Swap will use this wallet directly instead of asking you to connect an external wallet.</p>
+          <div className="sire-wallet-warning"><LockKeyhole size={15}/><span>Never share your recovery phrase or password. SIRE cannot recover a lost recovery phrase.</span></div>
+          <button type="button" className="sire-review-button" onClick={beginWalletCreation}>Create Wallet</button>
+        </div>}
+
+        {walletStep === 'unlock' && <div className="sire-wallet-onboarding-body">
+          <div className="sire-wallet-hero-icon"><LockKeyhole size={25}/></div>
+          <h3>Unlock SIRE Wallet</h3>
+          <p>Your SIRE Wallet already exists on this device. Enter its password to make it available to Swap.</p>
+          <div className="sire-wallet-form">
+            <label>Wallet password<input type="password" autoFocus autoComplete="current-password" value={walletPassword} onChange={e => setWalletPassword(e.target.value)} placeholder="Enter your password" onKeyDown={e => { if (e.key === 'Enter') void unlockWallet(); }}/></label>
+          </div>
+          {walletCreationError && <div className="sire-swap-error"><CircleAlert size={14}/><span>{walletCreationError}</span></div>}
+          <button type="button" className="sire-review-button" disabled={walletCreating} onClick={() => void unlockWallet()}>{walletCreating ? <><LoaderCircle className="sire-spin" size={15}/> Unlocking…</> : 'Unlock Wallet'}</button>
+        </div>}
+
+        {walletStep === 'backup' && <div className="sire-wallet-onboarding-body">
+          <h3>Back up your recovery phrase</h3>
+          <p>Write these words down offline, in the exact order. This phrase is the recovery key for the wallet.</p>
+          <div className="sire-wallet-mnemonic">{walletMnemonic.split(' ').map((word, index) => <span key={word + index}><i>{index + 1}</i><b>{word}</b></span>)}</div>
+          <div className="sire-wallet-form">
+            <label>Set wallet password<input type="password" autoComplete="new-password" value={walletPassword} onChange={e => setWalletPassword(e.target.value)} placeholder="At least 8 characters"/></label>
+            <label>Confirm password<input type="password" autoComplete="new-password" value={walletPasswordConfirm} onChange={e => setWalletPasswordConfirm(e.target.value)} placeholder="Repeat password"/></label>
+            <label>Confirm recovery phrase<input value={walletConfirmPhrase} onChange={e => setWalletConfirmPhrase(e.target.value)} placeholder="Type all words in order"/></label>
+          </div>
+          {walletCreationError && <div className="sire-swap-error"><CircleAlert size={14}/><span>{walletCreationError}</span></div>}
+          <button type="button" className="sire-review-button" disabled={walletCreating || !walletMnemonic} onClick={() => void finishWalletCreation()}>{walletCreating ? <><LoaderCircle className="sire-spin" size={15}/> Creating wallet…</> : 'Confirm & Create Wallet'}</button>
+          <button type="button" className="sire-wallet-secondary" onClick={closeWalletOnboarding}>Cancel</button>
+        </div>}
+
+        {walletStep === 'confirm' && <div className="sire-wallet-onboarding-body sire-wallet-created">
+          <div className="sire-wallet-success">✓</div>
+          <h3>SIRE Wallet created</h3>
+          <p>Your native wallet is unlocked and ready for Swap.</p>
+          <code>{shortAddress(walletCreatedAddress)}</code>
+        </div>}
+      </section>
+    </div>}
+    {historyOpen && <div className="sire-modal-backdrop sire-token-picker-backdrop" onMouseDown={() => setHistoryOpen(false)}>
+      <section className="sire-token-modal sire-swap-history-sheet" role="dialog" aria-modal="true" aria-label="Swap history" onMouseDown={e => e.stopPropagation()}>
+        <div className="sire-token-modal-head"><div><b>Swap history</b><small>Recent SIRE Swap executions on this device</small></div><button type="button" onClick={() => setHistoryOpen(false)} aria-label="Close history"><X size={17}/></button></div>
+        <div className="sire-swap-history-list">
+          {swapHistory.length ? swapHistory.map(item => <div className="sire-swap-history-row" key={item.hash}><div><b>{item.amount} {item.from} → {item.output} {item.to}</b><small>{item.fromNetwork}{item.fromNetwork !== item.toNetwork ? ' → ' + item.toNetwork : ''} · {new Date(item.time).toLocaleString()}</small></div><a href={(item.fromNetwork === 'BNB Chain' ? 'https://bscscan.com/tx/' : item.fromNetwork === 'Base' ? 'https://basescan.org/tx/' : item.fromNetwork === 'Arbitrum' ? 'https://arbiscan.io/tx/' : item.fromNetwork === 'Optimism' ? 'https://optimistic.etherscan.io/tx/' : item.fromNetwork === 'Polygon' ? 'https://polygonscan.com/tx/' : item.fromNetwork === 'Avalanche' ? 'https://snowtrace.io/tx/' : 'https://etherscan.io/tx/') + item.hash} target="_blank" rel="noreferrer">View</a></div>) : <div className="sire-swap-history-empty">No swaps yet.</div>}
+        </div>
+      </section>
+    </div>}
+
+    {limitExpiryOpen && <div className="sire-modal-backdrop sire-token-picker-backdrop" onMouseDown={() => setLimitExpiryOpen(false)}>
+      <section className="sire-token-modal sire-limit-expiry-sheet" role="dialog" aria-modal="true" aria-label="Order expiration" onMouseDown={e => e.stopPropagation()}>
+        <div className="sire-token-modal-head">
+          <div><b>Order expiration</b><small>Choose how long this limit order stays active</small></div>
+          <button type="button" onClick={() => setLimitExpiryOpen(false)} aria-label="Close expiration"><X size={17}/></button>
+        </div>
+        <div className="sire-limit-expiry-options">
+          {[['1 hour',3600],['24 hours',86400],['7 days',604800],['30 days',2592000]].map(([label,value]) => (
+            <button key={String(value)} type="button" className={!limitExpiryCustom && limitExpiry === Number(value) ? 'active' : ''} onClick={() => { setLimitExpiry(Number(value)); setLimitExpiryCustom(''); setLimitExpiryOpen(false); }}>{label}</button>
+          ))}
+        </div>
+        <label className="sire-limit-custom-date">
+          <span>Custom date & time</span>
+          <input type="datetime-local" value={limitExpiryCustom} min={new Date(Date.now() + 60000).toISOString().slice(0,16)} onChange={e => {
+            const value = e.target.value;
+            setLimitExpiryCustom(value);
+            const timestamp = new Date(value).getTime();
+            if (Number.isFinite(timestamp) && timestamp > Date.now()) setLimitExpiry(Math.max(60, Math.ceil((timestamp - Date.now()) / 1000)));
+          }} />
+        </label>
+        <button type="button" className="sire-review-button" onClick={() => setLimitExpiryOpen(false)}>Done</button>
+      </section>
+    </div>}
+
+    {limitKeypad && <div className="sire-modal-backdrop sire-token-picker-backdrop" onMouseDown={() => setLimitKeypad(null)}>
+      <section className="sire-token-modal sire-limit-keypad-sheet" role="dialog" aria-modal="true" aria-label={limitKeypad === 'amount' ? 'Enter payment amount' : 'Enter limit price'} onMouseDown={e => e.stopPropagation()}>
+        <div className="sire-token-modal-head">
+          <div><b>{limitKeypad === 'amount' ? 'Payment amount' : 'Limit price'}</b><small>Use the SIRE numeric keypad</small></div>
+          <button type="button" onClick={() => setLimitKeypad(null)} aria-label="Close keypad"><X size={17}/></button>
+        </div>
+        <div className="sire-limit-keypad-display">
+          <strong>{limitKeypadDraft || '0'}</strong>
+          <span>{limitKeypad === 'amount' ? from.symbol : limitTaker.symbol}</span>
+        </div>
+        <div className="sire-limit-keypad-grid">
+          {['1','2','3','4','5','6','7','8','9','.','0','⌫'].map(key => (
+            <button key={key} type="button" onClick={() => {
+              let next = limitKeypadDraft;
+              if (key === '⌫') {
+                next = next.slice(0, -1);
+              } else if (key === '.' && next.includes('.')) {
+                return;
+              } else {
+                next += key;
+              }
+              setLimitKeypadDraft(next);
+              if (limitKeypad === 'amount') {
+                setAmount(next);
+              } else {
+                setLimitPrice(next);
+                setLimitPricePreset('Custom');
+              }
+              setLimitError('');
+            }}>{key}</button>
+          ))}
+        </div>
+      </section>
+    </div>}
+
+    {tokenPicker && <div className="sire-modal-backdrop sire-token-picker-backdrop" onMouseDown={() => setTokenPicker(null)}>
+      <section className="sire-token-modal sire-token-picker-sheet" role="dialog" aria-modal="true" aria-label="Select token" onMouseDown={e => e.stopPropagation()}>
+        <div className="sire-token-sheet-handle" aria-hidden="true"><span /></div>
+        <div className="sire-token-modal-head">
+          <div><b>Select token</b><small>{pickerNetwork} · live token catalogue</small></div>
+          <button type="button" onClick={() => setTokenPicker(null)} aria-label="Close token selector"><X size={17}/></button>
+        </div>
+        <div className="sire-token-search"><Search size={15}/><input autoFocus value={search} onChange={e => setSearch(e.target.value)} placeholder="Search symbol, name or address"/></div>
+        <div className="sire-token-network-strip" aria-label="Networks">
+          {supportedNetworks.map(item => (
+            <button key={item.name} type="button" className={item.name === pickerNetwork ? 'active' : ''} onClick={() => void selectNetwork(item.name, tokenPicker === 'to' ? 'to' : 'from')}>
+              <LogoMark src={item.logoURI} fallback={item.name.slice(0, 1)} className="sire-token-network-icon" />
+              <span>{item.name}</span>
+            </button>
+          ))}
+        </div>
+        <div className="sire-token-list" aria-label="Instruments">
+          {filteredTokens.map(token => (
+            <button key={token.address} type="button" onClick={() => chooseToken(token)}>
+              <span className="sire-token-list-logo">
+                <LogoMark src={token.logoURI} fallback={token.symbol.slice(0,1)} className="sire-token-mark" />
+                <LogoMark
+                  src={supportedNetworks.find(item => item.chainId === token.chainId)?.logoURI}
+                  fallback={supportedNetworks.find(item => item.chainId === token.chainId)?.name.slice(0,1) || network.slice(0,1)}
+                  className="sire-token-chain-badge"
+                />
+              </span>
+              <span><b>{token.symbol}</b><small>{token.name}</small></span>
+              <span className="sire-token-address">{token.address.slice(0,6) + '…' + token.address.slice(-4)}</span>
+            </button>
+          ))}
+        </div>
+      </section>
+    </div>}
+
+
+  </div>;
+}
+ + money(Number(limitDisplayPrice), 2) : (limitMarketPrice ? '
+                </button>
+              </div>
+              <div className={'sire-limit-price-options sire-limit-price-options-' + limitSide.toLowerCase()}>
+                {(limitSide === 'Buy'
+                  ? ['Market','-1%','-5%','-10%','Custom']
+                  : ['Market','+1%','+5%','+10%','Custom']
+                ).map(option => (
+                  <button
+                    key={option}
+                    type="button"
+                    className={limitPricePreset === option ? 'selected' : ''}
+                    onClick={() => {
+                      if (!limitMarketPrice) return;
+                      const base = Number(limitMarketPrice);
+                      if (option === 'Market') {
+                        setLimitPrice(String(base));
+                        setLimitPricePreset('Market');
+                      } else if (option === 'Custom') {
+                        setLimitKeypadDraft(limitPrice || String(base));
+                        setLimitKeypad('price');
+                        setLimitPricePreset('Custom');
+                      } else {
+                        const pct = Number(option.replace('%',''));
+                        const effective = limitSide === 'Buy' ? -Math.abs(pct) : Math.abs(pct);
+                        setLimitPrice(String(base * (1 + effective / 100)));
+                        setLimitPricePreset(option);
+                      }
+                      setLimitError('');
+                    }}
+                  >{option}</button>
+                ))}
+              </div>
+
+              <div className={'sire-limit-token-card sire-limit-payment-card ' + (limitSide === 'Buy' ? 'buy' : 'sell')}>
+                <div className="sire-limit-payment-expiry">
+                  <span>Expiry</span>
+                  <button type="button" className="sire-limit-expiry-pill" onClick={() => setLimitExpiryOpen(true)}>
+                    {limitExpiryCustom ? new Date(limitExpiryCustom).toLocaleString([], {month:'short', day:'numeric', hour:'numeric', minute:'2-digit'}) : limitExpiry === 3600 ? '1 hour' : limitExpiry === 86400 ? '24 hours' : limitExpiry === 604800 ? '7 days' : '30 days'}
+                    <ChevronDown size={13}/>
+                  </button>
+                </div>
+                <button
+                  type="button"
+                  className="sire-limit-token-pill sire-limit-payment-pill"
+                  aria-label={(limitSide === 'Buy' ? 'Payment ' : 'Receive ') + (limitTaker.symbol || 'token')}
+                  onClick={() => setTokenPicker(limitSide === 'Sell' ? 'to' : 'from')}
+                >
+                  <LogoMark src={limitTaker.logoURI} fallback={limitTaker.symbol.slice(0,1) || 'T'} className="sire-token-mark large" />
+                  <span><b>{limitTaker.symbol || 'Select token'}</b><small>{limitTaker.name || ''}</small></span>
+                  <ChevronDown size={15}/>
+                </button>
+              
+                <button
+                  type="button"
+                  className="sire-limit-payment-summary"
+                  aria-label={limitSide === 'Buy' ? 'Enter payment amount' : 'Enter sell amount'}
+                  onClick={() => { setLimitKeypadDraft(amount || ''); setLimitKeypad('amount'); }}
+                >
+                  <strong><span>{amount || '0'}</span><em>{from.symbol || ''}</em></strong>
+                  <small>{from.priceUSD && Number.isFinite(Number(amount)) ? '$' + money(Number(amount) * from.priceUSD, 2) : '—'}</small>
+                  <div><span>Receive</span><b>{limitTargetAmount ? limitTargetAmount : '—'}</b><em>{limitReceiveToken.symbol || ''}</em></div>
+                </button>
+                {limitPreviewError && <div className="sire-swap-error" role="alert"><CircleAlert size={14}/><span>{limitPreviewError}</span></div>}
+              </div>
+
+              <div className="sire-limit-price-options sire-limit-payment-percentages" aria-label="Payment amount percentage">
+                {[25, 50, 75, 100].map(percent => (
+                  <button
+                    key={percent}
+                    type="button"
+                    onClick={() => setAmount(String((Number(formatUnits(fromBalance, from.decimals, 18)) * percent) / 100))}
+                  >{percent}%</button>
+                ))}
+              </div>
+
+              <button type="button" className={'sire-review-button sire-limit-submit ' + (limitSide === 'Buy' ? 'buy' : 'sell')} disabled={limitBusy || !wallet || !nativeUnlocked || !limitPrice || !amount || Boolean(limitPreviewError)} onClick={() => void placeLimitOrder()}>
+                {limitBusy ? <><LoaderCircle className="sire-spin" size={15}/> {status || 'Placing order'}</> : (wallet ? (limitSide === 'Buy' ? 'Buy ' + limitMaker.symbol : 'Sell ' + limitMaker.symbol) : 'Unlock SIRE Wallet')}
+              </button>
+
+              <small className="sire-limit-note">Your limit order is monitored through 0x Swap API v2. Your tokens remain in SIRE Wallet until the target is reached and you review the live quote.</small>
+              {limitError && <div className="sire-swap-error"><CircleAlert size={14}/><span>{limitError}</span></div>}
+
+              <div className="sire-limit-orders">
+                <div className="sire-limit-orders-head"><b>Open orders</b><button type="button" onClick={() => void refreshLimitOrders()}>Refresh</button></div>
+                {limitOrders.length > 0 ? limitOrders.slice(0, 8).map((order:any) => (
+                  <div className="sire-limit-order-row" key={order.orderHash}>
+                    <div>
+                      <b>{order.side === 'Buy' ? 'Buy' : 'Sell'} {order.makerSymbol || 'Token'}</b>
+                      <small>{order.limitPrice || 'Limit'} {order.takerSymbol ? order.takerSymbol : ''} · {order.orderStatus === 1 || order.status === 'Open' ? 'Open' : String(order.orderStatus || order.status || 'Pending')}</small>
+                    </div>
+                    <button type="button" disabled={limitBusy} onClick={() => void cancelLimit(order)}>Cancel</button>
+                  </div>
+                )) : <div className="sire-limit-empty">No open limit orders.</div>}
+              </div>
+            </div>}
+
+            <div className="sire-swap-route">
+              <button type="button" onClick={() => setProviderOpen(true)} disabled={!providerQuotes.length}>
+                <span>Providers</span>
+                <small>{providerQuotes.length ? providerQuotes.length + ' live route' + (providerQuotes.length === 1 ? '' : 's') + ' · Compare' : 'Waiting for live routes'}</small>
+              </button>
+              {quote && <div className="sire-route-metrics">
+                <span><b>{quote.toolName || quote.tool || 'Router'}</b><small>Selected provider</small></span>
+                <span><b>{quote.executionDuration ? '~' + Math.max(1, Math.round(quote.executionDuration)) + 's' : '—'}</b><small>Estimated time</small></span>
+                <span><b>{quote.gasUSD ? '$' + Number(quote.gasUSD).toFixed(2) : '—'}</b><small>Network fee</small></span>
+              </div>}
+            </div>
+
+            {tradeMode === 'Swap' && <div className="sire-swap-confirm-wrap">
+              {!wallet ? (
+                <button type="button" className="sire-review-button sire-connect-button" onClick={() => void connect()}>
+                  <WalletCards size={15}/> {hasNativeWallet() ? 'Unlock SIRE Wallet' : 'Create SIRE Wallet'}
+                </button>
+              ) : walletChain !== (SWAP_NETWORKS[network]?.chainId ?? 1) ? (
+                <button type="button" className="sire-review-button" onClick={() => void selectNetwork(network)}>Switch to {network}</button>
+              ) : (
+                <button type="button" className="sire-review-button" disabled={!canExecute} onClick={() => void execute()}>
+                  {busy ? <><LoaderCircle className="sire-spin" size={15}/> {status || 'Executing'}</> : quote ? 'Confirm Swap' : quoteLoading ? 'Getting live quote…' : 'Waiting for executable quote'}
+                </button>
+              )}
+            </div>}
+ 
+            <div className="sire-slippage">
+              <span>Slippage</span>
+              <div>
+                {[0.001, 0.005, 0.01].map(value => (
+                  <button key={value} type="button" className={slippage === value ? 'active' : ''} onClick={() => setSlippage(value)}>
+                    {(value * 100).toFixed(1)}%
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="sire-swap-details">
+               <div><span>Price impact</span><b>{quote?.priceImpact != null ? (quote.priceImpact * 100).toFixed(2) + '%' : '—'}</b></div>
+               <div><span>Network fee</span><b>{quote?.gasUSD ? '$' + Number(quote.gasUSD).toFixed(2) : '—'}</b></div>
+               <div><span>Minimum received</span><b>{quote ? minimum + ' ' + to.symbol : '—'}</b></div>
+               <div><span>{isCrossChain ? 'Destination' : 'Recipient'}</span><b>{recipient ? shortAddress(recipient) : 'You'}</b></div>
+               {quote && <div><span>Quote refresh</span><b>{quoteSeconds > 0 ? quoteSeconds + 's' : 'Refresh required'}</b></div>}
+             </div>
+
+             <div className="sire-swap-recipient">
+               <button type="button" className={recipientOpen ? 'active' : ''} onClick={() => setRecipientOpen(value => !value)}>
+                 <span>Send to</span><b>{recipient ? shortAddress(recipient) : 'My wallet'}</b>
+               </button>
+               {recipientOpen && <div className="sire-recipient-editor">
+                 <input value={recipient} onChange={e => { setRecipient(e.target.value.trim()); setRecipientError(''); }} placeholder="0x… destination address" spellCheck={false} />
+                 <button type="button" onClick={() => { setRecipient(''); setRecipientError(''); }}>Use my wallet</button>
+                 {recipient && !recipientValid && <small>Enter a valid EVM destination address.</small>}
+               </div>}
+             </div>
+
+
+            {quote && wallet && nativeUnlocked && !busy && !simulationBusy && <button type="button" className="sire-wallet-secondary sire-test-swap-button" onClick={() => void simulate()}>
+              Run no-money test
+            </button>}
+            {(quoteError || executionError) && <div className="sire-swap-error"><CircleAlert size={14}/><span>{quoteError || executionError}</span></div>}
+            {simulationResult && <div className="sire-swap-status sire-swap-simulation-result"><span>{simulationResult}</span></div>}
+            {status && !executionError && <div className="sire-swap-status">{status}{txHash && <a href={(network === 'BNB Chain' ? 'https://bscscan.com/tx/' : network === 'Base' ? 'https://basescan.org/tx/' : network === 'Arbitrum' ? 'https://arbiscan.io/tx/' : network === 'Optimism' ? 'https://optimistic.etherscan.io/tx/' : network === 'Polygon' ? 'https://polygonscan.com/tx/' : network === 'Avalanche' ? 'https://snowtrace.io/tx/' : 'https://etherscan.io/tx/') + txHash} target="_blank" rel="noreferrer">View transaction</a>}</div>}
+
+            <div className="sire-swap-safety"><LockKeyhole size={13}/> Quotes expire quickly and are revalidated before signing.</div>
+             <button type="button" className="sire-wallet-secondary sire-history-trigger" onClick={() => setHistoryOpen(true)}>View swap history ({swapHistory.length})</button>
+          </section>
+        </div>
+      </main>
+    </div>
+
+    {insufficientBalanceOpen && <div className="sire-modal-backdrop sire-insufficient-backdrop" onMouseDown={() => setInsufficientBalanceOpen(false)}>
+      <section className="sire-insufficient-sheet" role="dialog" aria-modal="true" aria-label="Insufficient balance" onMouseDown={e => e.stopPropagation()}>
+        <div className="sire-insufficient-icon"><CircleAlert size={22}/></div>
+        <div className="sire-insufficient-copy">
+          <h3>Insufficient {from.symbol} balance</h3>
+          <p>You have <b>{insufficientBalanceAmount} {from.symbol}</b>, but this swap requires <b>{amount} {from.symbol}</b>.</p>
+          <p className="sire-insufficient-sub">Your quote is still available to review. Add funds to continue with this swap.</p>
+        </div>
+        <button type="button" className="sire-review-button sire-buy-balance-button" onClick={() => {
+          setInsufficientBalanceOpen(false);
+          window.dispatchEvent(new CustomEvent('sire:buy-token', { detail: { symbol: from.symbol, network, token: from } }));
+        }}>Buy {from.symbol}</button>
+        <button type="button" className="sire-wallet-secondary" onClick={() => setInsufficientBalanceOpen(false)}>Not now</button>
+      </section>
+    </div>}
+
+    {providerOpen && <div className="sire-modal-backdrop sire-provider-backdrop" onMouseDown={() => setProviderOpen(false)}>
+      <section className="sire-provider-sheet" role="dialog" aria-modal="true" aria-label="Swap providers" onMouseDown={e => e.stopPropagation()}>
+        <div className="sire-provider-handle" aria-hidden="true"><span /></div>
+        <div className="sire-provider-head">
+          <div><b>Providers</b><small>Live executable routes · sorted by received amount</small></div>
+          <button type="button" onClick={() => setProviderOpen(false)} aria-label="Close providers"><X size={18}/></button>
+        </div>
+        <div className="sire-provider-list">
+          {providerQuotes.map((candidate, index) => {
+            const selected = quote === candidate;
+            const receive = formatUnits(candidate.toAmount, candidate.toToken.decimals, 8);
+            const usd = candidate.toToken.priceUSD ? Number(receive) * Number(candidate.toToken.priceUSD) : 0;
+            return (
+              <button
+                type="button"
+                className={'sire-provider-card' + (selected ? ' selected' : '')}
+                key={(candidate.toolName || candidate.tool || 'route') + ':' + candidate.toAmount + ':' + (candidate.transactionRequest?.data || '')}
+                onClick={() => { setQuote(candidate); setProviderOpen(false); }}
+              >
+                <div className="sire-provider-card-top">
+                  <div className="sire-provider-name">
+                    <span className="sire-provider-icon">{(candidate.toolName || candidate.tool || 'R').slice(0,1).toUpperCase()}</span>
+                    <span><b>{candidate.toolName || candidate.tool || 'Router'}</b><small>Live executable route</small></span>
+                  </div>
+                  {index === 0 && <em>Best</em>}
+                </div>
+                <div className="sire-provider-amount">
+                  <b>{receive} {candidate.toToken.symbol}</b>
+                  <span>{usd > 0 ? '$' + money(usd, 2) : '—'}</span>
+                </div>
+                <div className="sire-provider-metrics">
+                  <span><b>{candidate.executionDuration ? '~' + Math.max(1, Math.round(candidate.executionDuration)) + 's' : '—'}</b><small>Est. time</small></span>
+                  <span><b>{candidate.gasUSD ? '$' + Number(candidate.gasUSD).toFixed(4) : '—'}</b><small>Gas fee</small></span>
+                  <span><b>{candidate.priceImpact != null ? (candidate.priceImpact * 100).toFixed(2) + '%' : '—'}</b><small>Price impact</small></span>
+                </div>
+                <div className="sire-provider-route-line">
+                  <span>{candidate.fromToken.symbol} · {network}</span><i>→</i><span>{candidate.toToken.symbol} · {toNetwork}</span>
+                  <strong>{selected ? 'Selected' : 'Use route'}</strong>
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      </section>
+    </div>}
+
+    {walletOnboarding && <div className="sire-modal-backdrop" onMouseDown={closeWalletOnboarding}>
+      <section className="sire-token-modal sire-wallet-onboarding" role="dialog" aria-modal="true" aria-label="Create SIRE Wallet" onMouseDown={e => e.stopPropagation()}>
+        <div className="sire-token-modal-head">
+          <div><b>{walletStep === 'intro' ? 'Create SIRE Wallet' : walletStep === 'backup' ? 'Secure your wallet' : 'Wallet created'}</b><small>Native self-custody wallet · no external wallet required</small></div>
+          {walletStep !== 'confirm' && <button type="button" onClick={closeWalletOnboarding} aria-label="Close wallet setup"><X size={17}/></button>}
+        </div>
+
+        {walletStep === 'intro' && <div className="sire-wallet-onboarding-body">
+          <div className="sire-wallet-hero-icon"><WalletCards size={25}/></div>
+          <h3>Create your SIRE Wallet</h3>
+          <p>Your wallet is created on this device and its recovery phrase is controlled by you. Swap will use this wallet directly instead of asking you to connect an external wallet.</p>
+          <div className="sire-wallet-warning"><LockKeyhole size={15}/><span>Never share your recovery phrase or password. SIRE cannot recover a lost recovery phrase.</span></div>
+          <button type="button" className="sire-review-button" onClick={beginWalletCreation}>Create Wallet</button>
+        </div>}
+
+        {walletStep === 'unlock' && <div className="sire-wallet-onboarding-body">
+          <div className="sire-wallet-hero-icon"><LockKeyhole size={25}/></div>
+          <h3>Unlock SIRE Wallet</h3>
+          <p>Your SIRE Wallet already exists on this device. Enter its password to make it available to Swap.</p>
+          <div className="sire-wallet-form">
+            <label>Wallet password<input type="password" autoFocus autoComplete="current-password" value={walletPassword} onChange={e => setWalletPassword(e.target.value)} placeholder="Enter your password" onKeyDown={e => { if (e.key === 'Enter') void unlockWallet(); }}/></label>
+          </div>
+          {walletCreationError && <div className="sire-swap-error"><CircleAlert size={14}/><span>{walletCreationError}</span></div>}
+          <button type="button" className="sire-review-button" disabled={walletCreating} onClick={() => void unlockWallet()}>{walletCreating ? <><LoaderCircle className="sire-spin" size={15}/> Unlocking…</> : 'Unlock Wallet'}</button>
+        </div>}
+
+        {walletStep === 'backup' && <div className="sire-wallet-onboarding-body">
+          <h3>Back up your recovery phrase</h3>
+          <p>Write these words down offline, in the exact order. This phrase is the recovery key for the wallet.</p>
+          <div className="sire-wallet-mnemonic">{walletMnemonic.split(' ').map((word, index) => <span key={word + index}><i>{index + 1}</i><b>{word}</b></span>)}</div>
+          <div className="sire-wallet-form">
+            <label>Set wallet password<input type="password" autoComplete="new-password" value={walletPassword} onChange={e => setWalletPassword(e.target.value)} placeholder="At least 8 characters"/></label>
+            <label>Confirm password<input type="password" autoComplete="new-password" value={walletPasswordConfirm} onChange={e => setWalletPasswordConfirm(e.target.value)} placeholder="Repeat password"/></label>
+            <label>Confirm recovery phrase<input value={walletConfirmPhrase} onChange={e => setWalletConfirmPhrase(e.target.value)} placeholder="Type all words in order"/></label>
+          </div>
+          {walletCreationError && <div className="sire-swap-error"><CircleAlert size={14}/><span>{walletCreationError}</span></div>}
+          <button type="button" className="sire-review-button" disabled={walletCreating || !walletMnemonic} onClick={() => void finishWalletCreation()}>{walletCreating ? <><LoaderCircle className="sire-spin" size={15}/> Creating wallet…</> : 'Confirm & Create Wallet'}</button>
+          <button type="button" className="sire-wallet-secondary" onClick={closeWalletOnboarding}>Cancel</button>
+        </div>}
+
+        {walletStep === 'confirm' && <div className="sire-wallet-onboarding-body sire-wallet-created">
+          <div className="sire-wallet-success">✓</div>
+          <h3>SIRE Wallet created</h3>
+          <p>Your native wallet is unlocked and ready for Swap.</p>
+          <code>{shortAddress(walletCreatedAddress)}</code>
+        </div>}
+      </section>
+    </div>}
+    {historyOpen && <div className="sire-modal-backdrop sire-token-picker-backdrop" onMouseDown={() => setHistoryOpen(false)}>
+      <section className="sire-token-modal sire-swap-history-sheet" role="dialog" aria-modal="true" aria-label="Swap history" onMouseDown={e => e.stopPropagation()}>
+        <div className="sire-token-modal-head"><div><b>Swap history</b><small>Recent SIRE Swap executions on this device</small></div><button type="button" onClick={() => setHistoryOpen(false)} aria-label="Close history"><X size={17}/></button></div>
+        <div className="sire-swap-history-list">
+          {swapHistory.length ? swapHistory.map(item => <div className="sire-swap-history-row" key={item.hash}><div><b>{item.amount} {item.from} → {item.output} {item.to}</b><small>{item.fromNetwork}{item.fromNetwork !== item.toNetwork ? ' → ' + item.toNetwork : ''} · {new Date(item.time).toLocaleString()}</small></div><a href={(item.fromNetwork === 'BNB Chain' ? 'https://bscscan.com/tx/' : item.fromNetwork === 'Base' ? 'https://basescan.org/tx/' : item.fromNetwork === 'Arbitrum' ? 'https://arbiscan.io/tx/' : item.fromNetwork === 'Optimism' ? 'https://optimistic.etherscan.io/tx/' : item.fromNetwork === 'Polygon' ? 'https://polygonscan.com/tx/' : item.fromNetwork === 'Avalanche' ? 'https://snowtrace.io/tx/' : 'https://etherscan.io/tx/') + item.hash} target="_blank" rel="noreferrer">View</a></div>) : <div className="sire-swap-history-empty">No swaps yet.</div>}
+        </div>
+      </section>
+    </div>}
+
+    {limitExpiryOpen && <div className="sire-modal-backdrop sire-token-picker-backdrop" onMouseDown={() => setLimitExpiryOpen(false)}>
+      <section className="sire-token-modal sire-limit-expiry-sheet" role="dialog" aria-modal="true" aria-label="Order expiration" onMouseDown={e => e.stopPropagation()}>
+        <div className="sire-token-modal-head">
+          <div><b>Order expiration</b><small>Choose how long this limit order stays active</small></div>
+          <button type="button" onClick={() => setLimitExpiryOpen(false)} aria-label="Close expiration"><X size={17}/></button>
+        </div>
+        <div className="sire-limit-expiry-options">
+          {[['1 hour',3600],['24 hours',86400],['7 days',604800],['30 days',2592000]].map(([label,value]) => (
+            <button key={String(value)} type="button" className={!limitExpiryCustom && limitExpiry === Number(value) ? 'active' : ''} onClick={() => { setLimitExpiry(Number(value)); setLimitExpiryCustom(''); setLimitExpiryOpen(false); }}>{label}</button>
+          ))}
+        </div>
+        <label className="sire-limit-custom-date">
+          <span>Custom date & time</span>
+          <input type="datetime-local" value={limitExpiryCustom} min={new Date(Date.now() + 60000).toISOString().slice(0,16)} onChange={e => {
+            const value = e.target.value;
+            setLimitExpiryCustom(value);
+            const timestamp = new Date(value).getTime();
+            if (Number.isFinite(timestamp) && timestamp > Date.now()) setLimitExpiry(Math.max(60, Math.ceil((timestamp - Date.now()) / 1000)));
+          }} />
+        </label>
+        <button type="button" className="sire-review-button" onClick={() => setLimitExpiryOpen(false)}>Done</button>
+      </section>
+    </div>}
+
+    {limitKeypad && <div className="sire-modal-backdrop sire-token-picker-backdrop" onMouseDown={() => setLimitKeypad(null)}>
+      <section className="sire-token-modal sire-limit-keypad-sheet" role="dialog" aria-modal="true" aria-label={limitKeypad === 'amount' ? 'Enter payment amount' : 'Enter limit price'} onMouseDown={e => e.stopPropagation()}>
+        <div className="sire-token-modal-head">
+          <div><b>{limitKeypad === 'amount' ? 'Payment amount' : 'Limit price'}</b><small>Use the SIRE numeric keypad</small></div>
+          <button type="button" onClick={() => setLimitKeypad(null)} aria-label="Close keypad"><X size={17}/></button>
+        </div>
+        <div className="sire-limit-keypad-display">
+          <strong>{limitKeypadDraft || '0'}</strong>
+          <span>{limitKeypad === 'amount' ? from.symbol : limitTaker.symbol}</span>
+        </div>
+        <div className="sire-limit-keypad-grid">
+          {['1','2','3','4','5','6','7','8','9','.','0','⌫'].map(key => (
+            <button key={key} type="button" onClick={() => {
+              let next = limitKeypadDraft;
+              if (key === '⌫') {
+                next = next.slice(0, -1);
+              } else if (key === '.' && next.includes('.')) {
+                return;
+              } else {
+                next += key;
+              }
+              setLimitKeypadDraft(next);
+              if (limitKeypad === 'amount') {
+                setAmount(next);
+              } else {
+                setLimitPrice(next);
+                setLimitPricePreset('Custom');
+              }
+              setLimitError('');
+            }}>{key}</button>
+          ))}
+        </div>
+      </section>
+    </div>}
+
+    {tokenPicker && <div className="sire-modal-backdrop sire-token-picker-backdrop" onMouseDown={() => setTokenPicker(null)}>
+      <section className="sire-token-modal sire-token-picker-sheet" role="dialog" aria-modal="true" aria-label="Select token" onMouseDown={e => e.stopPropagation()}>
+        <div className="sire-token-sheet-handle" aria-hidden="true"><span /></div>
+        <div className="sire-token-modal-head">
+          <div><b>Select token</b><small>{pickerNetwork} · live token catalogue</small></div>
+          <button type="button" onClick={() => setTokenPicker(null)} aria-label="Close token selector"><X size={17}/></button>
+        </div>
+        <div className="sire-token-search"><Search size={15}/><input autoFocus value={search} onChange={e => setSearch(e.target.value)} placeholder="Search symbol, name or address"/></div>
+        <div className="sire-token-network-strip" aria-label="Networks">
+          {supportedNetworks.map(item => (
+            <button key={item.name} type="button" className={item.name === pickerNetwork ? 'active' : ''} onClick={() => void selectNetwork(item.name, tokenPicker === 'to' ? 'to' : 'from')}>
+              <LogoMark src={item.logoURI} fallback={item.name.slice(0, 1)} className="sire-token-network-icon" />
+              <span>{item.name}</span>
+            </button>
+          ))}
+        </div>
+        <div className="sire-token-list" aria-label="Instruments">
+          {filteredTokens.map(token => (
+            <button key={token.address} type="button" onClick={() => chooseToken(token)}>
+              <span className="sire-token-list-logo">
+                <LogoMark src={token.logoURI} fallback={token.symbol.slice(0,1)} className="sire-token-mark" />
+                <LogoMark
+                  src={supportedNetworks.find(item => item.chainId === token.chainId)?.logoURI}
+                  fallback={supportedNetworks.find(item => item.chainId === token.chainId)?.name.slice(0,1) || network.slice(0,1)}
+                  className="sire-token-chain-badge"
+                />
+              </span>
+              <span><b>{token.symbol}</b><small>{token.name}</small></span>
+              <span className="sire-token-address">{token.address.slice(0,6) + '…' + token.address.slice(-4)}</span>
+            </button>
+          ))}
+        </div>
+      </section>
+    </div>}
+
+
+  </div>;
+}
+ + money(Number(limitMarketPrice), 2) : '—'}</strong>
+                  <small>USD per {limitMaker.symbol || ''}</small>
+                  {limitExecutionMarketPrice && <em>Execution: {limitExecutionMarketPrice} {limitTaker.symbol || ''} per {limitMaker.symbol || ''}</em>}
+                </div>
+              </div>
+
+              <div className="sire-limit-side-toggle" role="tablist" aria-label="Limit side">
+                {(['Buy','Sell'] as const).map(side => (
+                  <button
+                    key={side}
+                    type="button"
+                    role="tab"
+                    aria-selected={limitSide === side}
+                    className={limitSide === side ? 'active ' + side.toLowerCase() : ''}
+                    onClick={() => {
+                      if (side !== limitSide) {
+                        // Keep the selected trading pair, but reverse its direction.
+                        // Buy WBTC with USDCE -> Sell WBTC for USDCE.
+                        const currentFrom = from;
+                        const currentTo = to;
+                        setFrom(currentTo);
+                        setTo(currentFrom);
+                      }
+                      setLimitSide(side);
+                      setLimitPrice('');
+                      setLimitDisplayPrice('');
+                      setLimitPricePreset('Market');
+                      setLimitError('');
+                      setAmount('1');
+                    }}
+                  >
+                    {side}
+                  </button>
+                ))}
+              </div>
+
+              <div className={'sire-limit-price-card sire-limit-price-main ' + (limitSide === 'Buy' ? 'buy' : 'sell')}>
+                <div className="sire-limit-price-message">
+                  {limitSide === 'Buy' ? 'Buy ' : 'Sell '}
+                  <LogoMark src={limitMaker.logoURI} fallback={limitMaker.symbol.slice(0,1) || 'T'} className="sire-limit-inline-logo" />
+                  <b>{limitMaker.symbol || 'token'}</b>
+                  {limitSide === 'Buy' ? ' when price is below ' : ' when price is above '}
+                  <strong>{limitPricePreset}</strong>
+                </div>
+                <button
+                  type="button"
+                  className="sire-limit-target-price"
+                  aria-label="Enter limit price"
+                  onClick={() => {
+                    setLimitKeypadDraft(limitPrice || limitMarketPrice || '');
+                    setLimitKeypad('price');
+                    setLimitPricePreset('Custom');
+                  }}
+                >
+                  <span>{limitPrice || (limitMarketPrice || '—')}</span>
+                  <small>{limitTaker.symbol}</small>
+                </button>
+              </div>
+              <div className={'sire-limit-price-options sire-limit-price-options-' + limitSide.toLowerCase()}>
+                {(limitSide === 'Buy'
+                  ? ['Market','-1%','-5%','-10%','Custom']
+                  : ['Market','+1%','+5%','+10%','Custom']
+                ).map(option => (
+                  <button
+                    key={option}
+                    type="button"
+                    className={limitPricePreset === option ? 'selected' : ''}
+                    onClick={() => {
+                      if (!limitMarketPrice) return;
+                      const base = Number(limitMarketPrice);
+                      if (option === 'Market') {
+                        setLimitPrice(String(base));
+                        setLimitPricePreset('Market');
+                      } else if (option === 'Custom') {
+                        setLimitKeypadDraft(limitPrice || String(base));
+                        setLimitKeypad('price');
+                        setLimitPricePreset('Custom');
+                      } else {
+                        const pct = Number(option.replace('%',''));
+                        const effective = limitSide === 'Buy' ? -Math.abs(pct) : Math.abs(pct);
+                        setLimitPrice(String(base * (1 + effective / 100)));
+                        setLimitPricePreset(option);
+                      }
+                      setLimitError('');
+                    }}
+                  >{option}</button>
+                ))}
+              </div>
+
+              <div className={'sire-limit-token-card sire-limit-payment-card ' + (limitSide === 'Buy' ? 'buy' : 'sell')}>
+                <div className="sire-limit-payment-expiry">
+                  <span>Expiry</span>
+                  <button type="button" className="sire-limit-expiry-pill" onClick={() => setLimitExpiryOpen(true)}>
+                    {limitExpiryCustom ? new Date(limitExpiryCustom).toLocaleString([], {month:'short', day:'numeric', hour:'numeric', minute:'2-digit'}) : limitExpiry === 3600 ? '1 hour' : limitExpiry === 86400 ? '24 hours' : limitExpiry === 604800 ? '7 days' : '30 days'}
+                    <ChevronDown size={13}/>
+                  </button>
+                </div>
+                <button
+                  type="button"
+                  className="sire-limit-token-pill sire-limit-payment-pill"
+                  aria-label={(limitSide === 'Buy' ? 'Payment ' : 'Receive ') + (limitTaker.symbol || 'token')}
+                  onClick={() => setTokenPicker(limitSide === 'Sell' ? 'to' : 'from')}
+                >
+                  <LogoMark src={limitTaker.logoURI} fallback={limitTaker.symbol.slice(0,1) || 'T'} className="sire-token-mark large" />
+                  <span><b>{limitTaker.symbol || 'Select token'}</b><small>{limitTaker.name || ''}</small></span>
+                  <ChevronDown size={15}/>
+                </button>
+              
+                <button
+                  type="button"
+                  className="sire-limit-payment-summary"
+                  aria-label={limitSide === 'Buy' ? 'Enter payment amount' : 'Enter sell amount'}
+                  onClick={() => { setLimitKeypadDraft(amount || ''); setLimitKeypad('amount'); }}
+                >
+                  <strong><span>{amount || '0'}</span><em>{from.symbol || ''}</em></strong>
+                  <small>{from.priceUSD && Number.isFinite(Number(amount)) ? '$' + money(Number(amount) * from.priceUSD, 2) : '—'}</small>
+                  <div><span>Receive</span><b>{limitTargetAmount ? limitTargetAmount : '—'}</b><em>{limitReceiveToken.symbol || ''}</em></div>
+                </button>
+                {limitPreviewError && <div className="sire-swap-error" role="alert"><CircleAlert size={14}/><span>{limitPreviewError}</span></div>}
+              </div>
+
+              <div className="sire-limit-price-options sire-limit-payment-percentages" aria-label="Payment amount percentage">
+                {[25, 50, 75, 100].map(percent => (
+                  <button
+                    key={percent}
+                    type="button"
+                    onClick={() => setAmount(String((Number(formatUnits(fromBalance, from.decimals, 18)) * percent) / 100))}
+                  >{percent}%</button>
+                ))}
+              </div>
+
+              <button type="button" className={'sire-review-button sire-limit-submit ' + (limitSide === 'Buy' ? 'buy' : 'sell')} disabled={limitBusy || !wallet || !nativeUnlocked || !limitPrice || !amount || Boolean(limitPreviewError)} onClick={() => void placeLimitOrder()}>
+                {limitBusy ? <><LoaderCircle className="sire-spin" size={15}/> {status || 'Placing order'}</> : (wallet ? (limitSide === 'Buy' ? 'Buy ' + limitMaker.symbol : 'Sell ' + limitMaker.symbol) : 'Unlock SIRE Wallet')}
+              </button>
+
+              <small className="sire-limit-note">Your limit order is monitored through 0x Swap API v2. Your tokens remain in SIRE Wallet until the target is reached and you review the live quote.</small>
+              {limitError && <div className="sire-swap-error"><CircleAlert size={14}/><span>{limitError}</span></div>}
+
+              <div className="sire-limit-orders">
+                <div className="sire-limit-orders-head"><b>Open orders</b><button type="button" onClick={() => void refreshLimitOrders()}>Refresh</button></div>
+                {limitOrders.length > 0 ? limitOrders.slice(0, 8).map((order:any) => (
+                  <div className="sire-limit-order-row" key={order.orderHash}>
+                    <div>
+                      <b>{order.side === 'Buy' ? 'Buy' : 'Sell'} {order.makerSymbol || 'Token'}</b>
+                      <small>{order.limitPrice || 'Limit'} {order.takerSymbol ? order.takerSymbol : ''} · {order.orderStatus === 1 || order.status === 'Open' ? 'Open' : String(order.orderStatus || order.status || 'Pending')}</small>
+                    </div>
+                    <button type="button" disabled={limitBusy} onClick={() => void cancelLimit(order)}>Cancel</button>
+                  </div>
+                )) : <div className="sire-limit-empty">No open limit orders.</div>}
+              </div>
+            </div>}
+
+            <div className="sire-swap-route">
+              <button type="button" onClick={() => setProviderOpen(true)} disabled={!providerQuotes.length}>
+                <span>Providers</span>
+                <small>{providerQuotes.length ? providerQuotes.length + ' live route' + (providerQuotes.length === 1 ? '' : 's') + ' · Compare' : 'Waiting for live routes'}</small>
+              </button>
+              {quote && <div className="sire-route-metrics">
+                <span><b>{quote.toolName || quote.tool || 'Router'}</b><small>Selected provider</small></span>
+                <span><b>{quote.executionDuration ? '~' + Math.max(1, Math.round(quote.executionDuration)) + 's' : '—'}</b><small>Estimated time</small></span>
+                <span><b>{quote.gasUSD ? '$' + Number(quote.gasUSD).toFixed(2) : '—'}</b><small>Network fee</small></span>
+              </div>}
+            </div>
+
+            {tradeMode === 'Swap' && <div className="sire-swap-confirm-wrap">
+              {!wallet ? (
+                <button type="button" className="sire-review-button sire-connect-button" onClick={() => void connect()}>
+                  <WalletCards size={15}/> {hasNativeWallet() ? 'Unlock SIRE Wallet' : 'Create SIRE Wallet'}
+                </button>
+              ) : walletChain !== (SWAP_NETWORKS[network]?.chainId ?? 1) ? (
+                <button type="button" className="sire-review-button" onClick={() => void selectNetwork(network)}>Switch to {network}</button>
+              ) : (
+                <button type="button" className="sire-review-button" disabled={!canExecute} onClick={() => void execute()}>
+                  {busy ? <><LoaderCircle className="sire-spin" size={15}/> {status || 'Executing'}</> : quote ? 'Confirm Swap' : quoteLoading ? 'Getting live quote…' : 'Waiting for executable quote'}
+                </button>
+              )}
+            </div>}
+ 
+            <div className="sire-slippage">
+              <span>Slippage</span>
+              <div>
+                {[0.001, 0.005, 0.01].map(value => (
+                  <button key={value} type="button" className={slippage === value ? 'active' : ''} onClick={() => setSlippage(value)}>
+                    {(value * 100).toFixed(1)}%
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="sire-swap-details">
+               <div><span>Price impact</span><b>{quote?.priceImpact != null ? (quote.priceImpact * 100).toFixed(2) + '%' : '—'}</b></div>
+               <div><span>Network fee</span><b>{quote?.gasUSD ? '$' + Number(quote.gasUSD).toFixed(2) : '—'}</b></div>
+               <div><span>Minimum received</span><b>{quote ? minimum + ' ' + to.symbol : '—'}</b></div>
+               <div><span>{isCrossChain ? 'Destination' : 'Recipient'}</span><b>{recipient ? shortAddress(recipient) : 'You'}</b></div>
+               {quote && <div><span>Quote refresh</span><b>{quoteSeconds > 0 ? quoteSeconds + 's' : 'Refresh required'}</b></div>}
+             </div>
+
+             <div className="sire-swap-recipient">
+               <button type="button" className={recipientOpen ? 'active' : ''} onClick={() => setRecipientOpen(value => !value)}>
+                 <span>Send to</span><b>{recipient ? shortAddress(recipient) : 'My wallet'}</b>
+               </button>
+               {recipientOpen && <div className="sire-recipient-editor">
+                 <input value={recipient} onChange={e => { setRecipient(e.target.value.trim()); setRecipientError(''); }} placeholder="0x… destination address" spellCheck={false} />
+                 <button type="button" onClick={() => { setRecipient(''); setRecipientError(''); }}>Use my wallet</button>
+                 {recipient && !recipientValid && <small>Enter a valid EVM destination address.</small>}
+               </div>}
+             </div>
+
+
+            {quote && wallet && nativeUnlocked && !busy && !simulationBusy && <button type="button" className="sire-wallet-secondary sire-test-swap-button" onClick={() => void simulate()}>
+              Run no-money test
+            </button>}
+            {(quoteError || executionError) && <div className="sire-swap-error"><CircleAlert size={14}/><span>{quoteError || executionError}</span></div>}
+            {simulationResult && <div className="sire-swap-status sire-swap-simulation-result"><span>{simulationResult}</span></div>}
+            {status && !executionError && <div className="sire-swap-status">{status}{txHash && <a href={(network === 'BNB Chain' ? 'https://bscscan.com/tx/' : network === 'Base' ? 'https://basescan.org/tx/' : network === 'Arbitrum' ? 'https://arbiscan.io/tx/' : network === 'Optimism' ? 'https://optimistic.etherscan.io/tx/' : network === 'Polygon' ? 'https://polygonscan.com/tx/' : network === 'Avalanche' ? 'https://snowtrace.io/tx/' : 'https://etherscan.io/tx/') + txHash} target="_blank" rel="noreferrer">View transaction</a>}</div>}
+
+            <div className="sire-swap-safety"><LockKeyhole size={13}/> Quotes expire quickly and are revalidated before signing.</div>
+             <button type="button" className="sire-wallet-secondary sire-history-trigger" onClick={() => setHistoryOpen(true)}>View swap history ({swapHistory.length})</button>
+          </section>
+        </div>
+      </main>
+    </div>
+
+    {insufficientBalanceOpen && <div className="sire-modal-backdrop sire-insufficient-backdrop" onMouseDown={() => setInsufficientBalanceOpen(false)}>
+      <section className="sire-insufficient-sheet" role="dialog" aria-modal="true" aria-label="Insufficient balance" onMouseDown={e => e.stopPropagation()}>
+        <div className="sire-insufficient-icon"><CircleAlert size={22}/></div>
+        <div className="sire-insufficient-copy">
+          <h3>Insufficient {from.symbol} balance</h3>
+          <p>You have <b>{insufficientBalanceAmount} {from.symbol}</b>, but this swap requires <b>{amount} {from.symbol}</b>.</p>
+          <p className="sire-insufficient-sub">Your quote is still available to review. Add funds to continue with this swap.</p>
+        </div>
+        <button type="button" className="sire-review-button sire-buy-balance-button" onClick={() => {
+          setInsufficientBalanceOpen(false);
+          window.dispatchEvent(new CustomEvent('sire:buy-token', { detail: { symbol: from.symbol, network, token: from } }));
+        }}>Buy {from.symbol}</button>
+        <button type="button" className="sire-wallet-secondary" onClick={() => setInsufficientBalanceOpen(false)}>Not now</button>
+      </section>
+    </div>}
+
+    {providerOpen && <div className="sire-modal-backdrop sire-provider-backdrop" onMouseDown={() => setProviderOpen(false)}>
+      <section className="sire-provider-sheet" role="dialog" aria-modal="true" aria-label="Swap providers" onMouseDown={e => e.stopPropagation()}>
+        <div className="sire-provider-handle" aria-hidden="true"><span /></div>
+        <div className="sire-provider-head">
+          <div><b>Providers</b><small>Live executable routes · sorted by received amount</small></div>
+          <button type="button" onClick={() => setProviderOpen(false)} aria-label="Close providers"><X size={18}/></button>
+        </div>
+        <div className="sire-provider-list">
+          {providerQuotes.map((candidate, index) => {
+            const selected = quote === candidate;
+            const receive = formatUnits(candidate.toAmount, candidate.toToken.decimals, 8);
+            const usd = candidate.toToken.priceUSD ? Number(receive) * Number(candidate.toToken.priceUSD) : 0;
+            return (
+              <button
+                type="button"
+                className={'sire-provider-card' + (selected ? ' selected' : '')}
+                key={(candidate.toolName || candidate.tool || 'route') + ':' + candidate.toAmount + ':' + (candidate.transactionRequest?.data || '')}
+                onClick={() => { setQuote(candidate); setProviderOpen(false); }}
+              >
+                <div className="sire-provider-card-top">
+                  <div className="sire-provider-name">
+                    <span className="sire-provider-icon">{(candidate.toolName || candidate.tool || 'R').slice(0,1).toUpperCase()}</span>
+                    <span><b>{candidate.toolName || candidate.tool || 'Router'}</b><small>Live executable route</small></span>
+                  </div>
+                  {index === 0 && <em>Best</em>}
+                </div>
+                <div className="sire-provider-amount">
+                  <b>{receive} {candidate.toToken.symbol}</b>
+                  <span>{usd > 0 ? '$' + money(usd, 2) : '—'}</span>
+                </div>
+                <div className="sire-provider-metrics">
+                  <span><b>{candidate.executionDuration ? '~' + Math.max(1, Math.round(candidate.executionDuration)) + 's' : '—'}</b><small>Est. time</small></span>
+                  <span><b>{candidate.gasUSD ? '$' + Number(candidate.gasUSD).toFixed(4) : '—'}</b><small>Gas fee</small></span>
+                  <span><b>{candidate.priceImpact != null ? (candidate.priceImpact * 100).toFixed(2) + '%' : '—'}</b><small>Price impact</small></span>
+                </div>
+                <div className="sire-provider-route-line">
+                  <span>{candidate.fromToken.symbol} · {network}</span><i>→</i><span>{candidate.toToken.symbol} · {toNetwork}</span>
+                  <strong>{selected ? 'Selected' : 'Use route'}</strong>
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      </section>
+    </div>}
+
+    {walletOnboarding && <div className="sire-modal-backdrop" onMouseDown={closeWalletOnboarding}>
+      <section className="sire-token-modal sire-wallet-onboarding" role="dialog" aria-modal="true" aria-label="Create SIRE Wallet" onMouseDown={e => e.stopPropagation()}>
+        <div className="sire-token-modal-head">
+          <div><b>{walletStep === 'intro' ? 'Create SIRE Wallet' : walletStep === 'backup' ? 'Secure your wallet' : 'Wallet created'}</b><small>Native self-custody wallet · no external wallet required</small></div>
+          {walletStep !== 'confirm' && <button type="button" onClick={closeWalletOnboarding} aria-label="Close wallet setup"><X size={17}/></button>}
+        </div>
+
+        {walletStep === 'intro' && <div className="sire-wallet-onboarding-body">
+          <div className="sire-wallet-hero-icon"><WalletCards size={25}/></div>
+          <h3>Create your SIRE Wallet</h3>
+          <p>Your wallet is created on this device and its recovery phrase is controlled by you. Swap will use this wallet directly instead of asking you to connect an external wallet.</p>
+          <div className="sire-wallet-warning"><LockKeyhole size={15}/><span>Never share your recovery phrase or password. SIRE cannot recover a lost recovery phrase.</span></div>
+          <button type="button" className="sire-review-button" onClick={beginWalletCreation}>Create Wallet</button>
+        </div>}
+
+        {walletStep === 'unlock' && <div className="sire-wallet-onboarding-body">
+          <div className="sire-wallet-hero-icon"><LockKeyhole size={25}/></div>
+          <h3>Unlock SIRE Wallet</h3>
+          <p>Your SIRE Wallet already exists on this device. Enter its password to make it available to Swap.</p>
+          <div className="sire-wallet-form">
+            <label>Wallet password<input type="password" autoFocus autoComplete="current-password" value={walletPassword} onChange={e => setWalletPassword(e.target.value)} placeholder="Enter your password" onKeyDown={e => { if (e.key === 'Enter') void unlockWallet(); }}/></label>
+          </div>
+          {walletCreationError && <div className="sire-swap-error"><CircleAlert size={14}/><span>{walletCreationError}</span></div>}
+          <button type="button" className="sire-review-button" disabled={walletCreating} onClick={() => void unlockWallet()}>{walletCreating ? <><LoaderCircle className="sire-spin" size={15}/> Unlocking…</> : 'Unlock Wallet'}</button>
+        </div>}
+
+        {walletStep === 'backup' && <div className="sire-wallet-onboarding-body">
+          <h3>Back up your recovery phrase</h3>
+          <p>Write these words down offline, in the exact order. This phrase is the recovery key for the wallet.</p>
+          <div className="sire-wallet-mnemonic">{walletMnemonic.split(' ').map((word, index) => <span key={word + index}><i>{index + 1}</i><b>{word}</b></span>)}</div>
+          <div className="sire-wallet-form">
+            <label>Set wallet password<input type="password" autoComplete="new-password" value={walletPassword} onChange={e => setWalletPassword(e.target.value)} placeholder="At least 8 characters"/></label>
+            <label>Confirm password<input type="password" autoComplete="new-password" value={walletPasswordConfirm} onChange={e => setWalletPasswordConfirm(e.target.value)} placeholder="Repeat password"/></label>
+            <label>Confirm recovery phrase<input value={walletConfirmPhrase} onChange={e => setWalletConfirmPhrase(e.target.value)} placeholder="Type all words in order"/></label>
+          </div>
+          {walletCreationError && <div className="sire-swap-error"><CircleAlert size={14}/><span>{walletCreationError}</span></div>}
+          <button type="button" className="sire-review-button" disabled={walletCreating || !walletMnemonic} onClick={() => void finishWalletCreation()}>{walletCreating ? <><LoaderCircle className="sire-spin" size={15}/> Creating wallet…</> : 'Confirm & Create Wallet'}</button>
+          <button type="button" className="sire-wallet-secondary" onClick={closeWalletOnboarding}>Cancel</button>
+        </div>}
+
+        {walletStep === 'confirm' && <div className="sire-wallet-onboarding-body sire-wallet-created">
+          <div className="sire-wallet-success">✓</div>
+          <h3>SIRE Wallet created</h3>
+          <p>Your native wallet is unlocked and ready for Swap.</p>
+          <code>{shortAddress(walletCreatedAddress)}</code>
+        </div>}
+      </section>
+    </div>}
+    {historyOpen && <div className="sire-modal-backdrop sire-token-picker-backdrop" onMouseDown={() => setHistoryOpen(false)}>
+      <section className="sire-token-modal sire-swap-history-sheet" role="dialog" aria-modal="true" aria-label="Swap history" onMouseDown={e => e.stopPropagation()}>
+        <div className="sire-token-modal-head"><div><b>Swap history</b><small>Recent SIRE Swap executions on this device</small></div><button type="button" onClick={() => setHistoryOpen(false)} aria-label="Close history"><X size={17}/></button></div>
+        <div className="sire-swap-history-list">
+          {swapHistory.length ? swapHistory.map(item => <div className="sire-swap-history-row" key={item.hash}><div><b>{item.amount} {item.from} → {item.output} {item.to}</b><small>{item.fromNetwork}{item.fromNetwork !== item.toNetwork ? ' → ' + item.toNetwork : ''} · {new Date(item.time).toLocaleString()}</small></div><a href={(item.fromNetwork === 'BNB Chain' ? 'https://bscscan.com/tx/' : item.fromNetwork === 'Base' ? 'https://basescan.org/tx/' : item.fromNetwork === 'Arbitrum' ? 'https://arbiscan.io/tx/' : item.fromNetwork === 'Optimism' ? 'https://optimistic.etherscan.io/tx/' : item.fromNetwork === 'Polygon' ? 'https://polygonscan.com/tx/' : item.fromNetwork === 'Avalanche' ? 'https://snowtrace.io/tx/' : 'https://etherscan.io/tx/') + item.hash} target="_blank" rel="noreferrer">View</a></div>) : <div className="sire-swap-history-empty">No swaps yet.</div>}
+        </div>
+      </section>
+    </div>}
+
+    {limitExpiryOpen && <div className="sire-modal-backdrop sire-token-picker-backdrop" onMouseDown={() => setLimitExpiryOpen(false)}>
+      <section className="sire-token-modal sire-limit-expiry-sheet" role="dialog" aria-modal="true" aria-label="Order expiration" onMouseDown={e => e.stopPropagation()}>
+        <div className="sire-token-modal-head">
+          <div><b>Order expiration</b><small>Choose how long this limit order stays active</small></div>
+          <button type="button" onClick={() => setLimitExpiryOpen(false)} aria-label="Close expiration"><X size={17}/></button>
+        </div>
+        <div className="sire-limit-expiry-options">
+          {[['1 hour',3600],['24 hours',86400],['7 days',604800],['30 days',2592000]].map(([label,value]) => (
+            <button key={String(value)} type="button" className={!limitExpiryCustom && limitExpiry === Number(value) ? 'active' : ''} onClick={() => { setLimitExpiry(Number(value)); setLimitExpiryCustom(''); setLimitExpiryOpen(false); }}>{label}</button>
+          ))}
+        </div>
+        <label className="sire-limit-custom-date">
+          <span>Custom date & time</span>
+          <input type="datetime-local" value={limitExpiryCustom} min={new Date(Date.now() + 60000).toISOString().slice(0,16)} onChange={e => {
+            const value = e.target.value;
+            setLimitExpiryCustom(value);
+            const timestamp = new Date(value).getTime();
+            if (Number.isFinite(timestamp) && timestamp > Date.now()) setLimitExpiry(Math.max(60, Math.ceil((timestamp - Date.now()) / 1000)));
+          }} />
+        </label>
+        <button type="button" className="sire-review-button" onClick={() => setLimitExpiryOpen(false)}>Done</button>
+      </section>
+    </div>}
+
+    {limitKeypad && <div className="sire-modal-backdrop sire-token-picker-backdrop" onMouseDown={() => setLimitKeypad(null)}>
+      <section className="sire-token-modal sire-limit-keypad-sheet" role="dialog" aria-modal="true" aria-label={limitKeypad === 'amount' ? 'Enter payment amount' : 'Enter limit price'} onMouseDown={e => e.stopPropagation()}>
+        <div className="sire-token-modal-head">
+          <div><b>{limitKeypad === 'amount' ? 'Payment amount' : 'Limit price'}</b><small>Use the SIRE numeric keypad</small></div>
+          <button type="button" onClick={() => setLimitKeypad(null)} aria-label="Close keypad"><X size={17}/></button>
+        </div>
+        <div className="sire-limit-keypad-display">
+          <strong>{limitKeypadDraft || '0'}</strong>
+          <span>{limitKeypad === 'amount' ? from.symbol : limitTaker.symbol}</span>
+        </div>
+        <div className="sire-limit-keypad-grid">
+          {['1','2','3','4','5','6','7','8','9','.','0','⌫'].map(key => (
+            <button key={key} type="button" onClick={() => {
+              let next = limitKeypadDraft;
+              if (key === '⌫') {
+                next = next.slice(0, -1);
+              } else if (key === '.' && next.includes('.')) {
+                return;
+              } else {
+                next += key;
+              }
+              setLimitKeypadDraft(next);
+              if (limitKeypad === 'amount') {
+                setAmount(next);
+              } else {
+                setLimitPrice(next);
+                setLimitPricePreset('Custom');
+              }
+              setLimitError('');
+            }}>{key}</button>
+          ))}
+        </div>
+      </section>
+    </div>}
+
+    {tokenPicker && <div className="sire-modal-backdrop sire-token-picker-backdrop" onMouseDown={() => setTokenPicker(null)}>
+      <section className="sire-token-modal sire-token-picker-sheet" role="dialog" aria-modal="true" aria-label="Select token" onMouseDown={e => e.stopPropagation()}>
+        <div className="sire-token-sheet-handle" aria-hidden="true"><span /></div>
+        <div className="sire-token-modal-head">
+          <div><b>Select token</b><small>{pickerNetwork} · live token catalogue</small></div>
+          <button type="button" onClick={() => setTokenPicker(null)} aria-label="Close token selector"><X size={17}/></button>
+        </div>
+        <div className="sire-token-search"><Search size={15}/><input autoFocus value={search} onChange={e => setSearch(e.target.value)} placeholder="Search symbol, name or address"/></div>
+        <div className="sire-token-network-strip" aria-label="Networks">
+          {supportedNetworks.map(item => (
+            <button key={item.name} type="button" className={item.name === pickerNetwork ? 'active' : ''} onClick={() => void selectNetwork(item.name, tokenPicker === 'to' ? 'to' : 'from')}>
+              <LogoMark src={item.logoURI} fallback={item.name.slice(0, 1)} className="sire-token-network-icon" />
+              <span>{item.name}</span>
+            </button>
+          ))}
+        </div>
+        <div className="sire-token-list" aria-label="Instruments">
+          {filteredTokens.map(token => (
+            <button key={token.address} type="button" onClick={() => chooseToken(token)}>
+              <span className="sire-token-list-logo">
+                <LogoMark src={token.logoURI} fallback={token.symbol.slice(0,1)} className="sire-token-mark" />
+                <LogoMark
+                  src={supportedNetworks.find(item => item.chainId === token.chainId)?.logoURI}
+                  fallback={supportedNetworks.find(item => item.chainId === token.chainId)?.name.slice(0,1) || network.slice(0,1)}
+                  className="sire-token-chain-badge"
+                />
+              </span>
+              <span><b>{token.symbol}</b><small>{token.name}</small></span>
+              <span className="sire-token-address">{token.address.slice(0,6) + '…' + token.address.slice(-4)}</span>
+            </button>
+          ))}
+        </div>
+      </section>
+    </div>}
+
+
+  </div>;
+}
+ + money(Number(limitMarketPrice), 2) : '—')}</span>
+                  <small>USD per {limitMaker.symbol}</small>
+                </button>
+              </div>
+              <div className={'sire-limit-price-options sire-limit-price-options-' + limitSide.toLowerCase()}>
+                {(limitSide === 'Buy'
+                  ? ['Market','-1%','-5%','-10%','Custom']
+                  : ['Market','+1%','+5%','+10%','Custom']
+                ).map(option => (
+                  <button
+                    key={option}
+                    type="button"
+                    className={limitPricePreset === option ? 'selected' : ''}
+                    onClick={() => {
+                      if (!limitMarketPrice) return;
+                      const base = Number(limitMarketPrice);
+                      if (option === 'Market') {
+                        setLimitPrice(String(base));
+                        setLimitPricePreset('Market');
+                      } else if (option === 'Custom') {
+                        setLimitKeypadDraft(limitPrice || String(base));
+                        setLimitKeypad('price');
+                        setLimitPricePreset('Custom');
+                      } else {
+                        const pct = Number(option.replace('%',''));
+                        const effective = limitSide === 'Buy' ? -Math.abs(pct) : Math.abs(pct);
+                        setLimitPrice(String(base * (1 + effective / 100)));
+                        setLimitPricePreset(option);
+                      }
+                      setLimitError('');
+                    }}
+                  >{option}</button>
+                ))}
+              </div>
+
+              <div className={'sire-limit-token-card sire-limit-payment-card ' + (limitSide === 'Buy' ? 'buy' : 'sell')}>
+                <div className="sire-limit-payment-expiry">
+                  <span>Expiry</span>
+                  <button type="button" className="sire-limit-expiry-pill" onClick={() => setLimitExpiryOpen(true)}>
+                    {limitExpiryCustom ? new Date(limitExpiryCustom).toLocaleString([], {month:'short', day:'numeric', hour:'numeric', minute:'2-digit'}) : limitExpiry === 3600 ? '1 hour' : limitExpiry === 86400 ? '24 hours' : limitExpiry === 604800 ? '7 days' : '30 days'}
+                    <ChevronDown size={13}/>
+                  </button>
+                </div>
+                <button
+                  type="button"
+                  className="sire-limit-token-pill sire-limit-payment-pill"
+                  aria-label={(limitSide === 'Buy' ? 'Payment ' : 'Receive ') + (limitTaker.symbol || 'token')}
+                  onClick={() => setTokenPicker(limitSide === 'Sell' ? 'to' : 'from')}
+                >
+                  <LogoMark src={limitTaker.logoURI} fallback={limitTaker.symbol.slice(0,1) || 'T'} className="sire-token-mark large" />
+                  <span><b>{limitTaker.symbol || 'Select token'}</b><small>{limitTaker.name || ''}</small></span>
+                  <ChevronDown size={15}/>
+                </button>
+              
+                <button
+                  type="button"
+                  className="sire-limit-payment-summary"
+                  aria-label={limitSide === 'Buy' ? 'Enter payment amount' : 'Enter sell amount'}
+                  onClick={() => { setLimitKeypadDraft(amount || ''); setLimitKeypad('amount'); }}
+                >
+                  <strong><span>{amount || '0'}</span><em>{from.symbol || ''}</em></strong>
+                  <small>{from.priceUSD && Number.isFinite(Number(amount)) ? '$' + money(Number(amount) * from.priceUSD, 2) : '—'}</small>
+                  <div><span>Receive</span><b>{limitTargetAmount ? limitTargetAmount : '—'}</b><em>{limitReceiveToken.symbol || ''}</em></div>
+                </button>
+                {limitPreviewError && <div className="sire-swap-error" role="alert"><CircleAlert size={14}/><span>{limitPreviewError}</span></div>}
+              </div>
+
+              <div className="sire-limit-price-options sire-limit-payment-percentages" aria-label="Payment amount percentage">
+                {[25, 50, 75, 100].map(percent => (
+                  <button
+                    key={percent}
+                    type="button"
+                    onClick={() => setAmount(String((Number(formatUnits(fromBalance, from.decimals, 18)) * percent) / 100))}
+                  >{percent}%</button>
+                ))}
+              </div>
+
+              <button type="button" className={'sire-review-button sire-limit-submit ' + (limitSide === 'Buy' ? 'buy' : 'sell')} disabled={limitBusy || !wallet || !nativeUnlocked || !limitPrice || !amount || Boolean(limitPreviewError)} onClick={() => void placeLimitOrder()}>
+                {limitBusy ? <><LoaderCircle className="sire-spin" size={15}/> {status || 'Placing order'}</> : (wallet ? (limitSide === 'Buy' ? 'Buy ' + limitMaker.symbol : 'Sell ' + limitMaker.symbol) : 'Unlock SIRE Wallet')}
+              </button>
+
+              <small className="sire-limit-note">Your limit order is monitored through 0x Swap API v2. Your tokens remain in SIRE Wallet until the target is reached and you review the live quote.</small>
+              {limitError && <div className="sire-swap-error"><CircleAlert size={14}/><span>{limitError}</span></div>}
+
+              <div className="sire-limit-orders">
+                <div className="sire-limit-orders-head"><b>Open orders</b><button type="button" onClick={() => void refreshLimitOrders()}>Refresh</button></div>
+                {limitOrders.length > 0 ? limitOrders.slice(0, 8).map((order:any) => (
+                  <div className="sire-limit-order-row" key={order.orderHash}>
+                    <div>
+                      <b>{order.side === 'Buy' ? 'Buy' : 'Sell'} {order.makerSymbol || 'Token'}</b>
+                      <small>{order.limitPrice || 'Limit'} {order.takerSymbol ? order.takerSymbol : ''} · {order.orderStatus === 1 || order.status === 'Open' ? 'Open' : String(order.orderStatus || order.status || 'Pending')}</small>
+                    </div>
+                    <button type="button" disabled={limitBusy} onClick={() => void cancelLimit(order)}>Cancel</button>
+                  </div>
+                )) : <div className="sire-limit-empty">No open limit orders.</div>}
+              </div>
+            </div>}
+
+            <div className="sire-swap-route">
+              <button type="button" onClick={() => setProviderOpen(true)} disabled={!providerQuotes.length}>
+                <span>Providers</span>
+                <small>{providerQuotes.length ? providerQuotes.length + ' live route' + (providerQuotes.length === 1 ? '' : 's') + ' · Compare' : 'Waiting for live routes'}</small>
+              </button>
+              {quote && <div className="sire-route-metrics">
+                <span><b>{quote.toolName || quote.tool || 'Router'}</b><small>Selected provider</small></span>
+                <span><b>{quote.executionDuration ? '~' + Math.max(1, Math.round(quote.executionDuration)) + 's' : '—'}</b><small>Estimated time</small></span>
+                <span><b>{quote.gasUSD ? '$' + Number(quote.gasUSD).toFixed(2) : '—'}</b><small>Network fee</small></span>
+              </div>}
+            </div>
+
+            {tradeMode === 'Swap' && <div className="sire-swap-confirm-wrap">
+              {!wallet ? (
+                <button type="button" className="sire-review-button sire-connect-button" onClick={() => void connect()}>
+                  <WalletCards size={15}/> {hasNativeWallet() ? 'Unlock SIRE Wallet' : 'Create SIRE Wallet'}
+                </button>
+              ) : walletChain !== (SWAP_NETWORKS[network]?.chainId ?? 1) ? (
+                <button type="button" className="sire-review-button" onClick={() => void selectNetwork(network)}>Switch to {network}</button>
+              ) : (
+                <button type="button" className="sire-review-button" disabled={!canExecute} onClick={() => void execute()}>
+                  {busy ? <><LoaderCircle className="sire-spin" size={15}/> {status || 'Executing'}</> : quote ? 'Confirm Swap' : quoteLoading ? 'Getting live quote…' : 'Waiting for executable quote'}
+                </button>
+              )}
+            </div>}
+ 
+            <div className="sire-slippage">
+              <span>Slippage</span>
+              <div>
+                {[0.001, 0.005, 0.01].map(value => (
+                  <button key={value} type="button" className={slippage === value ? 'active' : ''} onClick={() => setSlippage(value)}>
+                    {(value * 100).toFixed(1)}%
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="sire-swap-details">
+               <div><span>Price impact</span><b>{quote?.priceImpact != null ? (quote.priceImpact * 100).toFixed(2) + '%' : '—'}</b></div>
+               <div><span>Network fee</span><b>{quote?.gasUSD ? '$' + Number(quote.gasUSD).toFixed(2) : '—'}</b></div>
+               <div><span>Minimum received</span><b>{quote ? minimum + ' ' + to.symbol : '—'}</b></div>
+               <div><span>{isCrossChain ? 'Destination' : 'Recipient'}</span><b>{recipient ? shortAddress(recipient) : 'You'}</b></div>
+               {quote && <div><span>Quote refresh</span><b>{quoteSeconds > 0 ? quoteSeconds + 's' : 'Refresh required'}</b></div>}
+             </div>
+
+             <div className="sire-swap-recipient">
+               <button type="button" className={recipientOpen ? 'active' : ''} onClick={() => setRecipientOpen(value => !value)}>
+                 <span>Send to</span><b>{recipient ? shortAddress(recipient) : 'My wallet'}</b>
+               </button>
+               {recipientOpen && <div className="sire-recipient-editor">
+                 <input value={recipient} onChange={e => { setRecipient(e.target.value.trim()); setRecipientError(''); }} placeholder="0x… destination address" spellCheck={false} />
+                 <button type="button" onClick={() => { setRecipient(''); setRecipientError(''); }}>Use my wallet</button>
+                 {recipient && !recipientValid && <small>Enter a valid EVM destination address.</small>}
+               </div>}
+             </div>
+
+
+            {quote && wallet && nativeUnlocked && !busy && !simulationBusy && <button type="button" className="sire-wallet-secondary sire-test-swap-button" onClick={() => void simulate()}>
+              Run no-money test
+            </button>}
+            {(quoteError || executionError) && <div className="sire-swap-error"><CircleAlert size={14}/><span>{quoteError || executionError}</span></div>}
+            {simulationResult && <div className="sire-swap-status sire-swap-simulation-result"><span>{simulationResult}</span></div>}
+            {status && !executionError && <div className="sire-swap-status">{status}{txHash && <a href={(network === 'BNB Chain' ? 'https://bscscan.com/tx/' : network === 'Base' ? 'https://basescan.org/tx/' : network === 'Arbitrum' ? 'https://arbiscan.io/tx/' : network === 'Optimism' ? 'https://optimistic.etherscan.io/tx/' : network === 'Polygon' ? 'https://polygonscan.com/tx/' : network === 'Avalanche' ? 'https://snowtrace.io/tx/' : 'https://etherscan.io/tx/') + txHash} target="_blank" rel="noreferrer">View transaction</a>}</div>}
+
+            <div className="sire-swap-safety"><LockKeyhole size={13}/> Quotes expire quickly and are revalidated before signing.</div>
+             <button type="button" className="sire-wallet-secondary sire-history-trigger" onClick={() => setHistoryOpen(true)}>View swap history ({swapHistory.length})</button>
+          </section>
+        </div>
+      </main>
+    </div>
+
+    {insufficientBalanceOpen && <div className="sire-modal-backdrop sire-insufficient-backdrop" onMouseDown={() => setInsufficientBalanceOpen(false)}>
+      <section className="sire-insufficient-sheet" role="dialog" aria-modal="true" aria-label="Insufficient balance" onMouseDown={e => e.stopPropagation()}>
+        <div className="sire-insufficient-icon"><CircleAlert size={22}/></div>
+        <div className="sire-insufficient-copy">
+          <h3>Insufficient {from.symbol} balance</h3>
+          <p>You have <b>{insufficientBalanceAmount} {from.symbol}</b>, but this swap requires <b>{amount} {from.symbol}</b>.</p>
+          <p className="sire-insufficient-sub">Your quote is still available to review. Add funds to continue with this swap.</p>
+        </div>
+        <button type="button" className="sire-review-button sire-buy-balance-button" onClick={() => {
+          setInsufficientBalanceOpen(false);
+          window.dispatchEvent(new CustomEvent('sire:buy-token', { detail: { symbol: from.symbol, network, token: from } }));
+        }}>Buy {from.symbol}</button>
+        <button type="button" className="sire-wallet-secondary" onClick={() => setInsufficientBalanceOpen(false)}>Not now</button>
+      </section>
+    </div>}
+
+    {providerOpen && <div className="sire-modal-backdrop sire-provider-backdrop" onMouseDown={() => setProviderOpen(false)}>
+      <section className="sire-provider-sheet" role="dialog" aria-modal="true" aria-label="Swap providers" onMouseDown={e => e.stopPropagation()}>
+        <div className="sire-provider-handle" aria-hidden="true"><span /></div>
+        <div className="sire-provider-head">
+          <div><b>Providers</b><small>Live executable routes · sorted by received amount</small></div>
+          <button type="button" onClick={() => setProviderOpen(false)} aria-label="Close providers"><X size={18}/></button>
+        </div>
+        <div className="sire-provider-list">
+          {providerQuotes.map((candidate, index) => {
+            const selected = quote === candidate;
+            const receive = formatUnits(candidate.toAmount, candidate.toToken.decimals, 8);
+            const usd = candidate.toToken.priceUSD ? Number(receive) * Number(candidate.toToken.priceUSD) : 0;
+            return (
+              <button
+                type="button"
+                className={'sire-provider-card' + (selected ? ' selected' : '')}
+                key={(candidate.toolName || candidate.tool || 'route') + ':' + candidate.toAmount + ':' + (candidate.transactionRequest?.data || '')}
+                onClick={() => { setQuote(candidate); setProviderOpen(false); }}
+              >
+                <div className="sire-provider-card-top">
+                  <div className="sire-provider-name">
+                    <span className="sire-provider-icon">{(candidate.toolName || candidate.tool || 'R').slice(0,1).toUpperCase()}</span>
+                    <span><b>{candidate.toolName || candidate.tool || 'Router'}</b><small>Live executable route</small></span>
+                  </div>
+                  {index === 0 && <em>Best</em>}
+                </div>
+                <div className="sire-provider-amount">
+                  <b>{receive} {candidate.toToken.symbol}</b>
+                  <span>{usd > 0 ? '$' + money(usd, 2) : '—'}</span>
+                </div>
+                <div className="sire-provider-metrics">
+                  <span><b>{candidate.executionDuration ? '~' + Math.max(1, Math.round(candidate.executionDuration)) + 's' : '—'}</b><small>Est. time</small></span>
+                  <span><b>{candidate.gasUSD ? '$' + Number(candidate.gasUSD).toFixed(4) : '—'}</b><small>Gas fee</small></span>
+                  <span><b>{candidate.priceImpact != null ? (candidate.priceImpact * 100).toFixed(2) + '%' : '—'}</b><small>Price impact</small></span>
+                </div>
+                <div className="sire-provider-route-line">
+                  <span>{candidate.fromToken.symbol} · {network}</span><i>→</i><span>{candidate.toToken.symbol} · {toNetwork}</span>
+                  <strong>{selected ? 'Selected' : 'Use route'}</strong>
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      </section>
+    </div>}
+
+    {walletOnboarding && <div className="sire-modal-backdrop" onMouseDown={closeWalletOnboarding}>
+      <section className="sire-token-modal sire-wallet-onboarding" role="dialog" aria-modal="true" aria-label="Create SIRE Wallet" onMouseDown={e => e.stopPropagation()}>
+        <div className="sire-token-modal-head">
+          <div><b>{walletStep === 'intro' ? 'Create SIRE Wallet' : walletStep === 'backup' ? 'Secure your wallet' : 'Wallet created'}</b><small>Native self-custody wallet · no external wallet required</small></div>
+          {walletStep !== 'confirm' && <button type="button" onClick={closeWalletOnboarding} aria-label="Close wallet setup"><X size={17}/></button>}
+        </div>
+
+        {walletStep === 'intro' && <div className="sire-wallet-onboarding-body">
+          <div className="sire-wallet-hero-icon"><WalletCards size={25}/></div>
+          <h3>Create your SIRE Wallet</h3>
+          <p>Your wallet is created on this device and its recovery phrase is controlled by you. Swap will use this wallet directly instead of asking you to connect an external wallet.</p>
+          <div className="sire-wallet-warning"><LockKeyhole size={15}/><span>Never share your recovery phrase or password. SIRE cannot recover a lost recovery phrase.</span></div>
+          <button type="button" className="sire-review-button" onClick={beginWalletCreation}>Create Wallet</button>
+        </div>}
+
+        {walletStep === 'unlock' && <div className="sire-wallet-onboarding-body">
+          <div className="sire-wallet-hero-icon"><LockKeyhole size={25}/></div>
+          <h3>Unlock SIRE Wallet</h3>
+          <p>Your SIRE Wallet already exists on this device. Enter its password to make it available to Swap.</p>
+          <div className="sire-wallet-form">
+            <label>Wallet password<input type="password" autoFocus autoComplete="current-password" value={walletPassword} onChange={e => setWalletPassword(e.target.value)} placeholder="Enter your password" onKeyDown={e => { if (e.key === 'Enter') void unlockWallet(); }}/></label>
+          </div>
+          {walletCreationError && <div className="sire-swap-error"><CircleAlert size={14}/><span>{walletCreationError}</span></div>}
+          <button type="button" className="sire-review-button" disabled={walletCreating} onClick={() => void unlockWallet()}>{walletCreating ? <><LoaderCircle className="sire-spin" size={15}/> Unlocking…</> : 'Unlock Wallet'}</button>
+        </div>}
+
+        {walletStep === 'backup' && <div className="sire-wallet-onboarding-body">
+          <h3>Back up your recovery phrase</h3>
+          <p>Write these words down offline, in the exact order. This phrase is the recovery key for the wallet.</p>
+          <div className="sire-wallet-mnemonic">{walletMnemonic.split(' ').map((word, index) => <span key={word + index}><i>{index + 1}</i><b>{word}</b></span>)}</div>
+          <div className="sire-wallet-form">
+            <label>Set wallet password<input type="password" autoComplete="new-password" value={walletPassword} onChange={e => setWalletPassword(e.target.value)} placeholder="At least 8 characters"/></label>
+            <label>Confirm password<input type="password" autoComplete="new-password" value={walletPasswordConfirm} onChange={e => setWalletPasswordConfirm(e.target.value)} placeholder="Repeat password"/></label>
+            <label>Confirm recovery phrase<input value={walletConfirmPhrase} onChange={e => setWalletConfirmPhrase(e.target.value)} placeholder="Type all words in order"/></label>
+          </div>
+          {walletCreationError && <div className="sire-swap-error"><CircleAlert size={14}/><span>{walletCreationError}</span></div>}
+          <button type="button" className="sire-review-button" disabled={walletCreating || !walletMnemonic} onClick={() => void finishWalletCreation()}>{walletCreating ? <><LoaderCircle className="sire-spin" size={15}/> Creating wallet…</> : 'Confirm & Create Wallet'}</button>
+          <button type="button" className="sire-wallet-secondary" onClick={closeWalletOnboarding}>Cancel</button>
+        </div>}
+
+        {walletStep === 'confirm' && <div className="sire-wallet-onboarding-body sire-wallet-created">
+          <div className="sire-wallet-success">✓</div>
+          <h3>SIRE Wallet created</h3>
+          <p>Your native wallet is unlocked and ready for Swap.</p>
+          <code>{shortAddress(walletCreatedAddress)}</code>
+        </div>}
+      </section>
+    </div>}
+    {historyOpen && <div className="sire-modal-backdrop sire-token-picker-backdrop" onMouseDown={() => setHistoryOpen(false)}>
+      <section className="sire-token-modal sire-swap-history-sheet" role="dialog" aria-modal="true" aria-label="Swap history" onMouseDown={e => e.stopPropagation()}>
+        <div className="sire-token-modal-head"><div><b>Swap history</b><small>Recent SIRE Swap executions on this device</small></div><button type="button" onClick={() => setHistoryOpen(false)} aria-label="Close history"><X size={17}/></button></div>
+        <div className="sire-swap-history-list">
+          {swapHistory.length ? swapHistory.map(item => <div className="sire-swap-history-row" key={item.hash}><div><b>{item.amount} {item.from} → {item.output} {item.to}</b><small>{item.fromNetwork}{item.fromNetwork !== item.toNetwork ? ' → ' + item.toNetwork : ''} · {new Date(item.time).toLocaleString()}</small></div><a href={(item.fromNetwork === 'BNB Chain' ? 'https://bscscan.com/tx/' : item.fromNetwork === 'Base' ? 'https://basescan.org/tx/' : item.fromNetwork === 'Arbitrum' ? 'https://arbiscan.io/tx/' : item.fromNetwork === 'Optimism' ? 'https://optimistic.etherscan.io/tx/' : item.fromNetwork === 'Polygon' ? 'https://polygonscan.com/tx/' : item.fromNetwork === 'Avalanche' ? 'https://snowtrace.io/tx/' : 'https://etherscan.io/tx/') + item.hash} target="_blank" rel="noreferrer">View</a></div>) : <div className="sire-swap-history-empty">No swaps yet.</div>}
+        </div>
+      </section>
+    </div>}
+
+    {limitExpiryOpen && <div className="sire-modal-backdrop sire-token-picker-backdrop" onMouseDown={() => setLimitExpiryOpen(false)}>
+      <section className="sire-token-modal sire-limit-expiry-sheet" role="dialog" aria-modal="true" aria-label="Order expiration" onMouseDown={e => e.stopPropagation()}>
+        <div className="sire-token-modal-head">
+          <div><b>Order expiration</b><small>Choose how long this limit order stays active</small></div>
+          <button type="button" onClick={() => setLimitExpiryOpen(false)} aria-label="Close expiration"><X size={17}/></button>
+        </div>
+        <div className="sire-limit-expiry-options">
+          {[['1 hour',3600],['24 hours',86400],['7 days',604800],['30 days',2592000]].map(([label,value]) => (
+            <button key={String(value)} type="button" className={!limitExpiryCustom && limitExpiry === Number(value) ? 'active' : ''} onClick={() => { setLimitExpiry(Number(value)); setLimitExpiryCustom(''); setLimitExpiryOpen(false); }}>{label}</button>
+          ))}
+        </div>
+        <label className="sire-limit-custom-date">
+          <span>Custom date & time</span>
+          <input type="datetime-local" value={limitExpiryCustom} min={new Date(Date.now() + 60000).toISOString().slice(0,16)} onChange={e => {
+            const value = e.target.value;
+            setLimitExpiryCustom(value);
+            const timestamp = new Date(value).getTime();
+            if (Number.isFinite(timestamp) && timestamp > Date.now()) setLimitExpiry(Math.max(60, Math.ceil((timestamp - Date.now()) / 1000)));
+          }} />
+        </label>
+        <button type="button" className="sire-review-button" onClick={() => setLimitExpiryOpen(false)}>Done</button>
+      </section>
+    </div>}
+
+    {limitKeypad && <div className="sire-modal-backdrop sire-token-picker-backdrop" onMouseDown={() => setLimitKeypad(null)}>
+      <section className="sire-token-modal sire-limit-keypad-sheet" role="dialog" aria-modal="true" aria-label={limitKeypad === 'amount' ? 'Enter payment amount' : 'Enter limit price'} onMouseDown={e => e.stopPropagation()}>
+        <div className="sire-token-modal-head">
+          <div><b>{limitKeypad === 'amount' ? 'Payment amount' : 'Limit price'}</b><small>Use the SIRE numeric keypad</small></div>
+          <button type="button" onClick={() => setLimitKeypad(null)} aria-label="Close keypad"><X size={17}/></button>
+        </div>
+        <div className="sire-limit-keypad-display">
+          <strong>{limitKeypadDraft || '0'}</strong>
+          <span>{limitKeypad === 'amount' ? from.symbol : limitTaker.symbol}</span>
+        </div>
+        <div className="sire-limit-keypad-grid">
+          {['1','2','3','4','5','6','7','8','9','.','0','⌫'].map(key => (
+            <button key={key} type="button" onClick={() => {
+              let next = limitKeypadDraft;
+              if (key === '⌫') {
+                next = next.slice(0, -1);
+              } else if (key === '.' && next.includes('.')) {
+                return;
+              } else {
+                next += key;
+              }
+              setLimitKeypadDraft(next);
+              if (limitKeypad === 'amount') {
+                setAmount(next);
+              } else {
+                setLimitPrice(next);
+                setLimitPricePreset('Custom');
+              }
+              setLimitError('');
+            }}>{key}</button>
+          ))}
+        </div>
+      </section>
+    </div>}
+
+    {tokenPicker && <div className="sire-modal-backdrop sire-token-picker-backdrop" onMouseDown={() => setTokenPicker(null)}>
+      <section className="sire-token-modal sire-token-picker-sheet" role="dialog" aria-modal="true" aria-label="Select token" onMouseDown={e => e.stopPropagation()}>
+        <div className="sire-token-sheet-handle" aria-hidden="true"><span /></div>
+        <div className="sire-token-modal-head">
+          <div><b>Select token</b><small>{pickerNetwork} · live token catalogue</small></div>
+          <button type="button" onClick={() => setTokenPicker(null)} aria-label="Close token selector"><X size={17}/></button>
+        </div>
+        <div className="sire-token-search"><Search size={15}/><input autoFocus value={search} onChange={e => setSearch(e.target.value)} placeholder="Search symbol, name or address"/></div>
+        <div className="sire-token-network-strip" aria-label="Networks">
+          {supportedNetworks.map(item => (
+            <button key={item.name} type="button" className={item.name === pickerNetwork ? 'active' : ''} onClick={() => void selectNetwork(item.name, tokenPicker === 'to' ? 'to' : 'from')}>
+              <LogoMark src={item.logoURI} fallback={item.name.slice(0, 1)} className="sire-token-network-icon" />
+              <span>{item.name}</span>
+            </button>
+          ))}
+        </div>
+        <div className="sire-token-list" aria-label="Instruments">
+          {filteredTokens.map(token => (
+            <button key={token.address} type="button" onClick={() => chooseToken(token)}>
+              <span className="sire-token-list-logo">
+                <LogoMark src={token.logoURI} fallback={token.symbol.slice(0,1)} className="sire-token-mark" />
+                <LogoMark
+                  src={supportedNetworks.find(item => item.chainId === token.chainId)?.logoURI}
+                  fallback={supportedNetworks.find(item => item.chainId === token.chainId)?.name.slice(0,1) || network.slice(0,1)}
+                  className="sire-token-chain-badge"
+                />
+              </span>
+              <span><b>{token.symbol}</b><small>{token.name}</small></span>
+              <span className="sire-token-address">{token.address.slice(0,6) + '…' + token.address.slice(-4)}</span>
+            </button>
+          ))}
+        </div>
+      </section>
+    </div>}
+
+
+  </div>;
+}
+ + money(Number(limitMarketPrice), 2) : '—'}</strong>
+                  <small>USD per {limitMaker.symbol || ''}</small>
+                  {limitExecutionMarketPrice && <em>Execution: {limitExecutionMarketPrice} {limitTaker.symbol || ''} per {limitMaker.symbol || ''}</em>}
+                </div>
+              </div>
+
+              <div className="sire-limit-side-toggle" role="tablist" aria-label="Limit side">
+                {(['Buy','Sell'] as const).map(side => (
+                  <button
+                    key={side}
+                    type="button"
+                    role="tab"
+                    aria-selected={limitSide === side}
+                    className={limitSide === side ? 'active ' + side.toLowerCase() : ''}
+                    onClick={() => {
+                      if (side !== limitSide) {
+                        // Keep the selected trading pair, but reverse its direction.
+                        // Buy WBTC with USDCE -> Sell WBTC for USDCE.
+                        const currentFrom = from;
+                        const currentTo = to;
+                        setFrom(currentTo);
+                        setTo(currentFrom);
+                      }
+                      setLimitSide(side);
+                      setLimitPrice('');
+                      setLimitDisplayPrice('');
                       setLimitPricePreset('Market');
                       setLimitError('');
                       setAmount('1');
