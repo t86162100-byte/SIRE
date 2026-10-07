@@ -1009,7 +1009,23 @@ export default function TradeView({ referencePrice = 0 }: Props) {
                     role="tab"
                     aria-selected={limitSide === side}
                     className={limitSide === side ? 'active ' + side.toLowerCase() : ''}
-                    onClick={() => { setLimitSide(side); setLimitPrice(''); setLimitPricePreset('Market'); setLimitError(''); setAmount('1'); }}
+                    onClick={() => {
+                      if (side !== limitSide) {
+                        // Keep the selected trading pair, but reverse its direction.
+                        // Buy WBTC with USDCE -> Sell WBTC for USDCE.
+                        setFrom(current => current);
+                        setTo(current => current);
+                        const currentFrom = from;
+                        const currentTo = to;
+                        setFrom(currentTo);
+                        setTo(currentFrom);
+                      }
+                      setLimitSide(side);
+                      setLimitPrice('');
+                      setLimitPricePreset('Market');
+                      setLimitError('');
+                      setAmount('1');
+                    }}
                   >
                     {side}
                   </button>
