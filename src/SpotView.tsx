@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
 import { ChevronDown, LoaderCircle, Search } from 'lucide-react';
-import { fetchBinanceInstruments, type BinanceInstrument } from './binanceMarketData';
 import './spot.css';
 
 type Props = { wallet?: string; onConnect?: () => void };
@@ -8,21 +7,19 @@ type Props = { wallet?: string; onConnect?: () => void };
 type Side = 'Buy' | 'Sell';
 type OrderType = 'Market' | 'Limit';
 
+type SireSpotMarket = { symbol:string; name:string; baseAsset:string; quote:string; status:string; logoUrl?:string; price?:number; priceChangePercent?:number; assetName?:string };
 type Snapshot = { price?: number; bid?: number; ask?: number; percent?: number };
 
 const money = (value:number, digits=2) =>
   Number.isFinite(value) ? value.toLocaleString(undefined, { maximumFractionDigits: digits }) : '—';
 
-const logoFor = (symbol:string) =>
-  'https://assets.coincap.io/assets/icons/' + symbol.toLowerCase().replace(/usdt|usdc|fdusd|btc|eth|bnb$/,'') + '@2x.png';
-
-function baseOf(item?: BinanceInstrument|null) {
+function baseOf(item?: SireSpotMarket|null) {
   return String(item?.baseAsset || item?.symbol || '').replace(/(USDT|USDC|FDUSD|BTC|ETH|BNB)$/,'');
 }
 
 export default function SpotView({ wallet, onConnect }: Props) {
-  const [instruments, setInstruments] = useState<BinanceInstrument[]>([]);
-  const [selected, setSelected] = useState<BinanceInstrument | null>(null);
+  const [instruments, setInstruments] = useState<SireSpotMarket[]>([]);
+  const [selected, setSelected] = useState<SireSpotMarket | null>(null);
   const [search, setSearch] = useState('');
   const [pickerOpen, setPickerOpen] = useState(false);
   const [side, setSide] = useState<Side>('Buy');
@@ -36,35 +33,27 @@ export default function SpotView({ wallet, onConnect }: Props) {
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
-    fetchBinanceInstruments().then(items => {
-      if (cancelled) return;
-      const spot = items.filter(item => item.marketType === 'Spot' && item.status === 'TRADING' && item.quote === 'USDT');
-      setInstruments(spot);
-      setSelected(current => current || spot.find(item => item.symbol === 'BTCUSDT') || spot[0] || null);
-    }).catch(e => { if (!cancelled) setError(e instanceof Error ? e.message : String(e)); })
+    fetch('/api/sire/spot/catalog?t=' + Date.now(), { cache:'no-store' })
+      .then(response => response.json())
+      .then(payload => {
+        if (cancelled) return;
+        if (!payload?.ok || !Array.isArray(payload?.markets)) throw new Error(payload?.error || 'Unable to load SIRE Spot markets.');
+        const spot = payload.markets.filter((item:SireSpotMarket) => item.status === 'TRADING' && item.quote === 'USDT');
+        setInstruments(spot);
+        setSelected(current => current || spot.find(item => item.symbol === 'BTCUSDT') || spot[0] || null);
+      })
+      .catch(e => { if (!cancelled) setError(e instanceof Error ? e.message : String(e)); })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
   }, []);
 
   useEffect(() => {
     if (!selected) return;
-    let stopped = false;
-    const load = async () => {
-      try {
-        const response = await fetch('/api/sire/binance/market-snapshot?t=' + Date.now(), { cache:'no-store' });
-        const payload = await response.json().catch(() => ({}));
-        const raw = payload?.snapshots?.['SPOT:' + selected.symbol] || payload?.snapshots?.[selected.symbol];
-        if (!stopped && raw) setSnapshot({
-          price:Number(raw.price),
-          bid:Number(raw.bid),
-          ask:Number(raw.ask),
-          percent:Number(raw.percent ?? raw.priceChangePercent)
-        });
-      } catch {}
-    };
-    void load();
-    const timer = window.setInterval(load, 2000);
-    return () => { stopped = true; window.clearInterval(timer); };
+    const price = Number(selected.price);
+    setSnapshot({
+      price: Number.isFinite(price) ? price : undefined,
+      percent: Number.isFinite(Number(selected.priceChangePercent)) ? Number(selected.priceChangePercent) : undefined,
+    });
   }, [selected]);
 
   const filtered = useMemo(() => {
@@ -85,9 +74,9 @@ export default function SpotView({ wallet, onConnect }: Props) {
   return <div className="sire-spot-shell">
     <header className="sire-spot-head">
       <div>
-        <span>BINANCE SPOT</span>
+        <span>SIRE SPOT</span>
         <strong>Spot trading</strong>
-        <small>Trade crypto spot pairs with live Binance market data.</small>
+        <small>Trade SIRE Spot pairs with reference market data from CoinGecko.</small>
       </div>
       <div className="sire-spot-account">
         <span className={wallet ? 'online' : ''} />
@@ -99,7 +88,7 @@ export default function SpotView({ wallet, onConnect }: Props) {
       <section className="sire-spot-ticket">
         <div className="sire-spot-pair-row">
           <button className="sire-spot-pair" type="button" onClick={() => setPickerOpen(true)}>
-            <span className="sire-spot-logo"><img src={logoFor(selected?.baseAsset || '')} alt="" onError={e => { e.currentTarget.style.display='none'; }} /></span>
+            <span className="sire-spot-logo"><img src={selected?.logoUrl || ''} alt="" onError={e => { e.currentTarget.style.display='none'; }} /></span>
             <span><b>{selected?.symbol || 'Select pair'}</b><small>{selected?.name || 'USDT spot market'}</small></span>
             <ChevronDown size={15}/>
           </button>
@@ -138,7 +127,7 @@ export default function SpotView({ wallet, onConnect }: Props) {
         </div>
 
         <button type="button" className={'sire-spot-submit ' + side.toLowerCase()} onClick={() => {
-          setError(wallet ? 'Spot order execution is not connected to an exchange account yet.' : 'Connect a Spot exchange account to place orders.');
+          setError(wallet ? 'SIRE Spot execution is being connected to the SIRE order engine.' : 'Connect your SIRE Wallet to place Spot orders.');
           if (!wallet) onConnect?.();
         }}>
           {side} {base || 'Asset'}
