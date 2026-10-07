@@ -578,6 +578,7 @@ export default function TradeView({ referencePrice = 0 }: Props) {
             sellToken: limitMaker.address,
             buyToken: limitTaker.address,
             sellAmount: makerUnits,
+            buyDecimals: limitTaker.decimals,
             taker: wallet || ''
           })
         });
