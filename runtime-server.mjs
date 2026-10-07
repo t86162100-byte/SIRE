@@ -17,6 +17,7 @@ import { recordIssue, getRecentIssues } from './backend/sire-issue-tracker.ts';
 import { saveLimitOrder, listLimitOrders, cancelLimitOrder, runLimitOrderMonitorBatch, limitOrderStoreStatus } from './backend/limit-order-store.ts';
 import { fetchBinanceCatalogServer, fetchBinanceMarketSnapshotServer, fetchBinanceHistoryServer } from './backend/binance-catalog.ts';
 import { fetchSireSpotCatalogServer, sireSpotCatalogStatus } from './backend/sire-spot-catalog.ts';
+import { ensureSireSpotTables, getSpotBook, placeSpotOrder, cancelSpotOrder, getSpotAccount, getSpotOrders, getSpotTrades, spotEngineStatus, spotSubscribe, spotUnsubscribe, spotDisconnect } from './backend/sire-spot-engine.ts';
 
 const PORT = Number(process.env.PORT || 10000);
 const HOST = '0.0.0.0';
@@ -927,6 +928,67 @@ const server = http.createServer(async (req,res) => {
       return;
     }
     if (req.method === 'POST' && pathname === '/api/sire/agent/gpt') { const parsed = body ? JSON.parse(body) : {}; if (!String(parsed.query || '').trim()) return res.writeHead(400,{ 'Access-Control-Allow-Origin':'*','Content-Type':'application/json; charset=utf-8' }).end(JSON.stringify({ error:'query is required' })); try { const response = await handleDirectGptRequest(parsed); return res.writeHead(200,{ 'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8' }).end(JSON.stringify(response)); } catch (cause) { const message = cause instanceof Error ? cause.message : String(cause); console.error('[DIRECT GPT]', message); return res.writeHead(502,{ 'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8' }).end(JSON.stringify({ error:`Direct GPT test failed: ${message}` })); } }
+    if (req.method === 'GET' && pathname === '/api/sire/spot/book') {
+      try {
+        const url = new URL(req.url || '/', 'http://sire.local');
+        const symbol = String(url.searchParams.get('symbol') || 'BTCUSDT').toUpperCase();
+        const depth = Number(url.searchParams.get('depth') || 25);
+        const book = await getSpotBook(symbol, depth);
+        return res.writeHead(200,{'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify(book));
+      } catch (cause) {
+        return res.writeHead(400,{'Access-Control-Allow-Origin':'*','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify({ok:false,error:cause instanceof Error ? cause.message : String(cause)}));
+      }
+    }
+    if (req.method === 'GET' && pathname === '/api/sire/spot/trades') {
+      try {
+        const url = new URL(req.url || '/', 'http://sire.local');
+        const symbol = String(url.searchParams.get('symbol') || 'BTCUSDT').toUpperCase();
+        const limit = Number(url.searchParams.get('limit') || 100);
+        const trades = await getSpotTrades(symbol, limit);
+        return res.writeHead(200,{'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify(trades));
+      } catch (cause) {
+        return res.writeHead(400,{'Access-Control-Allow-Origin':'*','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify({ok:false,error:cause instanceof Error ? cause.message : String(cause)}));
+      }
+    }
+    if (req.method === 'GET' && pathname === '/api/sire/spot/account') {
+      try {
+        const url = new URL(req.url || '/', 'http://sire.local');
+        return res.writeHead(200,{'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify(await getSpotAccount(String(url.searchParams.get('wallet') || ''))));
+      } catch (cause) {
+        return res.writeHead(400,{'Access-Control-Allow-Origin':'*','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify({ok:false,error:cause instanceof Error ? cause.message : String(cause)}));
+      }
+    }
+    if (req.method === 'GET' && pathname === '/api/sire/spot/orders') {
+      try {
+        const url = new URL(req.url || '/', 'http://sire.local');
+        return res.writeHead(200,{'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify(await getSpotOrders(String(url.searchParams.get('wallet') || ''), Number(url.searchParams.get('limit') || 100))));
+      } catch (cause) {
+        return res.writeHead(400,{'Access-Control-Allow-Origin':'*','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify({ok:false,error:cause instanceof Error ? cause.message : String(cause)}));
+      }
+    }
+    if (req.method === 'GET' && pathname === '/api/sire/spot/engine/status') {
+      return res.writeHead(200,{'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify(await spotEngineStatus()));
+    }
+    if (req.method === 'POST' && pathname === '/api/sire/spot/orders') {
+      try {
+        const parsed = body ? JSON.parse(body) : {};
+        const order = await placeSpotOrder(parsed);
+        return res.writeHead(201,{'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify({ok:true,order,engine:'SIRE'}));
+      } catch (cause) {
+        return res.writeHead(400,{'Access-Control-Allow-Origin':'*','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify({ok:false,error:cause instanceof Error ? cause.message : String(cause)}));
+      }
+    }
+    if (req.method === 'POST' && pathname === '/api/sire/spot/orders/cancel') {
+      try {
+        const parsed = body ? JSON.parse(body) : {};
+        return res.writeHead(200,{'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify(await cancelSpotOrder(parsed)));
+      } catch (cause) {
+        return res.writeHead(400,{'Access-Control-Allow-Origin':'*','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify({ok:false,error:cause instanceof Error ? cause.message : String(cause)}));
+      }
+    }
+    if (req.method === 'GET' && pathname === '/api/sire/spot/health') {
+      return res.writeHead(200,{'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify(await spotEngineStatus()));
+    }
     if (req.method === 'GET' && pathname === '/api/sire/spot/catalog') {
       try {
         const url = new URL(req.url || '/', 'http://sire.local');
@@ -1113,13 +1175,22 @@ server.on('upgrade',(req,socket,head)=>{
     const connectionId=url.searchParams.get('connection_id')||randomUUID();
     ws.register(connectionId,wsSocket);
     wsSocket.send(JSON.stringify({type:'system.connected',payload:{connection_id:connectionId}}));
-    wsSocket.on('close',async()=>{ws.unregister(connectionId); await realtime({body:JSON.stringify({type:'system.disconnected',payload:{connection_id:connectionId}})});});
+    wsSocket.on('message',async data=>{
+      try{
+        const msg=JSON.parse(String(data));
+        if(msg?.type==='spot.subscribe' && msg?.symbol){ spotSubscribe(String(msg.symbol),connectionId); const book=await getSpotBook(String(msg.symbol),25); if(wsSocket.readyState===WebSocket.OPEN) wsSocket.send(JSON.stringify({v:1,type:'spot.update',payload:{symbol:String(msg.symbol).toUpperCase(),book,trade:null}})); }
+        else if(msg?.type==='spot.unsubscribe' && msg?.symbol) spotUnsubscribe(String(msg.symbol),connectionId);
+      }catch(error){ console.warn('[SIRE SPOT WS]',error instanceof Error?error.message:String(error)); }
+    });
+    wsSocket.on('close',async()=>{spotDisconnect(connectionId); ws.unregister(connectionId); await realtime({body:JSON.stringify({type:'system.disconnected',payload:{connection_id:connectionId}})});});
   });
 });
 
 server.listen(PORT,HOST,async()=>{ 
   console.log(`SIRE server listening on ${HOST}:${PORT}`);
   console.log('[DERIV HISTORY STORE]', JSON.stringify(await historyStoreStatus()));
+  console.log('[SIRE SPOT ENGINE] initializing persistent order, trade, balance and ledger tables');
+  void ensureSireSpotTables().catch(error => console.warn('[SIRE SPOT ENGINE]', error instanceof Error ? error.message : String(error)));
   console.log('[LIMIT ORDER MONITOR] server-side 0x monitor starting');
   void runLimitOrderMonitorBatch(2).catch(error => console.warn('[LIMIT ORDER MONITOR]', error instanceof Error ? error.message : String(error)));
   setInterval(() => void runLimitOrderMonitorBatch(2).catch(error => console.warn('[LIMIT ORDER MONITOR]', error instanceof Error ? error.message : String(error))), 5000);
