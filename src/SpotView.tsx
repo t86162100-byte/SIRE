@@ -11,6 +11,9 @@ type SireSpotMarket = {
   logoUrl?:string; price?:number; priceChangePercent?:number; bid?:number; ask?:number; assetName?:string
 };
 type Snapshot = { price?: number; bid?: number; ask?: number; percent?: number };
+type BookLevel = { price:number; quantity:number; orders?:number };
+type SpotBook = { asks:BookLevel[]; bids:BookLevel[]; lastTrade?:{price:number;quantity:number;time:number}|null; source?:string };
+type SpotBalance = { asset:string; available:number; locked:number };
 
 const money = (value:number, digits=2) =>
   Number.isFinite(value) ? value.toLocaleString(undefined, { maximumFractionDigits: digits }) : '—';
@@ -35,6 +38,10 @@ export default function SpotView({ wallet, onConnect }: Props) {
   const [quantity, setQuantity] = useState('');
   const [price, setPrice] = useState('');
   const [snapshot, setSnapshot] = useState<Snapshot>({});
+  const [book, setBook] = useState<SpotBook>({ asks:[], bids:[], lastTrade:null });
+  const [balances, setBalances] = useState<SpotBalance[]>([]);
+  const [subStatus, setSubStatus] = useState<'connecting'|'live'|'offline'>('offline');
+  const [subVersion, setSubVersion] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [mobilePanel, setMobilePanel] = useState<'Trade'|'Chart'>('Trade');
@@ -66,31 +73,108 @@ export default function SpotView({ wallet, onConnect }: Props) {
       ask: Number.isFinite(Number(selected.ask)) ? Number(selected.ask) : undefined,
       percent: Number.isFinite(Number(selected.priceChangePercent)) ? Number(selected.priceChangePercent) : undefined,
     });
+    setBook({asks:[],bids:[],lastTrade:null});
+    let cancelled = false;
+    const loadBook = () => fetch('/api/sire/spot/book?symbol=' + encodeURIComponent(selected.symbol) + '&depth=25', {cache:'no-store'})
+      .then(r=>r.json()).then(p => { if(!cancelled && p?.ok) setBook({asks:Array.isArray(p.asks)?p.asks:[],bids:Array.isArray(p.bids)?p.bids:[],lastTrade:p.lastTrade||null,source:p.source}); })
+      .catch(()=>{});
+    void loadBook();
+    return () => { cancelled = true; };
   }, [selected]);
+
+  useEffect(() => {
+    if (!selected || typeof WebSocket === 'undefined') return;
+    let closed = false;
+    let socket: WebSocket | null = null;
+    let retry: ReturnType<typeof setTimeout> | null = null;
+    const connect = () => {
+      if (closed) return;
+      setSubStatus('connecting');
+      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const id = (globalThis.crypto?.randomUUID?.() || ('spot-' + Date.now() + '-' + Math.random().toString(36).slice(2)));
+      socket = new WebSocket(protocol + '//' + window.location.host + '/ws?connection_id=' + encodeURIComponent(id));
+      socket.onopen = () => { setSubStatus('live'); socket?.send(JSON.stringify({type:'spot.subscribe',symbol:selected.symbol})); };
+      socket.onmessage = event => {
+        try {
+          const msg = JSON.parse(String(event.data || '{}'));
+          if (msg?.type === 'spot.update' && String(msg?.payload?.symbol || '').toUpperCase() === selected.symbol.toUpperCase()) {
+            const next = msg.payload.book;
+            if (next) setBook({asks:Array.isArray(next.asks)?next.asks:[],bids:Array.isArray(next.bids)?next.bids:[],lastTrade:next.lastTrade||null,source:next.source});
+            setSubVersion(v => v + 1);
+          }
+        } catch {}
+      };
+      socket.onclose = () => {
+        if (closed) return;
+        setSubStatus('offline');
+        retry = setTimeout(connect, 2000);
+      };
+      socket.onerror = () => setSubStatus('offline');
+    };
+    connect();
+    return () => { closed = true; if(retry) clearTimeout(retry); try { socket?.send(JSON.stringify({type:'spot.unsubscribe',symbol:selected.symbol})); } catch {} try { socket?.close(); } catch {} };
+  }, [selected?.symbol]);
+
+  useEffect(() => {
+    if (!wallet) { setBalances([]); return; }
+    let cancelled = false;
+    fetch('/api/sire/spot/account?wallet=' + encodeURIComponent(wallet), {cache:'no-store'})
+      .then(r=>r.json()).then(p=>{ if(!cancelled && p?.ok) setBalances(Array.isArray(p.balances)?p.balances:[]); })
+      .catch(()=>{});
+    return () => { cancelled = true; };
+  }, [wallet, subVersion]);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     return instruments.filter(item => !q || item.symbol.toLowerCase().includes(q) || String(item.name).toLowerCase().includes(q)).slice(0,80);
   }, [instruments, search]);
 
-  const marketPrice = Number(snapshot.price || selected?.price || 0);
-  const effectivePrice = orderType === 'Market' ? marketPrice : Number(price);
-  const total = Number(quantity) > 0 && effectivePrice > 0 ? Number(quantity) * effectivePrice : 0;
+  const marketPrice = Number(book.lastTrade?.price || snapshot.price || selected?.price || 0);
+  const bid = Number(book.bids[0]?.price || snapshot.bid || 0);
+  const ask = Number(book.asks[0]?.price || snapshot.ask || 0);
+  const effectivePrice = orderType === 'Market' ? (side === 'Buy' ? ask || marketPrice : bid || marketPrice) : Number(price);
   const base = baseOf(selected);
+  const baseBalance = balances.find(b => b.asset === base)?.available || 0;
+  const quoteBalance = balances.find(b => b.asset === 'USDT')?.available || 0;
+  const balanceForSide = side === 'Buy' ? quoteBalance : baseBalance;
+  const fraction = Math.min(1, Math.max(0, Number(quantity) || 0));
+  const tradeQuantity = side === 'Buy' ? (effectivePrice > 0 ? (balanceForSide * fraction) / effectivePrice : 0) : balanceForSide * fraction;
+  const total = tradeQuantity > 0 && effectivePrice > 0 ? tradeQuantity * effectivePrice : 0;
   const change = Number(snapshot.percent || 0);
   const isUp = change >= 0;
-  const bid = Number(snapshot.bid || marketPrice);
-  const ask = Number(snapshot.ask || marketPrice);
-  const spread = bid > 0 && ask > 0 ? Math.max(ask - bid, 0) : 0;
 
   const setPercent = (pct:number) => {
     if (!marketPrice) return;
     setPrice(String((marketPrice * (1 + pct / 100)).toFixed(marketPrice < 1 ? 8 : 2)));
   };
 
-  const submit = () => {
-    setError(wallet ? 'SIRE Spot execution is being connected to the SIRE order engine.' : 'Connect your SIRE Wallet to place Spot orders.');
-    if (!wallet) onConnect?.();
+  const submit = async () => {
+    setError('');
+    if (!wallet) { setError('Connect your SIRE Wallet to place Spot orders.'); onConnect?.(); return; }
+    if (orderType !== 'Market' && orderType !== 'Limit') { setError('This order type is not executable yet. Use Market or Limit.'); return; }
+    if (fraction <= 0) { setError('Choose an order amount first.'); return; }
+    if (!effectivePrice || !tradeQuantity) { setError('There is no executable SIRE Spot price/liquidity for this order.'); return; }
+    try {
+      const response = await fetch('/api/sire/spot/orders', {
+        method:'POST', headers:{'content-type':'application/json','accept':'application/json'},
+        body:JSON.stringify({
+          wallet, symbol:selected?.symbol, side, type:orderType.toUpperCase(),
+          quantity:tradeQuantity, ...(orderType === 'Limit' ? {price:Number(price)} : {}),
+          clientOrderId:(globalThis.crypto?.randomUUID?.() || ('sire-' + Date.now() + '-' + Math.random().toString(36).slice(2)))
+        })
+      });
+      const payload = await response.json().catch(()=>({}));
+      if (!response.ok || !payload?.ok) throw new Error(String(payload?.error || 'SIRE Spot order was rejected.'));
+      setQuantity('');
+      if (payload?.order?.averagePrice) setPrice(String(payload.order.averagePrice));
+      const [bookResponse, accountResponse] = await Promise.all([
+        fetch('/api/sire/spot/book?symbol=' + encodeURIComponent(selected?.symbol || '') + '&depth=25', {cache:'no-store'}),
+        fetch('/api/sire/spot/account?wallet=' + encodeURIComponent(wallet), {cache:'no-store'})
+      ]);
+      const [nextBook,nextAccount] = await Promise.all([bookResponse.json(),accountResponse.json()]);
+      if(nextBook?.ok) setBook({asks:nextBook.asks||[],bids:nextBook.bids||[],lastTrade:nextBook.lastTrade||null,source:nextBook.source});
+      if(nextAccount?.ok) setBalances(nextAccount.balances||[]);
+    } catch (e) { setError(e instanceof Error ? e.message : String(e)); }
   };
 
   return <div className="sire-spot-shell">
@@ -125,7 +209,7 @@ export default function SpotView({ wallet, onConnect }: Props) {
 
           <div className="sire-spot-total-card">
             <span>Total</span>
-            <button type="button" aria-label="Select quote currency"><span>USDT</span><ChevronDown size={14}/></button>
+            <button type="button" aria-label="Select quote currency"><span>{money(total, total < 1 ? 6 : 2)} USDT</span><ChevronDown size={14}/></button>
           </div>
           {orderType === 'Limit' && <label className="sire-spot-input">
             <span>Price</span><input inputMode="decimal" value={price} onChange={e => setPrice(e.target.value.replace(/[^0-9.]/g,''))} placeholder={marketPrice ? String(marketPrice) : '0.00'} /><em>USDT</em>
@@ -138,15 +222,15 @@ export default function SpotView({ wallet, onConnect }: Props) {
             </div>
           </div>
 
-          <div className="sire-spot-balance"><span>Available</span><b>0.00 USDT</b><button type="button" onClick={onConnect}>+</button></div>
+          <div className="sire-spot-balance"><span>Available</span><b>{money(balanceForSide, balanceForSide < 1 ? 6 : 2)} {side === 'Buy' ? 'USDT' : (base || 'BTC')}</b><button type="button" onClick={onConnect}>+</button></div>
 
           {orderType === 'Limit' && <div className="sire-spot-price-shortcuts">{[-1,0,1].map(p => <button key={p} type="button" onClick={() => setPercent(p)}>{p === 0 ? 'Market' : (p > 0 ? '+' : '') + p + '%'}</button>)}</div>}
 
           <div className="sire-spot-order-summary">
-            <div><span>Est. fee</span><b>— USDT</b></div>
+            <div><span>Est. fee</span><b>{total ? money(total * 0.001, total < 1 ? 6 : 2) + ' USDT' : '— USDT'}</b></div>
           </div>
 
-          <button type="button" className="sire-spot-submit" onClick={submit}>Connect wallet</button>
+          <button type="button" className="sire-spot-submit" onClick={submit}>{wallet ? 'Place order' : 'Connect wallet'}</button>
           {error && <div className="sire-spot-error">{error}</div>}
         </div>
       </section>
@@ -156,13 +240,15 @@ export default function SpotView({ wallet, onConnect }: Props) {
           <div className="sire-spot-book-controls" aria-label="Order book display"><button type="button" className={`active ${bookView}`} onClick={() => setBookView(bookView === 'both' ? 'bids' : bookView === 'bids' ? 'asks' : 'both')} aria-label="Cycle order book display"><i /><i /></button></div>
           <div className="sire-spot-book-head"><span>Price (USDT)</span><span>Amount ({base || 'BTC'})</span></div>
           <div className={`sire-spot-book-side asks ${bookView === 'bids' ? 'is-hidden' : ''}`}>
-            {[4,3,2,1].map((n,i) => <div key={n}><span>{formatPrice(ask + (i+1)*spread)}</span><b>{(0.00006*n).toFixed(5)}</b></div>)}
+            {book.asks.slice(0,4).reverse().map((level,i) => <div key={'a'+i}><span>{formatPrice(level.price)}</span><b>{money(level.quantity, level.quantity < 1 ? 6 : 4)}</b></div>)}
+            {book.asks.length === 0 && <div><span>—</span><b>—</b></div>}
           </div>
           <div className="sire-spot-book-mid"><strong>{formatPrice(marketPrice)}</strong><span>{isUp ? '▲' : '▼'} {Math.abs(change).toFixed(2)}%</span></div>
           <div className={`sire-spot-book-side bids ${bookView === 'asks' ? 'is-hidden' : ''}`}>
-            {[1,2,3,4,5].map((n,i) => <div key={n}><span>{formatPrice(Math.max(0, bid - (i+1)*spread))}</span><b>{(0.00007*n).toFixed(5)}</b></div>)}
+            {book.bids.slice(0,5).map((level,i) => <div key={'b'+i}><span>{formatPrice(level.price)}</span><b>{money(level.quantity, level.quantity < 1 ? 6 : 4)}</b></div>)}
+            {book.bids.length === 0 && <div><span>—</span><b>—</b></div>}
           </div>
-          <div className="sire-spot-depth"><span>Buy 31%</span><i><b></b></i><span>Sell 69%</span></div><button type="button" className="sire-spot-book-step" aria-label="Price step"><span>0.01</span><ChevronDown size={11}/></button>
+          <div className="sire-spot-depth"><span>Buy {book.bids.length ? 'LIVE' : '—'}</span><i><b></b></i><span>Sell {book.asks.length ? 'LIVE' : '—'}</span></div><button type="button" className="sire-spot-book-step" aria-label="Price step"><span>0.01</span><ChevronDown size={11}/></button>
         </div>
       </aside>
     </main>
