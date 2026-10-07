@@ -38,6 +38,7 @@ export default function SpotView({ wallet, onConnect }: Props) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [mobilePanel, setMobilePanel] = useState<'Trade'|'Chart'>('Trade');
+  const [bookView, setBookView] = useState<'both'|'asks'|'bids'>('both');
 
   useEffect(() => {
     let cancelled = false;
@@ -152,14 +153,15 @@ export default function SpotView({ wallet, onConnect }: Props) {
 
       <aside className="sire-spot-book-card">
         <div className="sire-spot-book">
+          <div className="sire-spot-book-controls" aria-label="Order book display"><button type="button" className={bookView === 'asks' ? 'active asks' : 'asks'} onClick={() => setBookView(bookView === 'asks' ? 'both' : 'asks')} aria-label="Show sell orders"><i /><i /></button><button type="button" className={bookView === 'both' ? 'active both' : 'both'} onClick={() => setBookView('both')} aria-label="Show both orders"><i /><i /></button><button type="button" className={bookView === 'bids' ? 'active bids' : 'bids'} onClick={() => setBookView(bookView === 'bids' ? 'both' : 'bids')} aria-label="Show buy orders"><i /><i /></button></div>
           <div className="sire-spot-book-head"><span>Price (USDT)</span><span>Amount ({base || 'BTC'})</span></div>
-          <div className="sire-spot-book-side asks">
+          {bookView !== 'bids' && <div className="sire-spot-book-side asks">
             {[4,3,2,1].map((n,i) => <div key={n}><span>{formatPrice(ask + (i+1)*spread)}</span><b>{(0.00006*n).toFixed(5)}</b></div>)}
-          </div>
+          </div>}
           <div className="sire-spot-book-mid"><strong>{formatPrice(marketPrice)}</strong><span>{isUp ? '▲' : '▼'} {Math.abs(change).toFixed(2)}%</span></div>
-          <div className="sire-spot-book-side bids">
+          {bookView !== 'asks' && <div className="sire-spot-book-side bids">
             {[1,2,3,4,5].map((n,i) => <div key={n}><span>{formatPrice(Math.max(0, bid - (i+1)*spread))}</span><b>{(0.00007*n).toFixed(5)}</b></div>)}
-          </div>
+          </div>}
           <div className="sire-spot-depth"><span>Buy 31%</span><i><b></b></i><span>Sell 69%</span></div>
         </div>
       </aside>
