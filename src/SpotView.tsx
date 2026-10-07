@@ -157,11 +157,11 @@ export default function SpotView({ wallet, onConnect }: Props) {
           <div className="sire-spot-book-head"><span>Price (USDT)</span><span>Amount ({base || 'BTC'})</span></div>
           <div className={`sire-spot-book-side asks ${bookView === 'bids' ? 'is-hidden' : ''}`}>
             {[4,3,2,1].map((n,i) => <div key={n}><span>{formatPrice(ask + (i+1)*spread)}</span><b>{(0.00006*n).toFixed(5)}</b></div>)}
-          </div>}
+          </div>
           <div className="sire-spot-book-mid"><strong>{formatPrice(marketPrice)}</strong><span>{isUp ? '▲' : '▼'} {Math.abs(change).toFixed(2)}%</span></div>
           <div className={`sire-spot-book-side bids ${bookView === 'asks' ? 'is-hidden' : ''}`}>
             {[1,2,3,4,5].map((n,i) => <div key={n}><span>{formatPrice(Math.max(0, bid - (i+1)*spread))}</span><b>{(0.00007*n).toFixed(5)}</b></div>)}
-          </div>}
+          </div>
           <div className="sire-spot-depth"><span>Buy 31%</span><i><b></b></i><span>Sell 69%</span></div><button type="button" className="sire-spot-book-step" aria-label="Price step"><span>0.01</span><ChevronDown size={11}/></button>
         </div>
       </aside>
