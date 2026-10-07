@@ -1009,7 +1009,10 @@ export default function TradeView({ referencePrice = 0 }: Props) {
                 </button>
                 <div className="sire-limit-live-price" aria-live="polite">
                   <span>Price</span>
-                  <strong>{limitMarketPrice ? '
+                  <strong>{limitMarketPrice ? "$" + money(Number(limitMarketPrice), 2) : '—'}</strong>
+                  <small>USD per {limitMaker.symbol || ''}</small>
+                  {limitExecutionMarketPrice && <em>Execution: {limitExecutionMarketPrice} {limitTaker.symbol || ''} per {limitMaker.symbol || ''}</em>}
+                </div>
 
               <div className="sire-limit-side-toggle" role="tablist" aria-label="Limit side">
                 {(['Buy','Sell'] as const).map(side => (
@@ -1059,7 +1062,9 @@ export default function TradeView({ referencePrice = 0 }: Props) {
                     setLimitPricePreset('Custom');
                   }}
                 >
-                  <span>{limitDisplayPrice ? '
+                  <span>{limitDisplayPrice ? "$" + money(Number(limitDisplayPrice), 2) : (limitMarketPrice ? "$" + money(Number(limitMarketPrice), 2) : '—')}</span>
+                  <small>USD per {limitMaker.symbol}</small>
+                </button>
               </div>
               <div className={'sire-limit-price-options sire-limit-price-options-' + limitSide.toLowerCase()}>
                 {(limitSide === 'Buy'
