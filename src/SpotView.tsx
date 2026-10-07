@@ -127,8 +127,6 @@ export default function SpotView({ wallet, onConnect }: Props) {
             <span>Total</span>
             <button type="button" aria-label="Select quote currency"><span>USDT</span><ChevronDown size={14}/></button>
           </div>
-          <div className="sire-spot-balance"><span>Available</span><b>0.00 USDT</b><button type="button" onClick={onConnect}>+</button></div>
-
           {orderType === 'Limit' && <label className="sire-spot-input">
             <span>Price</span><input inputMode="decimal" value={price} onChange={e => setPrice(e.target.value.replace(/[^0-9.]/g,''))} placeholder={marketPrice ? String(marketPrice) : '0.00'} /><em>USDT</em>
           </label>}
@@ -139,6 +137,8 @@ export default function SpotView({ wallet, onConnect }: Props) {
               {[0,25,50,75,100].map(p => <button key={p} type="button" aria-label={`${p}%`} className={Number(quantity) * 100 >= p ? 'active' : ''} onClick={() => setQuantity(String(p / 100))}><i /></button>)}
             </div>
           </div>
+
+          <div className="sire-spot-balance"><span>Available</span><b>0.00 USDT</b><button type="button" onClick={onConnect}>+</button></div>
 
           {orderType === 'Limit' && <div className="sire-spot-price-shortcuts">{[-1,0,1].map(p => <button key={p} type="button" onClick={() => setPercent(p)}>{p === 0 ? 'Market' : (p > 0 ? '+' : '') + p + '%'}</button>)}</div>}
 
