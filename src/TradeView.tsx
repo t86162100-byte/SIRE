@@ -1013,8 +1013,6 @@ export default function TradeView({ referencePrice = 0 }: Props) {
                       if (side !== limitSide) {
                         // Keep the selected trading pair, but reverse its direction.
                         // Buy WBTC with USDCE -> Sell WBTC for USDCE.
-                        setFrom(current => current);
-                        setTo(current => current);
                         const currentFrom = from;
                         const currentTo = to;
                         setFrom(currentTo);
