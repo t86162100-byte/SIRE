@@ -1,6 +1,8 @@
 import { getSpotBook } from './sire-spot-engine.ts';
 
 export type LiquidityLevel = { price:number; quantity:number };
+export const BOOTSTRAP_LIQUIDITY_PROVIDER = 'WINTERMUTE';
+
 export type LiquiditySnapshot = {
   symbol:string;
   bids:LiquidityLevel[];
@@ -25,12 +27,13 @@ export function spotLiquidityStatus(){
   const provider=String(process.env.SIRE_SPOT_LIQUIDITY_PROVIDER||'disabled').trim().toLowerCase();
   const configured=provider==='external-http' && Boolean(String(process.env.SIRE_SPOT_LIQUIDITY_URL||'').trim());
   return {
+    selectedProvider: BOOTSTRAP_LIQUIDITY_PROVIDER,
     configured,
     provider: configured ? 'external-http' : 'disabled',
     mode: configured ? 'BOOTSTRAP_EXTERNAL' : 'SIRE_ONLY',
     note: configured
       ? 'External liquidity is an adapter only; SIRE remains the order, account and settlement authority.'
-      : 'No external liquidity provider is configured. SIRE does not fabricate liquidity.'
+      : `Selected bootstrap provider: ${BOOTSTRAP_LIQUIDITY_PROVIDER}. Institutional onboarding/API credentials are required before external execution is enabled; SIRE does not fabricate liquidity.`
   };
 }
 
