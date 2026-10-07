@@ -1,5 +1,6 @@
 import pg from 'pg';
 import { randomUUID, createHash } from 'node:crypto';
+import { ws } from '@appdeploy/sdk';
 
 const { Pool } = pg;
 const pool = process.env.DATABASE_URL ? new Pool({
@@ -15,6 +16,7 @@ const TRADES = 'sire_spot_trades_v1';
 const LEDGER = 'sire_spot_ledger_v1';
 const ACCOUNTS = 'sire_spot_accounts_v1';
 const FEE_BPS = Math.max(0, Math.min(100, Number(process.env.SIRE_SPOT_FEE_BPS || 10)));
+const spotConnections = new Map<string, Set<string>>();
 
 function db(){ if(!pool) throw new Error('DATABASE_URL is not configured.'); return pool; }
 function normWallet(v:string){ const s=String(v||'').trim(); if(!/^0x[a-fA-F0-9]{40}$/.test(s)) throw new Error('A valid SIRE Wallet address is required.'); return s.toLowerCase(); }
@@ -62,6 +64,11 @@ function serializeOrder(r:any){
     updatedAt:new Date(r.updated_at||Date.now()).getTime()
   };
 }
+
+export function spotSubscribe(symbolInput:string,connectionId:string){ const symbol=normSymbol(symbolInput); const id=String(connectionId||'').trim(); if(!id) throw new Error('connection_id is required.'); let set=spotConnections.get(symbol); if(!set){set=new Set();spotConnections.set(symbol,set);} set.add(id); return {ok:true,symbol}; }
+export function spotUnsubscribe(symbolInput:string,connectionId:string){ const symbol=normSymbol(symbolInput),set=spotConnections.get(symbol); if(set){set.delete(String(connectionId||''));if(!set.size)spotConnections.delete(symbol);} return {ok:true,symbol}; }
+export function spotDisconnect(connectionId:string){ const id=String(connectionId||''); for(const [symbol,set] of spotConnections){set.delete(id);if(!set.size)spotConnections.delete(symbol);} }
+async function publishSpot(symbol:string,trade:any=null){ const set=spotConnections.get(symbol); if(!set?.size)return; const book=await getSpotBook(symbol,25); await ws.send([...set],{v:1,type:'spot.update',payload:{symbol,book,trade}}); }
 
 export async function getSpotBook(symbolInput:string,depth=20){
   await ensureSireSpotTables();
@@ -160,6 +167,7 @@ export async function placeSpotOrder(input:any){
     else status='OPEN';
     await c.query(`UPDATE ${ORDERS} SET remaining=$2,status=$3,updated_at=now() WHERE id=$1`,[orderId,String(Math.max(0,remaining)),status]);
     await c.query('COMMIT');
+    await publishSpot(symbol, filled ? {symbol, quantity:filled, price:avgNumerator/filled, time:Date.now()} : null);
     return {...serializeOrder({id:orderId,client_order_id:clientOrderId,wallet,symbol,side,type,price,quantity,remaining:Math.max(0,remaining),status}),filledQuantity:filled,averagePrice:filled?avgNumerator/filled:null};
   }catch(e){await c.query('ROLLBACK').catch(()=>{});throw e;}finally{c.release();}
 }
@@ -178,6 +186,7 @@ export async function cancelSpotOrder(input:any){
     else{const unlock=rem*Number(o.price)+feeOnQuote(rem*Number(o.price));await delta(c,wallet,o.quote_asset,unlock,-unlock,'ORDER_CANCEL_UNLOCK',id);}
     await c.query(`UPDATE ${ORDERS} SET status='CANCELED',updated_at=now() WHERE id=$1`,[id]);
     await c.query('COMMIT');
+    await publishSpot(String(o.symbol));
     return {ok:true,order:serializeOrder({...o,status:'CANCELED',remaining:rem})};
   }catch(e){await c.query('ROLLBACK').catch(()=>{});throw e;}finally{c.release();}
 }
