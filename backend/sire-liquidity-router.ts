@@ -76,9 +76,9 @@ const wintermute:LiquidityProvider = {
   priority:100,
   supports:(i)=>validInstrument(i).assetClass==='CRYPTO' && cryptoTypes.has(i.instrumentType),
   health:async()=>{
-    const url=configuredUrl('SIRE_LIQUIDITY_WINTERMUTE_URL');
-    return url ? {ok:true,detail:'Wintermute adapter configured; private credentials are required for execution.'}
-               : {ok:false,detail:'Wintermute selected as bootstrap provider but private institutional API configuration is not present.'};
+    const url=configuredUrl('SIRE_LIQUIDITY_WINTERMUTE_EXECUTION_URL');
+    return url && tokenForConfigured('WINTERMUTE') ? {ok:true,detail:'Wintermute execution adapter configured.'}
+               : {ok:false,detail:'Wintermute selected as bootstrap provider but its private execution URL/token are not configured.'};
   }
 };
 
@@ -87,6 +87,11 @@ const wintermute:LiquidityProvider = {
  * never invents a venue API or pretends an external fill happened. A real
  * adapter must be installed and its endpoint/credentials configured.
  */
+
+function tokenForConfigured(provider:string){
+  return provider==='WINTERMUTE' ? Boolean(String(process.env.SIRE_LIQUIDITY_WINTERMUTE_TOKEN||'').trim()) : Boolean(String(process.env.SIRE_LIQUIDITY_TOKEN||'').trim());
+}
+
 function externalProvider(id:string,priority:number,envUrl:string,supports:(i:LiquidityInstrument)=>boolean):LiquidityProvider{
   return {
     id,priority,supports,
