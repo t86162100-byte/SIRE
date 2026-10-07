@@ -126,29 +126,29 @@ async function cancelBitgetOrder(category:string,orderId:string,clientOidValue:s
 
 export async function externalSpotExecute(request:ExternalSpotRequest):Promise<ExternalSpotFill[]>{
   if(request.provider!=='BITGET') throw new Error(\`No direct execution adapter is configured for provider \${request.provider}.\`);
-  if(request.orderType!=='MARKET') throw new Error('Bitget external adapter currently executes Spot market orders only.');
+  if(request.orderType!=='MARKET' && request.orderType!=='LIMIT') throw new Error('Unsupported Bitget Spot order type.');
 
   const oid=clientOid(request.clientOrderId);
   const quotePrice=await bitgetSpotPrice(request.symbol);
-  const qty=request.side==='BUY' ? String(Math.max(request.quantity*quotePrice,Number.EPSILON)) : String(request.quantity);
+  const qty=request.side==='BUY' ? String(request.quantity) : String(request.quantity);
   const placed=await bitgetRequest('POST','/api/v3/trade/place-order',{
     category:'SPOT',symbol:request.symbol,side:request.side.toLowerCase(),
-    orderType:'market',qty,clientOid:oid,timeInForce:'gtc'
+    orderType:request.orderType.toLowerCase(),qty,clientOid:oid,timeInForce:request.orderType==='LIMIT'?'gtc':'ioc',...(request.orderType==='LIMIT'?{price:String(request.limitPrice)}:{})
   });
   const externalOrderId=String(placed?.data?.orderId||'');
   if(!externalOrderId) throw new Error('Bitget accepted the request without returning an order ID.');
 
-  const deadline=Date.now()+8000;
+  const deadline=Date.now()+(request.orderType==='LIMIT'?1500:8000);
   let detail:any=null;
   while(Date.now()<deadline){
     detail=(await bitgetRequest('GET',\`/api/v3/trade/order-info?orderId=\${encodeURIComponent(externalOrderId)}\`))?.data;
     const status=String(detail?.orderStatus||'').toLowerCase();
-    if(status==='filled'||status==='cancelled') break;
+    if(status==='filled'||status==='cancelled'||status==='partially_filled') break;
     await new Promise(r=>setTimeout(r,250));
   }
 
   const status=String(detail?.orderStatus||'').toLowerCase();
-  if(status!=='filled' && status!=='cancelled' && status!=='partially_filled'){
+  if(request.orderType==='MARKET' && status!=='filled' && status!=='cancelled' && status!=='partially_filled'){
     await cancelBitgetOrder('SPOT',externalOrderId,oid).catch(()=>{});
     detail=(await bitgetRequest('GET',\`/api/v3/trade/order-info?orderId=\${encodeURIComponent(externalOrderId)}\`))?.data;
   }
@@ -162,7 +162,10 @@ export async function externalSpotExecute(request:ExternalSpotRequest):Promise<E
   const finalStatus=String(detail?.orderStatus||'').toLowerCase();
 
   if(filled<=0){
-    if(finalStatus==='cancelled') throw new Error('Bitget cancelled the market order without a fill.');
+    if(request.orderType==='LIMIT' && (finalStatus==='new'||finalStatus==='live'||finalStatus==='partially_filled')){
+      return [{provider:'BITGET',externalOrderId,symbol:request.symbol,side:request.side,price:request.limitPrice||quotePrice,quantity:0,status:'PENDING'}];
+    }
+    if(finalStatus==='cancelled') throw new Error('Bitget cancelled the order without a fill.');
     throw new Error('Bitget returned no executed quantity.');
   }
 
