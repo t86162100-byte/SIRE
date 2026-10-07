@@ -33,8 +33,18 @@ function parseDecimal(value: string, decimals: number): bigint {
   const clean = String(value || '').trim();
   if (!/^\d+(?:\.\d+)?$/.test(clean)) throw new Error('Enter a valid limit price.');
   const [whole, fraction = ''] = clean.split('.');
-  if (fraction.length > decimals) throw new Error('Limit price has too many decimal places.');
-  return BigInt(whole) * 10n ** BigInt(decimals) + BigInt((fraction + '0'.repeat(decimals)).slice(0, decimals));
+  const scale = 10n ** BigInt(decimals);
+  const kept = (fraction + '0'.repeat(decimals)).slice(0, decimals);
+  let result = BigInt(whole) * scale + BigInt(kept || '0');
+
+  // Market-derived prices can legitimately contain more decimal places than
+  // the 18-decimal fixed-point representation used by the limit formulas.
+  // Round, rather than reject those prices and make the Receive preview
+  // silently disappear.
+  if (fraction.length > decimals && fraction[decimals] >= '5') {
+    result += 1n;
+  }
+  return result;
 }
 
 export function limitTakingAmount(makingAmount: string, makerDecimals: number, takerDecimals: number, price: string): string {
