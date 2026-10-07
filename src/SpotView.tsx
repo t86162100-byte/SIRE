@@ -19,7 +19,7 @@ const money = (value:number, digits=2) =>
   Number.isFinite(value) ? value.toLocaleString(undefined, { maximumFractionDigits: digits }) : '—';
 
 function baseOf(item?: SireSpotMarket|null) {
-  return String(item?.baseAsset || item?.symbol || '').replace(/(USDT|USDC|FDUSD|BTC|ETH|BNB)$/,'');
+  return String(item?.baseAsset || item?.symbol || '').replace(/(USDT|USDC|FDUSD)$/,'');
 }
 
 function formatPrice(value:number) {
@@ -40,7 +40,6 @@ export default function SpotView({ wallet, onConnect }: Props) {
   const [snapshot, setSnapshot] = useState<Snapshot>({});
   const [book, setBook] = useState<SpotBook>({ asks:[], bids:[], lastTrade:null });
   const [balances, setBalances] = useState<SpotBalance[]>([]);
-  const [subStatus, setSubStatus] = useState<'connecting'|'live'|'offline'>('offline');
   const [subVersion, setSubVersion] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -89,11 +88,10 @@ export default function SpotView({ wallet, onConnect }: Props) {
     let retry: ReturnType<typeof setTimeout> | null = null;
     const connect = () => {
       if (closed) return;
-      setSubStatus('connecting');
       const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
       const id = (globalThis.crypto?.randomUUID?.() || ('spot-' + Date.now() + '-' + Math.random().toString(36).slice(2)));
       socket = new WebSocket(protocol + '//' + window.location.host + '/ws?connection_id=' + encodeURIComponent(id));
-      socket.onopen = () => { setSubStatus('live'); socket?.send(JSON.stringify({type:'spot.subscribe',symbol:selected.symbol})); };
+      socket.onopen = () => { socket?.send(JSON.stringify({type:'spot.subscribe',symbol:selected.symbol})); };
       socket.onmessage = event => {
         try {
           const msg = JSON.parse(String(event.data || '{}'));
@@ -106,10 +104,8 @@ export default function SpotView({ wallet, onConnect }: Props) {
       };
       socket.onclose = () => {
         if (closed) return;
-        setSubStatus('offline');
         retry = setTimeout(connect, 2000);
       };
-      socket.onerror = () => setSubStatus('offline');
     };
     connect();
     return () => { closed = true; if(retry) clearTimeout(retry); try { socket?.send(JSON.stringify({type:'spot.unsubscribe',symbol:selected.symbol})); } catch {} try { socket?.close(); } catch {} };
