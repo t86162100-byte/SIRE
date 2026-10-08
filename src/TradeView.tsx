@@ -126,7 +126,10 @@ export default function TradeView({ referencePrice = 0, forceSpot = false, spotS
   const [limitOrders, setLimitOrders] = useState<any[]>([]);
 
   useEffect(() => {
-    if (forceSpot) setTradeProduct('Spot');
+    if (forceSpot) {
+      setTradeProduct('Spot');
+      window.dispatchEvent(new CustomEvent('sire:spot-return-consumed'));
+    }
   }, [forceSpot]);
 
   useEffect(() => {
