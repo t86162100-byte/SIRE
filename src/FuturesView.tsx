@@ -145,11 +145,22 @@ export default function FuturesView({initialSymbol}:Props){
           </div>
         </div>
 
-        <div className="sire-futures-tpsl-row">
-          <button type="button">TP/SL</button>
-          <label><input type="checkbox" checked={reduceOnly} onChange={e=>setReduceOnly(e.target.checked)}/><span>Reduce Only</span></label>
+        <div className="sire-futures-toggle-stack">
+          <label><span>TP/SL</span><input type="checkbox" aria-label="Toggle TP/SL"/></label>
+          <label><span>Reduce Only</span><input type="checkbox" checked={reduceOnly} onChange={e=>setReduceOnly(e.target.checked)} aria-label="Toggle Reduce Only"/></label>
         </div>
-        <div className="sire-futures-available"><span>Avbl</span><b>—</b></div>
+        <div className="sire-futures-costs">
+          <div className="sire-futures-cost-row"><span>Max</span><b>—</b></div>
+          <div className="sire-futures-cost-row"><span>Cost</span><b>—</b></div>
+          <div className="sire-futures-open-row">
+            <div><span>Cost</span><b>—</b></div>
+            <button type="button" className="sire-futures-open-long" onClick={()=>{setSide('Long');setAction('Open');setReduceOnly(false)}}>Open long</button>
+          </div>
+          <div className="sire-futures-open-row">
+            <div><span>Cost</span><b>—</b></div>
+            <button type="button" className="sire-futures-open-short" onClick={()=>{setSide('Short');setAction('Open');setReduceOnly(false)}}>Open short</button>
+          </div>
+        </div>
         <button disabled={busy} className={'sire-futures-submit '+(side==='Long'?'long':'short')} onClick={submit}>{busy?<LoaderCircle className="sire-spin" size={15}/>:null}{action} {side}</button>
         {error&&<div className="sire-futures-error">{error}</div>}
       </section>
