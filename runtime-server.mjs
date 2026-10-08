@@ -16,6 +16,7 @@ import { runAutonomousCycle } from './autonomous/sire-autonomous-cycle.ts';
 import { recordIssue, getRecentIssues } from './backend/sire-issue-tracker.ts';
 import { saveLimitOrder, listLimitOrders, cancelLimitOrder, runLimitOrderMonitorBatch, limitOrderStoreStatus } from './backend/limit-order-store.ts';
 import { fetchBinanceCatalogServer, fetchBinanceMarketSnapshotServer, fetchBinanceHistoryServer } from './backend/binance-catalog.ts';
+import { fetchBitgetCatalogServer, bitgetCatalogStatus } from './backend/bitget-catalog.ts';
 import { fetchSireSpotCatalogServer, sireSpotCatalogStatus } from './backend/sire-spot-catalog.ts';
 import { ensureSireSpotTables, getSpotBook, placeSpotOrder, cancelSpotOrder, getSpotAccount, getSpotOrders, getSpotTrades, spotEngineStatus, spotSubscribe, spotUnsubscribe, spotDisconnect } from './backend/sire-spot-engine.ts';
 import { getRoutedSpotLiquidity, spotLiquidityStatus } from './backend/sire-spot-liquidity.ts';
@@ -1008,6 +1009,21 @@ const server = http.createServer(async (req,res) => {
     }
     if (req.method === 'GET' && pathname === '/api/sire/spot/health') {
       return res.writeHead(200,{'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify(await spotEngineStatus()));
+    }
+    if (req.method === 'GET' && pathname === '/api/sire/bitget/catalog') {
+      try {
+        const url = new URL(req.url || '/', 'http://sire.local');
+        const force = url.searchParams.get('refresh') === '1';
+        const catalog = await fetchBitgetCatalogServer(force);
+        return res.writeHead(200,{ 'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8' }).end(JSON.stringify(catalog));
+      } catch (cause) {
+        const message = cause instanceof Error ? cause.message : String(cause);
+        console.error('[SIRE BITGET CATALOG]', message);
+        return res.writeHead(502,{ 'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8' }).end(JSON.stringify({ ok:false, error:message, provider:'BITGET' }));
+      }
+    }
+    if (req.method === 'GET' && pathname === '/api/sire/bitget/catalog/status') {
+      return res.writeHead(200,{ 'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8' }).end(JSON.stringify(bitgetCatalogStatus()));
     }
     if (req.method === 'GET' && pathname === '/api/sire/spot/catalog') {
       try {
