@@ -317,6 +317,12 @@ export default function App() {
   const liveInstruments = instruments;
 
   useEffect(() => {
+    const consumeSpotReturn = () => setSpotReturnToTrade(false);
+    window.addEventListener('sire:spot-return-consumed', consumeSpotReturn);
+    return () => window.removeEventListener('sire:spot-return-consumed', consumeSpotReturn);
+  }, []);
+
+  useEffect(() => {
     const openSpotMarketPicker = () => {
       setTradeOpen(false);
       setSpotReturnToTrade(true);
