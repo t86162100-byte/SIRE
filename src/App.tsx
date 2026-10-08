@@ -5,7 +5,7 @@ import ResearchLab from './ResearchLab';
 import HomeView from './HomeView';
 import FinancialChart from './FinancialChart';
 import { fetchDerivInstruments, type DerivInstrument } from './derivMarketData';
-import { fetchBinanceInstruments, type BinanceInstrument } from './binanceMarketData';
+import { fetchBitgetInstruments, type BitgetInstrument } from './bitgetMarketData';
 import { SireErrorScreen } from './SireErrorBoundary';
 import './nativeTerminal.css';
 import { MarketInstrumentCard } from './marketCardDesigns';
@@ -13,8 +13,8 @@ import TradeView from './TradeView';
 import SireWalletPanel from './SireWalletPanel';
 import './sireWalletPanel.css';
 
-type MarketProvider = 'DERIV' | 'BINANCE';
-export type Instrument = Partial<DerivInstrument> & Partial<BinanceInstrument> & {
+type MarketProvider = 'DERIV' | 'BITGET';
+export type Instrument = Partial<DerivInstrument> & Partial<BitgetInstrument> & {
   id: string;
   provider: MarketProvider;
   providerLabel: string;
@@ -99,8 +99,8 @@ const makeLogoFallback = (label: string) => {
 const makeAssetLogoFallback = (item: Instrument) => makeLogoFallback(item.displaySymbol || item.symbol);
 
 const MARKET_TOP_GROUPS = ['CRYPTO', 'TRADE FI', 'ALPHA'] as const;
-const BINANCE_TOP_GROUPS = MARKET_TOP_GROUPS;
-const MARKET_SOURCES: readonly MarketProvider[] = ['DERIV', 'BINANCE'];
+const BITGET_TOP_GROUPS = MARKET_TOP_GROUPS;
+const MARKET_SOURCES: readonly MarketProvider[] = ['DERIV', 'BITGET'];
 
 const MARKET_SUBGROUPS: Record<string, readonly string[]> = {
   CRYPTO: ['Spot', 'Futures'],
@@ -108,8 +108,8 @@ const MARKET_SUBGROUPS: Record<string, readonly string[]> = {
 };
 
 const MARKET_SUBSUBGROUPS: Record<string, readonly string[]> = {
-  'CRYPTO::Spot': ['ALL', 'USDT', 'USDC', 'U', 'USD', 'BNB', 'BTC', 'FIAT', 'BTCC', 'ETH', 'ALTs'],
-  'CRYPTO::Futures': ['USDT-M', 'COIN-M', 'Margin'],
+  'CRYPTO::Spot': ['ALL', 'USDT', 'USDC', 'U', 'USD', 'BNB', 'BTC', 'FIAT', 'BTCC', 'ETH', 'ALTs', 'RWA', 'Reality'],
+  'CRYPTO::Futures': ['USDT-M', 'COIN-M', 'USDC-M', 'Margin'],
   'TRADE FI::Stocks': ['U.S. stock', 'ETFs'],
   'TRADE FI::Futures': ['Commodities', 'ETFs', 'Stocks', 'Fx', 'Pre-IPO'],
   'TRADE FI::Spot': ['bStocks', 'tCommodities'],
@@ -123,8 +123,8 @@ const MARKET_LEAF_FILTERS: Record<string, readonly string[]> = {
 };
 
 const visibleMarketTopGroups = (_provider: 'ALL' | MarketProvider) => MARKET_TOP_GROUPS;
-const sourceDisplayName = (value: string) => value === 'DERIV' ? 'Deriv' : value === 'BINANCE' ? 'Binance' : value;
-const sourceLogoUrl = (value: string) => value === 'BINANCE' ? 'https://www.binance.com/favicon.ico' : 'https://deriv.com/favicon.ico';
+const sourceDisplayName = (value: string) => value === 'DERIV' ? 'Deriv' : value === 'BITGET' ? 'Bitget' : value;
+const sourceLogoUrl = (value: string) => value === 'BITGET' ? 'https://www.bitget.com/favicon.ico' : 'https://deriv.com/favicon.ico';
 
 const normalizeMarketLabel = (value: unknown) =>
   String(value || '').trim().toLowerCase().replace(/[\s_-]+/g, ' ');
@@ -150,16 +150,16 @@ const hasMarketValue = (item: Instrument, target: string) => {
   return values.some(value => value === needle || value.includes(needle) || needle.includes(value));
 };
 
-const isBinance = (item: Instrument) => item.provider === 'BINANCE';
+const isBitget = (item: Instrument) => item.provider === 'BITGET';
 
 const matchesMarketTopGroup = (item: Instrument, group: string) => {
   const marketGroup = normalizeMarketLabel((item as any).marketGroup);
   const category = normalizeMarketLabel(item.category);
   const instrumentType = normalizeMarketLabel((item as any).instrumentType);
-  if (group === 'CRYPTO') return isBinance(item)
+  if (group === 'CRYPTO') return isBitget(item)
     ? marketGroup === 'crypto'
     : (marketGroup === 'crypto' || category === 'crypto' || instrumentType.includes('crypto'));
-  if (group === 'TRADE FI') return isBinance(item)
+  if (group === 'TRADE FI') return isBitget(item)
     ? marketGroup === 'tradfi' || marketGroup === 'trade fi'
     : (marketGroup === 'tradfi' || marketGroup === 'trade fi' || category === 'tradfi' || category === 'stocks' || category === 'forex' || category === 'commodities');
   if (group === 'ALPHA') return category === 'alpha' || marketGroup === 'alpha' || instrumentType === 'alpha';
@@ -197,12 +197,13 @@ const matchesMarketSubSubgroup = (item: Instrument, group: string, subgroup: str
   if (group === 'CRYPTO' && subgroup === 'Spot') {
     const quote = normalizeMarketLabel((item as any).quote);
     if (['usdt','usdc','u','usd','bnb','btc','btcc','eth'].includes(target)) return quote === target;
+     if (target === 'rwa' || target === 'reality') return values.some(value => value === target || value.includes(target));
     if (target === 'fiat') return ['eur','gbp','aud','brl','try','rub','zar','ngn','jpy','pln','ron','uah','chf','cad','hkd','sgd','mxn','ars'].includes(quote);
     if (target === 'alts') return quote === 'alts' || quoteBucketForFilter((item as any).quote) === 'alts';
     return false;
   }
   if (group === 'CRYPTO' && subgroup === 'Futures') {
-    if (item.provider === 'BINANCE') {
+    if (item.provider === 'BITGET') {
       if (target === 'usdt m') return normalizeMarketLabel((item as any).marketSubcategory) === 'usdt m';
       if (target === 'coin m') return normalizeMarketLabel((item as any).marketSubcategory) === 'coin m';
       if (target === 'margin') return normalizeMarketLabel(item.marketType) === 'margin' || Boolean((item as any).margin);
@@ -238,13 +239,13 @@ const matchesMarketLeaf = (item: Instrument, group: string, subgroup: string, su
 
 const makeProviderLogoFallback = (_item: Instrument) => 'https://deriv.com/favicon.ico';
 
-const loadBinanceCatalog = async (reason: string): Promise<BinanceInstrument[]> => {
-  const url = '/api/sire/binance/catalog?source=' + encodeURIComponent(reason) + '&t=' + Date.now();
-  console.info('[SIRE BINANCE] catalog request starting', { reason, url });
+const loadBitgetCatalog = async (reason: string): Promise<BitgetInstrument[]> => {
+  const url = '/api/sire/bitget/catalog?source=' + encodeURIComponent(reason) + '&t=' + Date.now();
+  console.info('[SIRE BITGET] catalog request starting', { reason, url });
   const response = await fetch(url, { cache: 'no-store', headers: { Accept: 'application/json' } });
   const payload = await response.json().catch(() => ({}));
-  const instruments = Array.isArray(payload?.instruments) ? payload.instruments as BinanceInstrument[] : [];
-  console.info('[SIRE BINANCE] catalog response', {
+  const instruments = Array.isArray(payload?.instruments) ? payload.instruments as BitgetInstrument[] : [];
+  console.info('[SIRE BITGET] catalog response', {
     reason,
     ok: response.ok && payload?.ok === true,
     status: response.status,
@@ -253,17 +254,17 @@ const loadBinanceCatalog = async (reason: string): Promise<BinanceInstrument[]> 
     diagnostics: payload?.diagnostics,
   });
   if (!response.ok || !payload?.ok) {
-    throw new Error(payload?.error || 'Binance native catalog is unavailable.');
+    throw new Error(payload?.error || 'Bitget native catalog is unavailable.');
   }
   if (!instruments.length) {
-    throw new Error('Binance native catalog returned zero instruments.');
+    throw new Error('Bitget native catalog returned zero instruments.');
   }
   return instruments;
 };
 
 const chooseInitialMarketInstrument = (items: Instrument[]) =>
-  items.find(item => item.provider === 'BINANCE' && item.symbol === 'BTCUSDT') ||
-  items.find(item => item.provider === 'BINANCE' && item.marketType === 'Spot') ||
+  items.find(item => item.provider === 'BITGET' && item.symbol === 'BTCUSDT') ||
+  items.find(item => item.provider === 'BITGET' && item.marketType === 'Spot') ||
   items.find(item => item.provider === 'DERIV' && item.exchangeOpen !== 0 && item.tradingSuspended !== 1) ||
   items[0] || null;
 
@@ -305,139 +306,10 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    if (!instruments.some(item => item.provider === 'BINANCE')) return;
-    let cancelled = false;
-    const applySnapshot = async () => {
-      try {
-        const response = await fetch('/api/sire/binance/market-snapshot?t=' + Date.now(), { cache:'no-store', headers:{Accept:'application/json'} });
-        const payload = await response.json().catch(() => ({}));
-        if (cancelled || !response.ok || !payload?.ok || !payload?.snapshots) return;
-        const snapshots = payload.snapshots as Record<string, any>;
-        const venueFor = (item: Instrument) => {
-          if (item.marketType === 'Stocks') return 'EQUITY';
-          if (item.marketType === 'Options') return 'OPTIONS';
-          if (item.marketGroup === 'ALPHA' || item.marketType === 'Alpha') return 'ALPHA';
-          const sub = String(item.marketSubcategory || item.settlement || '').toUpperCase();
-          if (sub.includes('COIN-M')) return 'COIN-M';
-          if (sub.includes('USDT-M')) return 'USDT-M';
-          return 'SPOT';
-        };
-        const findSnapshot = (item: Instrument) => {
-          const symbol = String(item.symbol || '').toUpperCase();
-          const primary = venueFor(item) + ':' + symbol;
-          if (snapshots[primary]) return snapshots[primary];
-          // Preserve exact venue matching first, then tolerate Binance
-          // catalogue/market-family labels that expose the same symbol through
-          // another public ticker venue.
-          for (const venue of ['SPOT', 'USDT-M', 'COIN-M', 'OPTIONS', 'EQUITY', 'ALPHA']) {
-            const candidate = snapshots[venue + ':' + symbol];
-            if (candidate) return candidate;
-          }
-          return null;
-        };
-        setInstruments(current => current.map(item => {
-          if (item.provider !== 'BINANCE') return item;
-          const snap = findSnapshot(item);
-          if (!snap) return item;
-          return { ...item,
-            ...(Number.isFinite(Number(snap.price)) ? {price:Number(snap.price)} : {}),
-            ...(Number.isFinite(Number(snap.bid)) ? {bid:Number(snap.bid)} : {}),
-            ...(Number.isFinite(Number(snap.ask)) ? {ask:Number(snap.ask)} : {}),
-            ...(Number.isFinite(Number(snap.priceChangePercent)) ? {priceChangePercent:Number(snap.priceChangePercent),change24h:Number(snap.priceChangePercent)} : {}),
-            ...(Number.isFinite(Number(snap.volume24h)) ? {volume24h:Number(snap.volume24h)} : {}),
-            ...(Number.isFinite(Number(snap.quoteVolume)) ? {quoteVolume:Number(snap.quoteVolume)} : {}),
-            ...(Number.isFinite(Number(snap.high24h)) ? {high24h:Number(snap.high24h)} : {}),
-            ...(Number.isFinite(Number(snap.low24h)) ? {low24h:Number(snap.low24h)} : {}),
-            ...(Number.isFinite(Number(snap.open24h)) ? {open24h:Number(snap.open24h)} : {}),
-            ...(Number.isFinite(Number(snap.marketCap)) ? {marketCap:Number(snap.marketCap)} : {})
-          };
-        }));
-      } catch {}
-    };
-    void applySnapshot();
-    const timer = window.setInterval(() => { void applySnapshot(); }, 1000);
-    return () => { cancelled = true; window.clearInterval(timer); };
-  }, [instruments.length]);
-
-  // Live Binance ticker streams for the Market tab. REST remains the
-  // authoritative fallback for venues without a public market stream.
-  useEffect(() => {
-    if (!instruments.some(item => item.provider === 'BINANCE')) return;
-    let stopped = false;
-    let raf = 0;
-    const pending = new Map<string, any>();
-
-    const flush = () => {
-      raf = 0;
-      if (stopped || pending.size === 0) return;
-      const updates = new Map(pending);
-      pending.clear();
-      setInstruments(current => current.map(item => {
-        if (item.provider !== 'BINANCE') return item;
-        const update = updates.get(String(item.symbol || '').toUpperCase());
-        return update ? { ...item, ...update } : item;
-      }));
-    };
-
-    const queue = (symbol: string, update: any) => {
-      pending.set(String(symbol || '').toUpperCase(), update);
-      if (!raf) raf = window.requestAnimationFrame(flush);
-    };
-
-    const sockets: WebSocket[] = [];
-    const connect = (url: string, mapper: (data: any) => { symbol?: string; update?: any } | null) => {
-      try {
-        const socket = new WebSocket(url);
-        sockets.push(socket);
-        socket.onmessage = event => {
-          if (stopped) return;
-          try {
-            const raw = JSON.parse(String(event.data));
-            const messages = Array.isArray(raw) ? raw : [raw?.data || raw];
-            for (const data of messages) {
-              const mapped = mapper(data);
-              if (mapped?.symbol && mapped.update) queue(mapped.symbol, mapped.update);
-            }
-          } catch {}
-        };
-        socket.onclose = () => {
-          if (!stopped) window.setTimeout(() => connect(url, mapper), 1500);
-        };
-      } catch {}
-    };
-
-    const cryptoTicker = (data: any) => {
-      const symbol = String(data?.s || '').toUpperCase();
-      if (!symbol) return null;
-      return { symbol, update: {
-        ...(Number.isFinite(Number(data?.c)) ? { price:Number(data.c) } : {}),
-        ...(Number.isFinite(Number(data?.P)) ? { priceChangePercent:Number(data.P), change24h:Number(data.P) } : {}),
-        ...(Number.isFinite(Number(data?.v)) ? { volume24h:Number(data.v) } : {}),
-        ...(Number.isFinite(Number(data?.q)) ? { quoteVolume:Number(data.q) } : {}),
-        ...(Number.isFinite(Number(data?.h)) ? { high24h:Number(data.h) } : {}),
-        ...(Number.isFinite(Number(data?.l)) ? { low24h:Number(data.l) } : {}),
-        ...(Number.isFinite(Number(data?.o)) ? { open24h:Number(data.o) } : {})
-      }};
-    };
-
-    const alphaTicker = cryptoTicker;
-    connect('wss://stream.binance.com:9443/ws/!ticker@arr', cryptoTicker);
-    connect('wss://fstream.binance.com/ws/!ticker@arr', cryptoTicker);
-    connect('wss://dstream.binance.com/ws/!ticker@arr', cryptoTicker);
-    connect('wss://nbstream.binance.com/w3w/wsa/stream/ws/!ticker@arr', alphaTicker);
-
-    return () => {
-      stopped = true;
-      if (raf) window.cancelAnimationFrame(raf);
-      for (const socket of sockets) { try { socket.close(); } catch {} }
-    };
-  }, [instruments.length]);
-
-  useEffect(() => {
     let cancelled = false;
     const load = async () => {
-      const binanceCatalog = loadBinanceCatalog('startup');
-      const [derivResult, binanceResult] = await Promise.allSettled([fetchDerivInstruments(), binanceCatalog]);
+      const bitgetCatalog = loadBitgetCatalog('startup');
+      const [derivResult, bitgetResult] = await Promise.allSettled([fetchDerivInstruments(), bitgetCatalog]);
       if (cancelled) return;
       const normalized: Instrument[] = [];
       if (derivResult.status === 'fulfilled') {
@@ -449,11 +321,11 @@ export default function App() {
           providerLogoUrl:'https://deriv.com/favicon.ico',
         })) as Instrument[]);
       }
-      if (binanceResult.status === 'fulfilled') {
-        normalized.push(...binanceResult.value.map(item => ({
-          ...item, id:'BINANCE:'+item.marketType+':'+item.symbol, provider:'BINANCE' as MarketProvider,
-          providerLabel:'Binance', displaySymbol:item.symbol, logoUrl:item.logoUrl || makeLogoFallback(item.baseAsset || item.symbol),
-          providerLogoUrl:item.providerLogoUrl || 'https://www.binance.com/favicon.ico',
+      if (bitgetResult.status === 'fulfilled') {
+        normalized.push(...bitgetResult.value.map(item => ({
+          ...item, id:'BITGET:'+item.marketType+':'+item.symbol, provider:'BITGET' as MarketProvider,
+          providerLabel:'Bitget', displaySymbol:item.symbol, logoUrl:item.logoUrl || makeLogoFallback(item.baseAsset || item.symbol),
+          providerLogoUrl:item.providerLogoUrl || 'https://www.bitget.com/favicon.ico',
         })) as Instrument[]);
       }
       const unique = normalized.filter((item,index,all)=>item.id && all.findIndex(x=>x.id===item.id)===index);
@@ -462,7 +334,7 @@ export default function App() {
       setSelected(initial);
       setChartSymbols(initial ? [initial.symbol] : []);
       if (!unique.length) {
-        const errors = [derivResult,binanceResult].filter((x:any)=>x.status==='rejected').map((x:any)=>x.reason?.message || String(x.reason));
+        const errors = [derivResult,bitgetResult].filter((x:any)=>x.status==='rejected').map((x:any)=>x.reason?.message || String(x.reason));
         setDerivError(errors.join(' | ') || 'No market instruments are currently available.');
       } else setDerivError('');
       setDerivLoading(false);
@@ -584,7 +456,7 @@ export default function App() {
     });
   }, [randomizedInstruments, deferredSearch, providerFilter, categoryFilter, marketSubcategoryFilter, marketSubSubcategoryFilter, marketLeafFilter]);
 
-  const chartableInstruments = useMemo(() => liveInstruments.filter(item => item.provider === 'DERIV' || item.provider === 'BINANCE'), [liveInstruments]);
+  const chartableInstruments = useMemo(() => liveInstruments.filter(item => item.provider === 'DERIV' || item.provider === 'BITGET'), [liveInstruments]);
   const quoteWindow = useMemo(() => {
     const rowHeight = 88;
     const buffer = 18;
@@ -650,7 +522,7 @@ export default function App() {
   }
 
   if (tradeOpen) {
-    const ethUsdt = liveInstruments.find(item => item.provider === 'BINANCE' && String(item.symbol || '').toUpperCase() === 'ETHUSDT');
+    const ethUsdt = liveInstruments.find(item => item.provider === 'BITGET' && String(item.symbol || '').toUpperCase() === 'ETHUSDT');
     return <TradeView referencePrice={Number(ethUsdt?.price || 0)} referenceChange={Number(ethUsdt?.priceChangePercent ?? ethUsdt?.change24h ?? 0)} />;
   }
 
@@ -803,29 +675,29 @@ export default function App() {
                       className={`sire-exchange-option${providerFilter === provider ? ' active' : ''}`}
                       onClick={() => {
                         setProviderFilter(provider);
-                        if (provider === 'BINANCE') {
+                        if (provider === 'BITGET') {
                           setCategoryFilter('CRYPTO');
                           setMarketSubcategoryFilter('Spot');
                           setMarketSubSubcategoryFilter('ALL');
                           setMarketLeafFilter('ALL');
-                          void loadBinanceCatalog('source-selector').then(binanceItems => {
+                          void loadBitgetCatalog('source-selector').then(bitgetItems => {
                           setInstruments(current => {
-                            const deriv = current.filter(item => item.provider !== 'BINANCE');
-                            const normalized = binanceItems.map(item => ({
+                            const deriv = current.filter(item => item.provider !== 'BITGET');
+                            const normalized = bitgetItems.map(item => ({
                               ...item,
-                              id: 'BINANCE:' + item.marketType + ':' + item.symbol,
-                              provider: 'BINANCE' as MarketProvider,
-                              providerLabel: 'Binance',
+                              id: 'BITGET:' + item.marketType + ':' + item.symbol,
+                              provider: 'BITGET' as MarketProvider,
+                              providerLabel: 'Bitget',
                               displaySymbol: item.symbol,
                               logoUrl: makeLogoFallback(item.baseAsset || item.symbol),
-                              providerLogoUrl: 'https://www.binance.com/favicon.ico',
+                              providerLogoUrl: 'https://www.bitget.com/favicon.ico',
                             })) as Instrument[];
                             return [...deriv, ...normalized];
                           });
                           setDerivError('');
                         }).catch(error => {
                           const message = error instanceof Error ? error.message : String(error);
-                          console.error('[SIRE BINANCE] source selector failed', message);
+                          console.error('[SIRE BITGET] source selector failed', message);
                           setDerivError(message);
                         });
                         } else if (provider === 'DERIV') {
