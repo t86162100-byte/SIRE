@@ -109,7 +109,7 @@ export default function FuturesView({initialSymbol}:Props){
             <span className="sire-futures-logo">{selected?.baseAsset?.slice(0,1)||'F'}</span>
             <span><b>{selected?.symbol||'Select contract'}</b><small>{selected?.name||'Futures contract'}</small></span><ChevronDown size={14}/>
           </button>
-          <div className="sire-futures-market-stats"><strong>{priceFmt(marketPrice)}</strong><span className={change>=0?'up':'down'}>{change>=0?'▲':'▼'} {Math.abs(change).toFixed(2)}%</span></div>
+          
         </div>
 
         <div className="sire-futures-order-tabs"><button className={action==='Open'?'active':''} onClick={()=>{setAction('Open');setReduceOnly(false)}}>Open</button><button className={action==='Close'?'active':''} onClick={()=>{setAction('Close');setReduceOnly(true)}}>Close</button></div>
@@ -139,6 +139,14 @@ export default function FuturesView({initialSymbol}:Props){
       </section>
 
       <aside className="sire-futures-book-card">
+        <div className="sire-futures-contract-switcher">
+          <select value={contractTab} onChange={e=>setContractTab(e.target.value as 'USDT-M'|'COIN-M'|'USDC-M')} aria-label="Futures contract type">
+            <option value="USDT-M">USDT-M</option>
+            <option value="COIN-M">COIN-M</option>
+            <option value="USDC-M">USDC-M</option>
+          </select>
+          <ChevronDown size={13} aria-hidden="true"/>
+        </div>
         <div className="sire-futures-book-controls"><button onClick={()=>setBookView(bookView==='both'?'bids':bookView==='bids'?'asks':'both')}><SlidersHorizontal size={12}/><span>Book</span></button><span>LIVE</span></div>
         <div className="sire-futures-book-head"><span>Price (USDT)</span><span>Size</span></div>
         <div className={'sire-futures-book-side asks '+(bookView==='bids'?'hidden':'')}>{book.asks.slice(0,6).reverse().map((x,i)=><div key={i} style={{'--depth-width':(maxDepthAsk?Math.max(3,Math.min(100,x.quantity/maxDepthAsk*100)):3)+'%'} as any}><span>{priceFmt(x.price)}</span><b>{money(x.quantity,4)}</b></div>)}</div>
