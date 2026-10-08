@@ -301,6 +301,7 @@ export default function App() {
   const [researchLabOpen, setResearchLabOpen] = useState(false);
   const [homeOpen, setHomeOpen] = useState(false);
   const [tradeOpen, setTradeOpen] = useState(false);
+  const [spotReturnToTrade, setSpotReturnToTrade] = useState(false);
   const [chartLayout, setChartLayout] = useState<1 | 2>(1);
   const [activeChartIndex, setActiveChartIndex] = useState(0);
   const [linked, setLinked] = useState(false);
@@ -314,6 +315,21 @@ export default function App() {
   const bitgetMarketDesiredRef = useRef<Set<string>>(new Set());
 
   const liveInstruments = instruments;
+
+  useEffect(() => {
+    const openSpotMarketPicker = () => {
+      setTradeOpen(false);
+      setSpotReturnToTrade(true);
+      setProviderFilter('BITGET');
+      setCategoryFilter('CRYPTO');
+      setMarketSubcategoryFilter('Spot');
+      setMarketSubSubcategoryFilter('ALL');
+      setMarketLeafFilter('ALL');
+      setSearch('');
+    };
+    window.addEventListener('sire:open-market-for-spot', openSpotMarketPicker);
+    return () => window.removeEventListener('sire:open-market-for-spot', openSpotMarketPicker);
+  }, []);
 
   useEffect(() => {
     const openTrade = () => setTradeOpen(true);
@@ -609,6 +625,7 @@ export default function App() {
         ? current.map((value, index) => index === 0 ? item.symbol : value)
         : [item.symbol]);
     }
+    if (spotReturnToTrade && item.provider === 'BITGET') setTradeOpen(true);
   };
 
   const openInstrumentPicker = (mode: 'main' | 'multi') => {
@@ -659,7 +676,7 @@ export default function App() {
 
   if (tradeOpen) {
     const ethUsdt = liveInstruments.find(item => item.provider === 'BITGET' && String(item.symbol || '').toUpperCase() === 'ETHUSDT');
-    return <TradeView referencePrice={Number(ethUsdt?.price || 0)} referenceChange={Number(ethUsdt?.priceChangePercent ?? ethUsdt?.change24h ?? 0)} />;
+    return <TradeView referencePrice={Number(ethUsdt?.price || 0)} referenceChange={Number(ethUsdt?.priceChangePercent ?? ethUsdt?.change24h ?? 0)} forceSpot={spotReturnToTrade} spotSymbol={spotReturnToTrade ? selected?.symbol : undefined} />;
   }
 
   return <main className={`native-terminal-shell${researchLabOpen ? ' sire-research-open' : ''}`}>
