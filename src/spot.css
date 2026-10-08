@@ -138,7 +138,7 @@
 .sire-spot-book-controls button.active{border-color:#59636f;box-shadow:0 0 8px rgba(255,255,255,.08)}
 .sire-spot-book-side{gap:3px}
 .sire-spot-book-side div{height:30px;box-sizing:border-box}
-.sire-spot-book-side div:after{left:0;right:0;width:auto}
+.sire-spot-book-side div:after{left:auto;right:0;width:var(--depth-width,2%);transition:width .12s linear,opacity .12s ease}
 .sire-spot-book-step{width:58px;height:22px;margin:10px 0 7px 4px}
 .sire-spot-book-step span{font-variant-numeric:tabular-nums}
 
