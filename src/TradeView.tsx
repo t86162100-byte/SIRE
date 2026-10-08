@@ -26,6 +26,7 @@ import {
 import { cancelPreparedNativeWallet, finalizePreparedNativeWallet, getNativeWalletAddress, hasNativeWallet, isNativeWalletUnlocked, prepareNativeWallet, unlockNativeWallet } from './sireWalletCore';
 import { limitMakingAmount, limitTakingAmount } from './limitOrderEngine';
 import SpotView from './SpotView';
+import FuturesView from './FuturesView';
 const loadLimitOrderEngine = () => import('./limitOrderEngine');
 
 type Props = { referencePrice?: number; referenceChange?: number; forceSpot?: boolean; spotSymbol?: string };
@@ -71,7 +72,7 @@ export default function TradeView({ referencePrice = 0, forceSpot = false, spotS
   const [walletChain, setWalletChain] = useState<number | null>(null);
   const [fromBalance, setFromBalance] = useState('0');
   const [tradeMode, setTradeMode] = useState<'Swap' | 'Limit'>('Swap');
-  const [tradeProduct, setTradeProduct] = useState<'Swap' | 'Spot'>('Swap');
+  const [tradeProduct, setTradeProduct] = useState<'Swap' | 'Spot' | 'Futures'>('Swap');
   const [slippage, setSlippage] = useState(0.005);
   const [routeOrder, setRouteOrder] = useState<SwapRouteOrder>('CHEAPEST');
   const [quote, setQuote] = useState<SwapQuote | null>(null);
@@ -928,8 +929,8 @@ export default function TradeView({ referencePrice = 0, forceSpot = false, spotS
     <header className="sire-trade-productbar">
       <div className="sire-trade-product-scroll">
         {PRODUCTS.map(product => (
-          <button key={product} type="button" className={tradeProduct === product ? 'active' : ''} disabled={product !== 'Swap' && product !== 'Spot'}
-            onClick={() => { if (product === 'Swap' || product === 'Spot') setTradeProduct(product); }}>
+          <button key={product} type="button" className={tradeProduct === product ? 'active' : ''} disabled={product !== 'Swap' && product !== 'Spot' && product !== 'Futures'}
+            onClick={() => { if (product === 'Swap' || product === 'Spot' || product === 'Futures') setTradeProduct(product as 'Swap' | 'Spot' | 'Futures'); }}>
             {product}
           </button>
         ))}
@@ -940,7 +941,7 @@ export default function TradeView({ referencePrice = 0, forceSpot = false, spotS
       </div>
     </header>
 
-    {tradeProduct === 'Spot' ? <SpotView wallet={wallet} initialSymbol={spotSymbol} onConnect={() => window.dispatchEvent(new CustomEvent('sire:open-native-wallet'))} /> : <>
+    {tradeProduct === 'Futures' ? <FuturesView /> : tradeProduct === 'Spot' ? <SpotView wallet={wallet} initialSymbol={spotSymbol} onConnect={() => window.dispatchEvent(new CustomEvent('sire:open-native-wallet'))} /> : <>
     <div className="sire-trade-mode-row" role="tablist" aria-label="Trade mode">
       <div className="sire-trade-mode-pills">
         {(['Swap', 'Limit'] as const).map(mode => (
