@@ -145,6 +145,8 @@ export default function SpotView({ wallet, initialSymbol, onConnect }: Props) {
   }, [instruments, search]);
 
   const marketPrice = Number(book.lastTrade?.price || snapshot.price || selected?.price || 0);
+  const askDepthMax = Math.max(0, ...book.asks.slice(0, 5).map(level => Number(level.quantity) || 0));
+  const bidDepthMax = Math.max(0, ...book.bids.slice(0, 5).map(level => Number(level.quantity) || 0));
   const bid = Number(book.bids[0]?.price || snapshot.bid || 0);
   const ask = Number(book.asks[0]?.price || snapshot.ask || 0);
   const effectivePrice = orderType === 'Market' ? (side === 'Buy' ? ask || marketPrice : bid || marketPrice) : Number(price);
@@ -258,12 +260,12 @@ export default function SpotView({ wallet, initialSymbol, onConnect }: Props) {
           <div className="sire-spot-book-controls" aria-label="Order book display"><button type="button" className={`active ${bookView}`} onClick={() => setBookView(bookView === 'both' ? 'bids' : bookView === 'bids' ? 'asks' : 'both')} aria-label="Cycle order book display"><i /><i /></button></div>
           <div className="sire-spot-book-head"><span>Price (USDT)</span><span>Amount ({base || 'BTC'})</span></div>
           <div className={`sire-spot-book-side asks ${bookView === 'bids' ? 'is-hidden' : ''}`}>
-            {book.asks.slice(0,4).reverse().map((level,i) => <div key={'a'+i}><span>{formatPrice(level.price)}</span><b>{money(level.quantity, level.quantity < 1 ? 6 : 4)}</b></div>)}
+            {book.asks.slice(0,4).reverse().map((level,i) => <div key={'a'+i} style={{'--depth-width': String(Math.max(2, Math.min(100, askDepthMax ? ((Number(level.quantity) || 0) / askDepthMax) * 100 : 2))) + '%' } as any}><span>{formatPrice(level.price)}</span><b>{money(level.quantity, level.quantity < 1 ? 6 : 4)}</b></div>)}
             {book.asks.length === 0 && <div><span>—</span><b>—</b></div>}
           </div>
           <div className="sire-spot-book-mid"><strong>{formatPrice(marketPrice)}</strong><span>{isUp ? '▲' : '▼'} {Math.abs(change).toFixed(2)}%</span></div>
           <div className={`sire-spot-book-side bids ${bookView === 'asks' ? 'is-hidden' : ''}`}>
-            {book.bids.slice(0,5).map((level,i) => <div key={'b'+i}><span>{formatPrice(level.price)}</span><b>{money(level.quantity, level.quantity < 1 ? 6 : 4)}</b></div>)}
+            {book.bids.slice(0,5).map((level,i) => <div key={'b'+i} style={{'--depth-width': String(Math.max(2, Math.min(100, bidDepthMax ? ((Number(level.quantity) || 0) / bidDepthMax) * 100 : 2))) + '%' } as any}><span>{formatPrice(level.price)}</span><b>{money(level.quantity, level.quantity < 1 ? 6 : 4)}</b></div>)}
             {book.bids.length === 0 && <div><span>—</span><b>—</b></div>}
           </div>
           <div className="sire-spot-depth"><span>Buy {book.bids.length ? 'LIVE' : '—'}</span><i><b></b></i><span>Sell {book.asks.length ? 'LIVE' : '—'}</span></div><button type="button" className="sire-spot-book-step" aria-label="Price step"><span>0.01</span><ChevronDown size={11}/></button>
