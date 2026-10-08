@@ -14,6 +14,7 @@ import SireWalletPanel from './SireWalletPanel';
 import './sireWalletPanel.css';
 
 type MarketProvider = 'DERIV' | 'BITGET';
+type AppTab = 'home' | 'market' | 'trade' | 'discover' | 'portfolio';
 export type Instrument = Partial<DerivInstrument> & Partial<BitgetInstrument> & {
   id: string;
   provider: MarketProvider;
@@ -299,8 +300,9 @@ export default function App() {
   const [instrumentSearchOpen, setInstrumentSearchOpen] = useState(false);
   const [instrumentSearchMode, setInstrumentSearchMode] = useState<'main' | 'multi'>('main');
   const [researchLabOpen, setResearchLabOpen] = useState(false);
-  const [homeOpen, setHomeOpen] = useState(false);
+  const [homeOpen, setHomeOpen] = useState(true);
   const [tradeOpen, setTradeOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState<AppTab>('home');
   const [spotReturnToTrade, setSpotReturnToTrade] = useState(false);
   const [chartLayout, setChartLayout] = useState<1 | 2>(1);
   const [activeChartIndex, setActiveChartIndex] = useState(0);
@@ -325,7 +327,9 @@ export default function App() {
   useEffect(() => {
     const openSpotMarketPicker = () => {
       setTradeOpen(false);
+      setActiveTab('market');
       setSpotReturnToTrade(true);
+      window.dispatchEvent(new CustomEvent('sire:navigate-tab', { detail: { tab: 'market' } }));
       setProviderFilter('BITGET');
       setCategoryFilter('CRYPTO');
       setMarketSubcategoryFilter('Spot');
@@ -425,7 +429,12 @@ export default function App() {
   useEffect(() => {
     const onTabChanged = (event: Event) => {
       const tab = String((event as CustomEvent).detail?.tab || '');
-      setTradeOpen(tab === 'trade');
+      if (!['home', 'market', 'trade', 'discover', 'portfolio'].includes(tab)) return;
+      const nextTab = tab as AppTab;
+      setActiveTab(nextTab);
+      setHomeOpen(nextTab === 'home');
+      setTradeOpen(nextTab === 'trade');
+      setResearchLabOpen(nextTab === 'discover');
     };
     window.addEventListener('sire:tab-changed', onTabChanged);
     return () => window.removeEventListener('sire:tab-changed', onTabChanged);
@@ -630,8 +639,12 @@ export default function App() {
     // Do this first so choosing a Spot instrument cannot mutate the chart state.
     if (spotReturnToTrade && item.provider === 'BITGET' && normalizeMarketLabel(item.marketType) === 'spot') {
       setTradeOpen(true);
+      setActiveTab('trade');
+      window.dispatchEvent(new CustomEvent('sire:navigate-tab', { detail: { tab: 'trade' } }));
       return;
     }
+    // Selecting an instrument from the Market tab must stay in Market.
+    if (activeTab === 'market') return;
     if (chartableInstruments.some(candidate => candidate.id === item.id)) {
       setChartSymbols(current => current.length
         ? current.map((value, index) => index === 0 ? item.symbol : value)
@@ -681,13 +694,30 @@ export default function App() {
     setSelected(chartableInstruments.find(item => item.symbol === chartSymbols[1]) || selected);
     setMultiChartOpen(false);
   };
-  if (homeOpen) {
-    return <HomeView instruments={liveInstruments} onSelectInstrument={item => { const match = liveInstruments.find(candidate => candidate.id === item.id); if (match) selectInstrument(match); }} />;
+  if (activeTab === 'home') {
+    return <HomeView instruments={liveInstruments} onSelectInstrument={item => {
+      const match = liveInstruments.find(candidate => candidate.id === item.id);
+      if (match) selectInstrument(match);
+    }} />;
   }
 
-  if (tradeOpen) {
+  if (activeTab === 'trade' || tradeOpen) {
     const ethUsdt = liveInstruments.find(item => item.provider === 'BITGET' && String(item.symbol || '').toUpperCase() === 'ETHUSDT');
     return <TradeView referencePrice={Number(ethUsdt?.price || 0)} referenceChange={Number(ethUsdt?.priceChangePercent ?? ethUsdt?.change24h ?? 0)} forceSpot={spotReturnToTrade} spotSymbol={spotReturnToTrade ? selected?.symbol : undefined} />;
+  }
+
+  if (activeTab === 'portfolio') {
+    return <SireWalletPanel initialOpen />;
+  }
+
+  if (activeTab === 'discover') {
+    return <ResearchLab symbol={chartSymbols[activeChartIndex] || selected?.symbol || ''} instruments={instruments.map(item => ({ symbol: item.symbol, name: item.name }))} onClose={() => {
+      setResearchLabOpen(false);
+      window.dispatchEvent(new CustomEvent('sire:navigate-tab', { detail: { tab: 'home' } }));
+    }} onSelectInstrument={symbol => {
+      const item = instruments.find(candidate => candidate.symbol === symbol);
+      if (item) selectInstrument(item);
+    }} />;
   }
 
   return <main className={`native-terminal-shell${researchLabOpen ? ' sire-research-open' : ''}`}>
