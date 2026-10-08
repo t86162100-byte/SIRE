@@ -293,6 +293,8 @@ export default function App() {
   const [chartSymbols, setChartSymbols] = useState<string[]>([]);
   const linkGroupRef = useRef<LinkGroup | null>(null);
   const catalogueShuffleSeedRef = useRef(0x51f15e1d);
+  const bitgetMarketSocketRef = useRef<WebSocket | null>(null);
+  const bitgetMarketDesiredRef = useRef<Set<string>>(new Set());
 
   const liveInstruments = instruments;
 
@@ -454,6 +456,13 @@ export default function App() {
   }, [randomizedInstruments, deferredSearch, providerFilter, categoryFilter, marketSubcategoryFilter, marketSubSubcategoryFilter, marketLeafFilter]);
 
   const chartableInstruments = useMemo(() => liveInstruments.filter(item => item.provider === 'DERIV' || item.provider === 'BITGET'), [liveInstruments]);
+  const bitgetLiveKey = (item: Instrument) => {
+    if (item.provider !== 'BITGET') return null;
+    const market = String(item.marketSubcategory || '').toUpperCase();
+    const instType = item.marketType === 'Spot' ? 'spot' : market === 'USDT-M' ? 'usdt-futures' : market === 'COIN-M' ? 'coin-futures' : market === 'USDC-M' ? 'usdc-futures' : null;
+    return instType && item.symbol ? instType + ':' + String(item.symbol).toUpperCase() : null;
+  };
+
   const quoteWindow = useMemo(() => {
     const rowHeight = 88;
     const buffer = 18;
