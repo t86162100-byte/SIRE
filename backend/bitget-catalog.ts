@@ -118,7 +118,7 @@ function normalize(row: Json, requestedCategory: string): Json | null {
 
 async function loadCatalog(): Promise<Json> {
   const settled = await Promise.all(CATEGORIES.map(async category => {
-    const rows = await getJson(API_BASE + '/api/v3/market/instruments?category=' + encodeURIComponent(category));
+    const rows = await getJson(API_BASE + '/api/v3/public/instruments?category=' + encodeURIComponent(category));
     return { category, rows };
   }));
 
@@ -143,7 +143,7 @@ async function loadCatalog(): Promise<Json> {
   return {
     ok:true,
     provider:'BITGET',
-    source:'Bitget UTA /api/v3/market/instruments',
+    source:'Bitget UTA /api/v3/public/instruments',
     generatedAt:Date.now(),
     count:instruments.length,
     counts,
