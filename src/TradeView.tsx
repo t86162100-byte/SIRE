@@ -28,7 +28,7 @@ import { limitMakingAmount, limitTakingAmount } from './limitOrderEngine';
 import SpotView from './SpotView';
 const loadLimitOrderEngine = () => import('./limitOrderEngine');
 
-type Props = { referencePrice?: number; referenceChange?: number };
+type Props = { referencePrice?: number; referenceChange?: number; forceSpot?: boolean; spotSymbol?: string };
 
 const PRODUCTS = ['Swap', 'Spot', 'Margin', 'Futures', 'Options', 'Alpha', 'Tokenized', 'TradFi'];
 
@@ -58,7 +58,7 @@ const LogoMark = ({ src, fallback, className = '' }: { src?: string; fallback: s
   </span>
 );
 
-export default function TradeView({ referencePrice = 0 }: Props) {
+export default function TradeView({ referencePrice = 0, forceSpot = false, spotSymbol }: Props) {
   const [network, setNetwork] = useState('');
   const [supportedNetworks, setSupportedNetworks] = useState<SwapNetwork[]>([]);
   const [tokens, setTokens] = useState<SwapToken[]>([]);
@@ -124,6 +124,10 @@ export default function TradeView({ referencePrice = 0 }: Props) {
   const [limitBusy, setLimitBusy] = useState(false);
   const [limitError, setLimitError] = useState('');
   const [limitOrders, setLimitOrders] = useState<any[]>([]);
+
+  useEffect(() => {
+    if (forceSpot) setTradeProduct('Spot');
+  }, [forceSpot]);
 
   useEffect(() => {
     const syncNativeWallet = () => {
@@ -933,7 +937,7 @@ export default function TradeView({ referencePrice = 0 }: Props) {
       </div>
     </header>
 
-    {tradeProduct === 'Spot' ? <SpotView wallet={wallet} onConnect={() => window.dispatchEvent(new CustomEvent('sire:open-native-wallet'))} /> : <>
+    {tradeProduct === 'Spot' ? <SpotView wallet={wallet} initialSymbol={spotSymbol} onConnect={() => window.dispatchEvent(new CustomEvent('sire:open-native-wallet'))} /> : <>
     <div className="sire-trade-mode-row" role="tablist" aria-label="Trade mode">
       <div className="sire-trade-mode-pills">
         {(['Swap', 'Limit'] as const).map(mode => (
