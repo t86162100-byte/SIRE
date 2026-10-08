@@ -1223,11 +1223,13 @@ server.on('upgrade',(req,socket,head)=>{
     wsSocket.on('message',async data=>{
       try{
         const msg=JSON.parse(String(data));
-        if(msg?.type==='spot.subscribe' && msg?.symbol){ spotSubscribe(String(msg.symbol),connectionId); const book=await getSpotBook(String(msg.symbol),25); if(wsSocket.readyState===WebSocket.OPEN) wsSocket.send(JSON.stringify({v:1,type:'spot.update',payload:{symbol:String(msg.symbol).toUpperCase(),book,trade:null}})); }
+        if(msg?.type==='bitget.market.subscribe' && Array.isArray(msg?.subscriptions)) { await bitgetMarketSubscribe(wsSocket,msg.subscriptions); }
+        else if(msg?.type==='bitget.market.unsubscribe' && Array.isArray(msg?.subscriptions)) { bitgetMarketUnsubscribe(wsSocket,msg.subscriptions); }
+        else if(msg?.type==='spot.subscribe' && msg?.symbol){ spotSubscribe(String(msg.symbol),connectionId); const book=await getSpotBook(String(msg.symbol),25); if(wsSocket.readyState===WebSocket.OPEN) wsSocket.send(JSON.stringify({v:1,type:'spot.update',payload:{symbol:String(msg.symbol).toUpperCase(),book,trade:null}})); }
         else if(msg?.type==='spot.unsubscribe' && msg?.symbol) spotUnsubscribe(String(msg.symbol),connectionId);
       }catch(error){ console.warn('[SIRE SPOT WS]',error instanceof Error?error.message:String(error)); }
     });
-    wsSocket.on('close',async()=>{spotDisconnect(connectionId); ws.unregister(connectionId); await realtime({body:JSON.stringify({type:'system.disconnected',payload:{connection_id:connectionId}})});});
+    wsSocket.on('close',async()=>{bitgetMarketDisconnect(wsSocket); spotDisconnect(connectionId); ws.unregister(connectionId); await realtime({body:JSON.stringify({type:'system.disconnected',payload:{connection_id:connectionId}})});});
   });
 });
 
