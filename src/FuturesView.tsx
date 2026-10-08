@@ -136,17 +136,21 @@ export default function FuturesView({initialSymbol}:Props){
           <button type="button" onClick={()=>setPrice(priceFmt(marketPrice).replace(/,/g,''))}>BBO</button>
         </div>
         <label className="sire-futures-input"><span>Quantity</span><input inputMode="decimal" value={qty} onChange={e=>setQty(e.target.value.replace(/[^0-9.]/g,''))}/><span className="sire-futures-quantity-unit"><b>{selected?.baseAsset||'BTC'}</b><ChevronDown size={11}/></span></label>
-        <div className="sire-futures-slider"><div><span>Position size</span><b>{qtyPercent}%</b></div><input type="range" min="0" max="100" step="1" value={qtyPercent} onChange={e=>{const v=Number(e.target.value);setQtyPercent(v);setQty(v===0?'':String(v))}}/><div className="sire-futures-range-labels"><span>0%</span><span>25%</span><span>50%</span><span>75%</span><span>100%</span></div></div>
-
-        <div className="sire-futures-position-card">
-          <div><span>Position</span><b>{activePosition?activePosition.posSide?.toUpperCase()||'OPEN':'No open position'}</b></div>
-          <div><span>Size</span><b>{activePosition?money(Number(activePosition.total),6):'—'}</b></div>
-          <div><span>Unrealized PnL</span><b className={Number(activePosition?.unrealisedPnl||0)>=0?'up':'down'}>{activePosition?money(Number(activePosition.unrealisedPnl),2)+' USDT':'—'}</b></div>
+        <div className="sire-futures-slider">
+          <div className="sire-futures-range-track">
+            <input type="range" min="0" max="100" step="1" value={qtyPercent} onChange={e=>{const v=Number(e.target.value);setQtyPercent(v);setQty(v===0?'':String(v))}}/>
+            <div className="sire-futures-range-marks">
+              {[0,25,50,75,100].map(v=><button key={v} type="button" className={qtyPercent===v?'active':''} aria-label={v+'%'} onClick={()=>{setQtyPercent(v);setQty(v===0?'':String(v))}}><i/></button>)}
+            </div>
+          </div>
         </div>
 
-        <div className="sire-futures-order-summary"><span>Available margin</span><b>—</b><span>Est. liquidation</span><b>{activePosition?.liquidationPrice?priceFmt(Number(activePosition.liquidationPrice)):'—'}</b></div>
+        <div className="sire-futures-tpsl-row">
+          <button type="button">TP/SL</button>
+          <label><input type="checkbox" checked={reduceOnly} onChange={e=>setReduceOnly(e.target.checked)}/><span>Reduce Only</span></label>
+        </div>
+        <div className="sire-futures-available"><span>Avbl</span><b>—</b></div>
         <button disabled={busy} className={'sire-futures-submit '+(side==='Long'?'long':'short')} onClick={submit}>{busy?<LoaderCircle className="sire-spin" size={15}/>:null}{action} {side}</button>
-        <label className="sire-futures-reduce"><input type="checkbox" checked={reduceOnly} onChange={e=>setReduceOnly(e.target.checked)}/><span>Reduce-only</span></label>
         {error&&<div className="sire-futures-error">{error}</div>}
       </section>
 
