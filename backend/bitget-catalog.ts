@@ -1,6 +1,7 @@
 type Json = Record<string, any>;
 
 const API_BASE = 'https://api.bitget.com';
+const INSTRUMENTS_PATH = '/api/v3/market/instruments';
 const CATEGORIES = ['SPOT', 'MARGIN', 'USDT-FUTURES', 'COIN-FUTURES', 'USDC-FUTURES'] as const;
 const CACHE_TTL_MS = 60_000;
 let cache: { at: number; data: Json } | null = null;
@@ -51,9 +52,27 @@ function normalize(row: Json, requestedCategory: string): Json | null {
   const rwa = s(row?.isRwa).toLowerCase() === 'yes';
   const launchTime = n(row?.launchTime);
   const isNew = Number.isFinite(launchTime) ? Date.now() - Number(launchTime) < 30 * 86400000 : false;
+  const symbolType = upper(row?.symbolType);
+  const stablecoinBases = new Set(['USDT','USDC','USDE','USDS','DAI','FDUSD','TUSD','USDD','PYUSD','USDP','USDG','USDGO']);
+  const keyAssets = new Set(['BTC','ETH','BNB','SOL','XRP','DOGE','ADA','TRX','TON','AVAX','LINK','SUI','DOT','LTC','BCH','UNI']);
+  const baseUpper = upper(base);
+  const stablecoin = stablecoinBases.has(baseUpper);
+  const keyAsset = keyAssets.has(baseUpper);
+  const zeroFee = false;
+  const preMarket = /PRE$/.test(symbol) || /PRE[-_]/.test(symbol);
+  const thematic = [
+    ...(rwa ? ['RWA'] : []),
+    ...(stablecoin ? ['Stablecoin'] : []),
+    ...(keyAsset ? ['Key Asset'] : []),
+    ...(symbolType === 'metal' ? ['Metals'] : []),
+    ...(symbolType === 'commodity' ? ['Commodity'] : []),
+    ...(symbolType === 'stock' ? ['Stocks'] : []),
+    ...(isNew ? ['New'] : []),
+    ...(preMarket ? ['Pre-market', 'Pre-IPO'] : []),
+  ];
 
   if (category === 'SPOT') {
-    const filters = [quoteBucket(quote), 'Spot'];
+    const filters = [quoteBucket(quote), 'Spot', symbolType || 'crypto', ...thematic];
     if (rwa) filters.push('RWA');
     if (reality) filters.push('Reality');
     return {
@@ -63,7 +82,7 @@ function normalize(row: Json, requestedCategory: string): Json | null {
       marketSubSubcategory:quoteBucket(quote), marketFilter:quoteBucket(quote),
       marketFilters:[...new Set(filters)], instrumentType:reality ? 'Reality Stock' : rwa ? 'RWA Spot' : 'Crypto Spot',
       instrumentSubtype:reality ? 'Reality' : rwa ? 'RWA' : 'Spot',
-      quote, quoteAsset:quote, baseAsset:base, status:'TRADING',
+      quote, quoteAsset:quote, baseAsset:base, symbolType:symbolType.toLowerCase(), stablecoin, keyAsset, zeroFee, preMarket, preIpo:preMarket, status:'TRADING',
       margin:false, marginEnabled:false, isRwa:rwa, isReality:reality,
       pipSize:tickSize(row), pricePrecision:n(row?.pricePrecision),
       quantityPrecision:n(row?.quantityPrecision), quotePrecision:n(row?.quotePrecision),
@@ -73,7 +92,7 @@ function normalize(row: Json, requestedCategory: string): Json | null {
   }
 
   if (category === 'MARGIN') {
-    const filters = ['Margin'];
+    const filters = ['Margin', symbolType || 'crypto', ...thematic];
     if (base) filters.push(base);
     if (quote) filters.push(quote);
     return {
@@ -82,7 +101,7 @@ function normalize(row: Json, requestedCategory: string): Json | null {
       marketType:'Margin', category:'Margin', marketSubcategory:'Margin',
       marketSubSubcategory:'Margin', marketFilter:base || quote || 'Margin',
       marketFilters:[...new Set(filters)], instrumentType:'Crypto Margin',
-      instrumentSubtype:'Margin', quote, quoteAsset:quote, baseAsset:base,
+      instrumentSubtype:'Margin', quote, quoteAsset:quote, baseAsset:base, symbolType:symbolType.toLowerCase(), stablecoin, keyAsset, zeroFee, preMarket, preIpo:preMarket,
       status:'TRADING', margin:true, marginEnabled:true,
       maxCrossedLeverage:n(row?.maxCrossedLeverage),
       maxIsolatedLeverage:n(row?.maxIsolatedLeverage),
@@ -97,7 +116,7 @@ function normalize(row: Json, requestedCategory: string): Json | null {
   const marketSubcategory = isUSDT ? 'USDT-M' : isUSDC ? 'USDC-M' : 'COIN-M';
   const contractType = s(row?.type).toLowerCase();
   const subtype = contractType === 'perpetual' ? 'Perpetual' : contractType === 'delivery' ? 'Delivery' : contractType || 'Futures';
-  const filters = [marketSubcategory, subtype];
+  const filters = [marketSubcategory, subtype, symbolType || 'crypto', ...thematic];
   if (isNew) filters.push('New');
   if (quote) filters.push(quote);
 
@@ -108,7 +127,7 @@ function normalize(row: Json, requestedCategory: string): Json | null {
     marketSubSubcategory:marketSubcategory, marketFilter:marketSubcategory,
     marketFilters:[...new Set(filters)], instrumentType:'Crypto Futures',
     instrumentSubtype:subtype, quote, quoteAsset:quote, baseAsset:base,
-    settlement:marketSubcategory, contractType:subtype, status:'TRADING',
+    settlement:marketSubcategory, contractType:subtype, symbolType:symbolType.toLowerCase(), stablecoin, keyAsset, zeroFee, preMarket, preIpo:preMarket, status:'TRADING',
     margin:false, marginEnabled:false, onboardDate:launchTime, newListing:isNew,
     pipSize:tickSize(row), pricePrecision:n(row?.pricePrecision),
     quantityPrecision:n(row?.quantityPrecision), quotePrecision:n(row?.quotePrecision),
@@ -118,7 +137,7 @@ function normalize(row: Json, requestedCategory: string): Json | null {
 
 async function loadCatalog(): Promise<Json> {
   const settled = await Promise.all(CATEGORIES.map(async category => {
-    const rows = await getJson(API_BASE + '/api/v3/public/instruments?category=' + encodeURIComponent(category));
+    const rows = await getJson(API_BASE + INSTRUMENTS_PATH + '?category=' + encodeURIComponent(category));
     return { category, rows };
   }));
 
@@ -143,7 +162,7 @@ async function loadCatalog(): Promise<Json> {
   return {
     ok:true,
     provider:'BITGET',
-    source:'Bitget UTA /api/v3/public/instruments',
+    source:'Bitget UTA /api/v3/market/instruments',
     generatedAt:Date.now(),
     count:instruments.length,
     counts,
