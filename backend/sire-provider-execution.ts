@@ -99,6 +99,16 @@ async function bitgetSpotPrice(symbol:string){
   return positiveNumber(row?.lastPrice??row?.last,'Bitget market price');
 }
 
+export async function bitgetAuthenticatedHealth(){
+  try{
+    const data=await bitgetRequest('GET','/api/v3/account/assets');
+    const assets=Array.isArray(data?.data?.assets)?data.data.assets:[];
+    return {ok:true,authenticated:true,detail:'Bitget authenticated API connection is working.',accountEquity:data?.data?.accountEquity??null,assetCount:assets.length};
+  }catch(e){
+    return {ok:false,authenticated:false,detail:e instanceof Error?e.message:String(e)};
+  }
+}
+
 export async function bitgetExecutionHealth(){
   try{
     bitgetConfig();
