@@ -36,6 +36,8 @@ type Props = {
   videoSrc?: string;
 };
 
+const makeProviderLogoFallback = (_item: HomeInstrument) => 'https://deriv.com/favicon.ico';
+
 const fallbackLogo = (label: string) => {
   const text = String(label || '?').slice(0, 2).toUpperCase();
   return 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(
