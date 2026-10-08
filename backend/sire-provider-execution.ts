@@ -37,7 +37,7 @@ const BITGET_BASE='https://api.bitget.com';
 
 function positiveNumber(value:any,name:string){
   const n=Number(value);
-  if(!Number.isFinite(n)||n<=0) throw new Error(\`Invalid \${name} from liquidity provider.\`);
+  if(!Number.isFinite(n)||n<=0) throw new Error(`Invalid ${name} from liquidity provider.`);
   return n;
 }
 
@@ -51,7 +51,7 @@ function bitgetConfig(){
 
 function clientOid(value:string){
   const raw=String(value||'').replace(/[^0-9A-Za-z_:#\-+ ]/g,'').slice(0,32);
-  return raw||\`SIRE_\${Date.now()}\`.slice(0,32);
+  return raw||`SIRE_${Date.now()}`.slice(0,32);
 }
 
 function sign(secret:string,timestamp:string,method:string,path:string,body:string){
@@ -80,7 +80,7 @@ async function bitgetRequest(method:'GET'|'POST',path:string,body?:any){
   let data:any={};
   try{data=raw?JSON.parse(raw):{};}catch{data={raw};}
   if(!response.ok || data?.code!=='00000'){
-    throw new Error(\`Bitget API rejected request (\${response.status}/\${String(data?.code||'unknown')}): \${String(data?.msg||raw).slice(0,500)}\`);
+    throw new Error(`Bitget API rejected request (${response.status}/${String(data?.code||'unknown')}): ${String(data?.msg||raw).slice(0,500)}`);
   }
   return data;
 }
@@ -89,12 +89,12 @@ async function bitgetPublic(path:string){
   const response=await fetch(BITGET_BASE+path,{headers:{Accept:'application/json'},signal:AbortSignal.timeout(5000)});
   const raw=await response.text();
   const data=raw?JSON.parse(raw):{};
-  if(!response.ok||data?.code!=='00000') throw new Error(\`Bitget market-data request failed: \${String(data?.msg||raw).slice(0,300)}\`);
+  if(!response.ok||data?.code!=='00000') throw new Error(`Bitget market-data request failed: ${String(data?.msg||raw).slice(0,300)}`);
   return data;
 }
 
 async function bitgetSpotPrice(symbol:string){
-  const data=await bitgetPublic(\`/api/v3/market/tickers?category=SPOT&symbol=\${encodeURIComponent(symbol)}\`);
+  const data=await bitgetPublic(`/api/v3/market/tickers?category=SPOT&symbol=${encodeURIComponent(symbol)}`);
   const row=Array.isArray(data?.data)?data.data[0]:data?.data;
   return positiveNumber(row?.lastPrice??row?.last,'Bitget market price');
 }
@@ -117,7 +117,7 @@ export async function externalSpotQuote(request:ExternalSpotRequest):Promise<Ext
       price,total:price*request.quantity,expiresAt:Date.now()+3000
     };
   }
-  throw new Error(\`No direct execution adapter is configured for provider \${request.provider}.\`);
+  throw new Error(`No direct execution adapter is configured for provider ${request.provider}.`);
 }
 
 async function cancelBitgetOrder(category:string,orderId:string,clientOidValue:string){
@@ -125,7 +125,7 @@ async function cancelBitgetOrder(category:string,orderId:string,clientOidValue:s
 }
 
 export async function externalSpotExecute(request:ExternalSpotRequest):Promise<ExternalSpotFill[]>{
-  if(request.provider!=='BITGET') throw new Error(\`No direct execution adapter is configured for provider \${request.provider}.\`);
+  if(request.provider!=='BITGET') throw new Error(`No direct execution adapter is configured for provider ${request.provider}.`);
   if(request.orderType!=='MARKET' && request.orderType!=='LIMIT') throw new Error('Unsupported Bitget Spot order type.');
 
   const oid=clientOid(request.clientOrderId);
@@ -141,7 +141,7 @@ export async function externalSpotExecute(request:ExternalSpotRequest):Promise<E
   const deadline=Date.now()+(request.orderType==='LIMIT'?1500:8000);
   let detail:any=null;
   while(Date.now()<deadline){
-    detail=(await bitgetRequest('GET',\`/api/v3/trade/order-info?orderId=\${encodeURIComponent(externalOrderId)}\`))?.data;
+    detail=(await bitgetRequest('GET',`/api/v3/trade/order-info?orderId=${encodeURIComponent(externalOrderId)}`))?.data;
     const status=String(detail?.orderStatus||'').toLowerCase();
     if(status==='filled'||status==='cancelled'||status==='partially_filled') break;
     await new Promise(r=>setTimeout(r,250));
@@ -150,7 +150,7 @@ export async function externalSpotExecute(request:ExternalSpotRequest):Promise<E
   const status=String(detail?.orderStatus||'').toLowerCase();
   if(request.orderType==='MARKET' && status!=='filled' && status!=='cancelled' && status!=='partially_filled'){
     await cancelBitgetOrder('SPOT',externalOrderId,oid).catch(()=>{});
-    detail=(await bitgetRequest('GET',\`/api/v3/trade/order-info?orderId=\${encodeURIComponent(externalOrderId)}\`))?.data;
+    detail=(await bitgetRequest('GET',`/api/v3/trade/order-info?orderId=${encodeURIComponent(externalOrderId)}`))?.data;
   }
 
   const filled=positiveNumber(detail?.cumExecQty,'Bitget filled quantity');
