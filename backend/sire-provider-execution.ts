@@ -166,10 +166,44 @@ export async function bitgetOwnerPlaceOrder(input:any){
   if(orderType==='limit'&&!price) throw new Error('Limit price is required.');
   const oid=clientOid(String(input?.clientOid||''));
   const body:any={category,symbol,side,orderType,qty:String(qty),clientOid:oid};
+  if(category.endsWith('FUTURES')){
+    const posSide=String(input?.posSide||'').trim().toLowerCase();
+    const marginMode=String(input?.marginMode||'crossed').trim().toLowerCase();
+    if(posSide && !['long','short'].includes(posSide)) throw new Error('Futures position side must be long or short.');
+    if(!['crossed','isolated'].includes(marginMode)) throw new Error('Futures margin mode must be crossed or isolated.');
+    if(posSide) body.posSide=posSide;
+    body.marginMode=marginMode;
+    if(String(input?.reduceOnly||'').toLowerCase()==='yes') body.reduceOnly='yes';
+  }
   if(orderType==='limit'){body.price=String(price);body.timeInForce='gtc';}
   else body.timeInForce='ioc';
   const placed=await bitgetRequest('POST','/api/v3/trade/place-order',body);
   return {ok:true,provider:'BITGET',category,symbol,side,orderType,qty,price:price??null,orderId:String(placed?.data?.orderId||''),clientOid:String(placed?.data?.clientOid||oid)};
+}
+
+export async function bitgetOwnerFuturesPositions(category:string='USDT-FUTURES',symbol=''){
+  const safeCategory=String(category||'USDT-FUTURES').toUpperCase();
+  if(!['USDT-FUTURES','COIN-FUTURES','USDC-FUTURES'].includes(safeCategory)) throw new Error('Unsupported futures category.');
+  const qs='category='+encodeURIComponent(safeCategory)+(symbol?'&symbol='+encodeURIComponent(String(symbol).toUpperCase()):'');
+  const data=await bitgetRequest('GET','/api/v3/position/current-position?'+qs);
+  return {ok:true,provider:'BITGET',category:safeCategory,positions:Array.isArray(data?.data?.list)?data.data.list:[]};
+}
+
+export async function bitgetOwnerSetFuturesLeverage(input:any){
+  const category=String(input?.category||'USDT-FUTURES').toUpperCase();
+  const symbol=String(input?.symbol||'').trim().toUpperCase();
+  const leverage=positiveNumber(input?.leverage,'leverage');
+  const marginMode=String(input?.marginMode||'crossed').trim().toLowerCase();
+  if(!['USDT-FUTURES','COIN-FUTURES','USDC-FUTURES'].includes(category)) throw new Error('Unsupported futures category.');
+  if(!symbol) throw new Error('A futures symbol is required.');
+  if(!['crossed','isolated'].includes(marginMode)) throw new Error('Futures margin mode must be crossed or isolated.');
+  const body:any={category,symbol,leverage:String(leverage),marginMode};
+  const longLeverage=input?.longLeverage==null?'':String(input.longLeverage);
+  const shortLeverage=input?.shortLeverage==null?'':String(input.shortLeverage);
+  if(longLeverage) body.longLeverage=longLeverage;
+  if(shortLeverage) body.shortLeverage=shortLeverage;
+  const data=await bitgetRequest('POST','/api/v3/account/set-leverage',body);
+  return {ok:true,provider:'BITGET',category,symbol,leverage,marginMode,data:data?.data||null};
 }
 
 export async function bitgetExecutionHealth(){
