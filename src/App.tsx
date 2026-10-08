@@ -471,6 +471,89 @@ export default function App() {
     return { start, end, items: filtered.slice(start, end), top: start * rowHeight, bottom: Math.max(0, (filtered.length - end) * rowHeight) };
   }, [filtered, quoteScrollTop]);
 
+  useEffect(() => {
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const socket = new WebSocket(protocol + '//' + window.location.host + '/ws');
+    bitgetMarketSocketRef.current = socket;
+    const sendDesired = () => {
+      const subscriptions = [...bitgetMarketDesiredRef.current].map(key => {
+        const parts = key.split(':');
+        return { instType: parts[0], symbol: parts[1] };
+      });
+      if (socket.readyState === WebSocket.OPEN && subscriptions.length) {
+        socket.send(JSON.stringify({ type:'bitget.market.subscribe', subscriptions }));
+      }
+    };
+    socket.onopen = sendDesired;
+    socket.onmessage = event => {
+      try {
+        const message = JSON.parse(String(event.data));
+        if (message?.type !== 'bitget.market.update') return;
+        const payload = message.payload || {};
+        const instType = String(payload.instType || '').toLowerCase();
+        const symbol = String(payload.symbol || '').toUpperCase();
+        const targetMarket = instType === 'spot' ? 'Spot' : instType === 'usdt-futures' ? 'USDT-M' : instType === 'coin-futures' ? 'COIN-M' : instType === 'usdc-futures' ? 'USDC-M' : '';
+        if (!symbol || !targetMarket) return;
+        setInstruments(current => current.map(item => {
+          if (item.provider !== 'BITGET' || String(item.symbol || '').toUpperCase() !== symbol) return item;
+          const itemMarket = item.marketType === 'Spot' ? 'Spot' : String(item.marketSubcategory || '').toUpperCase();
+          if (itemMarket !== targetMarket) return item;
+          const next = { ...item } as Instrument & Record<string, unknown>;
+          next.liveTimestamp = payload.timestamp;
+          next.liveExchangeTimestamp = payload.exchangeTimestamp;
+          next.liveSeq = payload.seq;
+          next.livePseq = payload.pseq;
+          next.liveSource = 'BITGET_WS';
+          if (payload.type === 'ticker') {
+            if (Number.isFinite(Number(payload.price))) next.price = Number(payload.price);
+            if (Number.isFinite(Number(payload.bid))) next.bid = Number(payload.bid);
+            if (Number.isFinite(Number(payload.ask))) next.ask = Number(payload.ask);
+            if (Number.isFinite(Number(payload.change24h))) {
+              next.change24h = Number(payload.change24h) * 100;
+              next.priceChangePercent = Number(payload.change24h) * 100;
+            }
+            if (Number.isFinite(Number(payload.volume24h))) next.volume24h = Number(payload.volume24h);
+            if (Number.isFinite(Number(payload.quoteVolume24h))) next.quoteVolume = Number(payload.quoteVolume24h);
+            if (Number.isFinite(Number(payload.high24h))) next.high24h = Number(payload.high24h);
+            if (Number.isFinite(Number(payload.low24h))) next.low24h = Number(payload.low24h);
+          } else if (payload.type === 'depth') {
+            if (Number.isFinite(Number(payload.bid))) next.bid = Number(payload.bid);
+            if (Number.isFinite(Number(payload.ask))) next.ask = Number(payload.ask);
+          }
+          return next;
+        }));
+      } catch {}
+    };
+    socket.onclose = () => {
+      if (bitgetMarketSocketRef.current === socket) bitgetMarketSocketRef.current = null;
+    };
+    return () => {
+      if (bitgetMarketSocketRef.current === socket) bitgetMarketSocketRef.current = null;
+      try { socket.close(); } catch {}
+    };
+  }, []);
+
+  useEffect(() => {
+    const next = new Set<string>();
+    quoteWindow.items.forEach(item => {
+      const key = bitgetLiveKey(item);
+      if (key) next.add(key);
+    });
+    const previous = bitgetMarketDesiredRef.current;
+    const added = [...next].filter(key => !previous.has(key));
+    const removed = [...previous].filter(key => !next.has(key));
+    bitgetMarketDesiredRef.current = next;
+    const socket = bitgetMarketSocketRef.current;
+    if (socket?.readyState === WebSocket.OPEN) {
+      if (added.length) socket.send(JSON.stringify({ type:'bitget.market.subscribe', subscriptions: added.map(key => {
+        const parts = key.split(':'); return { instType: parts[0], symbol: parts[1] };
+      }) }));
+      if (removed.length) socket.send(JSON.stringify({ type:'bitget.market.unsubscribe', subscriptions: removed.map(key => {
+        const parts = key.split(':'); return { instType: parts[0], symbol: parts[1] };
+      }) }));
+    }
+  }, [quoteWindow.items]);
+
   const selectInstrument = (item: Instrument) => {
     setSelected(item);
     setSearch('');
