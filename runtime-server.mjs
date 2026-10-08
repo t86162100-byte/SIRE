@@ -1229,6 +1229,11 @@ server.on('upgrade',(req,socket,head)=>{
 
 server.listen(PORT,HOST,async()=>{ 
   console.log(`SIRE server listening on ${HOST}:${PORT}`);
+  if(process.env.BITGET_API_KEY && process.env.BITGET_API_SECRET && process.env.BITGET_API_PASSPHRASE){
+    void bitgetAuthenticatedHealth().then(result => console.log('[BITGET AUTH HEALTH]', JSON.stringify({ok:result.ok,authenticated:result.authenticated,detail:result.detail,assetCount:result.assetCount??null}))).catch(error => console.warn('[BITGET AUTH HEALTH]', error instanceof Error ? error.message : String(error)));
+  } else {
+    console.warn('[BITGET AUTH HEALTH] credentials are not configured in Render.');
+  }
   console.log('[DERIV HISTORY STORE]', JSON.stringify(await historyStoreStatus()));
   console.log('[SIRE SPOT ENGINE] initializing persistent order, trade, balance and ledger tables');
   void ensureSireSpotTables().catch(error => console.warn('[SIRE SPOT ENGINE]', error instanceof Error ? error.message : String(error)));
