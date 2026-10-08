@@ -126,8 +126,6 @@ export default function FuturesView({initialSymbol}:Props){
           <button className={action==='Close'?'active':''} onClick={()=>{setAction('Close');setReduceOnly(true)}}>Close</button>
         </div>
 
-        <div className="sire-futures-side"><button className={side==='Long'?'long active':'long'} onClick={()=>setSide('Long')}>Long</button><button className={side==='Short'?'short active':'short'} onClick={()=>setSide('Short')}>Short</button></div>
-
         <div className="sire-futures-control-row">
           <button onClick={()=>setOrderType(orderType==='Market'?'Limit':'Market')}><span>Order</span><b>{orderType}</b><ChevronDown size={12}/></button>
         </div>
