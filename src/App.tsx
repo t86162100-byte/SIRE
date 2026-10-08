@@ -495,7 +495,7 @@ export default function App() {
   const bitgetLiveKey = (item: Instrument) => {
     if (item.provider !== 'BITGET') return null;
     const market = String(item.marketSubcategory || '').toUpperCase();
-    const instType = item.marketType === 'Spot' ? 'spot' : market === 'USDT-M' ? 'usdt-futures' : market === 'COIN-M' ? 'coin-futures' : market === 'USDC-M' ? 'usdc-futures' : null;
+    const instType = item.marketType === 'Spot' || item.marketType === 'Margin' ? 'spot' : market === 'USDT-M' ? 'usdt-futures' : market === 'COIN-M' ? 'coin-futures' : market === 'USDC-M' ? 'usdc-futures' : null;
     return instType && item.symbol ? instType + ':' + String(item.symbol).toUpperCase() : null;
   };
 
@@ -509,8 +509,13 @@ export default function App() {
 
   useEffect(() => {
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const socket = new WebSocket(protocol + '//' + window.location.host + '/ws');
-    bitgetMarketSocketRef.current = socket;
+    let closed = false;
+    let socket: WebSocket | null = null;
+    let retry: ReturnType<typeof setTimeout> | null = null;
+    const connect = () => {
+      if (closed) return;
+      socket = new WebSocket(protocol + '//' + window.location.host + '/ws');
+      bitgetMarketSocketRef.current = socket;
     const sendDesired = () => {
       const subscriptions = [...bitgetMarketDesiredRef.current].map(key => {
         const parts = key.split(':');
@@ -520,8 +525,8 @@ export default function App() {
         socket.send(JSON.stringify({ type:'bitget.market.subscribe', subscriptions }));
       }
     };
-    socket.onopen = sendDesired;
-    socket.onmessage = event => {
+      socket.onopen = sendDesired;
+      socket.onmessage = event => {
       try {
         const message = JSON.parse(String(event.data));
         if (message?.type !== 'bitget.market.update') return;
@@ -533,7 +538,7 @@ export default function App() {
         setInstruments(current => current.map(item => {
           if (item.provider !== 'BITGET' || String(item.symbol || '').toUpperCase() !== symbol) return item;
           const itemMarket = item.marketType === 'Spot' ? 'Spot' : String(item.marketSubcategory || '').toUpperCase();
-          if (itemMarket !== targetMarket) return item;
+          if (itemMarket !== targetMarket && !(targetMarket === 'Spot' && item.marketType === 'Margin')) return item;
           const next = { ...item } as Instrument & Record<string, unknown>;
           next.liveTimestamp = payload.timestamp;
           next.liveExchangeTimestamp = payload.exchangeTimestamp;
@@ -560,12 +565,18 @@ export default function App() {
         }));
       } catch {}
     };
-    socket.onclose = () => {
-      if (bitgetMarketSocketRef.current === socket) bitgetMarketSocketRef.current = null;
+      socket.onclose = () => {
+        if (bitgetMarketSocketRef.current === socket) bitgetMarketSocketRef.current = null;
+        if (!closed) retry = setTimeout(connect, 1000);
+      };
+      socket.onerror = () => { try { socket?.close(); } catch {} };
     };
+    connect();
     return () => {
+      closed = true;
+      if (retry) clearTimeout(retry);
       if (bitgetMarketSocketRef.current === socket) bitgetMarketSocketRef.current = null;
-      try { socket.close(); } catch {}
+      try { socket?.close(); } catch {}
     };
   }, []);
 
