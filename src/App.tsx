@@ -306,39 +306,58 @@ export default function App() {
 
   useEffect(() => {
     let cancelled = false;
-    const load = async () => {
-      const bitgetCatalog = loadBitgetCatalog('startup');
-      const [derivResult, bitgetResult] = await Promise.allSettled([fetchDerivInstruments(), bitgetCatalog]);
+    const applyBitget = (items: BitgetInstrument[]) => {
       if (cancelled) return;
-      const normalized: Instrument[] = [];
-      if (derivResult.status === 'fulfilled') {
-        normalized.push(...derivResult.value.map(item => ({
+      const normalized = items.map(item => ({
+        ...item,
+        id:'BITGET:'+item.marketType+':'+item.symbol,
+        provider:'BITGET' as MarketProvider,
+        providerLabel:'Bitget',
+        displaySymbol:item.symbol,
+        logoUrl:item.logoUrl || makeLogoFallback(item.baseAsset || item.symbol),
+        providerLogoUrl:item.providerLogoUrl || 'https://www.bitget.com/favicon.ico',
+      })) as Instrument[];
+      setInstruments(current => {
+        const deriv = current.filter(item => item.provider !== 'BITGET');
+        return [...deriv, ...normalized].filter((item,index,all) => item.id && all.findIndex(x=>x.id===item.id)===index);
+      });
+      setSelected(current => current && current.provider === 'BITGET' ? current : chooseInitialMarketInstrument(normalized));
+      setChartSymbols(current => current.length ? current : [chooseInitialMarketInstrument(normalized)?.symbol || '']);
+      setDerivError('');
+      setDerivLoading(false);
+    };
+
+    const loadBitget = async () => {
+      try {
+        const items = await loadBitgetCatalog('startup');
+        applyBitget(items);
+      } catch (error) {
+        if (cancelled) return;
+        console.error('[SIRE BITGET] startup catalogue failed', error);
+        setDerivError(error instanceof Error ? error.message : String(error));
+        setDerivLoading(false);
+      }
+    };
+
+    const loadDeriv = async () => {
+      try {
+        const items = await fetchDerivInstruments();
+        if (cancelled) return;
+        const deriv = items.map(item => ({
           ...item, id:'DERIV:'+item.symbol, provider:'DERIV' as MarketProvider, providerLabel:'Deriv',
           marketType:item.category === 'synthetic' ? 'Synthetic Indices' : item.category,
           category:item.category === 'synthetic' ? 'Synthetic Indices' : item.category,
           displaySymbol:item.name || item.symbol, logoUrl:makeLogoFallback(item.symbol),
           providerLogoUrl:'https://deriv.com/favicon.ico',
-        })) as Instrument[]);
+        })) as Instrument[];
+        setInstruments(current => [...deriv, ...current.filter(item => item.provider !== 'DERIV')]);
+      } catch (error) {
+        console.warn('[SIRE DERIV] startup catalogue failed', error);
       }
-      if (bitgetResult.status === 'fulfilled') {
-        normalized.push(...bitgetResult.value.map(item => ({
-          ...item, id:'BITGET:'+item.marketType+':'+item.symbol, provider:'BITGET' as MarketProvider,
-          providerLabel:'Bitget', displaySymbol:item.symbol, logoUrl:item.logoUrl || makeLogoFallback(item.baseAsset || item.symbol),
-          providerLogoUrl:item.providerLogoUrl || 'https://www.bitget.com/favicon.ico',
-        })) as Instrument[]);
-      }
-      const unique = normalized.filter((item,index,all)=>item.id && all.findIndex(x=>x.id===item.id)===index);
-      setInstruments(unique);
-      const initial=chooseInitialMarketInstrument(unique);
-      setSelected(initial);
-      setChartSymbols(initial ? [initial.symbol] : []);
-      if (!unique.length) {
-        const errors = [derivResult,bitgetResult].filter((x:any)=>x.status==='rejected').map((x:any)=>x.reason?.message || String(x.reason));
-        setDerivError(errors.join(' | ') || 'No market instruments are currently available.');
-      } else setDerivError('');
-      setDerivLoading(false);
     };
-    void load();
+
+    void loadBitget();
+    void loadDeriv();
     return () => { cancelled=true; };
   }, []);
   useEffect(() => {
