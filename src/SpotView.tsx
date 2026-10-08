@@ -28,6 +28,22 @@ function formatPrice(value:number) {
   return value < 1 ? money(value, 6) : money(value, 2);
 }
 
+async function readJsonResponse(response:Response, label:string):Promise<any> {
+  const raw = await response.text();
+  const contentType = String(response.headers.get('content-type') || '').toLowerCase();
+  if (!response.ok) {
+    let detail = '';
+    try { const parsed = JSON.parse(raw); detail = parsed?.error || parsed?.message || ''; } catch {}
+    throw new Error(detail || label + ' returned HTTP ' + response.status);
+  }
+  if (!contentType.includes('application/json')) {
+    const preview = raw.trim().slice(0, 80).replace(/\s+/g, ' ');
+    throw new Error(label + ' returned a non-JSON response' + (preview ? ': ' + preview : '.'));
+  }
+  try { return JSON.parse(raw); }
+  catch { throw new Error(label + ' returned invalid JSON.'); }
+}
+
 export default function SpotView({ wallet, initialSymbol, onConnect }: Props) {
   const [instruments, setInstruments] = useState<SireSpotMarket[]>([]);
   const [selected, setSelected] = useState<SireSpotMarket | null>(null);
@@ -50,8 +66,8 @@ export default function SpotView({ wallet, initialSymbol, onConnect }: Props) {
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
-    fetch('/api/sire/bitget/catalog?t=' + Date.now(), { cache:'no-store' })
-      .then(response => response.json())
+    fetch('/api/sire/bitget/catalog?t=' + Date.now(), { cache:'no-store', headers:{Accept:'application/json'} })
+      .then(response => readJsonResponse(response,'Bitget catalog'))
       .then(payload => {
         if (cancelled) return;
         if (!payload?.ok || !Array.isArray(payload?.instruments)) throw new Error(payload?.error || 'Unable to load Bitget Spot markets.');
@@ -75,8 +91,8 @@ export default function SpotView({ wallet, initialSymbol, onConnect }: Props) {
     setBook({asks:[],bids:[],lastTrade:null});
     let cancelled = false;
     const category = String(selected.marketType || 'Spot').toUpperCase() === 'MARGIN' ? 'SPOT' : 'SPOT';
-    fetch('/api/sire/bitget/orderbook?category=' + category + '&symbol=' + encodeURIComponent(selected.symbol) + '&limit=25', {cache:'no-store'})
-      .then(r=>r.json()).then(p => {
+    fetch('/api/sire/bitget/orderbook?category=' + category + '&symbol=' + encodeURIComponent(selected.symbol) + '&limit=25', {cache:'no-store', headers:{Accept:'application/json'}})
+      .then(r=>readJsonResponse(r,'Bitget order book')).then(p => {
         if(!cancelled && p?.ok) setBook({
           asks:Array.isArray(p.asks)?p.asks:[], bids:Array.isArray(p.bids)?p.bids:[],
           lastTrade:null, source:p.source
@@ -131,8 +147,8 @@ export default function SpotView({ wallet, initialSymbol, onConnect }: Props) {
 
   useEffect(() => {
     let cancelled = false;
-    fetch('/api/sire/bitget/account', {cache:'no-store'})
-      .then(r=>r.json()).then(p=>{
+    fetch('/api/sire/bitget/account', {cache:'no-store', headers:{Accept:'application/json'}})
+      .then(r=>readJsonResponse(r,'Bitget account')).then(p=>{
         if(cancelled || !p?.ok) return;
         setBalances(Array.isArray(p.assets) ? p.assets.map((a:any)=>({asset:String(a.coin||''),available:Number(a.available||0),locked:Number(a.locked||0)})) : []);
       }).catch(()=>{});
@@ -188,10 +204,13 @@ export default function SpotView({ wallet, initialSymbol, onConnect }: Props) {
       setQuantity('');
       if (payload?.averagePrice) setPrice(String(payload.averagePrice));
       const [bookResponse, accountResponse] = await Promise.all([
-        fetch('/api/sire/bitget/orderbook?category=' + (selected?.marketType === 'Margin' ? 'SPOT' : 'SPOT') + '&symbol=' + encodeURIComponent(selected?.symbol || '') + '&limit=25', {cache:'no-store'}),
-        fetch('/api/sire/bitget/account', {cache:'no-store'})
+        fetch('/api/sire/bitget/orderbook?category=' + (selected?.marketType === 'Margin' ? 'SPOT' : 'SPOT') + '&symbol=' + encodeURIComponent(selected?.symbol || '') + '&limit=25', {cache:'no-store', headers:{Accept:'application/json'}}),
+        fetch('/api/sire/bitget/account', {cache:'no-store', headers:{Accept:'application/json'}})
       ]);
-      const [nextBook,nextAccount] = await Promise.all([bookResponse.json(),accountResponse.json()]);
+      const [nextBook,nextAccount] = await Promise.all([
+        readJsonResponse(bookResponse,'Bitget order book'),
+        readJsonResponse(accountResponse,'Bitget account')
+      ]);
       if(nextBook?.ok) setBook({asks:nextBook.asks||[],bids:nextBook.bids||[],lastTrade:null,source:nextBook.source});
       if(nextAccount?.ok) setBalances((nextAccount.assets||[]).map((a:any)=>({asset:String(a.coin||''),available:Number(a.available||0),locked:Number(a.locked||0)})));
     } catch (e) { setError(e instanceof Error ? e.message : String(e)); }
