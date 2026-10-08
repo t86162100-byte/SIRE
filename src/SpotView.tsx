@@ -8,6 +8,7 @@ type OrderType = 'Market' | 'Limit' | 'Stop-limit' | 'Trigger';
 
 type SireSpotMarket = {
   symbol:string; name:string; baseAsset:string; quote:string; status:string;
+  marketType?:string; marketSubcategory?:string; category?:string;
   logoUrl?:string; price?:number; priceChangePercent?:number; bid?:number; ask?:number; assetName?:string
 };
 type Snapshot = { price?: number; bid?: number; ask?: number; percent?: number };
@@ -49,12 +50,12 @@ export default function SpotView({ wallet, onConnect }: Props) {
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
-    fetch('/api/sire/spot/catalog?t=' + Date.now(), { cache:'no-store' })
+    fetch('/api/sire/bitget/catalog?t=' + Date.now(), { cache:'no-store' })
       .then(response => response.json())
       .then(payload => {
         if (cancelled) return;
-        if (!payload?.ok || !Array.isArray(payload?.markets)) throw new Error(payload?.error || 'Unable to load SIRE Spot markets.');
-        const spot = payload.markets.filter((item:SireSpotMarket) => item.status === 'TRADING' && item.quote === 'USDT');
+        if (!payload?.ok || !Array.isArray(payload?.instruments)) throw new Error(payload?.error || 'Unable to load Bitget Spot markets.');
+        const spot = payload.instruments.filter((item:SireSpotMarket) => item.status === 'TRADING' && item.marketType === 'Spot' && item.quote === 'USDT');
         setInstruments(spot);
         setSelected(current => current || spot.find(item => item.symbol === 'BTCUSDT') || spot[0] || null);
       })
@@ -65,19 +66,22 @@ export default function SpotView({ wallet, onConnect }: Props) {
 
   useEffect(() => {
     if (!selected) return;
-    const price = Number(selected.price);
     setSnapshot({
-      price: Number.isFinite(price) ? price : undefined,
+      price: Number.isFinite(Number(selected.price)) ? Number(selected.price) : undefined,
       bid: Number.isFinite(Number(selected.bid)) ? Number(selected.bid) : undefined,
       ask: Number.isFinite(Number(selected.ask)) ? Number(selected.ask) : undefined,
       percent: Number.isFinite(Number(selected.priceChangePercent)) ? Number(selected.priceChangePercent) : undefined,
     });
     setBook({asks:[],bids:[],lastTrade:null});
     let cancelled = false;
-    const loadBook = () => fetch('/api/sire/spot/book?symbol=' + encodeURIComponent(selected.symbol) + '&depth=25', {cache:'no-store'})
-      .then(r=>r.json()).then(p => { if(!cancelled && p?.ok) setBook({asks:Array.isArray(p.asks)?p.asks:[],bids:Array.isArray(p.bids)?p.bids:[],lastTrade:p.lastTrade||null,source:p.source}); })
-      .catch(()=>{});
-    void loadBook();
+    const category = String(selected.marketType || 'Spot').toUpperCase() === 'MARGIN' ? 'SPOT' : 'SPOT';
+    fetch('/api/sire/bitget/orderbook?category=' + category + '&symbol=' + encodeURIComponent(selected.symbol) + '&limit=25', {cache:'no-store'})
+      .then(r=>r.json()).then(p => {
+        if(!cancelled && p?.ok) setBook({
+          asks:Array.isArray(p.asks)?p.asks:[], bids:Array.isArray(p.bids)?p.bids:[],
+          lastTrade:null, source:p.source
+        });
+      }).catch(()=>{});
     return () => { cancelled = true; };
   }, [selected]);
 
@@ -89,36 +93,51 @@ export default function SpotView({ wallet, onConnect }: Props) {
     const connect = () => {
       if (closed) return;
       const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-      const id = (globalThis.crypto?.randomUUID?.() || ('spot-' + Date.now() + '-' + Math.random().toString(36).slice(2)));
-      socket = new WebSocket(protocol + '//' + window.location.host + '/ws?connection_id=' + encodeURIComponent(id));
-      socket.onopen = () => { socket?.send(JSON.stringify({type:'spot.subscribe',symbol:selected.symbol})); };
+      socket = new WebSocket(protocol + '//' + window.location.host + '/ws');
+      socket.onopen = () => {
+        const instType = selected.marketType === 'Margin' ? 'spot' : 'spot';
+        socket?.send(JSON.stringify({type:'bitget.market.subscribe',subscriptions:[{instType,symbol:selected.symbol}]}));
+      };
       socket.onmessage = event => {
         try {
           const msg = JSON.parse(String(event.data || '{}'));
-          if (msg?.type === 'spot.update' && String(msg?.payload?.symbol || '').toUpperCase() === selected.symbol.toUpperCase()) {
-            const next = msg.payload.book;
-            if (next) setBook({asks:Array.isArray(next.asks)?next.asks:[],bids:Array.isArray(next.bids)?next.bids:[],lastTrade:next.lastTrade||null,source:next.source});
-            setSubVersion(v => v + 1);
+          if (msg?.type !== 'bitget.market.update') return;
+          const payload = msg.payload || {};
+          if (String(payload.symbol || '').toUpperCase() !== selected.symbol.toUpperCase()) return;
+          if (payload.type === 'ticker') {
+            setSnapshot({
+              price:Number.isFinite(Number(payload.price)) ? Number(payload.price) : undefined,
+              bid:Number.isFinite(Number(payload.bid)) ? Number(payload.bid) : undefined,
+              ask:Number.isFinite(Number(payload.ask)) ? Number(payload.ask) : undefined,
+              percent:Number.isFinite(Number(payload.change24h)) ? Number(payload.change24h) * 100 : undefined
+            });
+          } else if (payload.type === 'depth') {
+            setBook({
+              asks:Array.isArray(payload.asks)?payload.asks.map((x:any)=>({price:Number(x[0]),quantity:Number(x[1])})):[],
+              bids:Array.isArray(payload.bids)?payload.bids.map((x:any)=>({price:Number(x[0]),quantity:Number(x[1])})):[],
+              lastTrade:null, source:'BITGET_WS'
+            });
           }
+          setSubVersion(v => v + 1);
         } catch {}
       };
       socket.onclose = () => {
-        if (closed) return;
-        retry = setTimeout(connect, 2000);
+        if (!closed) retry = setTimeout(connect, 1000);
       };
     };
     connect();
-    return () => { closed = true; if(retry) clearTimeout(retry); try { socket?.send(JSON.stringify({type:'spot.unsubscribe',symbol:selected.symbol})); } catch {} try { socket?.close(); } catch {} };
-  }, [selected?.symbol]);
+    return () => { closed = true; if(retry) clearTimeout(retry); try { socket?.close(); } catch {} };
+  }, [selected?.symbol, selected?.marketType]);
 
   useEffect(() => {
-    if (!wallet) { setBalances([]); return; }
     let cancelled = false;
-    fetch('/api/sire/spot/account?wallet=' + encodeURIComponent(wallet), {cache:'no-store'})
-      .then(r=>r.json()).then(p=>{ if(!cancelled && p?.ok) setBalances(Array.isArray(p.balances)?p.balances:[]); })
-      .catch(()=>{});
+    fetch('/api/sire/bitget/account', {cache:'no-store'})
+      .then(r=>r.json()).then(p=>{
+        if(cancelled || !p?.ok) return;
+        setBalances(Array.isArray(p.assets) ? p.assets.map((a:any)=>({asset:String(a.coin||''),available:Number(a.available||0),locked:Number(a.locked||0)})) : []);
+      }).catch(()=>{});
     return () => { cancelled = true; };
-  }, [wallet, subVersion]);
+  }, [subVersion]);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -146,17 +165,20 @@ export default function SpotView({ wallet, onConnect }: Props) {
 
   const submit = async () => {
     setError('');
-    if (!wallet) { setError('Connect your SIRE Wallet to place Spot orders.'); onConnect?.(); return; }
     if (orderType !== 'Market' && orderType !== 'Limit') { setError('This order type is not executable yet. Use Market or Limit.'); return; }
     if (fraction <= 0) { setError('Choose an order amount first.'); return; }
     if (!effectivePrice || !tradeQuantity) { setError('There is no executable SIRE Spot price/liquidity for this order.'); return; }
     try {
-      const response = await fetch('/api/sire/spot/orders', {
+      const response = await fetch('/api/sire/bitget/order', {
         method:'POST', headers:{'content-type':'application/json','accept':'application/json'},
         body:JSON.stringify({
-          wallet, symbol:selected?.symbol, side, type:orderType.toUpperCase(),
-          quantity:tradeQuantity, ...(orderType === 'Limit' ? {price:Number(price)} : {}),
-          clientOrderId:(globalThis.crypto?.randomUUID?.() || ('sire-' + Date.now() + '-' + Math.random().toString(36).slice(2)))
+          category:selected?.marketType === 'Margin' ? 'MARGIN' : 'SPOT',
+          symbol:selected?.symbol,
+          side:side.toLowerCase(),
+          orderType:orderType.toLowerCase(),
+          qty:orderType === 'Market' && side === 'Buy' ? total : tradeQuantity,
+          ...(orderType === 'Limit' ? {price:Number(price)} : {}),
+          clientOid:(globalThis.crypto?.randomUUID?.() || ('sire-' + Date.now() + '-' + Math.random().toString(36).slice(2))).slice(0,32)
         })
       });
       const payload = await response.json().catch(()=>({}));
@@ -164,12 +186,12 @@ export default function SpotView({ wallet, onConnect }: Props) {
       setQuantity('');
       if (payload?.order?.averagePrice) setPrice(String(payload.order.averagePrice));
       const [bookResponse, accountResponse] = await Promise.all([
-        fetch('/api/sire/spot/book?symbol=' + encodeURIComponent(selected?.symbol || '') + '&depth=25', {cache:'no-store'}),
-        fetch('/api/sire/spot/account?wallet=' + encodeURIComponent(wallet), {cache:'no-store'})
+        fetch('/api/sire/bitget/orderbook?category=' + (selected?.marketType === 'Margin' ? 'SPOT' : 'SPOT') + '&symbol=' + encodeURIComponent(selected?.symbol || '') + '&limit=25', {cache:'no-store'}),
+        fetch('/api/sire/bitget/account', {cache:'no-store'})
       ]);
       const [nextBook,nextAccount] = await Promise.all([bookResponse.json(),accountResponse.json()]);
-      if(nextBook?.ok) setBook({asks:nextBook.asks||[],bids:nextBook.bids||[],lastTrade:nextBook.lastTrade||null,source:nextBook.source});
-      if(nextAccount?.ok) setBalances(nextAccount.balances||[]);
+      if(nextBook?.ok) setBook({asks:nextBook.asks||[],bids:nextBook.bids||[],lastTrade:null,source:nextBook.source});
+      if(nextAccount?.ok) setBalances((nextAccount.assets||[]).map((a:any)=>({asset:String(a.coin||''),available:Number(a.available||0),locked:Number(a.locked||0)})));
     } catch (e) { setError(e instanceof Error ? e.message : String(e)); }
   };
 
@@ -226,7 +248,7 @@ export default function SpotView({ wallet, onConnect }: Props) {
             <div><span>Est. fee</span><b>{total ? money(total * 0.001, total < 1 ? 6 : 2) + ' USDT' : '— USDT'}</b></div>
           </div>
 
-          <button type="button" className="sire-spot-submit" onClick={submit}>{wallet ? 'Place order' : 'Connect wallet'}</button>
+          <button type="button" className="sire-spot-submit" onClick={submit}>Place order</button>
           {error && <div className="sire-spot-error">{error}</div>}
         </div>
       </section>
