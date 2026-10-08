@@ -21,8 +21,8 @@ function num(value?: string | number) {
   return Number.isFinite(n) ? n.toLocaleString(undefined,{maximumFractionDigits:8}) : '0';
 }
 
-export default function SireWalletPanel() {
-  const [open, setOpen] = useState(false);
+export default function SireWalletPanel({ initialOpen = false }: { initialOpen?: boolean }) {
+  const [open, setOpen] = useState(initialOpen);
   const [evmNetworks, setEvmNetworks] = useState<WalletNetwork[]>(FALLBACK_EVM_NETWORKS);
   const [network, setNetwork] = useState<WalletNetwork>('Ethereum');
   const [assets, setAssets] = useState<WalletAsset[]>([]);
