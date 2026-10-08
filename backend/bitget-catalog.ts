@@ -172,6 +172,27 @@ async function loadCatalog(): Promise<Json> {
       instruments.push(item);
       accepted++;
     }
+
+    // If Bitget temporarily fails one category, retain the last known-good
+    // instruments for that category instead of making the UI lose them.
+    if (error && cache?.data?.instruments) {
+      for (const item of cache.data.instruments) {
+        const itemCategory = upper(item?.category);
+        const itemMarketType = upper(item?.marketType);
+        const matches =
+          (category === 'SPOT' && itemMarketType === 'SPOT') ||
+          (category === 'MARGIN' && itemMarketType === 'MARGIN') ||
+          (category.endsWith('FUTURES') && itemMarketType === 'FUTURES' &&
+            upper(item?.marketSubcategory) === (category === 'USDT-FUTURES' ? 'USDT-M' : category === 'USDC-FUTURES' ? 'USDC-M' : 'COIN-M'));
+        if (!matches) continue;
+        const key = category + ':' + item.symbol;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        instruments.push(item);
+        accepted++;
+      }
+    }
+
     counts[category] = accepted;
     if (error) errors[category] = error;
   }
