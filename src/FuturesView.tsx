@@ -130,7 +130,10 @@ export default function FuturesView({initialSymbol}:Props){
           <button onClick={()=>setOrderType(orderType==='Market'?'Limit':'Market')}><span>Order</span><b>{orderType}</b><ChevronDown size={12}/></button>
         </div>
 
-        {orderType==='Limit'&&<label className="sire-futures-input"><span>Price</span><input inputMode="decimal" value={price} onChange={e=>setPrice(e.target.value.replace(/[^0-9.]/g,''))}/><em>USDT</em></label>}
+        <div className="sire-futures-price-row">
+          <label><span>Price</span><input inputMode="decimal" value={price} onChange={e=>setPrice(e.target.value.replace(/[^0-9.]/g,''))}/><em>USDT</em></label>
+          <button type="button" onClick={()=>setPrice(priceFmt(marketPrice).replace(/,/g,''))}>BBO</button>
+        </div>
         <label className="sire-futures-input"><span>Quantity</span><input inputMode="decimal" value={qty} onChange={e=>setQty(e.target.value.replace(/[^0-9.]/g,''))}/><em>{selected?.baseAsset||'Contracts'}</em></label>
         <div className="sire-futures-slider"><div><span>Position size</span><b>{qty||'0'}</b></div><input type="range" min="0" max="100" value={Math.min(100,Number(qty)||0)} onChange={e=>setQty(e.target.value)}/><div className="sire-futures-range-labels"><span>0%</span><span>25%</span><span>50%</span><span>75%</span><span>100%</span></div></div>
 
