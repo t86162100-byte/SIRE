@@ -1240,6 +1240,25 @@ server.listen(PORT,HOST,async()=>{
   } else {
     console.warn('[BITGET AUTH HEALTH] credentials are not configured in Render.');
   }
+  try {
+    const catalog = await fetchBitgetCatalogServer(false);
+    const candidates:any[] = [];
+    const pick = (instType:string, predicate:(x:any)=>boolean) => {
+      const item = (catalog?.instruments || []).find(predicate);
+      if (item) candidates.push({instType, symbol:String(item.symbol).toUpperCase()});
+    };
+    pick('spot', x => x.marketType === 'Spot' && x.symbol === 'BTCUSDT');
+    pick('spot', x => x.marketType === 'Spot' && x.quote === 'USDT' && x.symbol !== 'BTCUSDT');
+    pick('usdt-futures', x => x.marketSubcategory === 'USDT-M' && x.symbol === 'BTCUSDT');
+    pick('usdt-futures', x => x.marketSubcategory === 'USDT-M' && x.symbol !== 'BTCUSDT');
+    pick('coin-futures', x => x.marketSubcategory === 'COIN-M' && String(x.symbol).startsWith('BTC'));
+    pick('coin-futures', x => x.marketSubcategory === 'COIN-M');
+    pick('usdc-futures', x => x.marketSubcategory === 'USDC-M' && String(x.symbol).includes('BTC'));
+    pick('usdc-futures', x => x.marketSubcategory === 'USDC-M');
+    await startBitgetLiveDiagnostics(candidates);
+  } catch (error) {
+    console.warn('[BITGET LIVE DIAG] startup failed', error instanceof Error ? error.message : String(error));
+  }
   console.log('[DERIV HISTORY STORE]', JSON.stringify(await historyStoreStatus()));
   console.log('[SIRE SPOT ENGINE] initializing persistent order, trade, balance and ledger tables');
   void ensureSireSpotTables().catch(error => console.warn('[SIRE SPOT ENGINE]', error instanceof Error ? error.message : String(error)));
