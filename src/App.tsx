@@ -101,11 +101,12 @@ const makeAssetLogoFallback = (item: Instrument) => makeLogoFallback(item.displa
 const MARKET_TOP_GROUPS = ['CRYPTO'] as const;
 const MARKET_SOURCES: readonly MarketProvider[] = ['BITGET'];
 
-const MARKET_SUBGROUPS: Record<string, readonly string[]> = { CRYPTO: ['Spot', 'Futures'] };
+const MARKET_SUBGROUPS: Record<string, readonly string[]> = { CRYPTO: ['Spot', 'Futures', 'Margin'] };
 
 const MARKET_SUBSUBGROUPS: Record<string, readonly string[]> = {
-  'CRYPTO::Spot': ['ALL', 'USDT', 'USDC', 'U', 'USD', 'BNB', 'BTC', 'FIAT', 'BTCC', 'ETH', 'ALTs', 'RWA', 'Reality'],
-  'CRYPTO::Futures': ['USDT-M', 'COIN-M', 'USDC-M', 'Margin'],
+  'CRYPTO::Spot': ['ALL', 'New', 'Key Assets', 'Pre-IPO', 'Stocks', 'ETF', 'Metals', '0 fee', 'Stablecoin', 'AI', 'Meme', 'Solana ecosystem', 'RWA', 'GameFi', 'DeFi', 'NFT', 'Payment', 'DePIN'],
+  'CRYPTO::Futures': ['ALL', 'New', 'Key Assets', 'Pre-IPO', 'Stocks', 'ETF', 'Metals', 'Commodity', 'US Preferred Stocks', 'Stablecoin', 'AI', 'Meme', 'Solana ecosystem', 'GameFi', 'DeFi', 'NFT', 'Payment', 'DePIN', 'Pre-market'],
+  'CRYPTO::Margin': ['Key Asset', 'Stablecoin', 'AI', 'Meme', 'Solana ecosystem', 'RWA', 'GameFi', 'DeFi', 'NFT', 'Payment', 'DePIN'],
   'TRADE FI::Stocks': ['U.S. stock', 'ETFs'],
   'TRADE FI::Futures': ['Commodities', 'ETFs', 'Stocks', 'Fx', 'Pre-IPO'],
   'TRADE FI::Spot': ['bStocks', 'tCommodities'],
@@ -170,7 +171,10 @@ const matchesMarketSubgroup = (item: Instrument, group: string, subgroup: string
   }
   if (group === 'CRYPTO' && subgroup === 'Futures') {
     return matchesMarketTopGroup(item, 'CRYPTO') &&
-      ['futures','margin'].includes(normalizeMarketLabel(item.marketType));
+      normalizeMarketLabel(item.marketType) === 'futures';
+  }
+  if (group === 'CRYPTO' && subgroup === 'Margin') {
+    return matchesMarketTopGroup(item, 'CRYPTO') && normalizeMarketLabel(item.marketType) === 'margin';
   }
   if (group === 'TRADE FI' && subgroup === 'Stocks') {
     return matchesMarketTopGroup(item, 'TRADE FI') &&
@@ -191,23 +195,36 @@ const matchesMarketSubSubgroup = (item: Instrument, group: string, subgroup: str
   const target = normalizeMarketLabel(subSubgroup);
   if (target === 'all') return true;
   if (group === 'CRYPTO' && subgroup === 'Spot') {
-    const quote = normalizeMarketLabel((item as any).quote);
-    if (['usdt','usdc','u','usd','bnb','btc','btcc','eth'].includes(target)) return quote === target;
-     if (target === 'rwa' || target === 'reality') return (Array.isArray((item as any).marketFilters) ? (item as any).marketFilters : []).map(normalizeMarketLabel).some(value => value === target || value.includes(target));
-    if (target === 'fiat') return ['eur','gbp','aud','brl','try','rub','zar','ngn','jpy','pln','ron','uah','chf','cad','hkd','sgd','mxn','ars'].includes(quote);
-    if (target === 'alts') return quote === 'alts' || quoteBucketForFilter((item as any).quote) === 'alts';
-    return false;
+    const symbolType = normalizeMarketLabel((item as any).symbolType);
+    const values = (Array.isArray((item as any).marketFilters) ? (item as any).marketFilters : []).map(normalizeMarketLabel);
+    if (target === 'new') return Boolean((item as any).newListing);
+    if (target === 'stocks') return symbolType === 'stock' || Boolean((item as any).isReality);
+    if (target === 'etf') return values.includes('etf');
+    if (target === 'metals') return symbolType === 'metal';
+    if (target === 'pre ipo') return values.includes('pre ipo') || Boolean((item as any).preIpo);
+    if (target === '0 fee') return Boolean((item as any).zeroFee);
+    if (target === 'stablecoin') return Boolean((item as any).stablecoin);
+    return values.some(value => value === target || value.includes(target));
   }
   if (group === 'CRYPTO' && subgroup === 'Futures') {
     if (item.provider === 'BITGET') {
-      if (target === 'usdt m') return normalizeMarketLabel((item as any).marketSubcategory) === 'usdt m';
-      if (target === 'coin m') return normalizeMarketLabel((item as any).marketSubcategory) === 'coin m';
-      if (target === 'usdc m') return normalizeMarketLabel((item as any).marketSubcategory) === 'usdc m';
-      if (target === 'margin') return normalizeMarketLabel(item.marketType) === 'margin' || Boolean((item as any).margin);
+      const values = (Array.isArray((item as any).marketFilters) ? (item as any).marketFilters : []).map(normalizeMarketLabel);
+      const symbolType = normalizeMarketLabel((item as any).symbolType);
+      if (target === 'pre market') return Boolean((item as any).preMarket);
+      if (target === 'stocks' || target === 'us preferred stocks') return symbolType === 'stock';
+      if (target === 'etf') return values.includes('etf');
+      if (target === 'metals') return symbolType === 'metal';
+      if (target === 'commodity') return symbolType === 'commodity';
+      if (target === 'new') return Boolean((item as any).newListing);
+      if (target === 'pre ipo') return values.includes('pre ipo') || Boolean((item as any).preIpo);
+      if (target === 'stablecoin') return Boolean((item as any).stablecoin);
+      return values.some(value => value === target || value.includes(target));
     }
-    return normalizeMarketLabel((item as any).marketSubcategory) === target ||
-      normalizeMarketLabel((item as any).settlement) === target ||
-      (target === 'margin' && Boolean((item as any).margin));
+    return false;
+  }
+  if (group === 'CRYPTO' && subgroup === 'Margin') {
+    const values = (Array.isArray((item as any).marketFilters) ? (item as any).marketFilters : []).map(normalizeMarketLabel);
+    return values.some(value => value === target || value.includes(target));
   }
   if (group === 'TRADE FI') return hasMarketValue(item, target);
   if (group === 'ALPHA') return hasMarketValue(item, target);
