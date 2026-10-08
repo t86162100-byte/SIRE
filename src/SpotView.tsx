@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { ChevronDown, LoaderCircle, Search, Star, SlidersHorizontal, CandlestickChart, MoreHorizontal } from 'lucide-react';
 import './spot.css';
 
-type Props = { wallet?: string; onConnect?: () => void };
+type Props = { wallet?: string; initialSymbol?: string; onConnect?: () => void };
 type Side = 'Buy' | 'Sell';
 type OrderType = 'Market' | 'Limit' | 'Stop-limit' | 'Trigger';
 
@@ -28,7 +28,7 @@ function formatPrice(value:number) {
   return value < 1 ? money(value, 6) : money(value, 2);
 }
 
-export default function SpotView({ wallet, onConnect }: Props) {
+export default function SpotView({ wallet, initialSymbol, onConnect }: Props) {
   const [instruments, setInstruments] = useState<SireSpotMarket[]>([]);
   const [selected, setSelected] = useState<SireSpotMarket | null>(null);
   const [search, setSearch] = useState('');
@@ -57,12 +57,12 @@ export default function SpotView({ wallet, onConnect }: Props) {
         if (!payload?.ok || !Array.isArray(payload?.instruments)) throw new Error(payload?.error || 'Unable to load Bitget Spot markets.');
         const spot = payload.instruments.filter((item:SireSpotMarket) => item.status === 'TRADING' && item.marketType === 'Spot' && item.quote === 'USDT');
         setInstruments(spot);
-        setSelected(current => current || spot.find(item => item.symbol === 'BTCUSDT') || spot[0] || null);
+        setSelected(current => current || spot.find(item => item.symbol === initialSymbol) || spot.find(item => item.symbol === 'BTCUSDT') || spot[0] || null);
       })
       .catch(e => { if (!cancelled) setError(e instanceof Error ? e.message : String(e)); })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
-  }, []);
+  }, [initialSymbol]);
 
   useEffect(() => {
     if (!selected) return;
@@ -199,7 +199,7 @@ export default function SpotView({ wallet, onConnect }: Props) {
     <main className="sire-spot-workspace">
       <section className="sire-spot-trade-panel">
         <div className="sire-spot-trade-content">
-          <button type="button" className="sire-spot-instrument-pill" onClick={() => setPickerOpen(true)} aria-label="Select spot instrument">
+          <button type="button" className="sire-spot-instrument-pill" onClick={() => { setPickerOpen(false); window.dispatchEvent(new CustomEvent('sire:open-market-for-spot')); }} aria-label="Select spot instrument">
             <span className="sire-spot-instrument-logo">
               <img src={selected?.logoUrl || ''} alt="" onError={e => { e.currentTarget.style.display='none'; }} />
               {!selected?.logoUrl && <span>{base.slice(0,1) || '?'}</span>}
@@ -271,7 +271,7 @@ export default function SpotView({ wallet, onConnect }: Props) {
       </aside>
     </main>
 
-    {pickerOpen && <div className="sire-spot-picker-backdrop" onClick={() => setPickerOpen(false)}>
+    {false && pickerOpen && <div className="sire-spot-picker-backdrop" onClick={() => setPickerOpen(false)}>
       <section className="sire-spot-picker" onClick={e => e.stopPropagation()}>
         <div className="sire-spot-picker-head"><strong>Select spot pair</strong><button type="button" onClick={() => setPickerOpen(false)}>×</button></div>
         <div className="sire-spot-search"><Search size={15}/><input autoFocus value={search} onChange={e => setSearch(e.target.value)} placeholder="Search BTC, ETH, SOL…" /></div>
