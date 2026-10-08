@@ -18,7 +18,7 @@ import { saveLimitOrder, listLimitOrders, cancelLimitOrder, runLimitOrderMonitor
 import { fetchBinanceCatalogServer, fetchBinanceMarketSnapshotServer, fetchBinanceHistoryServer } from './backend/binance-catalog.ts';
 import { fetchBitgetCatalogServer, bitgetCatalogStatus } from './backend/bitget-catalog.ts';
 import { bitgetMarketSubscribe, bitgetMarketUnsubscribe, bitgetMarketDisconnect, startBitgetLiveDiagnostics, bitgetLiveStatus } from './backend/bitget-live-market.ts';
-import { bitgetAuthenticatedHealth } from './backend/sire-provider-execution.ts';
+import { bitgetAuthenticatedHealth, bitgetMarketOrderBook, bitgetOwnerAccount, bitgetOwnerPlaceOrder } from './backend/sire-provider-execution.ts';
 import { fetchSireSpotCatalogServer, sireSpotCatalogStatus } from './backend/sire-spot-catalog.ts';
 import { ensureSireSpotTables, getSpotBook, placeSpotOrder, cancelSpotOrder, getSpotAccount, getSpotOrders, getSpotTrades, spotEngineStatus, spotSubscribe, spotUnsubscribe, spotDisconnect } from './backend/sire-spot-engine.ts';
 import { getRoutedSpotLiquidity, spotLiquidityStatus } from './backend/sire-spot-liquidity.ts';
@@ -1011,6 +1011,33 @@ const server = http.createServer(async (req,res) => {
     }
     if (req.method === 'GET' && pathname === '/api/sire/spot/health') {
       return res.writeHead(200,{'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify(await spotEngineStatus()));
+    }
+    if (req.method === 'GET' && pathname === '/api/sire/bitget/orderbook') {
+      try {
+        const url = new URL(req.url || '/', 'http://sire.local');
+        const category = String(url.searchParams.get('category') || 'SPOT').toUpperCase();
+        const symbol = String(url.searchParams.get('symbol') || '').toUpperCase();
+        const limit = Number(url.searchParams.get('limit') || 25);
+        return res.writeHead(200,{'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify(await bitgetMarketOrderBook(category,symbol,limit)));
+      } catch (cause) {
+        return res.writeHead(502,{'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify({ok:false,error:cause instanceof Error ? cause.message : String(cause)}));
+      }
+    }
+    if (req.method === 'GET' && pathname === '/api/sire/bitget/account') {
+      try {
+        return res.writeHead(200,{'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify(await bitgetOwnerAccount()));
+      } catch (cause) {
+        return res.writeHead(502,{'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify({ok:false,error:cause instanceof Error ? cause.message : String(cause)}));
+      }
+    }
+    if (req.method === 'POST' && pathname === '/api/sire/bitget/order') {
+      try {
+        const parsed = body ? JSON.parse(body) : {};
+        const order = await bitgetOwnerPlaceOrder(parsed);
+        return res.writeHead(200,{'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify(order));
+      } catch (cause) {
+        return res.writeHead(400,{'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify({ok:false,error:cause instanceof Error ? cause.message : String(cause)}));
+      }
     }
     if (req.method === 'GET' && pathname === '/api/sire/bitget/live/status') {
       return res.writeHead(200,{'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify(bitgetLiveStatus()));
