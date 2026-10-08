@@ -102,16 +102,6 @@ export default function FuturesView({initialSymbol}:Props){
   };
 
   return <div className="sire-futures-shell">
-    <div className="sire-futures-topbar">
-      <div className="sire-futures-contracts">
-        {(['USDT-M','COIN-M','USDC-M'] as const).map(tab=><button key={tab} className={contractTab===tab?'active':''} onClick={()=>setContractTab(tab)}>{tab}</button>)}
-      </div>
-      <div className="sire-futures-risk">
-        <button onClick={()=>setMarginMode(marginMode==='Cross'?'Isolated':'Cross')}><span>Margin</span><b>{marginMode}</b></button>
-        <button><span>Position</span><b>One-way</b></button>
-      </div>
-    </div>
-
     <main className="sire-futures-workspace">
       <section className="sire-futures-trade">
         <div className="sire-futures-head">
