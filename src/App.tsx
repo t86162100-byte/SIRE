@@ -626,12 +626,17 @@ export default function App() {
   const selectInstrument = (item: Instrument) => {
     setSelected(item);
     setSearch('');
+    // Spot pair selection is a navigation handoff, not a chart selection.
+    // Do this first so choosing a Spot instrument cannot mutate the chart state.
+    if (spotReturnToTrade && item.provider === 'BITGET' && normalizeMarketLabel(item.marketType) === 'spot') {
+      setTradeOpen(true);
+      return;
+    }
     if (chartableInstruments.some(candidate => candidate.id === item.id)) {
       setChartSymbols(current => current.length
         ? current.map((value, index) => index === 0 ? item.symbol : value)
         : [item.symbol]);
     }
-    if (spotReturnToTrade && item.provider === 'BITGET') setTradeOpen(true);
   };
 
   const openInstrumentPicker = (mode: 'main' | 'multi') => {
