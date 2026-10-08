@@ -26,6 +26,7 @@ export default function FuturesView({initialSymbol}:Props){
   const [action,setAction]=useState<'Open'|'Close'>('Open');
   const [orderType,setOrderType]=useState<'Market'|'Limit'>('Market');
   const [qty,setQty]=useState('');
+  const [qtyPercent,setQtyPercent]=useState(0);
   const [price,setPrice]=useState('');
   const [leverage,setLeverage]=useState('10');
   const [marginMode,setMarginMode]=useState<'Cross'|'Isolated'>('Cross');
@@ -97,7 +98,7 @@ export default function FuturesView({initialSymbol}:Props){
       const payload={category,symbol:selected.symbol,side:side==='Long'?(isClose?'sell':'buy'):(isClose?'buy':'sell'),orderType:orderType.toLowerCase(),qty:String(n),price:orderType==='Limit'?String(price):undefined,posSide:side.toLowerCase(),marginMode:marginMode.toLowerCase(),reduceOnly:isClose?'yes':'no'};
       const result=await fetch('/api/sire/bitget/order',{method:'POST',headers:{'Content-Type':'application/json',Accept:'application/json'},body:JSON.stringify(payload)}).then(r=>readJson(r,'Bitget futures order'));
       if(!result?.ok)throw new Error(result?.error||'Futures order failed.');
-      setQty('');refreshPositions();
+      setQty('');setQtyPercent(0);refreshPositions();
     }catch(e){setError(e instanceof Error?e.message:String(e))}finally{setBusy(false)}
   };
 
@@ -134,8 +135,8 @@ export default function FuturesView({initialSymbol}:Props){
           <label><span>Price</span><input inputMode="decimal" value={price} onChange={e=>setPrice(e.target.value.replace(/[^0-9.]/g,''))}/><em>USDT</em></label>
           <button type="button" onClick={()=>setPrice(priceFmt(marketPrice).replace(/,/g,''))}>BBO</button>
         </div>
-        <label className="sire-futures-input"><span>Quantity</span><input inputMode="decimal" value={qty} onChange={e=>setQty(e.target.value.replace(/[^0-9.]/g,''))}/><em>{selected?.baseAsset||'Contracts'}</em></label>
-        <div className="sire-futures-slider"><div><span>Position size</span><b>{qty||'0'}</b></div><input type="range" min="0" max="100" value={Math.min(100,Number(qty)||0)} onChange={e=>setQty(e.target.value)}/><div className="sire-futures-range-labels"><span>0%</span><span>25%</span><span>50%</span><span>75%</span><span>100%</span></div></div>
+        <label className="sire-futures-input"><span>Quantity</span><input inputMode="decimal" value={qty} onChange={e=>setQty(e.target.value.replace(/[^0-9.]/g,''))}/><span className="sire-futures-quantity-unit"><b>{selected?.baseAsset||'BTC'}</b><ChevronDown size={11}/></span></label>
+        <div className="sire-futures-slider"><div><span>Position size</span><b>{qtyPercent}%</b></div><input type="range" min="0" max="100" step="1" value={qtyPercent} onChange={e=>{const v=Number(e.target.value);setQtyPercent(v);setQty(v===0?'':String(v))}}/><div className="sire-futures-range-labels"><span>0%</span><span>25%</span><span>50%</span><span>75%</span><span>100%</span></div></div>
 
         <div className="sire-futures-position-card">
           <div><span>Position</span><b>{activePosition?activePosition.posSide?.toUpperCase()||'OPEN':'No open position'}</b></div>
