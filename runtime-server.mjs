@@ -1242,8 +1242,8 @@ server.listen(PORT,HOST,async()=>{
   }
   try {
     const catalog = await fetchBitgetCatalogServer(false);
-    const candidates:any[] = [];
-    const pick = (instType:string, predicate:(x:any)=>boolean) => {
+    const candidates = [];
+    const pick = (instType, predicate) => {
       const item = (catalog?.instruments || []).find(predicate);
       if (item) candidates.push({instType, symbol:String(item.symbol).toUpperCase()});
     };
