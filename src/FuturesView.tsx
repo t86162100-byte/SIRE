@@ -150,15 +150,15 @@ export default function FuturesView({initialSymbol}:Props){
           <label><span>Reduce Only</span><input type="checkbox" checked={reduceOnly} onChange={e=>setReduceOnly(e.target.checked)} aria-label="Toggle Reduce Only"/></label>
         </div>
         <div className="sire-futures-costs">
-          <div className="sire-futures-cost-row"><span>Max</span><b>—</b></div>
-          <div className="sire-futures-cost-row"><span>Cost</span><b>—</b></div>
-          <div className="sire-futures-open-row">
-            <div><span>Cost</span><b>—</b></div>
-            <button type="button" className="sire-futures-open-long" onClick={()=>{setSide('Long');setAction('Open');setReduceOnly(false)}}>Open long</button>
+          <div className="sire-futures-action-block">
+            <div className="sire-futures-action-meta"><span>Max</span><b>—</b></div>
+            <div className="sire-futures-action-meta"><span>Cost</span><b>—</b></div>
+            <button disabled={busy} type="button" className="sire-futures-open-long" onClick={()=>{setSide('Long');setAction('Open');setReduceOnly(false)}}>Open long</button>
           </div>
-          <div className="sire-futures-open-row">
-            <div><span>Cost</span><b>—</b></div>
-            <button type="button" className="sire-futures-open-short" onClick={()=>{setSide('Short');setAction('Open');setReduceOnly(false)}}>Open short</button>
+          <div className="sire-futures-action-block">
+            <div className="sire-futures-action-meta"><span>Max</span><b>—</b></div>
+            <div className="sire-futures-action-meta"><span>Cost</span><b>—</b></div>
+            <button disabled={busy} type="button" className="sire-futures-open-short" onClick={()=>{setSide('Short');setAction('Open');setReduceOnly(false)}}>Open short</button>
           </div>
         </div>
         <button disabled={busy} className={'sire-futures-submit '+(side==='Long'?'long':'short')} onClick={submit}>{busy?<LoaderCircle className="sire-spin" size={15}/>:null}{action} {side}</button>
