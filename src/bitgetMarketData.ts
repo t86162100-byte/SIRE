@@ -40,6 +40,8 @@ export type BitgetInstrument = {
   fundingRate?:number;
   nextFundingTime?:number;
   openInterest?:number;
+  logoUrl?:string;
+  providerLogoUrl?:string;
 };
 
 type Bar = {time:number;open:number;high:number;low:number;close:number;volume?:number};
