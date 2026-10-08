@@ -41,7 +41,7 @@ export default function SpotView({ wallet, onConnect }: Props) {
   const [snapshot, setSnapshot] = useState<Snapshot>({});
   const [book, setBook] = useState<SpotBook>({ asks:[], bids:[], lastTrade:null });
   const [balances, setBalances] = useState<SpotBalance[]>([]);
-  const [subVersion, setSubVersion] = useState(0);
+  const [, setSubVersion] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [mobilePanel, setMobilePanel] = useState<'Trade'|'Chart'>('Trade');
@@ -137,7 +137,7 @@ export default function SpotView({ wallet, onConnect }: Props) {
         setBalances(Array.isArray(p.assets) ? p.assets.map((a:any)=>({asset:String(a.coin||''),available:Number(a.available||0),locked:Number(a.locked||0)})) : []);
       }).catch(()=>{});
     return () => { cancelled = true; };
-  }, [subVersion]);
+  }, []);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -184,7 +184,7 @@ export default function SpotView({ wallet, onConnect }: Props) {
       const payload = await response.json().catch(()=>({}));
       if (!response.ok || !payload?.ok) throw new Error(String(payload?.error || 'SIRE Spot order was rejected.'));
       setQuantity('');
-      if (payload?.order?.averagePrice) setPrice(String(payload.order.averagePrice));
+      if (payload?.averagePrice) setPrice(String(payload.averagePrice));
       const [bookResponse, accountResponse] = await Promise.all([
         fetch('/api/sire/bitget/orderbook?category=' + (selected?.marketType === 'Margin' ? 'SPOT' : 'SPOT') + '&symbol=' + encodeURIComponent(selected?.symbol || '') + '&limit=25', {cache:'no-store'}),
         fetch('/api/sire/bitget/account', {cache:'no-store'})
