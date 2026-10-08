@@ -17,6 +17,7 @@ import { recordIssue, getRecentIssues } from './backend/sire-issue-tracker.ts';
 import { saveLimitOrder, listLimitOrders, cancelLimitOrder, runLimitOrderMonitorBatch, limitOrderStoreStatus } from './backend/limit-order-store.ts';
 import { fetchBinanceCatalogServer, fetchBinanceMarketSnapshotServer, fetchBinanceHistoryServer } from './backend/binance-catalog.ts';
 import { fetchBitgetCatalogServer, bitgetCatalogStatus } from './backend/bitget-catalog.ts';
+import { bitgetAuthenticatedHealth } from './backend/sire-provider-execution.ts';
 import { fetchSireSpotCatalogServer, sireSpotCatalogStatus } from './backend/sire-spot-catalog.ts';
 import { ensureSireSpotTables, getSpotBook, placeSpotOrder, cancelSpotOrder, getSpotAccount, getSpotOrders, getSpotTrades, spotEngineStatus, spotSubscribe, spotUnsubscribe, spotDisconnect } from './backend/sire-spot-engine.ts';
 import { getRoutedSpotLiquidity, spotLiquidityStatus } from './backend/sire-spot-liquidity.ts';
@@ -1009,6 +1010,10 @@ const server = http.createServer(async (req,res) => {
     }
     if (req.method === 'GET' && pathname === '/api/sire/spot/health') {
       return res.writeHead(200,{'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify(await spotEngineStatus()));
+    }
+    if (req.method === 'GET' && pathname === '/api/sire/bitget/auth-health') {
+      const result = await bitgetAuthenticatedHealth();
+      return res.writeHead(result.ok ? 200 : 502,{ 'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8' }).end(JSON.stringify(result));
     }
     if (req.method === 'GET' && pathname === '/api/sire/bitget/catalog') {
       try {
