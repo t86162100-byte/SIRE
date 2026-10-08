@@ -5,7 +5,7 @@ import ResearchLab from './ResearchLab';
 import HomeView from './HomeView';
 import FinancialChart from './FinancialChart';
 import { fetchDerivInstruments, type DerivInstrument } from './derivMarketData';
-import { fetchBitgetInstruments, type BitgetInstrument } from './bitgetMarketData';
+import { type BitgetInstrument } from './bitgetMarketData';
 import { SireErrorScreen } from './SireErrorBoundary';
 import './nativeTerminal.css';
 import { MarketInstrumentCard } from './marketCardDesigns';
@@ -98,14 +98,10 @@ const makeLogoFallback = (label: string) => {
 
 const makeAssetLogoFallback = (item: Instrument) => makeLogoFallback(item.displaySymbol || item.symbol);
 
-const MARKET_TOP_GROUPS = ['CRYPTO', 'TRADE FI', 'ALPHA'] as const;
-const BITGET_TOP_GROUPS = MARKET_TOP_GROUPS;
-const MARKET_SOURCES: readonly MarketProvider[] = ['DERIV', 'BITGET'];
+const MARKET_TOP_GROUPS = ['CRYPTO'] as const;
+const MARKET_SOURCES: readonly MarketProvider[] = ['BITGET'];
 
-const MARKET_SUBGROUPS: Record<string, readonly string[]> = {
-  CRYPTO: ['Spot', 'Futures'],
-  'TRADE FI': ['Stocks', 'Futures', 'Spot'],
-};
+const MARKET_SUBGROUPS: Record<string, readonly string[]> = { CRYPTO: ['Spot', 'Futures'] };
 
 const MARKET_SUBSUBGROUPS: Record<string, readonly string[]> = {
   'CRYPTO::Spot': ['ALL', 'USDT', 'USDC', 'U', 'USD', 'BNB', 'BTC', 'FIAT', 'BTCC', 'ETH', 'ALTs', 'RWA', 'Reality'],
@@ -197,7 +193,7 @@ const matchesMarketSubSubgroup = (item: Instrument, group: string, subgroup: str
   if (group === 'CRYPTO' && subgroup === 'Spot') {
     const quote = normalizeMarketLabel((item as any).quote);
     if (['usdt','usdc','u','usd','bnb','btc','btcc','eth'].includes(target)) return quote === target;
-     if (target === 'rwa' || target === 'reality') return values.some(value => value === target || value.includes(target));
+     if (target === 'rwa' || target === 'reality') return (Array.isArray((item as any).marketFilters) ? (item as any).marketFilters : []).map(normalizeMarketLabel).some(value => value === target || value.includes(target));
     if (target === 'fiat') return ['eur','gbp','aud','brl','try','rub','zar','ngn','jpy','pln','ron','uah','chf','cad','hkd','sgd','mxn','ars'].includes(quote);
     if (target === 'alts') return quote === 'alts' || quoteBucketForFilter((item as any).quote) === 'alts';
     return false;
@@ -206,6 +202,7 @@ const matchesMarketSubSubgroup = (item: Instrument, group: string, subgroup: str
     if (item.provider === 'BITGET') {
       if (target === 'usdt m') return normalizeMarketLabel((item as any).marketSubcategory) === 'usdt m';
       if (target === 'coin m') return normalizeMarketLabel((item as any).marketSubcategory) === 'coin m';
+      if (target === 'usdc m') return normalizeMarketLabel((item as any).marketSubcategory) === 'usdc m';
       if (target === 'margin') return normalizeMarketLabel(item.marketType) === 'margin' || Boolean((item as any).margin);
     }
     return normalizeMarketLabel((item as any).marketSubcategory) === target ||
