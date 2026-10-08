@@ -1032,6 +1032,10 @@ const server = http.createServer(async (req,res) => {
     }
     if (req.method === 'POST' && pathname === '/api/sire/bitget/order') {
       try {
+        const ownerEmail = String(process.env.SIRE_OWNER_EMAIL || '').trim().toLowerCase();
+        if (!ownerEmail) return res.writeHead(503,{'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify({ok:false,error:'SIRE_OWNER_EMAIL is not configured for direct Bitget trading.'}));
+        const user = await currentUser(req);
+        if (!user || String(user.email || '').toLowerCase() !== ownerEmail) return res.writeHead(401,{'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify({ok:false,error:'Sign in with the SIRE owner account to trade through Bitget.'}));
         const parsed = body ? JSON.parse(body) : {};
         const order = await bitgetOwnerPlaceOrder(parsed);
         return res.writeHead(200,{'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify(order));
