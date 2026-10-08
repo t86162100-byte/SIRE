@@ -112,14 +112,24 @@ export default function FuturesView({initialSymbol}:Props){
           
         </div>
 
-        <div className="sire-futures-order-tabs"><button className={action==='Open'?'active':''} onClick={()=>{setAction('Open');setReduceOnly(false)}}>Open</button><button className={action==='Close'?'active':''} onClick={()=>{setAction('Close');setReduceOnly(true)}}>Close</button></div>
+        <div className="sire-futures-settings-row">
+          <button className="sire-futures-setting-card" onClick={()=>setMarginMode(marginMode==='Cross'?'Isolated':'Cross')}>
+            <span>Margin</span><b>{marginMode}</b><ChevronDown size={12}/>
+          </button>
+          <button className="sire-futures-setting-card" onClick={()=>{const next=leverage==='10'?'20':leverage==='20'?'5':'10';void applyLeverage(next)}}>
+            <span>Leverage</span><b>{leverage}×</b><ChevronDown size={12}/>
+          </button>
+        </div>
+
+        <div className="sire-futures-order-tabs">
+          <button className={action==='Open'?'active':''} onClick={()=>{setAction('Open');setReduceOnly(false)}}>Open</button>
+          <button className={action==='Close'?'active':''} onClick={()=>{setAction('Close');setReduceOnly(true)}}>Close</button>
+        </div>
 
         <div className="sire-futures-side"><button className={side==='Long'?'long active':'long'} onClick={()=>setSide('Long')}>Long</button><button className={side==='Short'?'short active':'short'} onClick={()=>setSide('Short')}>Short</button></div>
 
         <div className="sire-futures-control-row">
           <button onClick={()=>setOrderType(orderType==='Market'?'Limit':'Market')}><span>Order</span><b>{orderType}</b><ChevronDown size={12}/></button>
-          <button onClick={()=>setMarginMode(marginMode==='Cross'?'Isolated':'Cross')}><span>Margin</span><b>{marginMode}</b></button>
-          <button onClick={()=>{const next=leverage==='10'?'20':leverage==='20'?'5':'10';void applyLeverage(next)}}><span>Leverage</span><b>{leverage}×</b></button>
         </div>
 
         {orderType==='Limit'&&<label className="sire-futures-input"><span>Price</span><input inputMode="decimal" value={price} onChange={e=>setPrice(e.target.value.replace(/[^0-9.]/g,''))}/><em>USDT</em></label>}
