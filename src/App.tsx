@@ -271,7 +271,7 @@ export default function App() {
   const [derivLoading, setDerivLoading] = useState(true);
   const [derivError, setDerivError] = useState('');
   const [search, setSearch] = useState('');
-  const [providerFilter, setProviderFilter] = useState<'ALL' | MarketProvider>('ALL');
+  const [providerFilter, setProviderFilter] = useState<'ALL' | MarketProvider>('BITGET');
   const [categoryFilter, setCategoryFilter] = useState<string>('ALL');
   const [marketSubcategoryFilter, setMarketSubcategoryFilter] = useState<string>('ALL');
   const [marketSubSubcategoryFilter, setMarketSubSubcategoryFilter] = useState<string>('ALL');
