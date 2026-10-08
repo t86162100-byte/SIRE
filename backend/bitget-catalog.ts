@@ -15,18 +15,27 @@ const n = (v: unknown) => {
 const upper = (v: unknown) => s(v).toUpperCase();
 
 async function getJson(url: string) {
-  const response = await fetch(url, {
-    cache: 'no-store',
-    headers: { Accept: 'application/json', 'User-Agent': 'SIRE-Bitget-Catalog/1.0' },
-    signal: AbortSignal.timeout(20_000),
-  });
-  const raw = await response.text();
-  let payload: any = {};
-  try { payload = raw ? JSON.parse(raw) : {}; } catch { payload = {}; }
-  if (!response.ok || payload?.code !== '00000') {
-    throw new Error('Bitget instruments request failed: ' + s(payload?.msg || raw || response.statusText).slice(0, 300));
+  let lastError = 'unknown Bitget instruments error';
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    try {
+      const response = await fetch(url, {
+        cache: 'no-store',
+        headers: { Accept: 'application/json', 'User-Agent': 'SIRE-Bitget-Catalog/1.0' },
+        signal: AbortSignal.timeout(12_000),
+      });
+      const raw = await response.text();
+      let payload: any = {};
+      try { payload = raw ? JSON.parse(raw) : {}; } catch { payload = {}; }
+      if (response.ok && payload?.code === '00000' && Array.isArray(payload?.data)) {
+        return payload.data;
+      }
+      lastError = 'HTTP ' + response.status + ': ' + s(payload?.msg || raw || response.statusText).slice(0, 300);
+    } catch (cause) {
+      lastError = cause instanceof Error ? cause.message : String(cause);
+    }
+    if (attempt < 3) await new Promise(resolve => setTimeout(resolve, 500 * attempt));
   }
-  return Array.isArray(payload?.data) ? payload.data : [];
+  throw new Error('Bitget instruments request failed after 3 attempts: ' + lastError);
 }
 
 function quoteBucket(quote: string) {
@@ -136,16 +145,23 @@ function normalize(row: Json, requestedCategory: string): Json | null {
 }
 
 async function loadCatalog(): Promise<Json> {
-  const settled = await Promise.all(CATEGORIES.map(async category => {
-    const rows = await getJson(API_BASE + INSTRUMENTS_PATH + '?category=' + encodeURIComponent(category));
-    return { category, rows };
+  const results = await Promise.all(CATEGORIES.map(async category => {
+    try {
+      const rows = await getJson(API_BASE + INSTRUMENTS_PATH + '?category=' + encodeURIComponent(category));
+      return { category, rows, error: null as string | null };
+    } catch (cause) {
+      const error = cause instanceof Error ? cause.message : String(cause);
+      console.error('[BITGET CATALOG CATEGORY]', category, error);
+      return { category, rows: [] as Json[], error };
+    }
   }));
 
   const instruments: Json[] = [];
   const seen = new Set<string>();
   const counts: Record<string, number> = {};
+  const errors: Record<string, string> = {};
 
-  for (const { category, rows } of settled) {
+  for (const { category, rows, error } of results) {
     let accepted = 0;
     for (const row of rows) {
       const item = normalize(row, category);
@@ -157,6 +173,11 @@ async function loadCatalog(): Promise<Json> {
       accepted++;
     }
     counts[category] = accepted;
+    if (error) errors[category] = error;
+  }
+
+  if (!instruments.length) {
+    throw new Error('Bitget catalog unavailable: all instrument categories failed.');
   }
 
   return {
@@ -167,6 +188,8 @@ async function loadCatalog(): Promise<Json> {
     count:instruments.length,
     counts,
     categories:[...CATEGORIES],
+    errors:Object.keys(errors).length ? errors : undefined,
+    partial:Object.keys(errors).length > 0,
     instruments
   };
 }
