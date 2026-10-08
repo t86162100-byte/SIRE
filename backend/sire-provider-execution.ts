@@ -132,6 +132,46 @@ export async function bitgetAuthenticatedHealth(){
   }
 }
 
+export async function bitgetMarketOrderBook(category:string,symbol:string,limit=25){
+  const requested=String(category||'SPOT').toUpperCase();
+  const actual=requested==='MARGIN'?'SPOT':requested;
+  if(!['SPOT','USDT-FUTURES','COIN-FUTURES','USDC-FUTURES'].includes(actual)) throw new Error('Unsupported Bitget market category.');
+  const safeLimit=Math.max(1,Math.min(100,Math.floor(Number(limit)||25)));
+  const data=await bitgetPublic('/api/v3/market/orderbook?category='+encodeURIComponent(actual)+'&symbol='+encodeURIComponent(String(symbol).toUpperCase())+'&limit='+safeLimit);
+  const row=data?.data||{};
+  return {
+    ok:true,source:'BITGET_REST',category:requested,symbol:String(symbol).toUpperCase(),
+    ts:Number(row?.ts)||Date.now(),
+    asks:Array.isArray(row?.a)?row.a.map((x:any)=>({price:Number(x?.[0]),quantity:Number(x?.[1])})).filter((x:any)=>Number.isFinite(x.price)&&Number.isFinite(x.quantity)) : [],
+    bids:Array.isArray(row?.b)?row.b.map((x:any)=>({price:Number(x?.[0]),quantity:Number(x?.[1])})).filter((x:any)=>Number.isFinite(x.price)&&Number.isFinite(x.quantity)) : []
+  };
+}
+
+export async function bitgetOwnerAccount(){
+  const data=await bitgetRequest('GET','/api/v3/account/assets');
+  return {ok:true,accountEquity:data?.data?.accountEquity??null,usdtEquity:data?.data?.usdtEquity??null,assets:Array.isArray(data?.data?.assets)?data.data.assets:[]};
+}
+
+export async function bitgetOwnerPlaceOrder(input:any){
+  const category=String(input?.category||'SPOT').toUpperCase();
+  const symbol=String(input?.symbol||'').trim().toUpperCase();
+  const side=String(input?.side||'').trim().toLowerCase();
+  const orderType=String(input?.orderType||'').trim().toLowerCase();
+  const qty=positiveNumber(input?.qty,'order quantity');
+  const price=input?.price==null||input?.price===''?undefined:positiveNumber(input.price,'order price');
+  if(!['SPOT','MARGIN','USDT-FUTURES','COIN-FUTURES','USDC-FUTURES'].includes(category)) throw new Error('Unsupported Bitget order category.');
+  if(!symbol) throw new Error('A Bitget symbol is required.');
+  if(!['buy','sell'].includes(side)) throw new Error('Order side must be buy or sell.');
+  if(!['market','limit'].includes(orderType)) throw new Error('Order type must be market or limit.');
+  if(orderType==='limit'&&!price) throw new Error('Limit price is required.');
+  const oid=clientOid(String(input?.clientOid||''));
+  const body:any={category,symbol,side,orderType,qty:String(qty),clientOid:oid};
+  if(orderType==='limit'){body.price=String(price);body.timeInForce='gtc';}
+  else body.timeInForce='ioc';
+  const placed=await bitgetRequest('POST','/api/v3/trade/place-order',body);
+  return {ok:true,provider:'BITGET',category,symbol,side,orderType,qty,price:price??null,orderId:String(placed?.data?.orderId||''),clientOid:String(placed?.data?.clientOid||oid)};
+}
+
 export async function bitgetExecutionHealth(){
   try{
     bitgetConfig();
