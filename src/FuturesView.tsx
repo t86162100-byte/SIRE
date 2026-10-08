@@ -114,10 +114,10 @@ export default function FuturesView({initialSymbol}:Props){
 
         <div className="sire-futures-settings-row">
           <button className="sire-futures-setting-card" onClick={()=>setMarginMode(marginMode==='Cross'?'Isolated':'Cross')}>
-            <span>Margin</span><b>{marginMode}</b><ChevronDown size={12}/>
+            <b>{marginMode}</b>
           </button>
           <button className="sire-futures-setting-card" onClick={()=>{const next=leverage==='10'?'20':leverage==='20'?'5':'10';void applyLeverage(next)}}>
-            <span>Leverage</span><b>{leverage}×</b><ChevronDown size={12}/>
+            <b>{leverage}×</b>
           </button>
         </div>
 
