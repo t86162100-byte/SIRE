@@ -521,8 +521,8 @@ export default function App() {
         const parts = key.split(':');
         return { instType: parts[0], symbol: parts[1] };
       });
-      if (socket.readyState === WebSocket.OPEN && subscriptions.length) {
-        socket.send(JSON.stringify({ type:'bitget.market.subscribe', subscriptions }));
+      if (socket?.readyState === WebSocket.OPEN && subscriptions.length) {
+        socket?.send(JSON.stringify({ type:'bitget.market.subscribe', subscriptions }));
       }
     };
       socket.onopen = sendDesired;
