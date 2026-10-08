@@ -102,10 +102,10 @@ function ingest(message:any){
     if(topic==='ticker'){
       const event:LiveEvent={
         provider:'BITGET',type:'ticker',instType,symbol,timestamp:Date.now(),
-        exchangeTimestamp:ts,price:safeNumber(row?.lastPr),bid:safeNumber(row?.bidPr),ask:safeNumber(row?.askPr),
-        bidSize:safeNumber(row?.bidSz),askSize:safeNumber(row?.askSz),change24h:safeNumber(row?.change24h),
-        volume24h:safeNumber(row?.baseVolume),quoteVolume24h:safeNumber(row?.quoteVolume),
-        high24h:safeNumber(row?.high24h),low24h:safeNumber(row?.low24h),source:'BITGET_WS'
+        exchangeTimestamp:ts,price:safeNumber(row?.lastPrice),bid:safeNumber(row?.bid1Price),ask:safeNumber(row?.ask1Price),
+        bidSize:safeNumber(row?.bid1Size),askSize:safeNumber(row?.ask1Size),change24h:safeNumber(row?.price24hPcnt),
+        volume24h:safeNumber(row?.volume24h),quoteVolume24h:safeNumber(row?.turnover24h),
+        high24h:safeNumber(row?.highPrice24h),low24h:safeNumber(row?.lowPrice24h),source:'BITGET_WS'
       };
       stat.ticks++; stat.lastTickAt=event.timestamp; stat.lastPrice=event.price??stat.lastPrice;
       broadcast(event); logDiagnostic(event);
