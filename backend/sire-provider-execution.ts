@@ -101,9 +101,32 @@ async function bitgetSpotPrice(symbol:string){
 
 export async function bitgetAuthenticatedHealth(){
   try{
-    const data=await bitgetRequest('GET','/api/v3/account/assets');
-    const assets=Array.isArray(data?.data?.assets)?data.data.assets:[];
-    return {ok:true,authenticated:true,detail:'Bitget authenticated API connection is working.',accountEquity:data?.data?.accountEquity??null,assetCount:assets.length};
+    const [assetsData,infoData,settingsData]=await Promise.all([
+      bitgetRequest('GET','/api/v3/account/assets'),
+      bitgetRequest('GET','/api/v3/account/info'),
+      bitgetRequest('GET','/api/v3/account/settings')
+    ]);
+    const assets=Array.isArray(assetsData?.data?.assets)?assetsData.data.assets:[];
+    const permissions=Array.isArray(infoData?.data?.permissions)?infoData.data.permissions.map((x:any)=>String(x)):[]; 
+    const permType=String(infoData?.data?.permType||'');
+    const accountMode=String(settingsData?.data?.accountMode||'');
+    const accountLevel=String(settingsData?.data?.accountLevel||'');
+    const utaManagement=permissions.includes('uta_mgt');
+    const utaTrading=permissions.includes('uta_trade');
+    return {
+      ok:true,
+      authenticated:true,
+      detail:'Bitget authenticated API connection is working.',
+      accountEquity:assetsData?.data?.accountEquity??null,
+      assetCount:assets.length,
+      permType,
+      permissions,
+      utaManagement,
+      utaTrading,
+      tradingReady:permType==='read-and-write' && utaManagement && utaTrading,
+      accountMode,
+      accountLevel
+    };
   }catch(e){
     return {ok:false,authenticated:false,detail:e instanceof Error?e.message:String(e)};
   }
