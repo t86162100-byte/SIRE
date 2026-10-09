@@ -116,3 +116,12 @@
 .sire-futures-iceberg-setting input{width:88px;flex:0 0 88px;min-width:0;height:34px;box-sizing:border-box;padding:0 8px;border:1px solid #303640;border-radius:5px;background:#0b0b0b;color:#fff;text-align:right;font-size:12px;font-weight:850;outline:none}
 .sire-futures-iceberg-setting input:focus{border-color:#aeb5bf}
 .sire-futures-iceberg-done{width:100%;min-height:38px;margin-top:15px;border:0;border-radius:6px;background:#f4f5f6;color:#090909;font-size:11px;font-weight:950;cursor:pointer}
+
+/* Compact TWAP schedule */
+.sire-futures-twap-quantity{margin-top:0}
+.sire-futures-twap-slider{margin-top:0;margin-bottom:5px}
+.sire-futures-twap-running-label{margin:4px 0}
+.sire-futures-twap-time-row{display:grid;grid-template-columns:1fr 1fr;gap:5px;margin:0 0 5px}
+.sire-futures-twap-time-row label{display:flex;align-items:center;justify-content:space-between;height:30px;padding:0 8px;border:1px solid #252b34;border-radius:5px;background:#0b0b0b;box-sizing:border-box}
+.sire-futures-twap-time-row input{width:100%;min-width:0;border:0;outline:0;background:transparent;color:#fff;font-size:10px;font-weight:900}
+.sire-futures-twap-time-row span{color:#aeb5bf;font-size:10px;font-weight:900}
