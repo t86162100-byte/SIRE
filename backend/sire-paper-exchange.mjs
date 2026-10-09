@@ -150,6 +150,8 @@ const schedules = new Map();
 export function paperCreateSchedule(input) {
   const kind=String(input?.kind||'').toLowerCase(), category=categoryOf(input?.category), symbol=symbolOf(input?.symbol), side=String(input?.side||'').toLowerCase(), orderType=String(input?.orderType||'market').toLowerCase();
   const totalQty=positive(input?.totalQty,'Total quantity'), perOrderQty=positive(input?.perOrderQty,'Per-order quantity');
+  const requestId=String(input?.requestId||'').trim();
+  if(requestId){const prior=[...schedules.values()].find(j=>j.requestId===requestId);if(prior)return {ok:true,mode:'PAPER',duplicate:true,job:serial(prior)};}
   if(!['twap','iceberg','split'].includes(kind))throw new Error('Schedule kind must be TWAP, Iceberg or Split.');
   if(!FUTURES.has(category))throw new Error('Paper algo schedules require a Futures category.');
   if(!/^[A-Z0-9_]{3,32}$/.test(symbol)||!['buy','sell'].includes(side)||!['market','limit'].includes(orderType))throw new Error('Invalid paper schedule symbol, side or order type.');
@@ -163,7 +165,7 @@ export function paperCreateSchedule(input) {
   if(kind==='twap'&&(!Number.isInteger(durationSeconds)||durationSeconds<60||durationSeconds>86400||durationSeconds<(sliceCount-1)*intervalSeconds))throw new Error('TWAP duration is invalid for the selected interval and slice count.');
   const price=orderType==='limit'?positive(input?.price,'Limit price'):undefined;
   const id=idOf('SCHEDULE').toLowerCase().replace(/[^0-9a-f-]/g,'');
-  const job={id,kind,category,symbol,side,orderType,totalQty,perOrderQty,sliceCount,intervalSeconds,durationSeconds,price,posSide:String(input?.posSide||'').toLowerCase(),marginMode:String(input?.marginMode||'crossed'),reduceOnly:input?.reduceOnly?'yes':'no',timeInForce:String(input?.timeInForce||'gtc'),state:'running',completedSlices:0,createdAt:now(),nextRunAt:now(),lastError:null,children:[]};
+  const job={id,requestId,kind,category,symbol,side,orderType,totalQty,perOrderQty,sliceCount,intervalSeconds,durationSeconds,price,posSide:String(input?.posSide||'').toLowerCase(),marginMode:String(input?.marginMode||'crossed'),reduceOnly:input?.reduceOnly?'yes':'no',timeInForce:String(input?.timeInForce||'gtc'),state:'running',completedSlices:0,createdAt:now(),nextRunAt:now(),lastError:null,children:[]};
   schedules.set(id,job);
   return {ok:true,mode:'PAPER',job:serial(job)};
 }
