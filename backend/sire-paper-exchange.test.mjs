@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {
   paperReset, paperPlaceOrder, paperGetOrder, paperCancelOrder, paperModifyOrder,
   paperPlaceTrigger, paperCancelTrigger, paperModifyTrigger,
-  paperListOrders, paperListTriggers, paperPositions, paperSetLeverage, paperAccount
+  paperListOrders, paperListTriggers, paperPositions, paperSetLeverage, paperAccount, paperCreateSchedule, paperListSchedules, paperControlSchedule, paperRunScheduleBatch
 } from './sire-paper-exchange.mjs';
 
 test('paper Spot market buy fills virtually using quote-quantity semantics', () => {
@@ -69,4 +69,18 @@ test('invalid order inputs are rejected before any order is created', () => {
   assert.throws(()=>paperPlaceOrder({category:'SPOT',symbol:'BTCUSDT',side:'buy',orderType:'market',qty:'0'} ,{ask:1,bid:1}),/greater than zero/);
   assert.throws(()=>paperPlaceOrder({category:'SPOT',symbol:'BTCUSDT',side:'hold',orderType:'market',qty:'1'},{ask:1,bid:1}),/Side/);
   assert.equal(paperAccount().mode,'PAPER');
+});
+
+test('paper TWAP/Split scheduler submits virtual slices and supports pause/resume/cancel', async () => {
+  paperReset();
+  const created=paperCreateSchedule({kind:'split',category:'USDT-FUTURES',symbol:'BTCUSDT',side:'buy',orderType:'market',totalQty:'2',perOrderQty:'1',sliceCount:2,intervalSeconds:5,posSide:'long'});
+  assert.equal(created.mode,'PAPER');
+  assert.equal(created.job.state,'running');
+  const batch=await paperRunScheduleBatch(async()=>({bids:[{price:49999}],asks:[{price:50000}]}));
+  assert.equal(batch.processed,1);
+  assert.equal(paperListSchedules().jobs[0].completedSlices,1);
+  const paused=paperControlSchedule(created.job.id,'pause');
+  assert.equal(paused.job.state,'paused');
+  assert.equal(paperControlSchedule(created.job.id,'resume').job.state,'running');
+  assert.equal(paperControlSchedule(created.job.id,'cancel').job.state,'cancelled');
 });
