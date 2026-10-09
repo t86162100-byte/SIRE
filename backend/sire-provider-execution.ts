@@ -350,7 +350,7 @@ export async function bitgetOwnerPlaceTriggerOrder(input:any){
   }else{
     const activationPrice=positiveNumber(input?.triggerPrice,'activation price');const callback=positiveNumber(input?.callbackRatio,'trailing callback rate');
     if(callback>10)throw new Error('Trailing callback rate cannot exceed 10%.');
-    body.trailingStopParams={activationPrice:String(activationPrice),activationType:String(input?.triggerType||'fill_price')==='mark_price'?'mark':'market',trailType:'percentage',trailVariance:String(callback),preOrderType:'market'};
+    const preOrderType=String(input?.orderType||'market').toLowerCase();if(!['market','limit'].includes(preOrderType))throw new Error('Trailing execution type must be market or limit.');body.trailingStopParams={activationPrice:String(activationPrice),activationType:String(input?.triggerType||'fill_price')==='mark_price'?'mark':'market',trailType:String(input?.trailType||'percentage').toLowerCase(),trailVariance:String(callback),preOrderType,...(preOrderType==='limit'?{preOrderPrice:String(positiveNumber(input?.price,'trailing execution price'))}:{})};
   }
   if(input?.marginMode)body.marginMode=String(input.marginMode).toLowerCase();
   const data=await bitgetRequest('POST','/api/v3/trade/place-strategy-order',body);
