@@ -325,7 +325,7 @@ export async function bitgetOwnerOrderHistory(category:string,symbol=''){
   const safeCategory=String(category||'USDT-FUTURES').toUpperCase();
   if(!['SPOT','MARGIN','USDT-FUTURES','COIN-FUTURES','USDC-FUTURES'].includes(safeCategory)) throw new Error('Unsupported Bitget order category.');
   const qs='category='+encodeURIComponent(safeCategory)+(symbol?'&symbol='+encodeURIComponent(String(symbol).toUpperCase()):'');
-  const data=await bitgetRequest('GET','/api/v3/trade/order-history?'+qs);
+  const data=await bitgetRequest('GET','/api/v3/trade/history-orders?'+qs);
   return {ok:true,provider:'BITGET',category:safeCategory,orders:Array.isArray(data?.data?.list)?data.data.list:Array.isArray(data?.data)?data.data:[]};
 }
 
@@ -349,4 +349,42 @@ export async function bitgetOwnerPlaceTriggerOrder(input:any){
   if(input?.clientOid) body.clientOid=clientOid(String(input.clientOid));
   const data=await bitgetRequest('POST','/api/v2/mix/order/place-plan-order',body);
   return {ok:true,provider:'BITGET',category,symbol,data:data?.data||null};
+}
+
+export async function bitgetOwnerOrderInfo(orderIdOrClientOid:string){
+  const value=String(orderIdOrClientOid||'').trim();
+  if(!value) throw new Error('orderId or clientOid is required.');
+  const key=/^\d{8,}$/.test(value)?'orderId':'clientOid';
+  const data=await bitgetRequest('GET','/api/v3/trade/order-info?'+key+'='+encodeURIComponent(value));
+  return data?.data||null;
+}
+
+export async function bitgetOwnerModifyOrder(input:any){
+  const category=String(input?.category||'USDT-FUTURES').toUpperCase();
+  const orderId=String(input?.orderId||'').trim();
+  const clientOidValue=String(input?.clientOid||'').trim();
+  const symbol=String(input?.symbol||'').trim().toUpperCase();
+  if(!['SPOT','MARGIN','USDT-FUTURES','COIN-FUTURES','USDC-FUTURES'].includes(category)) throw new Error('Unsupported Bitget order category.');
+  if(!orderId&&!clientOidValue) throw new Error('orderId or clientOid is required.');
+  const body:any={category,...(orderId?{orderId}:{}),...(clientOidValue?{clientOid:clientOidValue}:{}),...(symbol?{symbol}:{})};
+  if(input?.qty!=null&&input.qty!=='') body.qty=String(positiveNumber(input.qty,'replacement quantity'));
+  if(input?.price!=null&&input.price!=='') body.price=String(positiveNumber(input.price,'replacement price'));
+  if(body.qty==null&&body.price==null) throw new Error('Provide a replacement quantity or price.');
+  if(body.price!=null&&input?.orderType==='market') throw new Error('Market orders cannot be repriced.');
+  const data=await bitgetRequest('POST','/api/v3/trade/modify-order',body);
+  return {ok:true,provider:'BITGET',category,data:data?.data||null};
+}
+
+export async function bitgetOwnerCancelAllOrders(category:string,symbol=''){
+  const safeCategory=String(category||'USDT-FUTURES').toUpperCase();
+  if(!['SPOT','MARGIN','USDT-FUTURES','COIN-FUTURES','USDC-FUTURES'].includes(safeCategory)) throw new Error('Unsupported Bitget order category.');
+  const open=await bitgetOwnerOpenOrders(safeCategory,symbol);
+  const results=[];
+  for(const order of open.orders){
+    const id=String(order?.orderId||'');const oid=String(order?.clientOid||'');
+    if(!id&&!oid) continue;
+    try{results.push(await bitgetOwnerCancelOrder({category:safeCategory,orderId:id||undefined,clientOid:oid||undefined}));}
+    catch(e){results.push({ok:false,orderId:id,clientOid:oid,error:e instanceof Error?e.message:String(e)});}
+  }
+  return {ok:results.every((x:any)=>x.ok!==false),provider:'BITGET',category:safeCategory,cancelled:results.filter((x:any)=>x.ok!==false).length,failed:results.filter((x:any)=>x.ok===false).length,results};
 }
