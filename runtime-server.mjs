@@ -1378,4 +1378,5 @@ server.listen(PORT,HOST,async()=>{
   void runLimitOrderMonitorBatch(2).catch(error => console.warn('[LIMIT ORDER MONITOR]', error instanceof Error ? error.message : String(error)));
   void runFuturesScheduleBatch().catch(error => console.warn('[FUTURES SCHEDULE]', error instanceof Error ? error.message : String(error)));
   setInterval(() => void runLimitOrderMonitorBatch(2).catch(error => console.warn('[LIMIT ORDER MONITOR]', error instanceof Error ? error.message : String(error))), 5000);
+  setInterval(() => void runFuturesScheduleBatch().catch(error => console.warn('[FUTURES SCHEDULE]', error instanceof Error ? error.message : String(error))), 1000);
 });
