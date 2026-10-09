@@ -146,3 +146,5 @@
 .sire-futures-lifecycle-empty{padding:14px 4px;color:#7f8792;font-size:10px;text-align:center}
 .sire-futures-edit-order{gap:8px}
 @media(max-width:480px){.sire-futures-lifecycle{padding:8px}.sire-futures-lifecycle-row{grid-template-columns:minmax(0,1fr) minmax(70px,.65fr) auto;gap:5px}.sire-futures-lifecycle-actions{flex-direction:column}.sire-futures-lifecycle button{padding:3px 6px}}
+
+.sire-futures-head .sire-trading-mode-banner{margin:0 0 0 auto;white-space:nowrap;max-width:52%;font-size:7px;padding:5px 6px}.sire-futures-head .sire-trading-mode-banner b{font-size:6px;padding:3px 4px}
