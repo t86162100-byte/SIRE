@@ -1,6 +1,6 @@
 import pg from 'pg';
 import { randomUUID } from 'node:crypto';
-import { bitgetOwnerPlaceOrder, bitgetOwnerOrderInfo, bitgetOwnerCancelOrder } from './sire-provider-execution.ts';
+import { bitgetOwnerPlaceOrder, bitgetOwnerOrderInfo, bitgetOwnerCancelOrder, bitgetMarketOrderBook } from './sire-provider-execution.ts';
 
 const pool = process.env.DATABASE_URL ? new pg.Pool({connectionString:process.env.DATABASE_URL,ssl:process.env.DATABASE_URL.includes('localhost')?false:{rejectUnauthorized:false},max:4}) : null;
 const TABLE='sire_futures_algo_jobs_v1';
@@ -47,20 +47,22 @@ function normalize(input:any,ownerEmail:string){
  if(kind==='twap'){
    durationSeconds=clampInt(input?.durationSeconds,60,86400,'TWAP duration');
    intervalSeconds=clampInt(input?.intervalSeconds??30,5,60,'TWAP frequency');
-   totalSlices=Math.min(10000,Math.max(1,Math.ceil(totalQty/perOrderQty)));
-   if(totalSlices>Math.ceil(durationSeconds/intervalSeconds))throw new Error('TWAP duration is too short for the selected per-order quantity and frequency. Increase duration or increase quantity per order.');
+   totalSlices=Math.min(10000,Math.max(1,Math.ceil(durationSeconds/intervalSeconds)));
  } else {
    totalSlices=kind==='iceberg'?Math.ceil(totalQty/perOrderQty):clampInt(input?.sliceCount,2,1000,'Split count');
    if(kind==='split'&&totalQty/totalSlices>perOrderQty)throw new Error('Split count is too small for the selected per-order quantity.');
    intervalSeconds=clampInt(input?.intervalSeconds??5,1,3600,'Slice interval');
  }
  if(kind==='twap' && totalQty/perOrderQty > totalSlices*1.00000001) throw new Error('Per-order quantity is too small for the TWAP schedule.');
- const price=input?.price==null||input.price===''?undefined:num(input.price,'Limit price');
- if(orderType==='limit'&&!price)throw new Error('Limit orders require a price.');
+ const preference=String(input?.preference||'Faster execution');
+ const price=input?.price==null||input.price===''?undefined:num(input.price,preference==='Fixed distance'?'Price distance':'Limit price');
+ if(orderType==='limit'&&!price)throw new Error('Limit orders require a price or distance.');
+ if(kind==='iceberg'&&preference==='Fixed distance'&&(!price||price>5))throw new Error('Fixed distance must be greater than 0 and at most 5%.');
  const marginMode=String(input?.marginMode||'crossed').toLowerCase();
  if(!['crossed','isolated'].includes(marginMode))throw new Error('Invalid margin mode.');
  const childQty=perOrderQty;
- const spec={category,symbol,side,posSide,orderType,price,marginMode,reduceOnly:input?.reduceOnly?'yes':'no',timeInForce:String(input?.timeInForce||'gtc').toLowerCase(),totalQty,perOrderQty,intervalSeconds,durationSeconds:durationSeconds||null,childQty,preference:String(input?.preference||'Faster execution'),queueType:String(input?.queueType||'Queue 1'),priceLimitEnabled:Boolean(input?.priceLimitEnabled),ownerEmail};
+ const childQty=kind==='twap'?totalQty/totalSlices:perOrderQty;
+ const spec={category,symbol,side,posSide,orderType,price,marginMode,reduceOnly:input?.reduceOnly?'yes':'no',timeInForce:String(input?.timeInForce||'gtc').toLowerCase(),totalQty,perOrderQty,intervalSeconds,durationSeconds:durationSeconds||null,childQty,preference,queueType:String(input?.queueType||'Queue 1'),priceLimitEnabled:Boolean(input?.priceLimitEnabled),ownerEmail};
  if(!['gtc','ioc','fok','post_only'].includes(spec.timeInForce))throw new Error('Unsupported time in force.');
  return {kind,category,symbol,totalQty,totalSlices,intervalSeconds,spec};
 }
@@ -120,7 +122,7 @@ export async function runFuturesScheduleBatch(){
     if(sliceNo>Number(job.total_slices)){await db.query(`UPDATE ${TABLE} SET state='completed',finished_at=now(),updated_at=now() WHERE id=$1`,[job.id]);processed++;continue;}
     const spec=job.spec;const already=await db.query(`SELECT * FROM ${CHILD} WHERE job_id=$1 AND slice_no=$2`,[job.id,sliceNo]);
     const clientOid=('SIRE'+String(job.id).replace(/-/g,'').slice(0,12)+'_'+sliceNo).slice(0,32);
-    const qty=Math.min(Number(spec.perOrderQty),Math.max(0,Number(spec.totalQty)-Number(job.completed_slices)*Number(spec.perOrderQty)));
+    const qty=Math.min(Number(spec.childQty),Math.max(0,Number(spec.totalQty)-Number(job.completed_slices)*Number(spec.childQty)));
     if(qty<=0){await db.query(`UPDATE ${TABLE} SET state='completed',finished_at=now(),updated_at=now() WHERE id=$1`,[job.id]);processed++;continue;}
     let child=already.rows[0];
     if(!child){
@@ -128,6 +130,12 @@ export async function runFuturesScheduleBatch(){
       child=created.rows[0];
     }
     let result:any;
+    if(job.kind==='iceberg'&&spec.orderType==='limit'&&spec.preference==='Fixed distance'){
+      const book=await bitgetMarketOrderBook(spec.category,spec.symbol,5);const bid=Number(book.bids?.[0]?.price||0);const ask=Number(book.asks?.[0]?.price||0);const distance=Number(spec.price)/100;
+      if(!(bid>0&&ask>0&&distance>0))throw new Error('Could not calculate a live Fixed distance price from Bitget order book.');
+      const anchor=spec.side==='buy'?(spec.queueType==='Queue 1'?bid:ask):(spec.queueType==='Queue 1'?ask:bid);
+      spec={...spec,price:spec.side==='buy'?anchor*(1-distance):anchor*(1+distance)};
+    }
     try{result=await reconcileOrPlace(child,spec);}
     catch(e){
       const msg=e instanceof Error?e.message:String(e);
