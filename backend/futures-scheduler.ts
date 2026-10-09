@@ -119,7 +119,7 @@ export async function runFuturesScheduleBatch(){
     }
     const sliceNo=Number(job.completed_slices)+1;
     if(sliceNo>Number(job.total_slices)){await db.query(`UPDATE ${TABLE} SET state='completed',finished_at=now(),updated_at=now() WHERE id=$1`,[job.id]);processed++;continue;}
-    const spec=job.spec;const already=await db.query(`SELECT * FROM ${CHILD} WHERE job_id=$1 AND slice_no=$2`,[job.id,sliceNo]);
+    let spec=job.spec;const already=await db.query(`SELECT * FROM ${CHILD} WHERE job_id=$1 AND slice_no=$2`,[job.id,sliceNo]);
     const clientOid=('SIRE'+String(job.id).replace(/-/g,'').slice(0,12)+'_'+sliceNo).slice(0,32);
     const qty=Math.min(Number(spec.childQty),Math.max(0,Number(spec.totalQty)-Number(job.completed_slices)*Number(spec.childQty)));
     if(qty<=0){await db.query(`UPDATE ${TABLE} SET state='completed',finished_at=now(),updated_at=now() WHERE id=$1`,[job.id]);processed++;continue;}
