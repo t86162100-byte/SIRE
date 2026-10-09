@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {
   paperReset, paperPlaceOrder, paperGetOrder, paperCancelOrder, paperModifyOrder,
   paperPlaceTrigger, paperCancelTrigger, paperModifyTrigger,
-  paperListOrders, paperListTriggers, paperPositions, paperSetLeverage, paperAccount, paperCreateSchedule, paperListSchedules, paperControlSchedule, paperRunScheduleBatch
+  paperListOrders, paperListTriggers, paperEvaluateTriggers, paperPositions, paperSetLeverage, paperAccount, paperCreateSchedule, paperListSchedules, paperControlSchedule, paperRunScheduleBatch
 } from './sire-paper-exchange.mjs';
 
 test('paper Spot market buy fills virtually using quote-quantity semantics', () => {
@@ -51,6 +51,18 @@ test('trigger order can be amended and cancelled without any exchange request', 
   const cancelled=paperCancelTrigger({orderId:placed.order.orderId});
   assert.equal(cancelled.order.status,'cancelled');
   assert.equal(paperListTriggers('USDT-FUTURES','BTCUSDT').orders.length,0);
+});
+
+test('paper trigger activates into a child order when its trigger price is reached', async () => {
+  paperReset();
+  const trigger=paperPlaceTrigger({category:'SPOT',symbol:'BTCUSDT',side:'buy',qty:'100',triggerPrice:'50000',orderType:'market',clientOid:'spot-trigger-activate'});
+  assert.equal(trigger.order.status,'live');
+  const result=await paperEvaluateTriggers(async()=>({bids:[{price:50099}],asks:[{price:50100}]}));
+  assert.equal(result.processed,1);
+  const reconciled=paperGetOrder({orderId:trigger.order.orderId});
+  assert.equal(reconciled.order.status,'triggered');
+  assert.ok(reconciled.order.childOrderId);
+  assert.equal(paperGetOrder({orderId:reconciled.order.childOrderId}).order.status,'filled');
 });
 
 test('futures open and reduce-only close update virtual positions', () => {
