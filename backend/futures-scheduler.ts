@@ -12,7 +12,7 @@ function validBitgetBase(){try{const base=String(process.env.BITGET_API_BASE_URL
 function requirePool(){if(!pool)throw new Error('DATABASE_URL is required for durable Futures schedules.');return pool;}
 function num(v,n){const x=Number(v);if(!Number.isFinite(x)||x<=0)throw new Error(n+' must be greater than zero.');return x;}
 function clampInt(v,min,max,n){const x=Number(v);if(!Number.isInteger(x)||x<min||x>max)throw new Error(n+' must be between '+min+' and '+max+'.');return x;}
-function liveSchedulerEnabled(){return String(process.env.SIRE_TRADING_MODE||'').trim().toUpperCase()!=='PAPER' && String(process.env.SIRE_ENABLE_LIVE_FUTURES_SCHEDULER||'').trim().toLowerCase()==='true';}
+function liveSchedulerEnabled(){return String(process.env.SIRE_TRADING_MODE||'PAPER').trim().toUpperCase()==='LIVE' && String(process.env.SIRE_ENABLE_LIVE_FUTURES_SCHEDULER||'').trim().toLowerCase()==='true';}
 async function ensure(){
  const db=requirePool();
  await db.query(`CREATE TABLE IF NOT EXISTS ${TABLE}(
