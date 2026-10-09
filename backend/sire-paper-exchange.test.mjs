@@ -73,9 +73,12 @@ test('invalid order inputs are rejected before any order is created', () => {
 
 test('paper TWAP/Split scheduler submits virtual slices and supports pause/resume/cancel', async () => {
   paperReset();
-  const created=paperCreateSchedule({kind:'split',category:'USDT-FUTURES',symbol:'BTCUSDT',side:'buy',orderType:'market',totalQty:'2',perOrderQty:'1',sliceCount:2,intervalSeconds:5,posSide:'long'});
+  const created=paperCreateSchedule({kind:'split',category:'USDT-FUTURES',symbol:'BTCUSDT',side:'buy',orderType:'market',totalQty:'2',perOrderQty:'1',sliceCount:2,intervalSeconds:5,posSide:'long',requestId:'split-idempotent'});
   assert.equal(created.mode,'PAPER');
   assert.equal(created.job.state,'running');
+  const duplicate=paperCreateSchedule({kind:'split',category:'USDT-FUTURES',symbol:'BTCUSDT',side:'buy',orderType:'market',totalQty:'2',perOrderQty:'1',sliceCount:2,intervalSeconds:5,posSide:'long',requestId:'split-idempotent'});
+  assert.equal(duplicate.duplicate,true);
+  assert.equal(duplicate.job.id,created.job.id);
   const batch=await paperRunScheduleBatch(async()=>({bids:[{price:49999}],asks:[{price:50000}]}));
   assert.equal(batch.processed,1);
   assert.equal(paperListSchedules().jobs[0].completedSlices,1);
