@@ -33,7 +33,7 @@ function applyFill(order, price, quantity) {
   order.fills.push({ price, qty, fee: price * qty * 0.0006, time: now() });
   if (FUTURES.has(order.category)) {
     const key = order.category + ':' + order.symbol + ':' + (order.posSide || (order.side === 'buy' ? 'long' : 'short'));
-    const prior = positions.get(key) || { category: order.category, symbol: order.symbol, posSide: order.posSide || (order.side === 'buy' ? 'long' : 'short'), total: 0, avgPrice: 0, leverage: 10, marginMode: order.marginMode || 'crossed', unrealisedPnl: 0 };
+    const prior = positions.get(key) || { category: order.category, symbol: order.symbol, posSide: order.posSide || (order.side === 'buy' ? 'long' : 'short'), total: 0, avgPrice: 0, leverage: leverage.get(order.category + ':' + order.symbol) || 10, marginMode: order.marginMode || 'crossed', unrealisedPnl: 0 };
     const closing = order.tradeSide === 'close' || order.reduceOnly === 'yes';
     if (closing) prior.total = Math.max(0, prior.total - qty);
     else {
