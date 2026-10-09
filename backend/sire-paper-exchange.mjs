@@ -171,7 +171,7 @@ export async function paperEvaluateTriggers(getMarket) {
     try{
       const market=await getMarket(position.category,position.symbol);const bid=Number(market.bids?.[0]?.price||0),ask=Number(market.asks?.[0]?.price||0);const current=bid>0&&ask>0?(bid+ask)/2:(bid||ask||Number(market.price||0));if(!(current>0))continue;
       const isLong=position.posSide==='long';const takeHit=position.takeProfit&&(isLong?current>=position.takeProfit:current<=position.takeProfit);const stopHit=position.stopLoss&&(isLong?current<=position.stopLoss:current>=position.stopLoss);if(!takeHit&&!stopHit)continue;
-      const side=isLong?'sell':'buy';const clientOid=('SIRE_PAPER_TPSL_'+position.symbol+'_'+position.posSide+'_'+String(position.openedAt||0)+'_'+(takeHit?'TP':'SL')).slice(0,32);
+      const side=isLong?'sell':'buy';const clientOid=('TPSL_'+position.symbol+'_'+position.posSide+'_'+String(position.openedAt||0).slice(-8)+'_'+(takeHit?'TP':'SL')).slice(0,32);
       paperPlaceOrder({category:position.category,symbol:position.symbol,side,orderType:'market',qty:String(position.total),clientOid,posSide:position.posSide,tradeSide:'close',reduceOnly:'yes',marginMode:position.marginMode},{bid,ask,price:current});processed++;
     }catch(e){position.lastError=e instanceof Error?e.message:String(e);}
   }
