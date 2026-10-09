@@ -35,9 +35,11 @@
 .sire-futures-range-marks button{position:relative;width:12px;height:12px;padding:0;border:0;background:transparent;transform:rotate(45deg);pointer-events:auto;cursor:pointer}
 .sire-futures-range-marks button i{display:block;width:9px;height:9px;margin:1.5px;border:1.5px solid #69727e;background:#0b0b0b;box-sizing:border-box}
 .sire-futures-range-marks button.active i{background:#fff;border-color:#fff;box-shadow:0 0 0 1px #000}
-.sire-futures-toggle-stack{display:flex;flex-direction:column;gap:5px;margin:0 0 9px}
-.sire-futures-toggle-stack label{height:28px;border:1px solid #252b34;border-radius:6px;background:#0b0b0b;color:#fff;display:flex;align-items:center;justify-content:space-between;padding:0 9px;box-sizing:border-box;font-size:8px;font-weight:950;cursor:pointer}
-.sire-futures-toggle-stack input{appearance:none;width:22px;height:12px;border-radius:999px;background:#303640;position:relative;margin:0;cursor:pointer}
+.sire-futures-toggle-stack{display:flex;flex-direction:column;align-items:flex-start;gap:9px;margin:2px 0 10px}
+.sire-futures-toggle-stack .sire-futures-inline-toggle{min-height:15px;display:inline-flex;flex-direction:row;align-items:center;justify-content:flex-start;gap:7px;padding:0;border:0;border-radius:0;background:transparent;color:#dce1e7;box-sizing:border-box;font-size:9px;font-weight:850;cursor:pointer}
+.sire-futures-toggle-stack .sire-futures-inline-toggle span{order:2}
+.sire-futures-toggle-stack .sire-futures-inline-toggle b{order:3;color:#fff;font-size:9px;font-weight:950}
+.sire-futures-toggle-stack input{appearance:none;flex:0 0 22px;width:22px;height:12px;border-radius:999px;background:#303640;position:relative;margin:0;cursor:pointer;order:1}
 .sire-futures-toggle-stack input:after{content:"";position:absolute;width:8px;height:8px;left:2px;top:2px;border-radius:50%;background:#8b949e}
 .sire-futures-toggle-stack input:checked{background:#fff}
 .sire-futures-toggle-stack input:checked:after{left:12px;background:#000}
