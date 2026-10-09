@@ -136,9 +136,6 @@ export default function FuturesView({initialSymbol}:Props){
     if(orderType==='Trailing stop order'&&(!Number(trailVariance)||Number(trailVariance)<=0)){setError('Enter a valid trailing callback rate.');return}
     if(tpSlEnabled&&takeProfitPrice&&(!Number(takeProfitPrice)||Number(takeProfitPrice)<=0)){setError('Enter a valid take-profit price.');return}
     if(tpSlEnabled&&stopLossPrice&&(!Number(stopLossPrice)||Number(stopLossPrice)<=0)){setError('Enter a valid stop-loss price.');return}
-    if(orderType==='TWAP'){setError('TWAP scheduler is not enabled yet; no orders were submitted.');return}
-    if(orderType==='Iceberg order'){setError('Iceberg scheduler is not enabled yet; no orders were submitted.');return}
-    if(orderType==='Split large order'){setError('Split-order scheduler is not enabled yet; no orders were submitted.');return}
     setBusy(true);
     try{
       const orderSideValue=orderSide==='Long'?(isClose?'sell':'buy'):(isClose?'buy':'sell');
@@ -158,8 +155,8 @@ export default function FuturesView({initialSymbol}:Props){
       const payload:any={category,symbol:selected.symbol,side:orderSideValue,orderType:limitBasedOrder?'limit':'market',qty:String(n),price:limitBasedOrder?String(price):undefined,posSide:orderSide.toLowerCase(),tradeSide:isClose?'close':'open',marginMode:marginMode==='Cross'?'crossed':'isolated',reduceOnly:isClose?'yes':'no',timeInForce:orderType==='Advanced limit order'?({'Post only':'post_only','IOC':'ioc','FOK':'fok'} as any)[timeInForce]:'gtc',slippagePercent:slippageEnabled&&orderType==='Market'?0.5:undefined,referencePrice:slippageEnabled&&orderType==='Market'?marketPrice:undefined,takeProfit:tpSlEnabled&&takeProfitPrice?takeProfitPrice:undefined,stopLoss:tpSlEnabled&&stopLossPrice?stopLossPrice:undefined};
       if(isTrigger){
         payload.planType=orderType==='Trailing stop order'?'track_plan':'normal_plan';
-        payload.triggerPrice=triggerPrice;
-        payload.triggerType=triggerSource==='Mark price'?'mark_price':'fill_price';
+        payload.triggerPrice=orderType==='Trailing stop order'?activationPrice:triggerPrice;
+        payload.triggerType=orderType==='Trailing stop order'?(trailingSource==='Mark'?'mark_price':'fill_price'):(triggerSource==='Mark price'?'mark_price':triggerSource==='Index price'?'index_price':'fill_price');
         payload.orderType=executeType.toLowerCase();
         payload.price=executeType==='Limit'?String(price):undefined;
         if(orderType==='Trailing stop order'){payload.callbackRatio=trailVarianceMode==='By spread (USDT)'?Number(trailVariance)/Math.max(marketPrice,1e-12)*100:Number(trailVariance);if(!Number.isFinite(payload.callbackRatio)||payload.callbackRatio<=0||payload.callbackRatio>10)throw new Error('Trailing callback must convert to a Bitget-supported value between 0 and 10%.');}
@@ -337,7 +334,8 @@ export default function FuturesView({initialSymbol}:Props){
         <div className="sire-futures-order-group-title">Split large order</div>
         {[
           {name:'Iceberg order',description:'Split large orders to reduce slippage.'},
-          {name:'TWAP',description:'Triggers limit or market orders at custom time intervals.'}
+          {name:'TWAP',description:'Triggers limit or market orders at custom time intervals.'},
+          {name:'Split large order',description:'Split the total quantity into a set number of child orders.'}
         ].map(item=><button type="button" key={item.name} className={'sire-futures-order-option '+(orderType===item.name?'selected':'')} onClick={()=>{setOrderType(item.name);setOrderDrawer(false)}}>
           <span className="sire-futures-order-option-copy"><b>{item.name}</b><small>{item.description}</small></span><i aria-hidden="true">{orderType===item.name?'✓':''}</i>
         </button>)}
