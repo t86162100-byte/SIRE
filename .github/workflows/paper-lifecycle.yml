@@ -14,5 +14,6 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm install --ignore-scripts --no-audit --no-fund
-      - run: node --test backend/sire-paper-exchange.test.mjs
+      - run: npm run test:paper
+      - run: node --check runtime-server.mjs
       - run: npm run build
