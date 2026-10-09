@@ -54,6 +54,7 @@ export default function SpotView({ wallet, initialSymbol, onConnect }: Props) {
   const [orderTypeOpen, setOrderTypeOpen] = useState(false);
   const [quantity, setQuantity] = useState('');
   const [price, setPrice] = useState('');
+  const [triggerPrice, setTriggerPrice] = useState('');
   const [snapshot, setSnapshot] = useState<Snapshot>({});
   const [book, setBook] = useState<SpotBook>({ asks:[], bids:[], lastTrade:null });
   const [balances, setBalances] = useState<SpotBalance[]>([]);
@@ -165,7 +166,7 @@ export default function SpotView({ wallet, initialSymbol, onConnect }: Props) {
   const bidDepthMax = Math.max(0, ...book.bids.slice(0, 5).map(level => Number(level.quantity) || 0));
   const bid = Number(book.bids[0]?.price || snapshot.bid || 0);
   const ask = Number(book.asks[0]?.price || snapshot.ask || 0);
-  const effectivePrice = orderType === 'Market' ? (side === 'Buy' ? ask || marketPrice : bid || marketPrice) : Number(price);
+  const effectivePrice = orderType === 'Market' || orderType === 'Trigger' ? (side === 'Buy' ? ask || marketPrice : bid || marketPrice) : Number(price);
   const base = baseOf(selected);
   const baseBalance = balances.find(b => b.asset === base)?.available || 0;
   const quoteBalance = balances.find(b => b.asset === 'USDT')?.available || 0;
@@ -183,28 +184,38 @@ export default function SpotView({ wallet, initialSymbol, onConnect }: Props) {
 
   const submit = async () => {
     setError('');
-    if (orderType !== 'Market' && orderType !== 'Limit') { setError('This order type is not executable yet. Use Market or Limit.'); return; }
+    const conditional = orderType === 'Stop-limit' || orderType === 'Trigger';
     if (fraction <= 0) { setError('Choose an order amount first.'); return; }
+    if (conditional && (!Number(triggerPrice) || Number(triggerPrice) <= 0)) { setError('Enter a valid trigger price.'); return; }
+    if ((orderType === 'Limit' || orderType === 'Stop-limit') && (!Number(price) || Number(price) <= 0)) { setError('Enter a valid limit price.'); return; }
     if (!effectivePrice || !tradeQuantity) { setError('There is no executable SIRE Spot price/liquidity for this order.'); return; }
     try {
-      const response = await fetch('/api/sire/bitget/order', {
+      const clientOid=(globalThis.crypto?.randomUUID?.() || ('sire-' + Date.now() + '-' + Math.random().toString(36).slice(2))).slice(0,32);
+      const body:any={
+        category:selected?.marketType === 'Margin' ? 'MARGIN' : 'SPOT',
+        symbol:selected?.symbol,
+        side:side.toLowerCase(),
+        qty:(orderType === 'Market' || orderType === 'Trigger') && side === 'Buy' ? total : tradeQuantity,
+        clientOid
+      };
+      if (conditional) {
+        body.planType='normal_plan';
+        body.triggerPrice=Number(triggerPrice);
+        body.orderType=orderType === 'Stop-limit' ? 'limit' : 'market';
+        if(orderType === 'Stop-limit') body.price=Number(price);
+      } else {
+        body.orderType=orderType.toLowerCase();
+        if(orderType === 'Limit') body.price=Number(price);
+      }
+      const response = await fetch(conditional ? '/api/sire/bitget/order/trigger' : '/api/sire/bitget/order', {
         method:'POST', headers:{'content-type':'application/json','accept':'application/json'},
-        body:JSON.stringify({
-          category:selected?.marketType === 'Margin' ? 'MARGIN' : 'SPOT',
-          symbol:selected?.symbol,
-          side:side.toLowerCase(),
-          orderType:orderType.toLowerCase(),
-          qty:orderType === 'Market' && side === 'Buy' ? total : tradeQuantity,
-          ...(orderType === 'Limit' ? {price:Number(price)} : {}),
-          clientOid:(globalThis.crypto?.randomUUID?.() || ('sire-' + Date.now() + '-' + Math.random().toString(36).slice(2))).slice(0,32)
-        })
+        body:JSON.stringify(body)
       });
       const payload = await response.json().catch(()=>({}));
       if (!response.ok || !payload?.ok) throw new Error(String(payload?.error || 'SIRE Spot order was rejected.'));
       setQuantity('');
-      if (payload?.averagePrice) setPrice(String(payload.averagePrice));
       const [bookResponse, accountResponse] = await Promise.all([
-        fetch('/api/sire/bitget/orderbook?category=' + (selected?.marketType === 'Margin' ? 'SPOT' : 'SPOT') + '&symbol=' + encodeURIComponent(selected?.symbol || '') + '&limit=25', {cache:'no-store', headers:{Accept:'application/json'}}),
+        fetch('/api/sire/bitget/orderbook?category=SPOT&symbol=' + encodeURIComponent(selected?.symbol || '') + '&limit=25', {cache:'no-store', headers:{Accept:'application/json'}}),
         fetch('/api/sire/bitget/account', {cache:'no-store', headers:{Accept:'application/json'}})
       ]);
       const [nextBook,nextAccount] = await Promise.all([
@@ -250,8 +261,11 @@ export default function SpotView({ wallet, initialSymbol, onConnect }: Props) {
             <span>Total</span>
             <button type="button" aria-label="Select quote currency"><span>{money(total, total < 1 ? 6 : 2)} USDT</span><ChevronDown size={14}/></button>
           </div>
-          {orderType === 'Limit' && <label className="sire-spot-input">
-            <span>Price</span><input inputMode="decimal" value={price} onChange={e => setPrice(e.target.value.replace(/[^0-9.]/g,''))} placeholder={marketPrice ? String(marketPrice) : '0.00'} /><em>USDT</em>
+          {(orderType === 'Limit' || orderType === 'Stop-limit') && <label className="sire-spot-input">
+            <span>{orderType === 'Stop-limit' ? 'Limit price' : 'Price'}</span><input inputMode="decimal" value={price} onChange={e => setPrice(e.target.value.replace(/[^0-9.]/g,''))} placeholder={marketPrice ? String(marketPrice) : '0.00'} /><em>USDT</em>
+          </label>}
+          {(orderType === 'Stop-limit' || orderType === 'Trigger') && <label className="sire-spot-input">
+            <span>Trigger price</span><input inputMode="decimal" value={triggerPrice} onChange={e => setTriggerPrice(e.target.value.replace(/[^0-9.]/g,''))} placeholder={marketPrice ? String(marketPrice) : '0.00'} /><em>USDT</em>
           </label>}
 
           <div className="sire-spot-amount-progress" aria-label="Amount">
