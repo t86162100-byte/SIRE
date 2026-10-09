@@ -405,7 +405,7 @@ export async function bitgetOwnerCancelAllOrders(category:string,symbol=''){
 export async function bitgetOwnerPendingTriggerOrders(category:string,symbol='',planType='normal_plan'){
   const safeCategory=String(category||'USDT-FUTURES').toUpperCase();const type=String(planType||'normal_plan').toLowerCase()==='track_plan'?'trailing_stop':'trigger';
   if(!['USDT-FUTURES','COIN-FUTURES','USDC-FUTURES'].includes(safeCategory))throw new Error('Trigger orders require a futures category.');
-  const qs='category='+encodeURIComponent(safeCategory)+'&type='+encodeURIComponent(type);
+  const qs='category='+encodeURIComponent(safeCategory.toLowerCase())+'&type='+encodeURIComponent(type);
   const data=await bitgetRequest('GET','/api/v3/trade/unfilled-strategy-orders?'+qs);
   const rows=Array.isArray(data?.data)?data.data:[];
   return {ok:true,provider:'BITGET',category:safeCategory,planType:type,orders:rows.filter((o:any)=>!symbol||String(o.symbol||'').toUpperCase()===String(symbol).toUpperCase()).map((o:any)=>({...o,isTrigger:true,planType:type==='trailing_stop'?'track_plan':'normal_plan'}))};
@@ -434,3 +434,12 @@ export async function bitgetOwnerModifyTriggerOrder(input:any){
   return {ok:true,provider:'BITGET',data:data?.data||null};
 }
 
+
+export async function bitgetOwnerStrategyOrderHistory(category:string,symbol=''){
+  const safeCategory=String(category||'USDT-FUTURES').toUpperCase();
+  if(!['USDT-FUTURES','COIN-FUTURES','USDC-FUTURES'].includes(safeCategory))throw new Error('Strategy history requires a futures category.');
+  const qs='category='+encodeURIComponent(safeCategory.toLowerCase())+'&limit=100';
+  const data=await bitgetRequest('GET','/api/v3/trade/history-strategy-orders?'+qs);
+  const rows=Array.isArray(data?.data?.list)?data.data.list:[];
+  return {ok:true,provider:'BITGET',category:safeCategory,orders:rows.filter((o:any)=>!symbol||String(o.symbol||'').toUpperCase()===String(symbol).toUpperCase()).map((o:any)=>({...o,isTrigger:true,orderType:o.type||'strategy'}))};
+}
