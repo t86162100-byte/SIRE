@@ -48,3 +48,19 @@
 .sire-futures-action-block button{height:32px;width:100%;border:0;border-radius:999px;font-size:8px;font-weight:950;cursor:pointer}
 .sire-futures-open-long{background:#2ecb8b;color:#07100c}
 .sire-futures-open-short{background:#f05d68;color:#fff}
+
+
+.sire-futures-order-backdrop{position:fixed;inset:0;z-index:120;background:rgba(0,0,0,.68);display:flex;justify-content:flex-end;align-items:stretch}
+.sire-futures-order-drawer{width:min(430px,100%);height:100%;overflow-y:auto;box-sizing:border-box;background:#080a0d;border-left:1px solid #292f38;padding:0 14px 24px;color:#fff;box-shadow:-18px 0 55px rgba(0,0,0,.45)}
+.sire-futures-order-drawer-head{position:sticky;top:0;z-index:2;display:flex;align-items:center;justify-content:space-between;margin:0 -14px;padding:17px 16px;background:#080a0d;border-bottom:1px solid #252b34}
+.sire-futures-order-drawer-head strong{font-size:15px;font-weight:950;letter-spacing:.1px}
+.sire-futures-order-drawer-head button{width:28px;height:28px;border:0;background:transparent;color:#fff;font-size:25px;line-height:1;cursor:pointer}
+.sire-futures-order-group-title{padding:17px 2px 8px;color:#aab2bd;font-size:11px;font-weight:950;letter-spacing:.15px}
+.sire-futures-order-option{width:100%;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 11px;margin:0 0 7px;border:1px solid #252b34;border-radius:9px;background:#0d1015;color:#fff;text-align:left;cursor:pointer;box-sizing:border-box;transition:border-color .15s,background .15s}
+.sire-futures-order-option.selected{border:1px solid #fff;background:#15191f;box-shadow:inset 0 0 0 1px rgba(255,255,255,.12)}
+.sire-futures-order-option-copy{display:flex;flex-direction:column;gap:5px;min-width:0}
+.sire-futures-order-option-copy b{font-size:12px;font-weight:950;line-height:1.25;color:#fff}
+.sire-futures-order-option-copy small{font-size:10px;font-weight:700;line-height:1.45;color:#a2aab5}
+.sire-futures-order-option>i{flex:0 0 17px;width:17px;height:17px;display:flex;align-items:center;justify-content:center;border:1px solid #515a66;border-radius:50%;font-size:10px;font-style:normal;font-weight:950;color:#050607}
+.sire-futures-order-option.selected>i{background:#fff;border-color:#fff}
+@media(max-width:640px){.sire-futures-order-backdrop{align-items:flex-end;justify-content:center}.sire-futures-order-drawer{width:100%;height:min(88dvh,760px);border-left:0;border-top:1px solid #292f38;border-radius:16px 16px 0 0;padding-bottom:max(22px,env(safe-area-inset-bottom));box-shadow:0 -18px 55px rgba(0,0,0,.5)}.sire-futures-order-drawer-head{padding-top:16px}.sire-futures-order-option{padding:12px 10px}.sire-futures-order-option-copy b{font-size:11px}.sire-futures-order-option-copy small{font-size:9px}}
