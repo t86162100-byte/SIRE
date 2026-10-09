@@ -383,25 +383,20 @@ export async function bitgetOwnerModifyOrder(input:any){
 
 export async function bitgetOwnerCancelAllOrders(category:string,symbol=''){
   const safeCategory=String(category||'USDT-FUTURES').toUpperCase();
-  if(!['SPOT','MARGIN','USDT-FUTURES','COIN-FUTURES','USDC-FUTURES'].includes(safeCategory)) throw new Error('Unsupported Bitget order category.');
-  const results=[];let cursor='';let pages=0;
+  if(!['SPOT','MARGIN','USDT-FUTURES','COIN-FUTURES','USDC-FUTURES'].includes(safeCategory))throw new Error('Unsupported Bitget order category.');
+  const results:any[]=[];let cursor='';let pages=0;
   do{
-   const qs='category='+encodeURIComponent(safeCategory)+(symbol?'&symbol='+encodeURIComponent(String(symbol).toUpperCase()):'')+'&limit=100'+(cursor?'&cursor='+encodeURIComponent(cursor):'');
-   const page=await bitgetRequest('GET','/api/v3/trade/unfilled-orders?'+qs);
-   const orders=Array.isArray(page?.data?.list)?page.data.list:[];
-   for(const order of orders){
-    const id=String(order?.orderId||'');const oid=String(order?.clientOid||'');
-    if(!id&&!oid) continue;
-    try{results.push(await bitgetOwnerCancelOrder({category:safeCategory,orderId:id||undefined,clientOid:oid||undefined}));}
-    catch(e){results.push({ok:false,orderId:id,clientOid:oid,error:e instanceof Error?e.message:String(e)});}
-   }
-   cursor=String(page?.data?.cursor||'');pages++;
+    const qs='category='+encodeURIComponent(safeCategory)+(symbol?'&symbol='+encodeURIComponent(String(symbol).toUpperCase()):'')+'&limit=100'+(cursor?'&cursor='+encodeURIComponent(cursor):'');
+    const page=await bitgetRequest('GET','/api/v3/trade/unfilled-orders?'+qs);const orders=Array.isArray(page?.data?.list)?page.data.list:[];
+    for(const order of orders){const orderId=String(order?.orderId||'');const clientOidValue=String(order?.clientOid||'');if(!orderId&&!clientOidValue)continue;try{results.push(await bitgetOwnerCancelOrder({category:safeCategory,orderId:orderId||undefined,clientOid:clientOidValue||undefined}));}catch(e){results.push({ok:false,orderId,error:e instanceof Error?e.message:String(e)});}}
+    cursor=String(page?.data?.cursor||'');pages++;
   }while(cursor&&pages<10);
   if(cursor)throw new Error('Cancel-all stopped after 10 pages; retry to cancel remaining orders.');
   if(safeCategory.endsWith('FUTURES')){
-    for(const planType of ['normal_plan','track_plan','profit_loss']){
-      try{const data=await bitgetRequest('POST','/api/v2/mix/order/cancel-plan-order',{productType:safeCategory,...(symbol?{symbol:String(symbol).toUpperCase()}:{}),planType});const d=data?.data||{};results.push({ok:!(Array.isArray(d.failureList)&&d.failureList.length),triggerPlan:planType,data:d});}
-      catch(e){results.push({ok:false,triggerPlan:planType,error:e instanceof Error?e.message:String(e)});}
+    for(const type of ['trigger','trailing_stop','iceberg','twap','oco']){
+      const qs='category='+encodeURIComponent(safeCategory.toLowerCase())+'&type='+encodeURIComponent(type);
+      try{const page=await bitgetRequest('GET','/api/v3/trade/unfilled-strategy-orders?'+qs);const orders=Array.isArray(page?.data)?page.data:[];for(const order of orders){const orderId=String(order?.orderId||'');const clientOidValue=String(order?.clientOid||'');if(!orderId&&!clientOidValue)continue;try{const d=await bitgetRequest('POST','/api/v3/trade/cancel-strategy-order',{...(orderId?{orderId}:{}),...(clientOidValue?{clientOid:clientOidValue}:{})});results.push({ok:true,orderId,clientOid:clientOidValue,data:d?.data||null});}catch(e){results.push({ok:false,orderId,error:e instanceof Error?e.message:String(e)});}}}
+      catch(e){results.push({ok:false,strategyType:type,error:e instanceof Error?e.message:String(e)});}
     }
   }
   return {ok:results.every((x:any)=>x.ok!==false),provider:'BITGET',category:safeCategory,cancelled:results.filter((x:any)=>x.ok!==false).length,failed:results.filter((x:any)=>x.ok===false).length,results};
