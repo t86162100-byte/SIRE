@@ -63,6 +63,9 @@ export default function SpotView({ wallet, initialSymbol, onConnect }: Props) {
   const [error, setError] = useState('');
   const [mobilePanel, setMobilePanel] = useState<'Trade'|'Chart'>('Trade');
   const [bookView, setBookView] = useState<'both'|'asks'|'bids'>('both');
+  const [tradingMode, setTradingMode] = useState<'PAPER'|'BITGET_DEMO'|'LIVE'>('PAPER');
+
+  useEffect(() => { let cancelled=false; fetch('/api/sire/bitget/trading-mode',{cache:'no-store',headers:{Accept:'application/json'}}).then(r=>readJsonResponse(r,'Trading mode')).then(p=>{if(!cancelled&&p?.ok&&['PAPER','BITGET_DEMO','LIVE'].includes(p.mode))setTradingMode(p.mode)}).catch(()=>{if(!cancelled)setTradingMode('PAPER')}); return()=>{cancelled=true}; }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -242,6 +245,7 @@ export default function SpotView({ wallet, initialSymbol, onConnect }: Props) {
             </span>
             <ChevronDown size={15}/>
           </button>
+          <div className={'sire-trading-mode-banner '+(tradingMode==='LIVE'?'live':tradingMode==='BITGET_DEMO'?'demo':'paper')}><b>{tradingMode}</b><span>{tradingMode==='PAPER'?'Simulated orders · no funds used':tradingMode==='BITGET_DEMO'?'Bitget demo account':'Live exchange orders'}</span></div>
 
           <div className="sire-spot-side-row">
             <button type="button" className={side === 'Buy' ? 'active buy' : ''} onClick={() => setSide('Buy')}>Buy</button>
