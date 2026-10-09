@@ -119,14 +119,32 @@ export default function FuturesView({initialSymbol}:Props){
   const submit=async(orderSide: 'Long'|'Short'=side, orderAction: 'Open'|'Close'=action, orderReduceOnly=reduceOnly)=>{
     setError('');if(!selected)return;
     const n=Number(qty);if(!Number.isFinite(n)||n<=0){setError('Enter a valid contract quantity.');return}
-    const limitBasedOrder=orderType==='Limit'||orderType==='Advanced limit order';
+    const isClose=orderAction==='Close'||orderReduceOnly;
+    const isTrigger=orderType==='Trigger order'||orderType==='Trailing stop order';
+    const limitBasedOrder=orderType==='Limit'||orderType==='Advanced limit order'||(isTrigger&&executeType==='Limit');
     if(limitBasedOrder&&(!Number(price)||Number(price)<=0)){setError('Enter a valid limit price.');return}
+    if(isTrigger&&(!Number(triggerPrice)||Number(triggerPrice)<=0)){setError('Enter a valid trigger price.');return}
+    if(orderType==='Trailing stop order'&&(!Number(trailVariance)||Number(trailVariance)<=0)){setError('Enter a valid trailing callback rate.');return}
+    if(orderType==='TWAP'){setError('TWAP scheduler is not enabled yet; no orders were submitted.');return}
+    if(orderType==='Iceberg order'){setError('Iceberg scheduler is not enabled yet; no orders were submitted.');return}
+    if(orderType==='Split large order'){setError('Split-order scheduler is not enabled yet; no orders were submitted.');return}
     setBusy(true);
     try{
-      const isClose=orderAction==='Close'||orderReduceOnly;
-      const payload={category,symbol:selected.symbol,side:orderSide==='Long'?(isClose?'sell':'buy'):(isClose?'buy':'sell'),orderType:limitBasedOrder?'limit':'market',qty:String(n),price:limitBasedOrder?String(price):undefined,posSide:orderSide.toLowerCase(),marginMode:marginMode.toLowerCase(),reduceOnly:isClose?'yes':'no'};
-      const result=await fetch('/api/sire/bitget/order',{method:'POST',headers:{'Content-Type':'application/json',Accept:'application/json'},body:JSON.stringify(payload)}).then(r=>readJson(r,'Bitget futures order'));
-      if(!result?.ok)throw new Error(result?.error||'Futures order failed.');
+      const orderSideValue=orderSide==='Long'?(isClose?'sell':'buy'):(isClose?'buy':'sell');
+      const payload:any={category,symbol:selected.symbol,side:orderSideValue,orderType:limitBasedOrder?'limit':'market',qty:String(n),price:limitBasedOrder?String(price):undefined,posSide:orderSide.toLowerCase(),tradeSide:isClose?'close':'open',marginMode:marginMode==='Cross'?'crossed':'isolated',reduceOnly:isClose?'yes':'no',timeInForce:orderType==='Advanced limit order'?({'Post only':'post_only','IOC':'ioc','FOK':'fok'} as any)[timeInForce]:'gtc',slippagePercent:slippageEnabled&&orderType==='Market'?0.5:undefined};
+      if(isTrigger){
+        payload.planType=orderType==='Trailing stop order'?'track_plan':'normal_plan';
+        payload.triggerPrice=triggerPrice;
+        payload.triggerType=triggerSource==='Mark price'?'mark_price':'fill_price';
+        payload.orderType=executeType.toLowerCase();
+        payload.price=executeType==='Limit'?String(price):undefined;
+        if(orderType==='Trailing stop order')payload.callbackRatio=trailVariance;
+        const result=await fetch('/api/sire/bitget/order/trigger',{method:'POST',headers:{'Content-Type':'application/json',Accept:'application/json'},body:JSON.stringify(payload)}).then(r=>readJson(r,'Bitget trigger order'));
+        if(!result?.ok)throw new Error(result?.error||'Trigger order failed.');
+      }else{
+        const result=await fetch('/api/sire/bitget/order',{method:'POST',headers:{'Content-Type':'application/json',Accept:'application/json'},body:JSON.stringify(payload)}).then(r=>readJson(r,'Bitget futures order'));
+        if(!result?.ok)throw new Error(result?.error||'Futures order failed.');
+      }
       setQty('');setQtyPercent(0);refreshPositions();
     }catch(e){setError(e instanceof Error?e.message:String(e))}finally{setBusy(false)}
   };
