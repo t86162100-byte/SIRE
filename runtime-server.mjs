@@ -24,7 +24,7 @@ import { createFuturesSchedule, listFuturesSchedules, controlFuturesSchedule, ca
 import { ensureSireSpotTables, getSpotBook, placeSpotOrder, cancelSpotOrder, getSpotAccount, getSpotOrders, getSpotTrades, spotEngineStatus, spotSubscribe, spotUnsubscribe, spotDisconnect } from './backend/sire-spot-engine.ts';
 import { getRoutedSpotLiquidity, spotLiquidityStatus } from './backend/sire-spot-liquidity.ts';
 import { universalLiquidityStatus, liquidityRoute } from './backend/sire-liquidity-router.ts';
-import { paperPlaceOrder, paperPlaceTrigger, paperGetOrder, paperCancelOrder, paperModifyOrder, paperCancelTrigger, paperModifyTrigger, paperCancelAll, paperListOrders, paperListTriggers, paperPositions, paperAccount, paperSetLeverage, paperReset, paperCreateSchedule, paperListSchedules, paperControlSchedule, paperCancelAllSchedules, paperRunScheduleBatch, paperEvaluateTriggers } from './backend/sire-paper-exchange.mjs';
+import { paperPlaceOrder, paperPlaceTrigger, paperGetOrder, paperCancelOrder, paperModifyOrder, paperCancelTrigger, paperModifyTrigger, paperCancelAll, paperListOrders, paperListTriggers, paperPositions, paperAccount, paperSetLeverage, paperReset, paperCreateSchedule, paperListSchedules, paperControlSchedule, paperCancelAllSchedules, paperRunScheduleBatch, paperEvaluateTriggers, paperEvaluateOrders } from './backend/sire-paper-exchange.mjs';
 
 const SIRE_PAPER_MODE = () => !['LIVE','BITGET_DEMO'].includes(String(process.env.SIRE_TRADING_MODE || 'PAPER').trim().toUpperCase());
 
@@ -1073,7 +1073,7 @@ const server = http.createServer(async (req,res) => {
         if(SIRE_PAPER_MODE()){
           const book=await bitgetMarketOrderBook(String(parsed.category||'SPOT'),String(parsed.symbol||''),5);
           const bid=Number(book.bids?.[0]?.price||0), ask=Number(book.asks?.[0]?.price||0);
-          order=paperPlaceOrder(parsed,{bid,ask,price:bid&&ask?(bid+ask)/2:0});
+          order=paperPlaceOrder(parsed,{bid,ask,bidQty:Number(book.bids?.[0]?.quantity||0),askQty:Number(book.asks?.[0]?.quantity||0),price:bid&&ask?(bid+ask)/2:0});
         }else order=await bitgetOwnerPlaceOrder(parsed);
         return res.writeHead(200,{'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify(order));
       } catch (cause) {
@@ -1419,7 +1419,7 @@ server.listen(PORT,HOST,async()=>{
   console.log('[LIMIT ORDER MONITOR] server-side 0x monitor starting');
   void runLimitOrderMonitorBatch(2).catch(error => console.warn('[LIMIT ORDER MONITOR]', error instanceof Error ? error.message : String(error)));
   const paperMarket=async(category,symbol)=>await bitgetMarketOrderBook(category,symbol,5);
-  const runScheduleTick=async()=>{if(SIRE_PAPER_MODE()){await paperEvaluateTriggers(paperMarket);return paperRunScheduleBatch(paperMarket);}return runFuturesScheduleBatch();};
+  const runScheduleTick=async()=>{if(SIRE_PAPER_MODE()){await paperEvaluateTriggers(paperMarket);await paperEvaluateOrders(paperMarket);return paperRunScheduleBatch(paperMarket);}return runFuturesScheduleBatch();};
   void runScheduleTick().catch(error => console.warn('[FUTURES SCHEDULE]', error instanceof Error ? error.message : String(error)));
   setInterval(() => void runLimitOrderMonitorBatch(2).catch(error => console.warn('[LIMIT ORDER MONITOR]', error instanceof Error ? error.message : String(error))), 5000);
   setInterval(() => void runScheduleTick().catch(error => console.warn('[FUTURES SCHEDULE]', error instanceof Error ? error.message : String(error))), 5000);
