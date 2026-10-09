@@ -2,8 +2,6 @@ name: SIRE paper lifecycle tests
 on:
   pull_request:
     branches: [render-migration]
-  push:
-    branches: [spot-futures-wiring-safety]
 permissions:
   contents: read
 jobs:
