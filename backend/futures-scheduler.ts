@@ -153,3 +153,12 @@ export async function runFuturesScheduleBatch(){
   return {enabled:true,processed};
  }finally{if(locked)try{await db.query('SELECT pg_advisory_unlock($1)',[0x53495246]);}catch{}db.release();}
 }
+
+export async function cancelAllFuturesSchedules(ownerEmail:string,category:string,symbol=''){
+ await ensure();const email=String(ownerEmail||'').trim().toLowerCase();const safeCategory=String(category||'USDT-FUTURES').toUpperCase();
+ if(!email)throw new Error('Authenticated owner identity is required.');
+ const values:any[]=[email,safeCategory];let symbolClause='';
+ if(symbol){values.push(String(symbol).toUpperCase());symbolClause=' AND upper(spec->>\'symbol\')=$3';}
+ const result=await requirePool().query('UPDATE '+TABLE+" SET state='cancel_requested',next_run_at=now(),updated_at=now() WHERE owner_email=$1 AND state IN ('running','paused') AND spec->>'category'=$2"+symbolClause+' RETURNING id',values);
+ return {ok:true,cancelRequested:result.rowCount||0};
+}
