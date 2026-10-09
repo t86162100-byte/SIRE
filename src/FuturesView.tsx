@@ -47,6 +47,11 @@ export default function FuturesView({initialSymbol}:Props){
   const [queueType,setQueueType]=useState<'Queue 1'|'Counterparty 1'>('Queue 1');
   const [queueDrawer,setQueueDrawer]=useState(false);
   const [priceLimitEnabled,setPriceLimitEnabled]=useState(false);
+  const [twapHours,setTwapHours]=useState('1');
+  const [twapMinutes,setTwapMinutes]=useState('0');
+  const [twapFrequency,setTwapFrequency]=useState('30s');
+  const [twapFrequencyDrawer,setTwapFrequencyDrawer]=useState(false);
+  const [twapAdvanced,setTwapAdvanced]=useState(false);
   const [slippageEnabled,setSlippageEnabled]=useState(false);
   const [qty,setQty]=useState('');
   const [qtyPercent,setQtyPercent]=useState(0);
