@@ -134,6 +134,7 @@ export default function FuturesView({initialSymbol}:Props){
     if(isTrigger&&orderType==='Trigger order'&&(!Number(triggerPrice)||Number(triggerPrice)<=0)){setError('Enter a valid trigger price.');return}
     if(orderType==='Trailing stop order'&&(!Number(activationPrice)||Number(activationPrice)<=0)){setError('Enter a valid activation price.');return}
     if(orderType==='Trailing stop order'&&(!Number(trailVariance)||Number(trailVariance)<=0)){setError('Enter a valid trailing callback rate.');return}
+    const algorithmic=['TWAP','Iceberg order','Split large order'].includes(orderType);
     if(tpSlEnabled&&takeProfitPrice&&(!Number(takeProfitPrice)||Number(takeProfitPrice)<=0)){setError('Enter a valid take-profit price.');return}
     if(tpSlEnabled&&stopLossPrice&&(!Number(stopLossPrice)||Number(stopLossPrice)<=0)){setError('Enter a valid stop-loss price.');return}
     setBusy(true);
