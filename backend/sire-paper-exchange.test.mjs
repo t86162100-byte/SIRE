@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {
   paperReset, paperPlaceOrder, paperGetOrder, paperCancelOrder, paperModifyOrder,
   paperPlaceTrigger, paperCancelTrigger, paperModifyTrigger,
-  paperListOrders, paperListTriggers, paperEvaluateTriggers, paperPositions, paperSetLeverage, paperAccount, paperCreateSchedule, paperListSchedules, paperControlSchedule, paperRunScheduleBatch
+  paperListOrders, paperListTriggers, paperEvaluateTriggers, paperEvaluateOrders, paperPositions, paperSetLeverage, paperAccount, paperCreateSchedule, paperListSchedules, paperControlSchedule, paperRunScheduleBatch
 } from './sire-paper-exchange.mjs';
 
 test('paper Spot market buy fills virtually using quote-quantity semantics', () => {
@@ -39,6 +39,22 @@ test('limit order can be amended and cancelled; terminal order cannot be amended
   assert.throws(()=>paperModifyOrder({orderId:placed.order.orderId,price:'800'}),/terminal/);
   assert.equal(paperListOrders('SPOT','ETHUSDT',false).orders.length,0);
   assert.equal(paperListOrders('SPOT','ETHUSDT',true).orders.length,1);
+});
+
+test('partial limit fills reconcile correctly before cancellation', async () => {
+  paperReset();
+  const placed=paperPlaceOrder({category:'SPOT',symbol:'ETHUSDT',side:'buy',orderType:'limit',qty:'1',price:'100',clientOid:'partial-limit-1'},{ask:101,bid:99});
+  assert.equal(placed.order.status,'new');
+  const result=await paperEvaluateOrders(async()=>({asks:[{price:99,quantity:0.25}],bids:[{price:98,quantity:10}]}));
+  assert.equal(result.processed,1);
+  const partial=paperGetOrder({orderId:placed.order.orderId}).order;
+  assert.equal(partial.status,'partially_filled');
+  assert.equal(partial.filledQty,0.25);
+  assert.equal(partial.remaining,0.75);
+  const cancelled=paperCancelOrder({orderId:placed.order.orderId}).order;
+  assert.equal(cancelled.status,'cancelled');
+  assert.equal(cancelled.filledQty,0.25);
+  assert.equal(cancelled.remaining,0.75);
 });
 
 test('trigger order can be amended and cancelled without any exchange request', () => {
