@@ -35,10 +35,12 @@ function applyFill(order, price, quantity) {
     const key = order.category + ':' + order.symbol + ':' + (order.posSide || (order.side === 'buy' ? 'long' : 'short'));
     const prior = positions.get(key) || { category: order.category, symbol: order.symbol, posSide: order.posSide || (order.side === 'buy' ? 'long' : 'short'), total: 0, avgPrice: 0, leverage: leverage.get(order.category + ':' + order.symbol) || 10, marginMode: order.marginMode || 'crossed', unrealisedPnl: 0 };
     const closing = order.tradeSide === 'close' || order.reduceOnly === 'yes';
-    if (closing) prior.total = Math.max(0, prior.total - qty);
+    if (closing) { prior.total = Math.max(0, prior.total - qty); if(prior.total<=1e-12){prior.takeProfit=undefined;prior.stopLoss=undefined;} }
     else {
       prior.avgPrice = prior.total ? ((prior.avgPrice * prior.total) + price * qty) / (prior.total + qty) : price;
       prior.total += qty;
+      if(order.takeProfit)prior.takeProfit=order.takeProfit;
+      if(order.stopLoss)prior.stopLoss=order.stopLoss;
     }
     positions.set(key, prior);
   } else {
@@ -63,7 +65,7 @@ export function paperPlaceOrder(input, market = {}) {
   const qty = category === 'SPOT' && orderType === 'market' && side === 'buy' ? requestedQty / price : requestedQty;
   const clientOid = oidOf(input?.clientOid);
   if (clientIds.has(clientOid)) return { ok:true, mode:'PAPER', duplicate:true, order:serial(orders.get(clientIds.get(clientOid))) };
-  const row = { orderId:idOf('ORDER'), clientOid, category, symbol, side, orderType, price:orderType==='limit'?price:null, requestedQty, qty, remaining:qty, filledQty:0, avgPrice:0, status:'new', tradeSide:String(input?.tradeSide||'open'), posSide:String(input?.posSide||'').toLowerCase(), marginMode:String(input?.marginMode||'crossed'), reduceOnly:String(input?.reduceOnly||'no'), timeInForce:String(input?.timeInForce||'gtc'), createdAt:now(), updatedAt:now(), fills:[] };
+  const row = { orderId:idOf('ORDER'), clientOid, category, symbol, side, orderType, price:orderType==='limit'?price:null, requestedQty, qty, remaining:qty, filledQty:0, avgPrice:0, status:'new', tradeSide:String(input?.tradeSide||'open'), posSide:String(input?.posSide||'').toLowerCase(), marginMode:String(input?.marginMode||'crossed'), reduceOnly:String(input?.reduceOnly||'no'), timeInForce:String(input?.timeInForce||'gtc'), takeProfit:input?.takeProfit==null||input.takeProfit===''?undefined:positive(input.takeProfit,'Take-profit price'), stopLoss:input?.stopLoss==null||input.stopLoss===''?undefined:positive(input.stopLoss,'Stop-loss price'), createdAt:now(), updatedAt:now(), fills:[] };
   orders.set(row.orderId,row); clientIds.set(clientOid,row.orderId);
   if (orderType === 'market') applyFill(row, price, qty);
   else {
@@ -162,6 +164,15 @@ export async function paperEvaluateTriggers(getMarket) {
       const child=paperPlaceOrder({category:trigger.category,symbol:trigger.symbol,side:trigger.side,orderType:trigger.orderType,qty:String(trigger.qty),price:trigger.price,clientOid:(trigger.clientOid+'_EXEC').slice(0,32),tradeSide:trigger.tradeSide,posSide:trigger.posSide,marginMode:trigger.marginMode,reduceOnly:trigger.reduceOnly,timeInForce:trigger.timeInForce},{bid,ask,price:current});
       trigger.status='triggered';trigger.childOrderId=child.order.orderId;trigger.updatedAt=now();processed++;
     }catch(e){trigger.lastError=e instanceof Error?e.message:String(e);}
+  }
+  for(const position of positions.values()){
+    if(!(position.total>1e-12)||(!position.takeProfit&&!position.stopLoss))continue;
+    try{
+      const market=await getMarket(position.category,position.symbol);const bid=Number(market.bids?.[0]?.price||0),ask=Number(market.asks?.[0]?.price||0);const current=bid>0&&ask>0?(bid+ask)/2:(bid||ask||Number(market.price||0));if(!(current>0))continue;
+      const isLong=position.posSide==='long';const takeHit=position.takeProfit&&(isLong?current>=position.takeProfit:current<=position.takeProfit);const stopHit=position.stopLoss&&(isLong?current<=position.stopLoss:current>=position.stopLoss);if(!takeHit&&!stopHit)continue;
+      const side=isLong?'sell':'buy';const clientOid=('SIRE_PAPER_TPSL_'+position.symbol+'_'+position.posSide+'_'+(takeHit?'TP':'SL')).slice(0,32);
+      paperPlaceOrder({category:position.category,symbol:position.symbol,side,orderType:'market',qty:String(position.total),clientOid,posSide:position.posSide,tradeSide:'close',reduceOnly:'yes',marginMode:position.marginMode},{bid,ask,price:current});processed++;
+    }catch(e){position.lastError=e instanceof Error?e.message:String(e);}
   }
   return {ok:true,mode:'PAPER',processed};
 }
