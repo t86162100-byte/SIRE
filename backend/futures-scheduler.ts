@@ -88,7 +88,7 @@ export async function controlFuturesSchedule(id:string,action:string,ownerEmail:
   await db.query(`UPDATE ${TABLE} SET state='running',next_run_at=now(),last_error=NULL,updated_at=now() WHERE id=$1`,[id]);
  }else if(action==='cancel'){
   if(!['running','paused','cancel_requested'].includes(job.state))throw new Error('This schedule is already terminal.');
-  await db.query(`UPDATE ${TABLE} SET state='cancel_requested',updated_at=now() WHERE id=$1`,[id]);
+  await db.query(`UPDATE ${TABLE} SET state='cancel_requested',next_run_at=now(),updated_at=now() WHERE id=$1`,[id]);
  }else throw new Error('Action must be pause, resume or cancel.');
  return {ok:true,job:(await listFuturesSchedules(email)).jobs.find((x:any)=>x.id===id)};
 }
