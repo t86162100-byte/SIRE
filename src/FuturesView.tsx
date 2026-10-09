@@ -11,6 +11,7 @@ type FuturesMarket = {
 type Level = { price:number; quantity:number };
 type Book = { asks:Level[]; bids:Level[] };
 type Position = { symbol:string; posSide?:string; total?:string; available?:string; avgPrice?:string; markPrice?:string; leverage?:string; unrealisedPnl?:string; liquidationPrice?:string; marginMode?:string };
+type ScheduleJob = {id:string;kind:string;state:string;spec?:any;totalSlices:number;completedSlices:number;lastError?:string|null};
 
 const money=(v:number,d=2)=>Number.isFinite(v)?v.toLocaleString(undefined,{maximumFractionDigits:d}):'—';
 const priceFmt=(v:number)=>Number.isFinite(v)?v.toLocaleString(undefined,{minimumFractionDigits:v<1?6:2,maximumFractionDigits:v<1?8:2}):'—';
@@ -62,12 +63,13 @@ export default function FuturesView({initialSymbol}:Props){
   const [snapshot,setSnapshot]=useState<{price?:number;bid?:number;ask?:number;percent?:number}>({});
   const [book,setBook]=useState<Book>({asks:[],bids:[]});
   const [positions,setPositions]=useState<Position[]>([]);
+  const [schedules,setSchedules]=useState<ScheduleJob[]>([]);
   const [loading,setLoading]=useState(true);
   const [busy,setBusy]=useState(false);
   const [error,setError]=useState('');
   const [bookView,setBookView]=useState<'both'|'asks'|'bids'>('both');
 
-  const category=contractTab==='USDT-M'?'USDT-FUTURES':contractTab==='COIN-M'?'COIN-FUTURES':'USDC-FUTURES';
+  const category=contractTab==='USDT-M'?'USDT-FUTURES':contractTab==='COIN-M'?'COIN-FUTURES':'USDC-FUTURES';\n  const refreshSchedules=async()=>{try{const p=await fetch('/api/sire/bitget/schedules',{cache:'no-store',headers:{Accept:'application/json'}}).then(r=>readJson(r,'Futures schedules'));setSchedules(Array.isArray(p?.jobs)?p.jobs:[])}catch{}};\n  const controlSchedule=async(id:string,action:'pause'|'resume'|'cancel')=>{try{await fetch('/api/sire/bitget/schedules/'+encodeURIComponent(id)+'/'+action,{method:'POST',headers:{Accept:'application/json'}}).then(r=>readJson(r,'Schedule '+action));await refreshSchedules()}catch(e){setError(e instanceof Error?e.message:String(e))}};
   const filtered=useMemo(()=>markets.filter(m=>!search||m.symbol.toLowerCase().includes(search.toLowerCase())||m.name.toLowerCase().includes(search.toLowerCase())),[markets,search]);
   const activePosition=positions.find(p=>p.symbol===selected?.symbol && Number(p.total||0)>0);
   const marketPrice=Number(snapshot.price||selected?.price||0);
@@ -112,7 +114,7 @@ export default function FuturesView({initialSymbol}:Props){
   },[selected?.symbol,category]);
 
   const refreshPositions=()=>{if(!selected)return;fetch('/api/sire/bitget/positions?category='+category+'&symbol='+encodeURIComponent(selected.symbol),{cache:'no-store',headers:{Accept:'application/json'}}).then(r=>readJson(r,'Bitget positions')).then(p=>setPositions(Array.isArray(p?.positions)?p.positions:[])).catch(()=>{})};
-  useEffect(()=>{refreshPositions()},[selected?.symbol,category]);
+  useEffect(()=>{refreshPositions()},[selected?.symbol,category]);\n  useEffect(()=>{void refreshSchedules();const timer=setInterval(()=>void refreshSchedules(),3000);return()=>clearInterval(timer)},[]);
 
   const applyLeverage=async(next:string)=>{setLeverage(next);if(!selected)return;try{await fetch('/api/sire/bitget/leverage',{method:'POST',headers:{'Content-Type':'application/json',Accept:'application/json'},body:JSON.stringify({category,symbol:selected.symbol,leverage:next,marginMode:marginMode.toLowerCase()})}).then(r=>readJson(r,'Bitget leverage'))}catch(e){setError(e instanceof Error?e.message:String(e))}};
 
@@ -131,6 +133,19 @@ export default function FuturesView({initialSymbol}:Props){
     setBusy(true);
     try{
       const orderSideValue=orderSide==='Long'?(isClose?'sell':'buy'):(isClose?'buy':'sell');
+      if(algorithmic){
+        const perQty=Number(qtyPerOrder);if(!Number.isFinite(perQty)||perQty<=0)throw new Error('Enter a valid quantity per order.');
+        const durationSeconds=Number(twapHours||0)*3600+Number(twapMinutes||0)*60;
+        const frequencySeconds=Number(String(twapFrequency).replace(/[^0-9]/g,''))||30;
+        const preference=orderPreferences;
+        const scheduledOrderType=orderType==='Iceberg order'&&preference!=='Faster execution'?'limit':'market';
+        if(orderType==='TWAP'&&durationSeconds<60)throw new Error('TWAP duration must be at least 1 minute.');
+        if(scheduledOrderType==='limit'&&(!Number(price)||Number(price)<=0))throw new Error('Enter the limit price for this Iceberg preference.');
+        const schedulePayload:any={kind:orderType==='TWAP'?'twap':orderType==='Iceberg order'?'iceberg':'split',category,symbol:selected.symbol,side:orderSideValue,posSide:orderSide.toLowerCase(),marginMode:marginMode==='Cross'?'crossed':'isolated',reduceOnly:isClose||reduceOnly,orderType:scheduledOrderType,totalQty:n,perOrderQty:perQty,intervalSeconds:orderType==='TWAP'?frequencySeconds:5,durationSeconds:Math.max(60,durationSeconds),sliceCount:Number(splitOrderCount),price:scheduledOrderType==='limit'?Number(price):undefined,timeInForce:'gtc',preference,queueType,priceLimitEnabled};
+        const created=await fetch('/api/sire/bitget/schedules',{method:'POST',headers:{'Content-Type':'application/json',Accept:'application/json'},body:JSON.stringify(schedulePayload)}).then(r=>readJson(r,'Create Futures schedule'));
+        if(!created?.ok)throw new Error(created?.error||'Could not create schedule.');
+        setError('Schedule '+String(created.job?.id||'created').slice(0,8)+' started.');setQty('');setQtyPercent(0);await refreshSchedules();return;
+      }
       const payload:any={category,symbol:selected.symbol,side:orderSideValue,orderType:limitBasedOrder?'limit':'market',qty:String(n),price:limitBasedOrder?String(price):undefined,posSide:orderSide.toLowerCase(),tradeSide:isClose?'close':'open',marginMode:marginMode==='Cross'?'crossed':'isolated',reduceOnly:isClose?'yes':'no',timeInForce:orderType==='Advanced limit order'?({'Post only':'post_only','IOC':'ioc','FOK':'fok'} as any)[timeInForce]:'gtc',slippagePercent:slippageEnabled&&orderType==='Market'?0.5:undefined,referencePrice:slippageEnabled&&orderType==='Market'?marketPrice:undefined};
       if(isTrigger){
         payload.planType=orderType==='Trailing stop order'?'track_plan':'normal_plan';
@@ -227,6 +242,7 @@ export default function FuturesView({initialSymbol}:Props){
           </div>
         </div>
         {error&&<div className="sire-futures-error">{error}</div>}
+        {schedules.filter(j=>['running','paused','cancel_requested'].includes(j.state)).slice(0,3).map(j=><div className="sire-futures-error" key={j.id}><span>{j.kind.toUpperCase()} · {j.state} · {j.completedSlices}/{j.totalSlices}</span>{j.lastError&&<small> {j.lastError}</small>}<span style={{float:'right',display:'inline-flex',gap:6}}>{j.state==='running'&&<button type="button" onClick={()=>void controlSchedule(j.id,'pause')}>Pause</button>}{j.state==='paused'&&<button type="button" onClick={()=>void controlSchedule(j.id,'resume')}>Resume</button>}<button type="button" onClick={()=>void controlSchedule(j.id,'cancel')}>Cancel</button></span></div>)}
       </section>
 
       <aside className="sire-futures-book-card">
