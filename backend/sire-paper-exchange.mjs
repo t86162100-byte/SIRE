@@ -82,6 +82,11 @@ export function paperPlaceTrigger(input) {
   triggers.set(row.orderId,row);
   return {ok:true,mode:'PAPER',order:serial(row)};
 }
+export function paperGetOrder(input) {
+  const row=[...orders.values(),...triggers.values()].find(o=>o.orderId===String(input?.orderId||'')||o.clientOid===String(input?.clientOid||''));
+  if(!row)throw new Error('Paper order not found.');
+  return {ok:true,mode:'PAPER',order:serial(row)};
+}
 export function paperCancelOrder(input) {
   const row=[...orders.values()].find(o=>o.orderId===String(input?.orderId||'')||o.clientOid===String(input?.clientOid||''));
   if(!row) throw new Error('Paper order not found.');
