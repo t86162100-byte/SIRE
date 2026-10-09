@@ -27,3 +27,19 @@ For a later exchange-demo phase, set `SIRE_TRADING_MODE=BITGET_DEMO` only with a
 `npm run build`
 
 The GitHub Actions workflow `.github/workflows/paper-lifecycle.yml` runs the paper lifecycle tests and frontend production build on this branch / its pull request.
+
+## Bitget Demo integration pass
+
+After the paper test/build checks pass, configure a **separate Bitget Demo API key** in an isolated test environment (never paste its values into chat). Set:
+
+- `SIRE_TRADING_MODE=BITGET_DEMO`
+- `SIRE_RUN_BITGET_DEMO_INTEGRATION=true`
+- `BITGET_API_KEY`, `BITGET_API_SECRET`, and `BITGET_API_PASSPHRASE` to the Demo key values
+
+Then run:
+
+`npm run test:bitget-demo`
+
+This opt-in integration test places only far-from-market **demo** Spot and USDT-Futures limit orders, queries status, amends and cancels them, and places/lists/cancels a Spot trigger order. The demo mode sends Bitget's `paptrading: 1` header. The test is skipped unless both the explicit test flag and `BITGET_DEMO` mode are set. It is not part of default CI, and it must never be run with a live API key.
+
+A passing simulator test suite is not a substitute for this exchange-demo pass. Keep `SIRE_TRADING_MODE` out of `LIVE` until the demo integration test and manual reconciliation of fills, partial fills, cancels/modifies, trigger activation, TP/SL and schedule recovery all pass.
