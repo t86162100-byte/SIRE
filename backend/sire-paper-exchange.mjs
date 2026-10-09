@@ -48,7 +48,7 @@ function applyFill(order, price, quantity) {
   }
 }
 export function paperReset() {
-  sequence = 0; orders.clear(); triggers.clear(); positions.clear(); leverage.clear(); clientIds.clear();
+  sequence = 0; orders.clear(); triggers.clear(); positions.clear(); leverage.clear(); clientIds.clear(); schedules.clear();
   balances.clear(); for (const [k,v] of [['USDT',100000],['USDC',100000],['BTC',10],['ETH',100],['SOL',10000]]) balances.set(k,v);
   return { ok:true, mode:'PAPER', reset:true };
 }
@@ -145,3 +145,58 @@ export function paperSetLeverage(input) {
   return {ok:true,mode:'PAPER',category,symbol,leverage:value};
 }
 export function paperOrderHistory() { return [...orders.values()].map(serial); }
+
+const schedules = new Map();
+export function paperCreateSchedule(input) {
+  const kind=String(input?.kind||'').toLowerCase(), category=categoryOf(input?.category), symbol=symbolOf(input?.symbol), side=String(input?.side||'').toLowerCase(), orderType=String(input?.orderType||'market').toLowerCase();
+  const totalQty=positive(input?.totalQty,'Total quantity'), perOrderQty=positive(input?.perOrderQty,'Per-order quantity');
+  if(!['twap','iceberg','split'].includes(kind))throw new Error('Schedule kind must be TWAP, Iceberg or Split.');
+  if(!FUTURES.has(category))throw new Error('Paper algo schedules require a Futures category.');
+  if(!/^[A-Z0-9_]{3,32}$/.test(symbol)||!['buy','sell'].includes(side)||!['market','limit'].includes(orderType))throw new Error('Invalid paper schedule symbol, side or order type.');
+  if(perOrderQty>totalQty)throw new Error('Per-order quantity cannot exceed total quantity.');
+  const intervalSeconds=Number(input?.intervalSeconds||30);
+  if(!Number.isInteger(intervalSeconds)||intervalSeconds<5||intervalSeconds>3600)throw new Error('Schedule interval must be between 5 and 3600 seconds.');
+  const sliceCount=kind==='iceberg'?Math.ceil(totalQty/perOrderQty):kind==='split'?Number(input?.sliceCount||0):Math.ceil(totalQty/perOrderQty);
+  if(!Number.isInteger(sliceCount)||sliceCount<1||sliceCount>1000)throw new Error('Schedule slice count must be between 1 and 1000.');
+  if(kind==='split'&&totalQty/sliceCount>perOrderQty+1e-12)throw new Error('Split count is too small for the selected per-order quantity.');
+  const durationSeconds=Number(input?.durationSeconds||0);
+  if(kind==='twap'&&(!Number.isInteger(durationSeconds)||durationSeconds<60||durationSeconds>86400||durationSeconds<(sliceCount-1)*intervalSeconds))throw new Error('TWAP duration is invalid for the selected interval and slice count.');
+  const price=orderType==='limit'?positive(input?.price,'Limit price'):undefined;
+  const id=idOf('SCHEDULE');
+  const job={id,kind,category,symbol,side,orderType,totalQty,perOrderQty,sliceCount,intervalSeconds,durationSeconds,price,posSide:String(input?.posSide||'').toLowerCase(),marginMode:String(input?.marginMode||'crossed'),reduceOnly:input?.reduceOnly?'yes':'no',timeInForce:String(input?.timeInForce||'gtc'),state:'running',completedSlices:0,createdAt:now(),nextRunAt:now(),lastError:null,children:[]};
+  schedules.set(id,job);
+  return {ok:true,mode:'PAPER',job:serial(job)};
+}
+export function paperListSchedules() { return {ok:true,mode:'PAPER',jobs:[...schedules.values()].map(serial)}; }
+export function paperControlSchedule(id,action) {
+  const job=schedules.get(String(id||''));if(!job)throw new Error('Paper schedule not found.');
+  if(action==='pause'){if(job.state!=='running')throw new Error('Only running paper schedules can be paused.');job.state='paused';}
+  else if(action==='resume'){if(job.state!=='paused')throw new Error('Only paused paper schedules can be resumed.');job.state='running';job.nextRunAt=now();}
+  else if(action==='cancel'){if(!['running','paused'].includes(job.state))throw new Error('Paper schedule is already terminal.');job.state='cancelled';}
+  else throw new Error('Action must be pause, resume or cancel.');
+  return {ok:true,mode:'PAPER',job:serial(job)};
+}
+export function paperCancelAllSchedules(category,symbol='') {
+  const c=categoryOf(category),s=symbolOf(symbol);let cancelled=0;
+  for(const job of schedules.values())if(job.category===c&&(!s||job.symbol===s)&&['running','paused'].includes(job.state)){job.state='cancelled';cancelled++;}
+  return {ok:true,mode:'PAPER',cancelled};
+}
+export async function paperRunScheduleBatch(getMarket) {
+  let processed=0;
+  for(const job of schedules.values()){
+    if(job.state!=='running'||job.nextRunAt>now())continue;
+    try{
+      if(job.completedSlices>=job.sliceCount){job.state='completed';continue;}
+      const slice=job.completedSlices+1;
+      const qty=Math.min(job.kind==='iceberg'?job.perOrderQty:job.totalQty/job.sliceCount,job.totalQty-job.children.reduce((sum,x)=>sum+x.qty,0));
+      if(qty<=1e-12){job.state='completed';continue;}
+      const market=await getMarket(job.category,job.symbol);
+      const order=paperPlaceOrder({category:job.category,symbol:job.symbol,side:job.side,orderType:job.orderType,qty:String(qty),price:job.price,clientOid:(job.id.replace(/[^A-Za-z0-9]/g,'').slice(0,15)+'_'+slice).slice(0,32),posSide:job.posSide,marginMode:job.marginMode,reduceOnly:job.reduceOnly,timeInForce:job.timeInForce},{bid:Number(market.bids?.[0]?.price||0),ask:Number(market.asks?.[0]?.price||0),price:Number(market.bids?.[0]?.price||market.asks?.[0]?.price||0)});
+      job.children.push({orderId:order.order.orderId,qty,clientOid:order.order.clientOid,status:order.order.status});
+      job.completedSlices++;job.lastError=null;job.nextRunAt=now()+job.intervalSeconds*1000;
+      if(job.completedSlices>=job.sliceCount)job.state='completed';
+      processed++;
+    }catch(e){job.lastError=e instanceof Error?e.message:String(e);job.state='failed';}
+  }
+  return {ok:true,mode:'PAPER',processed};
+}
