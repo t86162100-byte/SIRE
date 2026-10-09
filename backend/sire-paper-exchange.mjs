@@ -80,7 +80,7 @@ export function paperPlaceTrigger(input) {
   if (!CATEGORIES.has(category)) throw new Error('Unsupported paper category.');
   if (!/^[A-Z0-9_]{3,32}$/.test(symbol)||!['buy','sell'].includes(side)) throw new Error('Invalid trigger symbol or side.');
   const clientOid=oidOf(input?.clientOid);const prior=[...triggers.values()].find(o=>o.clientOid===clientOid);if(prior)return {ok:true,mode:'PAPER',duplicate:true,order:serial(prior)};
-  const row={orderId:idOf('TRIGGER'),clientOid,category,symbol,side,qty,triggerPrice:positive(input?.triggerPrice,'Trigger price'),orderType:String(input?.orderType||'market').toLowerCase(),planType:String(input?.planType||'normal_plan'),tradeSide:String(input?.tradeSide||'open'),posSide:String(input?.posSide||'').toLowerCase(),marginMode:String(input?.marginMode||'crossed'),reduceOnly:String(input?.reduceOnly||'no'),timeInForce:String(input?.timeInForce||'gtc'),status:'live',isTrigger:true,createdAt:now(),updatedAt:now()};
+  const row={orderId:idOf('TRIGGER'),clientOid,category,symbol,side,qty,triggerPrice:positive(input?.triggerPrice,'Trigger price'),orderType:String(input?.orderType||'market').toLowerCase(),planType:String(input?.planType||'normal_plan'),tradeSide:String(input?.tradeSide||'open'),posSide:String(input?.posSide||'').toLowerCase(),marginMode:String(input?.marginMode||'crossed'),reduceOnly:String(input?.reduceOnly||'no'),timeInForce:String(input?.timeInForce||'gtc'),takeProfit:input?.takeProfit==null||input.takeProfit===''?undefined:positive(input.takeProfit,'Take-profit price'),stopLoss:input?.stopLoss==null||input.stopLoss===''?undefined:positive(input.stopLoss,'Stop-loss price'),status:'live',isTrigger:true,createdAt:now(),updatedAt:now()};
   if (!['market','limit'].includes(row.orderType)) throw new Error('Trigger execution must be market or limit.');
   if (row.orderType==='limit') row.price=positive(input?.price,'Trigger limit price');
   triggers.set(row.orderId,row);
@@ -162,7 +162,7 @@ export async function paperEvaluateTriggers(getMarket) {
       if(!(current>0))continue;
       const activated=trigger.side==='buy'?current>=trigger.triggerPrice:current<=trigger.triggerPrice;
       if(!activated)continue;
-      const child=paperPlaceOrder({category:trigger.category,symbol:trigger.symbol,side:trigger.side,orderType:trigger.orderType,qty:String(trigger.qty),price:trigger.price,clientOid:(trigger.clientOid+'_EXEC').slice(0,32),tradeSide:trigger.tradeSide,posSide:trigger.posSide,marginMode:trigger.marginMode,reduceOnly:trigger.reduceOnly,timeInForce:trigger.timeInForce},{bid,ask,price:current});
+      const child=paperPlaceOrder({category:trigger.category,symbol:trigger.symbol,side:trigger.side,orderType:trigger.orderType,qty:String(trigger.qty),price:trigger.price,clientOid:(trigger.clientOid+'_EXEC').slice(0,32),tradeSide:trigger.tradeSide,posSide:trigger.posSide,marginMode:trigger.marginMode,reduceOnly:trigger.reduceOnly,timeInForce:trigger.timeInForce,takeProfit:trigger.takeProfit,stopLoss:trigger.stopLoss},{bid,ask,price:current});
       trigger.status='triggered';trigger.childOrderId=child.order.orderId;trigger.updatedAt=now();processed++;
     }catch(e){trigger.lastError=e instanceof Error?e.message:String(e);}
   }
