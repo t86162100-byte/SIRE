@@ -76,7 +76,8 @@ export function paperPlaceTrigger(input) {
   const category=categoryOf(input?.category), symbol=symbolOf(input?.symbol), side=String(input?.side||'').toLowerCase(), qty=positive(input?.qty,'Trigger quantity');
   if (!CATEGORIES.has(category)) throw new Error('Unsupported paper category.');
   if (!/^[A-Z0-9_]{3,32}$/.test(symbol)||!['buy','sell'].includes(side)) throw new Error('Invalid trigger symbol or side.');
-  const row={orderId:idOf('TRIGGER'),clientOid:oidOf(input?.clientOid),category,symbol,side,qty,triggerPrice:positive(input?.triggerPrice,'Trigger price'),orderType:String(input?.orderType||'market').toLowerCase(),planType:String(input?.planType||'normal_plan'),status:'live',isTrigger:true,createdAt:now(),updatedAt:now()};
+  const clientOid=oidOf(input?.clientOid);const prior=[...triggers.values()].find(o=>o.clientOid===clientOid);if(prior)return {ok:true,mode:'PAPER',duplicate:true,order:serial(prior)};
+  const row={orderId:idOf('TRIGGER'),clientOid,category,symbol,side,qty,triggerPrice:positive(input?.triggerPrice,'Trigger price'),orderType:String(input?.orderType||'market').toLowerCase(),planType:String(input?.planType||'normal_plan'),tradeSide:String(input?.tradeSide||'open'),posSide:String(input?.posSide||'').toLowerCase(),marginMode:String(input?.marginMode||'crossed'),reduceOnly:String(input?.reduceOnly||'no'),timeInForce:String(input?.timeInForce||'gtc'),status:'live',isTrigger:true,createdAt:now(),updatedAt:now()};
   if (!['market','limit'].includes(row.orderType)) throw new Error('Trigger execution must be market or limit.');
   if (row.orderType==='limit') row.price=positive(input?.price,'Trigger limit price');
   triggers.set(row.orderId,row);
@@ -129,6 +130,23 @@ export function paperListOrders(category, symbol='', history=false) {
 export function paperListTriggers(category, symbol='') {
   const c=categoryOf(category), s=symbolOf(symbol);
   return {ok:true,mode:'PAPER',orders:[...triggers.values()].filter(o=>o.category===c&&(!s||o.symbol===s)&&o.status==='live').map(serial)};
+}
+export async function paperEvaluateTriggers(getMarket) {
+  let processed=0;
+  for(const trigger of triggers.values()){
+    if(trigger.status!=='live')continue;
+    try{
+      const market=await getMarket(trigger.category,trigger.symbol);
+      const bid=Number(market.bids?.[0]?.price||0),ask=Number(market.asks?.[0]?.price||0);
+      const current=trigger.side==='buy'?(ask||Number(market.price||0)):(bid||Number(market.price||0));
+      if(!(current>0))continue;
+      const activated=trigger.side==='buy'?current>=trigger.triggerPrice:current<=trigger.triggerPrice;
+      if(!activated)continue;
+      const child=paperPlaceOrder({category:trigger.category,symbol:trigger.symbol,side:trigger.side,orderType:trigger.orderType,qty:String(trigger.qty),price:trigger.price,clientOid:(trigger.clientOid+'_EXEC').slice(0,32),tradeSide:trigger.tradeSide,posSide:trigger.posSide,marginMode:trigger.marginMode,reduceOnly:trigger.reduceOnly,timeInForce:trigger.timeInForce},{bid,ask,price:current});
+      trigger.status='triggered';trigger.childOrderId=child.order.orderId;trigger.updatedAt=now();processed++;
+    }catch(e){trigger.lastError=e instanceof Error?e.message:String(e);}
+  }
+  return {ok:true,mode:'PAPER',processed};
 }
 export function paperPositions(category, symbol='') {
   const c=categoryOf(category), s=symbolOf(symbol);
