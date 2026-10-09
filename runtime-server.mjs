@@ -26,7 +26,7 @@ import { getRoutedSpotLiquidity, spotLiquidityStatus } from './backend/sire-spot
 import { universalLiquidityStatus, liquidityRoute } from './backend/sire-liquidity-router.ts';
 import { paperPlaceOrder, paperPlaceTrigger, paperGetOrder, paperCancelOrder, paperModifyOrder, paperCancelTrigger, paperModifyTrigger, paperCancelAll, paperListOrders, paperListTriggers, paperPositions, paperAccount, paperSetLeverage, paperReset, paperCreateSchedule, paperListSchedules, paperControlSchedule, paperCancelAllSchedules, paperRunScheduleBatch } from './backend/sire-paper-exchange.mjs';
 
-const SIRE_PAPER_MODE = () => String(process.env.SIRE_TRADING_MODE || '').trim().toUpperCase() === 'PAPER';
+const SIRE_PAPER_MODE = () => !['LIVE','BITGET_DEMO'].includes(String(process.env.SIRE_TRADING_MODE || 'PAPER').trim().toUpperCase());
 
 const PORT = Number(process.env.PORT || 10000);
 const HOST = '0.0.0.0';
