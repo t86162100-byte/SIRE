@@ -335,22 +335,26 @@ export async function bitgetOwnerPlaceTriggerOrder(input:any){
   const side=String(input?.side||'').trim().toLowerCase();
   const tradeSide=String(input?.tradeSide||'open').trim().toLowerCase();
   const planType=String(input?.planType||'normal_plan').trim().toLowerCase();
-  const size=positiveNumber(input?.qty,'trigger quantity');
-  const triggerPrice=positiveNumber(input?.triggerPrice,'trigger price');
-  const marginMode=String(input?.marginMode||'crossed').toLowerCase();
-  const orderType=String(input?.orderType||'market').toLowerCase();
-  if(!['USDT-FUTURES','COIN-FUTURES','USDC-FUTURES'].includes(category)) throw new Error('Trigger orders require a futures category.');
-  if(!symbol||!['buy','sell'].includes(side)||!['open','close'].includes(tradeSide)) throw new Error('Invalid trigger order symbol, side or trade side.');
-  if(!['normal_plan','track_plan'].includes(planType)) throw new Error('Unsupported trigger plan type.');
-  if(!['crossed','isolated'].includes(marginMode)) throw new Error('Invalid margin mode.');
-  if(planType==='track_plan' && (!Number.isFinite(Number(input?.callbackRatio))||Number(input.callbackRatio)<=0||Number(input.callbackRatio)>10)) throw new Error('Trailing stop callback ratio must be greater than 0 and at most 10%.');
-  const marginCoin=String(input?.marginCoin||(category==='USDC-FUTURES'?'USDC':category==='USDT-FUTURES'?'USDT':'')).toUpperCase();
-  if(!marginCoin)throw new Error('COIN-M trigger orders require the contract margin coin.');
-  const body:any={planType,productType:category,symbol,marginMode,marginCoin,size:String(size),triggerPrice:String(triggerPrice),triggerType:['mark_price','fill_price'].includes(String(input?.triggerType))?String(input.triggerType):'fill_price',side,orderType:planType==='track_plan'?'market':orderType,price:planType==='track_plan'?'':(orderType==='limit'?String(positiveNumber(input?.price,'limit price')):''),tradeSide,reduceOnly:String(input?.reduceOnly||'no')==='yes'?'yes':'no'};
-  if(planType==='track_plan') body.callbackRatio=String(input.callbackRatio);
-  body.clientOid=clientOid(String(input?.clientOid||''));
-  const data=await bitgetRequest('POST','/api/v2/mix/order/place-plan-order',body);
-  return {ok:true,provider:'BITGET',category,symbol,data:data?.data||null};
+  const qty=positiveNumber(input?.qty,'trigger quantity');
+  if(!['USDT-FUTURES','COIN-FUTURES','USDC-FUTURES'].includes(category))throw new Error('Trigger orders require a futures category.');
+  if(!symbol||!['buy','sell'].includes(side)||!['open','close'].includes(tradeSide))throw new Error('Invalid trigger order symbol, side or trade side.');
+  if(!['normal_plan','track_plan'].includes(planType))throw new Error('Unsupported trigger plan type.');
+  const body:any={category,symbol,type:planType==='track_plan'?'trailing_stop':'trigger',side,posSide:String(input?.posSide||'').toLowerCase(),qty:String(qty),reduceOnly:String(input?.reduceOnly||'no')==='yes'?'yes':'no'};
+  if(body.posSide&&!['long','short'].includes(body.posSide))throw new Error('Invalid position side.');
+  if(planType==='normal_plan'){
+    const triggerPrice=positiveNumber(input?.triggerPrice,'trigger price');const orderType=String(input?.orderType||'market').toLowerCase();
+    if(!['market','limit'].includes(orderType))throw new Error('Trigger execution type must be market or limit.');
+    if(String(input?.triggerType||'fill_price')==='index_price')throw new Error('Bitget UTA trigger orders support market or mark price, not index price.');
+    body.triggerBy=String(input?.triggerType||'fill_price')==='mark_price'?'mark':'market';body.triggerPrice=String(triggerPrice);body.triggerOrderType=orderType;
+    if(orderType==='limit')body.triggerOrderPrice=String(positiveNumber(input?.price,'trigger execution price'));
+  }else{
+    const activationPrice=positiveNumber(input?.triggerPrice,'activation price');const callback=positiveNumber(input?.callbackRatio,'trailing callback rate');
+    if(callback>10)throw new Error('Trailing callback rate cannot exceed 10%.');
+    body.trailingStopParams={activationPrice:String(activationPrice),activationType:String(input?.triggerType||'fill_price')==='mark_price'?'mark':'market',trailType:'percentage',trailVariance:String(callback),preOrderType:'market'};
+  }
+  if(input?.marginMode)body.marginMode=String(input.marginMode).toLowerCase();
+  const data=await bitgetRequest('POST','/api/v3/trade/place-strategy-order',body);
+  return {ok:true,provider:'BITGET',category,symbol,planType,data:data?.data||null};
 }
 
 export async function bitgetOwnerOrderInfo(orderIdOrClientOid:string){
@@ -404,26 +408,35 @@ export async function bitgetOwnerCancelAllOrders(category:string,symbol=''){
 }
 
 export async function bitgetOwnerPendingTriggerOrders(category:string,symbol='',planType='normal_plan'){
-  const productType=String(category||'USDT-FUTURES').toUpperCase();const plan=String(planType||'normal_plan').toLowerCase();
-  if(!['USDT-FUTURES','COIN-FUTURES','USDC-FUTURES'].includes(productType))throw new Error('Trigger orders require a futures category.');
-  if(!['normal_plan','track_plan','profit_loss'].includes(plan))throw new Error('Unsupported trigger plan type.');
-  const qs='planType='+encodeURIComponent(plan)+'&productType='+encodeURIComponent(productType)+(symbol?'&symbol='+encodeURIComponent(String(symbol).toUpperCase()):'');
-  const data=await bitgetRequest('GET','/api/v2/mix/order/orders-plan-pending?'+qs);
-  const rows=data?.data?.entrustedList||[];
-  return {ok:true,provider:'BITGET',category:productType,planType:plan,orders:Array.isArray(rows)?rows:[]};
+  const safeCategory=String(category||'USDT-FUTURES').toUpperCase();const type=String(planType||'normal_plan').toLowerCase()==='track_plan'?'trailing_stop':'trigger';
+  if(!['USDT-FUTURES','COIN-FUTURES','USDC-FUTURES'].includes(safeCategory))throw new Error('Trigger orders require a futures category.');
+  const qs='category='+encodeURIComponent(safeCategory)+'&type='+encodeURIComponent(type);
+  const data=await bitgetRequest('GET','/api/v3/trade/unfilled-strategy-orders?'+qs);
+  const rows=Array.isArray(data?.data)?data.data:[];
+  return {ok:true,provider:'BITGET',category:safeCategory,planType:type,orders:rows.filter((o:any)=>!symbol||String(o.symbol||'').toUpperCase()===String(symbol).toUpperCase()).map((o:any)=>({...o,isTrigger:true,planType:type==='trailing_stop'?'track_plan':'normal_plan'}))};
 }
 
 export async function bitgetOwnerCancelTriggerOrder(input:any){
-  const productType=String(input?.category||input?.productType||'USDT-FUTURES').toUpperCase();
-  const symbol=String(input?.symbol||'').toUpperCase();const planType=String(input?.planType||'normal_plan').toLowerCase();
-  const orderId=String(input?.orderId||'').trim();const oid=String(input?.clientOid||'').trim();
-  if(!['USDT-FUTURES','COIN-FUTURES','USDC-FUTURES'].includes(productType))throw new Error('Trigger cancellation requires a futures category.');
-  if(!symbol)throw new Error('Symbol is required to cancel a trigger order.');
-  if(!['normal_plan','track_plan','profit_loss'].includes(planType))throw new Error('Unsupported trigger plan type.');
-  if(!orderId&&!oid)throw new Error('Trigger orderId or clientOid is required.');
-  const body:any={productType,symbol,planType,orderIdList:[{...(orderId?{orderId}:{}),...(oid?{clientOid:oid}:{})}]};
-  const data=await bitgetRequest('POST','/api/v2/mix/order/cancel-plan-order',body);
-  return {ok:true,provider:'BITGET',category:productType,planType,data:data?.data||null};
+  const orderId=String(input?.orderId||'').trim();const clientOidValue=String(input?.clientOid||'').trim();
+  if(!orderId&&!clientOidValue)throw new Error('Strategy orderId or clientOid is required.');
+  const data=await bitgetRequest('POST','/api/v3/trade/cancel-strategy-order',{...(orderId?{orderId}:{}),...(clientOidValue?{clientOid:clientOidValue}:{})});
+  return {ok:true,provider:'BITGET',data:data?.data||null};
+}
+
+export async function bitgetOwnerModifyTriggerOrder(input:any){
+  const orderId=String(input?.orderId||'').trim();const clientOidValue=String(input?.clientOid||'').trim();
+  if(!orderId&&!clientOidValue)throw new Error('Strategy orderId or clientOid is required.');
+  const body:any={...(orderId?{orderId}:{}),...(clientOidValue?{clientOid:clientOidValue}:{})};
+  if(input?.qty!=null&&input.qty!=='')body.qty=String(positiveNumber(input.qty,'strategy quantity'));
+  if(input?.triggerPrice!=null&&input.triggerPrice!=='')body.triggerPrice=String(positiveNumber(input.triggerPrice,'trigger price'));
+  if(input?.triggerBy)body.triggerBy=String(input.triggerBy);
+  if(input?.triggerOrderType)body.triggerOrderType=String(input.triggerOrderType);
+  if(input?.triggerOrderPrice!=null&&input.triggerOrderPrice!=='')body.triggerOrderPrice=String(positiveNumber(input.triggerOrderPrice,'trigger execution price'));
+  if(input?.takeProfit!=null&&input.takeProfit!=='')body.takeProfit=String(positiveNumber(input.takeProfit,'take-profit price'));
+  if(input?.stopLoss!=null&&input.stopLoss!=='')body.stopLoss=String(positiveNumber(input.stopLoss,'stop-loss price'));
+  if(!Object.keys(body).some(k=>!['orderId','clientOid'].includes(k)))throw new Error('Provide at least one strategy field to modify.');
+  const data=await bitgetRequest('POST','/api/v3/trade/modify-strategy-order',body);
+  return {ok:true,provider:'BITGET',data:data?.data||null};
 }
 
 export async function bitgetOwnerModifyTriggerOrder(input:any){
