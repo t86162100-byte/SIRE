@@ -78,6 +78,7 @@ export default function FuturesView({initialSymbol}:Props){
   const [loading,setLoading]=useState(true);
   const [busy,setBusy]=useState(false);
   const [error,setError]=useState('');
+  const [tradingMode,setTradingMode]=useState<'PAPER'|'BITGET_DEMO'|'LIVE'>('PAPER');
   const [bookView,setBookView]=useState<'both'|'asks'|'bids'>('both');
 
   const category=contractTab==='USDT-M'?'USDT-FUTURES':contractTab==='COIN-M'?'COIN-FUTURES':'USDC-FUTURES';
@@ -97,7 +98,8 @@ export default function FuturesView({initialSymbol}:Props){
   const maxDepthAsk=Math.max(0,...book.asks.slice(0,5).map(x=>x.quantity));
   const maxDepthBid=Math.max(0,...book.bids.slice(0,5).map(x=>x.quantity));
 
-  useEffect(()=>{let cancelled=false;setLoading(true);setError('');
+  useEffect(()=>{let cancelled=false;fetch('/api/sire/bitget/trading-mode',{cache:'no-store',headers:{Accept:'application/json'}}).then(r=>readJson(r,'Trading mode')).then(p=>{if(!cancelled&&p?.ok&&['PAPER','BITGET_DEMO','LIVE'].includes(p.mode))setTradingMode(p.mode)}).catch(()=>{if(!cancelled)setTradingMode('PAPER')});return()=>{cancelled=true}},[]);
+    useEffect(()=>{let cancelled=false;setLoading(true);setError('');
     fetch('/api/sire/bitget/catalog?t='+Date.now(),{cache:'no-store',headers:{Accept:'application/json'}}).then(r=>readJson(r,'Bitget catalog')).then(p=>{
       if(cancelled)return;
       const all=(Array.isArray(p?.instruments)?p.instruments:[]).filter((m:FuturesMarket)=>m.status==='TRADING'&&m.marketType==='Futures');
@@ -196,7 +198,7 @@ export default function FuturesView({initialSymbol}:Props){
             <span className="sire-futures-logo">{selected?.baseAsset?.slice(0,1)||'F'}</span>
             <span><b>{selected?.symbol||'Select contract'}</b><small>{selected?.name||'Futures contract'}</small></span><ChevronDown size={14}/>
           </button>
-          
+          <span className={'sire-trading-mode-banner '+(tradingMode==='LIVE'?'live':tradingMode==='BITGET_DEMO'?'demo':'paper')}><b>{tradingMode}</b><span>{tradingMode==='PAPER'?'Simulated · no funds used':tradingMode==='BITGET_DEMO'?'Bitget demo':'Live exchange'}</span></span>
         </div>
 
         <div className="sire-futures-settings-row">
