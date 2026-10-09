@@ -92,6 +92,17 @@ test('futures open and reduce-only close update virtual positions', () => {
   assert.equal(paperPositions('USDT-FUTURES','BTCUSDT').positions[0].total,'1.5');
 });
 
+test('paper Futures attached take-profit closes the virtual position when reached', async () => {
+  paperReset();
+  const opened=paperPlaceOrder({category:'USDT-FUTURES',symbol:'BTCUSDT',side:'buy',orderType:'market',qty:'1',clientOid:'tpsl-open-1',posSide:'long',tradeSide:'open',takeProfit:'51000',stopLoss:'49000'},{ask:50000,bid:49999});
+  assert.equal(opened.order.status,'filled');
+  assert.equal(paperPositions('USDT-FUTURES','BTCUSDT').positions[0].takeProfit,51000);
+  const result=await paperEvaluateTriggers(async()=>({bids:[{price:51000}],asks:[{price:51002}]}));
+  assert.equal(result.processed,1);
+  assert.equal(paperPositions('USDT-FUTURES','BTCUSDT').positions.length,0);
+  assert.equal(paperListOrders('USDT-FUTURES','BTCUSDT',true).orders.length,2);
+});
+
 test('invalid order inputs are rejected before any order is created', () => {
   paperReset();
   assert.throws(()=>paperPlaceOrder({category:'SPOT',symbol:'BTCUSDT',side:'buy',orderType:'market',qty:'0'} ,{ask:1,bid:1}),/greater than zero/);
