@@ -64,7 +64,7 @@ function normalize(input:any,ownerEmail:string){
  const marginMode=String(input?.marginMode||'crossed').toLowerCase();
  if(!['crossed','isolated'].includes(marginMode))throw new Error('Invalid margin mode.');
  const childQty=(kind==='twap'||kind==='split')?totalQty/totalSlices:perOrderQty;
- const spec={category,symbol,side,posSide,orderType,price,marginMode,reduceOnly:input?.reduceOnly?'yes':'no',takeProfit:input?.takeProfit==null||input.takeProfit===''?undefined:String(num(input.takeProfit,'Take-profit price')),stopLoss:input?.stopLoss==null||input.stopLoss===''?undefined:String(num(input.stopLoss,'Stop-loss price')),timeInForce:String(input?.timeInForce||'gtc').toLowerCase(),totalQty,perOrderQty,intervalSeconds,durationSeconds:durationSeconds||null,childQty,preference,queueType:String(input?.queueType||'Queue 1'),priceLimitEnabled:Boolean(input?.priceLimitEnabled),ownerEmail};
+ const spec={category,symbol,side,posSide,orderType,price,marginMode,reduceOnly:input?.reduceOnly?'yes':'no',takeProfit:input?.takeProfit==null||input.takeProfit===''?undefined:String(num(input.takeProfit,'Take-profit price')),stopLoss:input?.stopLoss==null||input.stopLoss===''?undefined:String(num(input.stopLoss,'Stop-loss price')),timeInForce:String(input?.timeInForce||'gtc').toLowerCase(),totalQty,perOrderQty,intervalSeconds,durationSeconds:durationSeconds||null,childQty,preference,queueType:String(input?.queueType||'Queue 1'),priceLimitEnabled:Boolean(input?.priceLimitEnabled),slippagePercent:input?.slippagePercent==null?0.5:num(input.slippagePercent,'Slippage percent'),ownerEmail};
  if(!['gtc','ioc','fok','post_only'].includes(spec.timeInForce))throw new Error('Unsupported time in force.');
  return {kind,category,symbol,totalQty,totalSlices,intervalSeconds,spec};
 }
@@ -108,7 +108,8 @@ async function reconcileOrPlace(child:any,spec:any){
   const message=e instanceof Error?e.message:String(e);
   if(!/not found|no order|order does not exist|400172|43025/i.test(message))throw e;
  }
- const order=await bitgetOwnerPlaceOrder({category:spec.category,symbol:spec.symbol,side:spec.side,orderType:spec.orderType,qty:String(child.qty),price:spec.price,clientOid:child.client_oid,posSide:spec.posSide,marginMode:spec.marginMode,reduceOnly:spec.reduceOnly,timeInForce:spec.timeInForce,takeProfit:spec.takeProfit,stopLoss:spec.stopLoss});
+ let referencePrice: number|undefined=undefined;if(spec.orderType==='market'){const book=await bitgetMarketOrderBook(spec.category,spec.symbol,5);const bid=Number(book.bids?.[0]?.price||0);const ask=Number(book.asks?.[0]?.price||0);const quote=spec.side==='buy'?ask:bid;if(!(quote>0))throw new Error('No current Bitget bid/ask quote available for scheduled market order.');referencePrice=quote;}
+ const order=await bitgetOwnerPlaceOrder({category:spec.category,symbol:spec.symbol,side:spec.side,orderType:spec.orderType,qty:String(child.qty),price:spec.price,clientOid:child.client_oid,posSide:spec.posSide,marginMode:spec.marginMode,reduceOnly:spec.reduceOnly,timeInForce:spec.timeInForce,takeProfit:spec.takeProfit,stopLoss:spec.stopLoss,referencePrice,slippagePercent:spec.slippagePercent});
  return {ok:true,data:order};
 }
 export async function runFuturesScheduleBatch(){
