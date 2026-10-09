@@ -131,7 +131,7 @@ export default function FuturesView({initialSymbol}:Props){
     setBusy(true);
     try{
       const orderSideValue=orderSide==='Long'?(isClose?'sell':'buy'):(isClose?'buy':'sell');
-      const payload:any={category,symbol:selected.symbol,side:orderSideValue,orderType:limitBasedOrder?'limit':'market',qty:String(n),price:limitBasedOrder?String(price):undefined,posSide:orderSide.toLowerCase(),tradeSide:isClose?'close':'open',marginMode:marginMode==='Cross'?'crossed':'isolated',reduceOnly:isClose?'yes':'no',timeInForce:orderType==='Advanced limit order'?({'Post only':'post_only','IOC':'ioc','FOK':'fok'} as any)[timeInForce]:'gtc',slippagePercent:slippageEnabled&&orderType==='Market'?0.5:undefined};
+      const payload:any={category,symbol:selected.symbol,side:orderSideValue,orderType:limitBasedOrder?'limit':'market',qty:String(n),price:limitBasedOrder?String(price):undefined,posSide:orderSide.toLowerCase(),tradeSide:isClose?'close':'open',marginMode:marginMode==='Cross'?'crossed':'isolated',reduceOnly:isClose?'yes':'no',timeInForce:orderType==='Advanced limit order'?({'Post only':'post_only','IOC':'ioc','FOK':'fok'} as any)[timeInForce]:'gtc',slippagePercent:slippageEnabled&&orderType==='Market'?0.5:undefined,referencePrice:slippageEnabled&&orderType==='Market'?marketPrice:undefined};
       if(isTrigger){
         payload.planType=orderType==='Trailing stop order'?'track_plan':'normal_plan';
         payload.triggerPrice=triggerPrice;
