@@ -394,6 +394,12 @@ export async function bitgetOwnerCancelAllOrders(category:string,symbol=''){
    cursor=String(page?.data?.cursor||'');pages++;
   }while(cursor&&pages<10);
   if(cursor)throw new Error('Cancel-all stopped after 10 pages; retry to cancel remaining orders.');
+  if(safeCategory.endsWith('FUTURES')){
+    for(const planType of ['normal_plan','track_plan','profit_loss']){
+      try{const data=await bitgetRequest('POST','/api/v2/mix/order/cancel-plan-order',{productType:safeCategory,...(symbol?{symbol:String(symbol).toUpperCase()}:{}),planType});const d=data?.data||{};results.push({ok:!(Array.isArray(d.failureList)&&d.failureList.length),triggerPlan:planType,data:d});}
+      catch(e){results.push({ok:false,triggerPlan:planType,error:e instanceof Error?e.message:String(e)});}
+    }
+  }
   return {ok:results.every((x:any)=>x.ok!==false),provider:'BITGET',category:safeCategory,cancelled:results.filter((x:any)=>x.ok!==false).length,failed:results.filter((x:any)=>x.ok===false).length,results};
 }
 
