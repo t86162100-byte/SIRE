@@ -418,7 +418,8 @@ export async function bitgetOwnerCancelAllOrders(category:string,symbol=''){
 
 export async function bitgetOwnerPendingTriggerOrders(category:string,symbol='',planType='normal_plan'){
   const safeCategory=String(category||'USDT-FUTURES').toUpperCase();const type=String(planType||'normal_plan').toLowerCase()==='track_plan'?'trailing_stop':'trigger';
-  if(!['USDT-FUTURES','COIN-FUTURES','USDC-FUTURES'].includes(safeCategory))throw new Error('Trigger orders require a futures category.');
+  if(!['SPOT','MARGIN','USDT-FUTURES','COIN-FUTURES','USDC-FUTURES'].includes(safeCategory))throw new Error('Unsupported trigger order category.');
+  if((safeCategory==='SPOT'||safeCategory==='MARGIN')&&type==='trailing_stop')return {ok:true,provider:'BITGET',category:safeCategory,planType:type,orders:[]};
   const qs='category='+encodeURIComponent(safeCategory.toLowerCase())+'&type='+encodeURIComponent(type);
   const data=await bitgetRequest('GET','/api/v3/trade/unfilled-strategy-orders?'+qs);
   const rows=Array.isArray(data?.data)?data.data:[];
