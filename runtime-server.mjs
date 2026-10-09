@@ -24,6 +24,9 @@ import { createFuturesSchedule, listFuturesSchedules, controlFuturesSchedule, ca
 import { ensureSireSpotTables, getSpotBook, placeSpotOrder, cancelSpotOrder, getSpotAccount, getSpotOrders, getSpotTrades, spotEngineStatus, spotSubscribe, spotUnsubscribe, spotDisconnect } from './backend/sire-spot-engine.ts';
 import { getRoutedSpotLiquidity, spotLiquidityStatus } from './backend/sire-spot-liquidity.ts';
 import { universalLiquidityStatus, liquidityRoute } from './backend/sire-liquidity-router.ts';
+import { paperPlaceOrder, paperPlaceTrigger, paperCancelOrder, paperModifyOrder, paperCancelTrigger, paperModifyTrigger, paperCancelAll, paperListOrders, paperListTriggers, paperPositions, paperAccount, paperSetLeverage, paperReset } from './backend/sire-paper-exchange.mjs';
+
+const SIRE_PAPER_MODE = () => String(process.env.SIRE_TRADING_MODE || '').trim().toUpperCase() === 'PAPER';
 
 const PORT = Number(process.env.PORT || 10000);
 const HOST = '0.0.0.0';
@@ -1032,7 +1035,7 @@ const server = http.createServer(async (req,res) => {
         const url = new URL(req.url || '/', 'http://sire.local');
         const category = String(url.searchParams.get('category') || 'USDT-FUTURES').toUpperCase();
         const symbol = String(url.searchParams.get('symbol') || '').toUpperCase();
-        return res.writeHead(200,{'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify(await bitgetOwnerFuturesPositions(category,symbol)));
+        return res.writeHead(200,{'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify(SIRE_PAPER_MODE()?paperPositions(category,symbol):await bitgetOwnerFuturesPositions(category,symbol)));
       } catch (cause) {
         return res.writeHead(502,{'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify({ok:false,error:cause instanceof Error ? cause.message : String(cause)}));
       }
@@ -1044,7 +1047,7 @@ const server = http.createServer(async (req,res) => {
         const user = await currentUser(req);
         if (!user || String(user.email || '').toLowerCase() !== ownerEmail) return res.writeHead(401,{'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify({ok:false,error:'Sign in with the SIRE owner account to manage futures leverage.'}));
         const parsed = body ? JSON.parse(body) : {};
-        return res.writeHead(200,{'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify(await bitgetOwnerSetFuturesLeverage(parsed)));
+        return res.writeHead(200,{'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify(SIRE_PAPER_MODE()?paperSetLeverage(parsed):await bitgetOwnerSetFuturesLeverage(parsed)));
       } catch (cause) {
         return res.writeHead(400,{'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify({ok:false,error:cause instanceof Error ? cause.message : String(cause)}));
       }
@@ -1054,7 +1057,7 @@ const server = http.createServer(async (req,res) => {
       if(!ownerEmail)return res.writeHead(503,{'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify({ok:false,error:'SIRE_OWNER_EMAIL is not configured.'}));
       if(!user||String(user.email||'').toLowerCase()!==ownerEmail)return res.writeHead(401,{'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify({ok:false,error:'Sign in with the SIRE owner account to view the Bitget account.'}));
       try {
-        return res.writeHead(200,{'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify(await bitgetOwnerAccount()));
+        return res.writeHead(200,{'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify(SIRE_PAPER_MODE()?paperAccount():await bitgetOwnerAccount()));
       } catch (cause) {
         return res.writeHead(502,{'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify({ok:false,error:cause instanceof Error ? cause.message : String(cause)}));
       }
@@ -1066,7 +1069,12 @@ const server = http.createServer(async (req,res) => {
         const user = await currentUser(req);
         if (!user || String(user.email || '').toLowerCase() !== ownerEmail) return res.writeHead(401,{'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify({ok:false,error:'Sign in with the SIRE owner account to trade through Bitget.'}));
         const parsed = body ? JSON.parse(body) : {};
-        const order = await bitgetOwnerPlaceOrder(parsed);
+        let order;
+        if(SIRE_PAPER_MODE()){
+          const book=await bitgetMarketOrderBook(String(parsed.category||'SPOT'),String(parsed.symbol||''),5);
+          const bid=Number(book.bids?.[0]?.price||0), ask=Number(book.asks?.[0]?.price||0);
+          order=paperPlaceOrder(parsed,{bid,ask,price:bid&&ask?(bid+ask)/2:0});
+        }else order=await bitgetOwnerPlaceOrder(parsed);
         return res.writeHead(200,{'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify(order));
       } catch (cause) {
         return res.writeHead(400,{'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify({ok:false,error:cause instanceof Error ? cause.message : String(cause)}));
@@ -1080,7 +1088,7 @@ const server = http.createServer(async (req,res) => {
         const user = await currentUser(req);
         if (!user || String(user.email || '').toLowerCase() !== ownerEmail) return res.writeHead(401,{'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify({ok:false,error:'Sign in with the SIRE owner account to manage Bitget orders.'}));
         const parsed = body ? JSON.parse(body) : {};
-        const result = pathname.endsWith('/cancel-all') ? await (async()=>{const exchange=await bitgetOwnerCancelAllOrders(parsed.category,parsed.symbol||'');const schedules=await cancelAllFuturesSchedules(String(process.env.SIRE_OWNER_EMAIL||''),parsed.category,parsed.symbol||'');return {...exchange,schedules,ok:exchange.ok&&schedules.ok}})() : pathname.endsWith('/modify') ? (parsed.isTrigger?await bitgetOwnerModifyTriggerOrder(parsed):await bitgetOwnerModifyOrder(parsed)) : pathname.endsWith('/cancel') ? (parsed.isTrigger?await bitgetOwnerCancelTriggerOrder(parsed):await bitgetOwnerCancelOrder(parsed)) : await bitgetOwnerPlaceTriggerOrder(parsed);
+        const result = SIRE_PAPER_MODE() ? (pathname.endsWith('/cancel-all') ? paperCancelAll(parsed.category,parsed.symbol||'') : pathname.endsWith('/modify') ? (parsed.isTrigger?paperModifyTrigger(parsed):paperModifyOrder(parsed)) : pathname.endsWith('/cancel') ? (parsed.isTrigger?paperCancelTrigger(parsed):paperCancelOrder(parsed)) : paperPlaceTrigger(parsed)) : (pathname.endsWith('/cancel-all') ? await (async()=>{const exchange=await bitgetOwnerCancelAllOrders(parsed.category,parsed.symbol||'');const schedules=await cancelAllFuturesSchedules(String(process.env.SIRE_OWNER_EMAIL||''),parsed.category,parsed.symbol||'');return {...exchange,schedules,ok:exchange.ok&&schedules.ok}})() : pathname.endsWith('/modify') ? (parsed.isTrigger?await bitgetOwnerModifyTriggerOrder(parsed):await bitgetOwnerModifyOrder(parsed)) : pathname.endsWith('/cancel') ? (parsed.isTrigger?await bitgetOwnerCancelTriggerOrder(parsed):await bitgetOwnerCancelOrder(parsed)) : await bitgetOwnerPlaceTriggerOrder(parsed));
         return res.writeHead(200,{'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify(result));
       } catch (cause) {
         return res.writeHead(400,{'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify({ok:false,error:cause instanceof Error ? cause.message : String(cause)}));
@@ -1091,7 +1099,7 @@ const server = http.createServer(async (req,res) => {
         if(!ownerEmail)return res.writeHead(503,{'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify({ok:false,error:'SIRE_OWNER_EMAIL is not configured.'}));
         if(!user||String(user.email||'').toLowerCase()!==ownerEmail)return res.writeHead(401,{'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify({ok:false,error:'Sign in with the SIRE owner account to view trigger orders.'}));
         const url=new URL(req.url||'/','http://sire.local');const category=String(url.searchParams.get('category')||'USDT-FUTURES').toUpperCase();const symbol=String(url.searchParams.get('symbol')||'').toUpperCase();
-        const plans=await Promise.all(['normal_plan','track_plan'].map(planType=>bitgetOwnerPendingTriggerOrders(category,symbol,planType)));const orders=plans.flatMap(p=>p.orders.map((o)=>({...o,isTrigger:true,category,orderType:'trigger'})));
+        const plans=SIRE_PAPER_MODE()?null:await Promise.all(['normal_plan','track_plan'].map(planType=>bitgetOwnerPendingTriggerOrders(category,symbol,planType)));const orders=SIRE_PAPER_MODE()?paperListTriggers(category,symbol).orders:plans.flatMap(p=>p.orders.map((o)=>({...o,isTrigger:true,category,orderType:'trigger'})));
         return res.writeHead(200,{'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify({ok:true,orders}));
       }catch(cause){return res.writeHead(502,{'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify({ok:false,error:cause instanceof Error?cause.message:String(cause)}));}
     }
@@ -1104,7 +1112,7 @@ const server = http.createServer(async (req,res) => {
         const url = new URL(req.url || '/', 'http://sire.local');
         const category = String(url.searchParams.get('category') || 'USDT-FUTURES').toUpperCase();
         const symbol = String(url.searchParams.get('symbol') || '').toUpperCase();
-        const result = pathname.endsWith('/open') ? await bitgetOwnerOpenOrders(category,symbol) : await (async()=>{const [regular,strategy]=await Promise.all([bitgetOwnerOrderHistory(category,symbol),bitgetOwnerStrategyOrderHistory(category,symbol)]);return {...regular,orders:[...(regular.orders||[]),...(strategy.orders||[])]}})();
+        const result = SIRE_PAPER_MODE() ? paperListOrders(category,symbol,pathname.endsWith('/history')) : (pathname.endsWith('/open') ? await bitgetOwnerOpenOrders(category,symbol) : await (async()=>{const [regular,strategy]=await Promise.all([bitgetOwnerOrderHistory(category,symbol),bitgetOwnerStrategyOrderHistory(category,symbol)]);return {...regular,orders:[...(regular.orders||[]),...(strategy.orders||[])]}})());
         return res.writeHead(200,{'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify(result));
       } catch (cause) {
         return res.writeHead(502,{'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify({ok:false,error:cause instanceof Error ? cause.message : String(cause)}));
