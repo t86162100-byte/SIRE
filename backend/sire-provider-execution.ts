@@ -187,11 +187,15 @@ export async function bitgetOwnerPlaceOrder(input:any){
   else body.timeInForce='ioc';
   if(input?.slippagePercent!=null && Number(input.slippagePercent)>0){
     const slippage=Number(input.slippagePercent);
+    const referencePrice=Number(input.referencePrice);
     if(!Number.isFinite(slippage)||slippage>5) throw new Error('Slippage protection must be between 0 and 5%.');
-    const ticker=await bitgetPublic('/api/v3/market/tickers?category='+encodeURIComponent(category)+'&symbol='+encodeURIComponent(symbol));
-    const row=Array.isArray(ticker?.data)?ticker.data[0]:ticker?.data;
-    const last=positiveNumber(row?.lastPrice??row?.last,'Bitget last price');
-    if(orderType==='market' && ((side==='buy' && last*(1+slippage/100)<last) || (side==='sell' && last*(1-slippage/100)>last))) throw new Error('Slippage protection validation failed.');
+    if(orderType==='market' && Number.isFinite(referencePrice) && referencePrice>0){
+      const ticker=await bitgetPublic('/api/v3/market/tickers?category='+encodeURIComponent(category)+'&symbol='+encodeURIComponent(symbol));
+      const row=Array.isArray(ticker?.data)?ticker.data[0]:ticker?.data;
+      const last=positiveNumber(row?.lastPrice??row?.last,'Bitget last price');
+      const drift=Math.abs(last-referencePrice)/referencePrice*100;
+      if(drift>slippage) throw new Error('Order blocked by slippage protection: market moved '+drift.toFixed(3)+'%, above your '+slippage+'% limit. Refresh the quote and retry.');
+    }
   }
   const placed=await bitgetRequest('POST','/api/v3/trade/place-order',body);
   return {ok:true,provider:'BITGET',category,symbol,side,orderType,qty,price:price??null,orderId:String(placed?.data?.orderId||''),clientOid:String(placed?.data?.clientOid||oid)};
