@@ -85,6 +85,13 @@ async function bitgetRequest(method:'GET'|'POST',path:string,body?:any){
   return data;
 }
 
+let bitgetHoldModeCache:{mode:string;expiresAt:number}|null=null;
+async function bitgetHoldMode(){
+  if(bitgetHoldModeCache&&bitgetHoldModeCache.expiresAt>Date.now())return bitgetHoldModeCache.mode;
+  const data=await bitgetRequest('GET','/api/v3/account/settings');const mode=String(data?.data?.holdMode||'');
+  if(!['one_way_mode','hedge_mode'].includes(mode))throw new Error('Could not determine Bitget Futures holding mode; order submission was blocked.');
+  bitgetHoldModeCache={mode,expiresAt:Date.now()+30000};return mode;
+}
 async function bitgetPublic(path:string){
   const response=await fetch(BITGET_BASE+path,{headers:{Accept:'application/json'},signal:AbortSignal.timeout(5000)});
   const raw=await response.text();
@@ -171,7 +178,8 @@ export async function bitgetOwnerPlaceOrder(input:any){
     const marginMode=String(input?.marginMode||'crossed').trim().toLowerCase();
     if(posSide && !['long','short'].includes(posSide)) throw new Error('Futures position side must be long or short.');
     if(!['crossed','isolated'].includes(marginMode)) throw new Error('Futures margin mode must be crossed or isolated.');
-    if(posSide) body.posSide=posSide;
+    const holdMode=await bitgetHoldMode();
+    if(holdMode==='hedge_mode'){if(!posSide)throw new Error('Position side is required in Bitget hedge mode.');body.posSide=posSide;}else delete body.posSide;
     body.marginMode=marginMode;
     if(String(input?.reduceOnly||'').toLowerCase()==='yes') body.reduceOnly='yes';
     else body.reduceOnly='no';
@@ -339,8 +347,9 @@ export async function bitgetOwnerPlaceTriggerOrder(input:any){
   if(!['USDT-FUTURES','COIN-FUTURES','USDC-FUTURES'].includes(category))throw new Error('Trigger orders require a futures category.');
   if(!symbol||!['buy','sell'].includes(side)||!['open','close'].includes(tradeSide))throw new Error('Invalid trigger order symbol, side or trade side.');
   if(!['normal_plan','track_plan'].includes(planType))throw new Error('Unsupported trigger plan type.');
-  const body:any={category,symbol,type:planType==='track_plan'?'trailing_stop':'trigger',side,posSide:String(input?.posSide||'').toLowerCase(),qty:String(qty),reduceOnly:String(input?.reduceOnly||'no')==='yes'?'yes':'no'};
-  if(body.posSide&&!['long','short'].includes(body.posSide))throw new Error('Invalid position side.');
+  const requestedPosSide=String(input?.posSide||'').toLowerCase();if(requestedPosSide&&!['long','short'].includes(requestedPosSide))throw new Error('Invalid position side.');
+  const holdMode=await bitgetHoldMode();if(holdMode==='hedge_mode'&&!requestedPosSide)throw new Error('Position side is required in Bitget hedge mode.');
+  const body:any={category,symbol,type:planType==='track_plan'?'trailing_stop':'trigger',side,...(holdMode==='hedge_mode'?{posSide:requestedPosSide}:{}),qty:String(qty),reduceOnly:String(input?.reduceOnly||'no')==='yes'?'yes':'no'};
   if(planType==='normal_plan'){
     const triggerPrice=positiveNumber(input?.triggerPrice,'trigger price');const orderType=String(input?.orderType||'market').toLowerCase();
     if(!['market','limit'].includes(orderType))throw new Error('Trigger execution type must be market or limit.');
