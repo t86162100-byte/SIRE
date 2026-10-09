@@ -8,6 +8,7 @@ const CHILD='sire_futures_algo_children_v1';
 const CATEGORIES=new Set(['USDT-FUTURES','COIN-FUTURES','USDC-FUTURES']);
 const STATES=new Set(['running','paused','cancel_requested','completed','cancelled','failed']);
 const now=()=>Date.now();
+function validBitgetBase(){try{const base=String(process.env.BITGET_API_BASE_URL||'https://api.bitget.com').trim();const u=new URL(base);return u.protocol==='https:'&&u.hostname.includes('.')}catch{return false}}
 function requirePool(){if(!pool)throw new Error('DATABASE_URL is required for durable Futures schedules.');return pool;}
 function num(v,n){const x=Number(v);if(!Number.isFinite(x)||x<=0)throw new Error(n+' must be greater than zero.');return x;}
 function clampInt(v,min,max,n){const x=Number(v);if(!Number.isInteger(x)||x<min||x>max)throw new Error(n+' must be between '+min+' and '+max+'.');return x;}
@@ -70,6 +71,7 @@ function normalize(input:any,ownerEmail:string){
 }
 export async function createFuturesSchedule(input:any,ownerEmail:string){
  await ensure();
+ if(!validBitgetBase())throw new Error('BITGET_API_BASE_URL is invalid; Futures schedules were not started. Correct the Bitget API base URL first.');
  const email=String(ownerEmail||'').trim().toLowerCase();if(!email)throw new Error('Authenticated owner identity is required.');
  const requestKey=String(input?.requestId||'').trim();if(requestKey&&!/^[A-Za-z0-9_-]{1,40}$/.test(requestKey))throw new Error('Invalid schedule request id.');
  if(requestKey){const prior=await requirePool().query(`SELECT * FROM ${TABLE} WHERE owner_email=$1 AND request_key=$2 LIMIT 1`,[email,requestKey]);if(prior.rows[0])return publicJob(prior.rows[0]);}
@@ -114,7 +116,7 @@ async function reconcileOrPlace(child:any,spec:any){
 }
 export async function runFuturesScheduleBatch(){
  if(!pool)return {enabled:false,processed:0};
- await ensure();const db=await pool.connect();let locked=false;let processed=0;
+ await ensure();if(!validBitgetBase()){await pool.query(`UPDATE ${TABLE} SET state='paused',last_error='Paused automatically: invalid BITGET_API_BASE_URL. Review before resuming.',updated_at=now() WHERE state='running'`);return {enabled:false,reason:'invalid_bitget_api_base',processed:0};}const db=await pool.connect();let locked=false;let processed=0;
  try{
   const lock=await db.query('SELECT pg_try_advisory_lock($1) AS locked',[0x53495246]);locked=Boolean(lock.rows[0]?.locked);if(!locked)return {enabled:true,leader:false,processed:0};
   const due=await db.query(`SELECT * FROM ${TABLE} WHERE state IN ('running','cancel_requested') AND next_run_at<=now() ORDER BY next_run_at LIMIT 10`);
