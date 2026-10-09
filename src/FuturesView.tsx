@@ -26,6 +26,8 @@ export default function FuturesView({initialSymbol}:Props){
   const [action,setAction]=useState<'Open'|'Close'>('Open');
   const [orderType,setOrderType]=useState('Market');
   const [orderDrawer,setOrderDrawer]=useState(false);
+  const [timeInForce,setTimeInForce]=useState<'Post only'|'IOC'|'FOK'>('Post only');
+  const [timeInForceDrawer,setTimeInForceDrawer]=useState(false);
   const [slippageEnabled,setSlippageEnabled]=useState(false);
   const [qty,setQty]=useState('');
   const [qtyPercent,setQtyPercent]=useState(0);
@@ -134,9 +136,10 @@ export default function FuturesView({initialSymbol}:Props){
           <button type="button" onClick={()=>setOrderDrawer(true)}><span>Order</span><b>{orderType}</b><ChevronDown size={12}/></button>
         </div>
 
-        {(orderType==='Limit'||orderType==='Advanced limit order')&&<div className="sire-futures-price-row">
+        {orderType==='Advanced limit order'&&<button type="button" className="sire-futures-tif-card" onClick={()=>setTimeInForceDrawer(true)}><span><small>Time in force</small><b>{timeInForce}</b></span><ChevronDown size={13}/></button>}
+        {(orderType==='Limit'||orderType==='Advanced limit order')&&<div className={'sire-futures-price-row '+(orderType==='Advanced limit order'?'single-price':'')}>
           <label><span>Price</span><input inputMode="decimal" value={price} onChange={e=>setPrice(e.target.value.replace(/[^0-9.]/g,''))}/><em>USDT</em></label>
-          <button type="button" onClick={()=>setPrice(priceFmt(marketPrice).replace(/,/g,''))}>BBO</button>
+          {orderType==='Limit'&&<button type="button" onClick={()=>setPrice(priceFmt(marketPrice).replace(/,/g,''))}>BBO</button>}
         </div>}
         <label className="sire-futures-input"><span>Quantity</span><input inputMode="decimal" value={qty} onChange={e=>setQty(e.target.value.replace(/[^0-9.]/g,''))}/><span className="sire-futures-quantity-unit"><b>{selected?.baseAsset||'BTC'}</b><ChevronDown size={11}/></span></label>
         <div className="sire-futures-slider">
@@ -186,6 +189,20 @@ export default function FuturesView({initialSymbol}:Props){
       </aside>
     </main>
 
+
+
+    {timeInForceDrawer&&<div className="sire-futures-order-backdrop" onClick={()=>setTimeInForceDrawer(false)}>
+      <section className="sire-futures-order-drawer sire-futures-tif-drawer" role="dialog" aria-modal="true" aria-label="Choose time in force" onClick={e=>e.stopPropagation()}>
+        <div className="sire-futures-order-drawer-head"><strong>Time in force</strong><button type="button" aria-label="Close time in force drawer" onClick={()=>setTimeInForceDrawer(false)}>×</button></div>
+        {[
+          {name:'Post only' as const,description:'The order will remain as a maker order and will be automatically canceled when the order matches an existing order.'},
+          {name:'IOC' as const,description:'Execute immediately and cancel the unfilled portion.'},
+          {name:'FOK' as const,description:'The order will either be executed immediately in full or automatically canceled.'}
+        ].map(item=><button type="button" key={item.name} className={'sire-futures-order-option '+(timeInForce===item.name?'selected':'')} onClick={()=>{setTimeInForce(item.name);setTimeInForceDrawer(false)}}>
+          <span className="sire-futures-order-option-copy"><b>{item.name}</b><small>{item.description}</small></span><i aria-hidden="true">{timeInForce===item.name?'✓':''}</i>
+        </button>)}
+      </section>
+    </div>}
 
     {orderDrawer&&<div className="sire-futures-order-backdrop" onClick={()=>setOrderDrawer(false)}>
       <section className="sire-futures-order-drawer" role="dialog" aria-modal="true" aria-label="Choose order type" onClick={e=>e.stopPropagation()}>
