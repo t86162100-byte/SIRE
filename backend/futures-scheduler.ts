@@ -47,7 +47,8 @@ function normalize(input:any,ownerEmail:string){
  if(kind==='twap'){
    durationSeconds=clampInt(input?.durationSeconds,60,86400,'TWAP duration');
    intervalSeconds=clampInt(input?.intervalSeconds??30,5,60,'TWAP frequency');
-   totalSlices=Math.min(10000,Math.max(1,Math.ceil(totalQty/perOrderQty)));\n   if(totalSlices>Math.ceil(durationSeconds/intervalSeconds))throw new Error('TWAP duration is too short for the selected per-order quantity and frequency. Increase duration or increase quantity per order.');
+   totalSlices=Math.min(10000,Math.max(1,Math.ceil(totalQty/perOrderQty)));
+   if(totalSlices>Math.ceil(durationSeconds/intervalSeconds))throw new Error('TWAP duration is too short for the selected per-order quantity and frequency. Increase duration or increase quantity per order.');
  } else {
    totalSlices=kind==='iceberg'?Math.ceil(totalQty/perOrderQty):clampInt(input?.sliceCount,2,1000,'Split count');
    if(kind==='split'&&totalQty/totalSlices>perOrderQty)throw new Error('Split count is too small for the selected per-order quantity.');
