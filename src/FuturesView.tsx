@@ -88,14 +88,14 @@ export default function FuturesView({initialSymbol}:Props){
 
   const applyLeverage=async(next:string)=>{setLeverage(next);if(!selected)return;try{await fetch('/api/sire/bitget/leverage',{method:'POST',headers:{'Content-Type':'application/json',Accept:'application/json'},body:JSON.stringify({category,symbol:selected.symbol,leverage:next,marginMode:marginMode.toLowerCase()})}).then(r=>readJson(r,'Bitget leverage'))}catch(e){setError(e instanceof Error?e.message:String(e))}};
 
-  const submit=async()=>{
+  const submit=async(orderSide: 'Long'|'Short'=side, orderAction: 'Open'|'Close'=action, orderReduceOnly=reduceOnly)=>{
     setError('');if(!selected)return;
     const n=Number(qty);if(!Number.isFinite(n)||n<=0){setError('Enter a valid contract quantity.');return}
     if(orderType==='Limit'&&(!Number(price)||Number(price)<=0)){setError('Enter a valid limit price.');return}
     setBusy(true);
     try{
-      const isClose=action==='Close'||reduceOnly;
-      const payload={category,symbol:selected.symbol,side:side==='Long'?(isClose?'sell':'buy'):(isClose?'buy':'sell'),orderType:orderType.toLowerCase(),qty:String(n),price:orderType==='Limit'?String(price):undefined,posSide:side.toLowerCase(),marginMode:marginMode.toLowerCase(),reduceOnly:isClose?'yes':'no'};
+      const isClose=orderAction==='Close'||orderReduceOnly;
+      const payload={category,symbol:selected.symbol,side:orderSide==='Long'?(isClose?'sell':'buy'):(isClose?'buy':'sell'),orderType:orderType.toLowerCase(),qty:String(n),price:orderType==='Limit'?String(price):undefined,posSide:orderSide.toLowerCase(),marginMode:marginMode.toLowerCase(),reduceOnly:isClose?'yes':'no'};
       const result=await fetch('/api/sire/bitget/order',{method:'POST',headers:{'Content-Type':'application/json',Accept:'application/json'},body:JSON.stringify(payload)}).then(r=>readJson(r,'Bitget futures order'));
       if(!result?.ok)throw new Error(result?.error||'Futures order failed.');
       setQty('');setQtyPercent(0);refreshPositions();
@@ -153,15 +153,14 @@ export default function FuturesView({initialSymbol}:Props){
           <div className="sire-futures-action-block">
             <div className="sire-futures-action-meta"><span>Max</span><b>—</b></div>
             <div className="sire-futures-action-meta"><span>Cost</span><b>—</b></div>
-            <button disabled={busy} type="button" className="sire-futures-open-long" onClick={()=>{setSide('Long');setAction('Open');setReduceOnly(false)}}>Open long</button>
+            <button disabled={busy} type="button" className="sire-futures-open-long" onClick={()=>{setSide('Long');setAction('Open');setReduceOnly(false);void submit('Long','Open',false)}}>Open long</button>
           </div>
           <div className="sire-futures-action-block">
             <div className="sire-futures-action-meta"><span>Max</span><b>—</b></div>
             <div className="sire-futures-action-meta"><span>Cost</span><b>—</b></div>
-            <button disabled={busy} type="button" className="sire-futures-open-short" onClick={()=>{setSide('Short');setAction('Open');setReduceOnly(false)}}>Open short</button>
+            <button disabled={busy} type="button" className="sire-futures-open-short" onClick={()=>{setSide('Short');setAction('Open');setReduceOnly(false);void submit('Short','Open',false)}}>Open short</button>
           </div>
         </div>
-        <button disabled={busy} className={'sire-futures-submit '+(side==='Long'?'long':'short')} onClick={submit}>{busy?<LoaderCircle className="sire-spin" size={15}/>:null}{action} {side}</button>
         {error&&<div className="sire-futures-error">{error}</div>}
       </section>
 
