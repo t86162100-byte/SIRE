@@ -14,10 +14,12 @@ function clampInt(v,min,max,n){const x=Number(v);if(!Number.isInteger(x)||x<min|
 async function ensure(){
  const db=requirePool();
  await db.query(`CREATE TABLE IF NOT EXISTS ${TABLE}(
- id uuid PRIMARY KEY, owner_email text NOT NULL, kind text NOT NULL, state text NOT NULL,
+ id uuid PRIMARY KEY, owner_email text NOT NULL, request_key text, kind text NOT NULL, state text NOT NULL,
  spec jsonb NOT NULL, total_slices integer NOT NULL, completed_slices integer NOT NULL DEFAULT 0,
  next_run_at timestamptz NOT NULL, started_at timestamptz, finished_at timestamptz,
  last_error text, created_at timestamptz NOT NULL DEFAULT now(), updated_at timestamptz NOT NULL DEFAULT now())`);
+ await db.query(`ALTER TABLE ${TABLE} ADD COLUMN IF NOT EXISTS request_key text`);
+ await db.query(`CREATE UNIQUE INDEX IF NOT EXISTS sire_futures_algo_request_idx ON ${TABLE}(owner_email,request_key) WHERE request_key IS NOT NULL`);
  await db.query(`CREATE INDEX IF NOT EXISTS sire_futures_algo_due_idx ON ${TABLE}(state,next_run_at)`);
  await db.query(`CREATE TABLE IF NOT EXISTS ${CHILD}(
  id uuid PRIMARY KEY, job_id uuid NOT NULL REFERENCES ${TABLE}(id) ON DELETE CASCADE,
@@ -69,9 +71,13 @@ function normalize(input:any,ownerEmail:string){
 export async function createFuturesSchedule(input:any,ownerEmail:string){
  await ensure();
  const email=String(ownerEmail||'').trim().toLowerCase();if(!email)throw new Error('Authenticated owner identity is required.');
+ const requestKey=String(input?.requestId||'').trim();if(requestKey&&!/^[A-Za-z0-9_-]{1,40}$/.test(requestKey))throw new Error('Invalid schedule request id.');
+ if(requestKey){const prior=await requirePool().query(`SELECT * FROM ${TABLE} WHERE owner_email=$1 AND request_key=$2 LIMIT 1`,[email,requestKey]);if(prior.rows[0])return publicJob(prior.rows[0]);}
  const n=normalize(input,email);const id=randomUUID();
- const result=await requirePool().query(`INSERT INTO ${TABLE}(id,owner_email,kind,state,spec,total_slices,next_run_at,started_at) VALUES($1,$2,$3,'running',$4::jsonb,$5,now(),now()) RETURNING *`,[id,email,n.kind,JSON.stringify(n.spec),n.totalSlices]);
- return publicJob(result.rows[0]);
+ const result=await requirePool().query(`INSERT INTO ${TABLE}(id,owner_email,request_key,kind,state,spec,total_slices,next_run_at,started_at) VALUES($1,$2,$3,$4,'running',$5::jsonb,$6,now(),now()) ON CONFLICT(owner_email,request_key) WHERE request_key IS NOT NULL DO NOTHING RETURNING *`,[id,email,requestKey||null,n.kind,JSON.stringify(n.spec),n.totalSlices]);
+ if(result.rows[0])return publicJob(result.rows[0]);
+ const prior=await requirePool().query(`SELECT * FROM ${TABLE} WHERE owner_email=$1 AND request_key=$2 LIMIT 1`,[email,requestKey]);if(prior.rows[0])return publicJob(prior.rows[0]);
+ throw new Error('Could not persist Futures schedule request.');
 }
 function publicJob(row:any){return {id:row.id,kind:row.kind,state:row.state,spec:row.spec,totalSlices:Number(row.total_slices),completedSlices:Number(row.completed_slices),nextRunAt:row.next_run_at,startedAt:row.started_at,finishedAt:row.finished_at,lastError:row.last_error,createdAt:row.created_at};}
 export async function listFuturesSchedules(ownerEmail:string){
