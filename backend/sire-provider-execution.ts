@@ -439,18 +439,3 @@ export async function bitgetOwnerModifyTriggerOrder(input:any){
   return {ok:true,provider:'BITGET',data:data?.data||null};
 }
 
-export async function bitgetOwnerModifyTriggerOrder(input:any){
-  const productType=String(input?.category||input?.productType||'USDT-FUTURES').toUpperCase();
-  const orderId=String(input?.orderId||'').trim();const oid=String(input?.clientOid||'').trim();
-  if(!['USDT-FUTURES','COIN-FUTURES','USDC-FUTURES'].includes(productType))throw new Error('Trigger modification requires a futures category.');
-  if(!orderId&&!oid)throw new Error('Trigger orderId or clientOid is required.');
-  const body:any={productType,...(orderId?{orderId}:{}),...(oid?{clientOid:oid}:{})};
-  if(input?.qty!=null&&input.qty!=='')body.newSize=String(positiveNumber(input.qty,'trigger quantity'));
-  if(input?.price!=null&&input.price!=='')body.newPrice=String(positiveNumber(input.price,'trigger execution price'));
-  if(input?.triggerPrice!=null&&input.triggerPrice!=='')body.newTriggerPrice=String(positiveNumber(input.triggerPrice,'trigger price'));
-  if(input?.triggerType)body.newTriggerType=String(input.triggerType);
-  if(input?.callbackRatio!=null&&input.callbackRatio!=='')body.newCallbackRatio=String(positiveNumber(input.callbackRatio,'callback ratio'));
-  if(!['newSize','newPrice','newTriggerPrice','newTriggerType','newCallbackRatio'].some(k=>body[k]!=null))throw new Error('Provide at least one trigger-order field to modify.');
-  const data=await bitgetRequest('POST','/api/v2/mix/order/modify-plan-order',body);
-  return {ok:true,provider:'BITGET',category:productType,data:data?.data||null};
-}
