@@ -28,6 +28,11 @@ export default function FuturesView({initialSymbol}:Props){
   const [orderDrawer,setOrderDrawer]=useState(false);
   const [timeInForce,setTimeInForce]=useState<'Post only'|'IOC'|'FOK'>('Post only');
   const [timeInForceDrawer,setTimeInForceDrawer]=useState(false);
+  const [triggerSource,setTriggerSource]=useState<'Market price'|'Index price'|'Mark price'>('Market price');
+  const [triggerSourceDrawer,setTriggerSourceDrawer]=useState(false);
+  const [executeType,setExecuteType]=useState<'Limit'|'Market'>('Limit');
+  const [executeTypeDrawer,setExecuteTypeDrawer]=useState(false);
+  const [triggerPrice,setTriggerPrice]=useState('');
   const [slippageEnabled,setSlippageEnabled]=useState(false);
   const [qty,setQty]=useState('');
   const [qtyPercent,setQtyPercent]=useState(0);
@@ -137,6 +142,8 @@ export default function FuturesView({initialSymbol}:Props){
         </div>
 
         {orderType==='Advanced limit order'&&<button type="button" className="sire-futures-tif-card" onClick={()=>setTimeInForceDrawer(true)}><span><small>Time in force</small><b>{timeInForce}</b></span><ChevronDown size={13}/></button>}
+        {orderType==='Trigger order'&&<button type="button" className="sire-futures-tif-card sire-futures-trigger-card" onClick={()=>setTriggerSourceDrawer(true)}><span><small>Trigger price</small><b>{triggerSource}</b></span><ChevronDown size={13}/></button>}
+        {orderType==='Trigger order'&&<><div className="sire-futures-trigger-execute"><span>Execute price</span><button type="button" onClick={()=>setExecuteTypeDrawer(true)}><b>{executeType}</b><ChevronDown size={12}/></button></div>{executeType==='Limit'&&<div className="sire-futures-price-row single-price"><label><span>Price</span><input inputMode="decimal" value={price} onChange={e=>setPrice(e.target.value.replace(/[^0-9.]/g,''))}/><em>USDT</em></label></div>}</>}
         {(orderType==='Limit'||orderType==='Advanced limit order')&&<div className={'sire-futures-price-row '+(orderType==='Advanced limit order'?'single-price':'')}>
           <label><span>Price</span><input inputMode="decimal" value={price} onChange={e=>setPrice(e.target.value.replace(/[^0-9.]/g,''))}/><em>USDT</em></label>
           {orderType==='Limit'&&<button type="button" onClick={()=>setPrice(priceFmt(marketPrice).replace(/,/g,''))}>BBO</button>}
@@ -190,6 +197,31 @@ export default function FuturesView({initialSymbol}:Props){
     </main>
 
 
+
+
+    {triggerSourceDrawer&&<div className="sire-futures-order-backdrop" onClick={()=>setTriggerSourceDrawer(false)}>
+      <section className="sire-futures-order-drawer sire-futures-choice-drawer" role="dialog" aria-modal="true" aria-label="Select trigger price" onClick={e=>e.stopPropagation()}>
+        <div className="sire-futures-order-drawer-head"><strong>Trigger price</strong><button type="button" aria-label="Close trigger price drawer" onClick={()=>setTriggerSourceDrawer(false)}>×</button></div>
+        {[
+          {name:'Market price' as const,description:'Trigger using the latest traded market price.'},
+          {name:'Index price' as const,description:'Trigger using the reference index price.'},
+          {name:'Mark price' as const,description:'Trigger using the futures mark price.'}
+        ].map(item=><button type="button" key={item.name} className={'sire-futures-order-option '+(triggerSource===item.name?'selected':'')} onClick={()=>{setTriggerSource(item.name);setTriggerSourceDrawer(false)}}>
+          <span className="sire-futures-order-option-copy"><b>{item.name}</b><small>{item.description}</small></span><i aria-hidden="true">{triggerSource===item.name?'✓':''}</i>
+        </button>)}
+      </section>
+    </div>}
+    {executeTypeDrawer&&<div className="sire-futures-order-backdrop" onClick={()=>setExecuteTypeDrawer(false)}>
+      <section className="sire-futures-order-drawer sire-futures-choice-drawer" role="dialog" aria-modal="true" aria-label="Select execution order type" onClick={e=>e.stopPropagation()}>
+        <div className="sire-futures-order-drawer-head"><strong>Execute price</strong><button type="button" aria-label="Close execution type drawer" onClick={()=>setExecuteTypeDrawer(false)}>×</button></div>
+        {[
+          {name:'Limit' as const,description:'Place a limit order when the trigger condition is reached.'},
+          {name:'Market' as const,description:'Place a market order when the trigger condition is reached.'}
+        ].map(item=><button type="button" key={item.name} className={'sire-futures-order-option '+(executeType===item.name?'selected':'')} onClick={()=>{setExecuteType(item.name);setExecuteTypeDrawer(false)}}>
+          <span className="sire-futures-order-option-copy"><b>{item.name}</b><small>{item.description}</small></span><i aria-hidden="true">{executeType===item.name?'✓':''}</i>
+        </button>)}
+      </section>
+    </div>}
 
     {timeInForceDrawer&&<div className="sire-futures-order-backdrop" onClick={()=>setTimeInForceDrawer(false)}>
       <section className="sire-futures-order-drawer sire-futures-tif-drawer" role="dialog" aria-modal="true" aria-label="Choose time in force" onClick={e=>e.stopPropagation()}>
