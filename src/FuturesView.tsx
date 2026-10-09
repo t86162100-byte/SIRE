@@ -26,6 +26,7 @@ export default function FuturesView({initialSymbol}:Props){
   const [action,setAction]=useState<'Open'|'Close'>('Open');
   const [orderType,setOrderType]=useState('Market');
   const [orderDrawer,setOrderDrawer]=useState(false);
+  const [slippageEnabled,setSlippageEnabled]=useState(false);
   const [qty,setQty]=useState('');
   const [qtyPercent,setQtyPercent]=useState(0);
   const [price,setPrice]=useState('');
@@ -133,10 +134,10 @@ export default function FuturesView({initialSymbol}:Props){
           <button type="button" onClick={()=>setOrderDrawer(true)}><span>Order</span><b>{orderType}</b><ChevronDown size={12}/></button>
         </div>
 
-        <div className="sire-futures-price-row">
+        {(orderType==='Limit'||orderType==='Advanced limit order')&&<div className="sire-futures-price-row">
           <label><span>Price</span><input inputMode="decimal" value={price} onChange={e=>setPrice(e.target.value.replace(/[^0-9.]/g,''))}/><em>USDT</em></label>
           <button type="button" onClick={()=>setPrice(priceFmt(marketPrice).replace(/,/g,''))}>BBO</button>
-        </div>
+        </div>}
         <label className="sire-futures-input"><span>Quantity</span><input inputMode="decimal" value={qty} onChange={e=>setQty(e.target.value.replace(/[^0-9.]/g,''))}/><span className="sire-futures-quantity-unit"><b>{selected?.baseAsset||'BTC'}</b><ChevronDown size={11}/></span></label>
         <div className="sire-futures-slider">
           <div className="sire-futures-range-track">
@@ -148,8 +149,9 @@ export default function FuturesView({initialSymbol}:Props){
         </div>
 
         <div className="sire-futures-toggle-stack">
-          <label><span>TP/SL</span><input type="checkbox" aria-label="Toggle TP/SL"/></label>
-          <label><span>Reduce Only</span><input type="checkbox" checked={reduceOnly} onChange={e=>setReduceOnly(e.target.checked)} aria-label="Toggle Reduce Only"/></label>
+          {orderType==='Market'&&<label className="sire-futures-inline-toggle"><input type="checkbox" checked={slippageEnabled} onChange={e=>setSlippageEnabled(e.target.checked)} aria-label="Toggle slippage protection"/><span>Slippage</span>{slippageEnabled&&<b>0.5%</b>}</label>}
+          <label className="sire-futures-inline-toggle"><input type="checkbox" aria-label="Toggle TP/SL"/><span>TP/SL</span></label>
+          <label className="sire-futures-inline-toggle"><input type="checkbox" checked={reduceOnly} onChange={e=>setReduceOnly(e.target.checked)} aria-label="Toggle Reduce Only"/><span>Reduce Only</span></label>
         </div>
         <div className="sire-futures-costs">
           <div className="sire-futures-action-block">
