@@ -12,6 +12,7 @@ function validBitgetBase(){try{const base=String(process.env.BITGET_API_BASE_URL
 function requirePool(){if(!pool)throw new Error('DATABASE_URL is required for durable Futures schedules.');return pool;}
 function num(v,n){const x=Number(v);if(!Number.isFinite(x)||x<=0)throw new Error(n+' must be greater than zero.');return x;}
 function clampInt(v,min,max,n){const x=Number(v);if(!Number.isInteger(x)||x<min||x>max)throw new Error(n+' must be between '+min+' and '+max+'.');return x;}
+function liveSchedulerEnabled(){return String(process.env.SIRE_ENABLE_LIVE_FUTURES_SCHEDULER||'').trim().toLowerCase()==='true';}
 async function ensure(){
  const db=requirePool();
  await db.query(`CREATE TABLE IF NOT EXISTS ${TABLE}(
@@ -50,13 +51,13 @@ function normalize(input:any,ownerEmail:string){
  if(kind==='twap'){
    durationSeconds=clampInt(input?.durationSeconds,60,86400,'TWAP duration');
    intervalSeconds=clampInt(input?.intervalSeconds??30,5,60,'TWAP frequency');
-   totalSlices=Math.min(10000,Math.max(1,Math.ceil(durationSeconds/intervalSeconds)));
+   totalSlices=Math.min(10000,Math.max(1,Math.ceil(totalQty/perOrderQty)));
  } else {
    totalSlices=kind==='iceberg'?Math.ceil(totalQty/perOrderQty):clampInt(input?.sliceCount,2,1000,'Split count');
    if(kind==='split'&&totalQty/totalSlices>perOrderQty)throw new Error('Split count is too small for the selected per-order quantity.');
    intervalSeconds=clampInt(input?.intervalSeconds??5,1,3600,'Slice interval');
  }
- if(kind==='twap' && totalQty/perOrderQty > totalSlices*1.00000001) throw new Error('Per-order quantity is too small for the TWAP schedule.');
+ if(kind==='twap' && durationSeconds < (totalSlices-1)*intervalSeconds) throw new Error('TWAP duration is too short for the quantity and selected frequency. Increase duration or per-order quantity.');
  const preference=String(input?.preference||'Faster execution');
  const price=input?.price==null||input.price===''?undefined:num(input.price,preference==='Fixed distance'?'Price distance':'Limit price');
  if(orderType==='limit'&&!price)throw new Error('Limit orders require a price or distance.');
@@ -70,6 +71,7 @@ function normalize(input:any,ownerEmail:string){
  return {kind,category,symbol,totalQty,totalSlices,intervalSeconds,spec};
 }
 export async function createFuturesSchedule(input:any,ownerEmail:string){
+ if(!liveSchedulerEnabled())throw new Error('Live TWAP/Iceberg/Split execution is safety-locked. No orders were sent. Enable SIRE_ENABLE_LIVE_FUTURES_SCHEDULER=true only after Bitget order lifecycle validation.');
  await ensure();
  if(!validBitgetBase())throw new Error('BITGET_API_BASE_URL is invalid; Futures schedules were not started. Correct the Bitget API base URL first.');
  const email=String(ownerEmail||'').trim().toLowerCase();if(!email)throw new Error('Authenticated owner identity is required.');
@@ -115,6 +117,7 @@ async function reconcileOrPlace(child:any,spec:any){
  return {ok:true,data:order};
 }
 export async function runFuturesScheduleBatch(){
+ if(!liveSchedulerEnabled())return {enabled:false,reason:'live_scheduler_safety_lock',processed:0};
  if(!pool)return {enabled:false,processed:0};
  await ensure();if(!validBitgetBase()){await pool.query(`UPDATE ${TABLE} SET state='paused',last_error='Paused automatically: invalid BITGET_API_BASE_URL. Review before resuming.',updated_at=now() WHERE state='running'`);return {enabled:false,reason:'invalid_bitget_api_base',processed:0};}const db=await pool.connect();let locked=false;let processed=0;
  try{
