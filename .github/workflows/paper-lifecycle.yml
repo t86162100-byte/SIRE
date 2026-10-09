@@ -16,4 +16,5 @@ jobs:
       - run: npm install --ignore-scripts --no-audit --no-fund
       - run: npm run test:paper
       - run: node --check runtime-server.mjs
+      - run: node --check backend/bitget-demo-lifecycle.test.mjs
       - run: npm run build
