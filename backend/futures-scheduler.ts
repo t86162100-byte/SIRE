@@ -57,11 +57,12 @@ function normalize(input:any,ownerEmail:string){
  const preference=String(input?.preference||'Faster execution');
  const price=input?.price==null||input.price===''?undefined:num(input.price,preference==='Fixed distance'?'Price distance':'Limit price');
  if(orderType==='limit'&&!price)throw new Error('Limit orders require a price or distance.');
+ if(kind==='iceberg'&&Boolean(input?.priceLimitEnabled)&&!price)throw new Error('Price limit is enabled but no limit price was supplied.');
  if(kind==='iceberg'&&preference==='Fixed distance'&&(!price||price>5))throw new Error('Fixed distance must be greater than 0 and at most 5%.');
  const marginMode=String(input?.marginMode||'crossed').toLowerCase();
  if(!['crossed','isolated'].includes(marginMode))throw new Error('Invalid margin mode.');
  const childQty=(kind==='twap'||kind==='split')?totalQty/totalSlices:perOrderQty;
- const spec={category,symbol,side,posSide,orderType,price,marginMode,reduceOnly:input?.reduceOnly?'yes':'no',timeInForce:String(input?.timeInForce||'gtc').toLowerCase(),totalQty,perOrderQty,intervalSeconds,durationSeconds:durationSeconds||null,childQty,preference,queueType:String(input?.queueType||'Queue 1'),priceLimitEnabled:Boolean(input?.priceLimitEnabled),ownerEmail};
+ const spec={category,symbol,side,posSide,orderType,price,marginMode,reduceOnly:input?.reduceOnly?'yes':'no',takeProfit:input?.takeProfit==null||input.takeProfit===''?undefined:String(num(input.takeProfit,'Take-profit price')),stopLoss:input?.stopLoss==null||input.stopLoss===''?undefined:String(num(input.stopLoss,'Stop-loss price')),timeInForce:String(input?.timeInForce||'gtc').toLowerCase(),totalQty,perOrderQty,intervalSeconds,durationSeconds:durationSeconds||null,childQty,preference,queueType:String(input?.queueType||'Queue 1'),priceLimitEnabled:Boolean(input?.priceLimitEnabled),ownerEmail};
  if(!['gtc','ioc','fok','post_only'].includes(spec.timeInForce))throw new Error('Unsupported time in force.');
  return {kind,category,symbol,totalQty,totalSlices,intervalSeconds,spec};
 }
