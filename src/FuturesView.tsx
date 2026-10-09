@@ -69,7 +69,9 @@ export default function FuturesView({initialSymbol}:Props){
   const [error,setError]=useState('');
   const [bookView,setBookView]=useState<'both'|'asks'|'bids'>('both');
 
-  const category=contractTab==='USDT-M'?'USDT-FUTURES':contractTab==='COIN-M'?'COIN-FUTURES':'USDC-FUTURES';\n  const refreshSchedules=async()=>{try{const p=await fetch('/api/sire/bitget/schedules',{cache:'no-store',headers:{Accept:'application/json'}}).then(r=>readJson(r,'Futures schedules'));setSchedules(Array.isArray(p?.jobs)?p.jobs:[])}catch{}};\n  const controlSchedule=async(id:string,action:'pause'|'resume'|'cancel')=>{try{await fetch('/api/sire/bitget/schedules/'+encodeURIComponent(id)+'/'+action,{method:'POST',headers:{Accept:'application/json'}}).then(r=>readJson(r,'Schedule '+action));await refreshSchedules()}catch(e){setError(e instanceof Error?e.message:String(e))}};
+  const category=contractTab==='USDT-M'?'USDT-FUTURES':contractTab==='COIN-M'?'COIN-FUTURES':'USDC-FUTURES';
+  const refreshSchedules=async()=>{try{const p=await fetch('/api/sire/bitget/schedules',{cache:'no-store',headers:{Accept:'application/json'}}).then(r=>readJson(r,'Futures schedules'));setSchedules(Array.isArray(p?.jobs)?p.jobs:[])}catch{}};
+  const controlSchedule=async(id:string,action:'pause'|'resume'|'cancel')=>{try{await fetch('/api/sire/bitget/schedules/'+encodeURIComponent(id)+'/'+action,{method:'POST',headers:{Accept:'application/json'}}).then(r=>readJson(r,'Schedule '+action));await refreshSchedules()}catch(e){setError(e instanceof Error?e.message:String(e))}};
   const filtered=useMemo(()=>markets.filter(m=>!search||m.symbol.toLowerCase().includes(search.toLowerCase())||m.name.toLowerCase().includes(search.toLowerCase())),[markets,search]);
   const activePosition=positions.find(p=>p.symbol===selected?.symbol && Number(p.total||0)>0);
   const marketPrice=Number(snapshot.price||selected?.price||0);
@@ -114,7 +116,8 @@ export default function FuturesView({initialSymbol}:Props){
   },[selected?.symbol,category]);
 
   const refreshPositions=()=>{if(!selected)return;fetch('/api/sire/bitget/positions?category='+category+'&symbol='+encodeURIComponent(selected.symbol),{cache:'no-store',headers:{Accept:'application/json'}}).then(r=>readJson(r,'Bitget positions')).then(p=>setPositions(Array.isArray(p?.positions)?p.positions:[])).catch(()=>{})};
-  useEffect(()=>{refreshPositions()},[selected?.symbol,category]);\n  useEffect(()=>{void refreshSchedules();const timer=setInterval(()=>void refreshSchedules(),3000);return()=>clearInterval(timer)},[]);
+  useEffect(()=>{refreshPositions()},[selected?.symbol,category]);
+  useEffect(()=>{void refreshSchedules();const timer=setInterval(()=>void refreshSchedules(),3000);return()=>clearInterval(timer)},[]);
 
   const applyLeverage=async(next:string)=>{setLeverage(next);if(!selected)return;try{await fetch('/api/sire/bitget/leverage',{method:'POST',headers:{'Content-Type':'application/json',Accept:'application/json'},body:JSON.stringify({category,symbol:selected.symbol,leverage:next,marginMode:marginMode.toLowerCase()})}).then(r=>readJson(r,'Bitget leverage'))}catch(e){setError(e instanceof Error?e.message:String(e))}};
 
