@@ -62,7 +62,8 @@ function sign(secret:string,timestamp:string,method:string,path:string,body:stri
 }
 
 async function bitgetRequest(method:'GET'|'POST',path:string,body?:any){
-  if(method==='POST'&&String(process.env.SIRE_TRADING_MODE||'').trim().toUpperCase()==='PAPER')throw new Error('Safety lock: authenticated Bitget writes are disabled while SIRE_TRADING_MODE=PAPER. Use the isolated paper simulator; no live order was sent.');
+  const tradingMode=String(process.env.SIRE_TRADING_MODE||'PAPER').trim().toUpperCase();
+  if(method==='POST'&&!['LIVE','BITGET_DEMO'].includes(tradingMode))throw new Error('Safety lock: authenticated Bitget writes require SIRE_TRADING_MODE=LIVE or BITGET_DEMO. Use the isolated paper simulator; no live order was sent.');
   const {apiKey,secret,passphrase,base}=bitgetConfig();
   const payload=method==='POST' ? JSON.stringify(body??{}) : '';
   const timestamp=String(Date.now());
@@ -75,7 +76,8 @@ async function bitgetRequest(method:'GET'|'POST',path:string,body?:any){
       'ACCESS-TIMESTAMP':timestamp,
       'ACCESS-PASSPHRASE':passphrase,
       'Content-Type':'application/json',
-      Accept:'application/json'
+      Accept:'application/json',
+      ...(tradingMode==='BITGET_DEMO'?{'paptrading':'1'}:{})
     },
     ...(method==='POST'?{body:payload}:{}),
     signal:AbortSignal.timeout(10000)
