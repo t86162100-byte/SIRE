@@ -41,7 +41,7 @@
 .sire-futures-toggle-stack input:after{content:"";position:absolute;width:8px;height:8px;left:2px;top:2px;border-radius:50%;background:#8b949e}
 .sire-futures-toggle-stack input:checked{background:#fff}
 .sire-futures-toggle-stack input:checked:after{left:12px;background:#000}
-.sire-futures-costs{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:0 0 9px}
+.sire-futures-costs{display:flex;flex-direction:column;gap:7px;margin:0 0 9px}
 .sire-futures-action-block{display:flex;flex-direction:column;gap:3px;min-width:0}
 .sire-futures-action-meta{min-height:19px;display:flex;align-items:center;justify-content:space-between;padding:0 2px;color:#8c96a2;font-size:8px;font-weight:950}
 .sire-futures-action-meta b{color:#fff;font-weight:950}
