@@ -318,7 +318,7 @@ export async function bitgetOwnerOpenOrders(category:string,symbol=''){
   if(!['SPOT','MARGIN','USDT-FUTURES','COIN-FUTURES','USDC-FUTURES'].includes(safeCategory)) throw new Error('Unsupported Bitget order category.');
   const qs='category='+encodeURIComponent(safeCategory)+(symbol?'&symbol='+encodeURIComponent(String(symbol).toUpperCase()):'');
   const data=await bitgetRequest('GET','/api/v3/trade/unfilled-orders?'+qs);
-  return {ok:true,provider:'BITGET',category:safeCategory,orders:Array.isArray(data?.data?.list)?data.data.list:Array.isArray(data?.data)?data.data:[]};
+  return {ok:true,provider:'BITGET',category:safeCategory,orders:Array.isArray(data?.data?.list)?data.data.list:Array.isArray(data?.data)?data.data:[],cursor:String(data?.data?.cursor||'')};
 }
 
 export async function bitgetOwnerOrderHistory(category:string,symbol=''){
@@ -344,9 +344,11 @@ export async function bitgetOwnerPlaceTriggerOrder(input:any){
   if(!['normal_plan','track_plan'].includes(planType)) throw new Error('Unsupported trigger plan type.');
   if(!['crossed','isolated'].includes(marginMode)) throw new Error('Invalid margin mode.');
   if(planType==='track_plan' && (!Number.isFinite(Number(input?.callbackRatio))||Number(input.callbackRatio)<=0||Number(input.callbackRatio)>10)) throw new Error('Trailing stop callback ratio must be greater than 0 and at most 10%.');
-  const body:any={planType,productType:category,symbol,marginMode,marginCoin:String(input?.marginCoin|| (category==='COIN-FUTURES'?'BTC':category==='USDC-FUTURES'?'USDC':'USDT')).toUpperCase(),size:String(size),triggerPrice:String(triggerPrice),triggerType:['mark_price','fill_price'].includes(String(input?.triggerType))?String(input.triggerType):'fill_price',side,orderType:planType==='track_plan'?'market':orderType,price:planType==='track_plan'?'':(orderType==='limit'?String(positiveNumber(input?.price,'limit price')):''),tradeSide};
+  const marginCoin=String(input?.marginCoin||(category==='USDC-FUTURES'?'USDC':category==='USDT-FUTURES'?'USDT':'')).toUpperCase();
+  if(!marginCoin)throw new Error('COIN-M trigger orders require the contract margin coin.');
+  const body:any={planType,productType:category,symbol,marginMode,marginCoin,size:String(size),triggerPrice:String(triggerPrice),triggerType:['mark_price','fill_price'].includes(String(input?.triggerType))?String(input.triggerType):'fill_price',side,orderType:planType==='track_plan'?'market':orderType,price:planType==='track_plan'?'':(orderType==='limit'?String(positiveNumber(input?.price,'limit price')):''),tradeSide,reduceOnly:String(input?.reduceOnly||'no')==='yes'?'yes':'no'};
   if(planType==='track_plan') body.callbackRatio=String(input.callbackRatio);
-  if(input?.clientOid) body.clientOid=clientOid(String(input.clientOid));
+  body.clientOid=clientOid(String(input?.clientOid||''));
   const data=await bitgetRequest('POST','/api/v2/mix/order/place-plan-order',body);
   return {ok:true,provider:'BITGET',category,symbol,data:data?.data||null};
 }
@@ -378,13 +380,19 @@ export async function bitgetOwnerModifyOrder(input:any){
 export async function bitgetOwnerCancelAllOrders(category:string,symbol=''){
   const safeCategory=String(category||'USDT-FUTURES').toUpperCase();
   if(!['SPOT','MARGIN','USDT-FUTURES','COIN-FUTURES','USDC-FUTURES'].includes(safeCategory)) throw new Error('Unsupported Bitget order category.');
-  const open=await bitgetOwnerOpenOrders(safeCategory,symbol);
-  const results=[];
-  for(const order of open.orders){
+  const results=[];let cursor='';let pages=0;
+  do{
+   const qs='category='+encodeURIComponent(safeCategory)+(symbol?'&symbol='+encodeURIComponent(String(symbol).toUpperCase()):'')+'&limit=100'+(cursor?'&cursor='+encodeURIComponent(cursor):'');
+   const page=await bitgetRequest('GET','/api/v3/trade/unfilled-orders?'+qs);
+   const orders=Array.isArray(page?.data?.list)?page.data.list:[];
+   for(const order of orders){
     const id=String(order?.orderId||'');const oid=String(order?.clientOid||'');
     if(!id&&!oid) continue;
     try{results.push(await bitgetOwnerCancelOrder({category:safeCategory,orderId:id||undefined,clientOid:oid||undefined}));}
     catch(e){results.push({ok:false,orderId:id,clientOid:oid,error:e instanceof Error?e.message:String(e)});}
-  }
+   }
+   cursor=String(page?.data?.cursor||'');pages++;
+  }while(cursor&&pages<10);
+  if(cursor)throw new Error('Cancel-all stopped after 10 pages; retry to cancel remaining orders.');
   return {ok:results.every((x:any)=>x.ok!==false),provider:'BITGET',category:safeCategory,cancelled:results.filter((x:any)=>x.ok!==false).length,failed:results.filter((x:any)=>x.ok===false).length,results};
 }
