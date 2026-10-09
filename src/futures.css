@@ -76,3 +76,13 @@
 .sire-futures-price-row.single-price{grid-template-columns:minmax(0,1fr)}
 .sire-futures-tif-drawer{padding-top:0}
 .sire-futures-tif-drawer .sire-futures-order-option{margin-top:8px}
+
+
+.sire-futures-trigger-card{display:grid;grid-template-columns:auto minmax(35px,1fr) auto;align-items:center;gap:8px;cursor:default}
+.sire-futures-trigger-card>span{display:flex;flex-direction:row;align-items:center;gap:7px;min-width:0}
+.sire-futures-trigger-card small{font-size:8px;white-space:nowrap}
+.sire-futures-trigger-card input{width:100%;min-width:0;height:26px;border:0;outline:0;background:transparent;color:#fff;text-align:right;font-size:10px;font-weight:900}
+.sire-futures-trigger-card>button{display:flex;align-items:center;gap:4px;padding:4px 0 4px 7px;border:0;border-left:1px solid #303640;background:transparent;color:#fff;font-size:9px;font-weight:950;white-space:nowrap;cursor:pointer}
+.sire-futures-trigger-execute{display:flex;align-items:center;justify-content:space-between;gap:8px;min-height:35px;margin:0 0 6px;padding:0 10px;border:1px solid #252b34;border-radius:6px;background:#0b0b0b;color:#dce1e7;box-sizing:border-box}
+.sire-futures-trigger-execute>span{font-size:8px;font-weight:900}
+.sire-futures-trigger-execute button{display:flex;align-items:center;gap:5px;border:0;background:transparent;color:#fff;font-size:9px;font-weight:950;cursor:pointer}
