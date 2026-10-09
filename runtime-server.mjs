@@ -1091,7 +1091,7 @@ const server = http.createServer(async (req,res) => {
         if(!ownerEmail)return res.writeHead(503,{'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify({ok:false,error:'SIRE_OWNER_EMAIL is not configured.'}));
         if(!user||String(user.email||'').toLowerCase()!==ownerEmail)return res.writeHead(401,{'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify({ok:false,error:'Sign in with the SIRE owner account to view trigger orders.'}));
         const url=new URL(req.url||'/','http://sire.local');const category=String(url.searchParams.get('category')||'USDT-FUTURES').toUpperCase();const symbol=String(url.searchParams.get('symbol')||'').toUpperCase();
-        const plans=await Promise.all(['normal_plan','track_plan'].map(planType=>bitgetOwnerPendingTriggerOrders(category,symbol,planType)));const orders=plans.flatMap(p=>p.orders.map((o:any)=>({...o,isTrigger:true,category,orderType:'trigger'})));
+        const plans=await Promise.all(['normal_plan','track_plan'].map(planType=>bitgetOwnerPendingTriggerOrders(category,symbol,planType)));const orders=plans.flatMap(p=>p.orders.map((o)=>({...o,isTrigger:true,category,orderType:'trigger'})));
         return res.writeHead(200,{'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify({ok:true,orders}));
       }catch(cause){return res.writeHead(502,{'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify({ok:false,error:cause instanceof Error?cause.message:String(cause)}));}
     }
