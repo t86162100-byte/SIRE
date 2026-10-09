@@ -1111,7 +1111,7 @@ const server = http.createServer(async (req,res) => {
         const url=new URL(req.url||'/','http://sire.local');const orderId=String(url.searchParams.get('orderId')||'');const clientOid=String(url.searchParams.get('clientOid')||'');
         if(!orderId&&!clientOid)return res.writeHead(400,{'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify({ok:false,error:'orderId or clientOid is required.'}));
         const order=SIRE_PAPER_MODE()?paperGetOrder({orderId,clientOid}):await bitgetOwnerOrderInfo(orderId||clientOid);
-        return res.writeHead(200,{'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify({ok:true,mode:SIRE_PAPER_MODE()?'PAPER':'LIVE',order}));
+        return res.writeHead(200,{'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify({ok:true,mode:SIRE_PAPER_MODE()?'PAPER':String(process.env.SIRE_TRADING_MODE||'LIVE').trim().toUpperCase(),order}));
       } catch(cause) { return res.writeHead(404,{'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify({ok:false,error:cause instanceof Error?cause.message:String(cause)})); }
     }
     if (req.method === 'GET' && ['/api/sire/bitget/orders/open','/api/sire/bitget/orders/history'].includes(pathname)) {
