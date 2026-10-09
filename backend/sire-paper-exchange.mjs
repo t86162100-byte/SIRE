@@ -68,7 +68,7 @@ export function paperPlaceOrder(input, market = {}) {
   if (orderType === 'market') applyFill(row, price, qty);
   else {
     const ask=Number(market.ask||market.price||0), bid=Number(market.bid||market.price||0);
-    if ((side==='buy' && ask>0 && price>=ask) || (side==='sell' && bid>0 && price<=bid)) applyFill(row, side==='buy'?ask:bid, qty);
+    if ((side==='buy' && ask>0 && price>=ask) || (side==='sell' && bid>0 && price<=bid)) { const available=Number(side==='buy'?market.askQty:market.bidQty);applyFill(row,side==='buy'?ask:bid,available>0?Math.min(qty,available):qty); }
   }
   return { ok:true, mode:'PAPER', order:serial(row) };
 }
@@ -130,6 +130,23 @@ export function paperListOrders(category, symbol='', history=false) {
 export function paperListTriggers(category, symbol='') {
   const c=categoryOf(category), s=symbolOf(symbol);
   return {ok:true,mode:'PAPER',orders:[...triggers.values()].filter(o=>o.category===c&&(!s||o.symbol===s)&&o.status==='live').map(serial)};
+}
+export async function paperEvaluateOrders(getMarket) {
+  let processed=0;
+  for(const order of orders.values()){
+    if(order.orderType!=='limit'||!['new','partially_filled'].includes(order.status))continue;
+    try{
+      const market=await getMarket(order.category,order.symbol);
+      const bid=Number(market.bids?.[0]?.price||0),ask=Number(market.asks?.[0]?.price||0);
+      const bidQty=Number(market.bids?.[0]?.quantity||0),askQty=Number(market.asks?.[0]?.quantity||0);
+      const crosses=order.side==='buy'?ask>0&&order.price>=ask:bid>0&&order.price<=bid;
+      if(!crosses)continue;
+      const available=order.side==='buy'?askQty:bidQty;
+      const qty=available>0?Math.min(order.remaining,available):order.remaining;
+      if(qty>0){applyFill(order,order.side==='buy'?ask:bid,qty);processed++;}
+    }catch(e){order.lastError=e instanceof Error?e.message:String(e);}
+  }
+  return {ok:true,mode:'PAPER',processed};
 }
 export async function paperEvaluateTriggers(getMarket) {
   let processed=0;
@@ -211,7 +228,7 @@ export async function paperRunScheduleBatch(getMarket) {
       const qty=Math.min(job.kind==='iceberg'?job.perOrderQty:job.totalQty/job.sliceCount,job.totalQty-job.children.reduce((sum,x)=>sum+x.qty,0));
       if(qty<=1e-12){job.state='completed';continue;}
       const market=await getMarket(job.category,job.symbol);
-      const order=paperPlaceOrder({category:job.category,symbol:job.symbol,side:job.side,orderType:job.orderType,qty:String(qty),price:job.price,clientOid:(job.id.replace(/[^A-Za-z0-9]/g,'').slice(0,15)+'_'+slice).slice(0,32),posSide:job.posSide,marginMode:job.marginMode,reduceOnly:job.reduceOnly,timeInForce:job.timeInForce},{bid:Number(market.bids?.[0]?.price||0),ask:Number(market.asks?.[0]?.price||0),price:Number(market.bids?.[0]?.price||market.asks?.[0]?.price||0)});
+      const order=paperPlaceOrder({category:job.category,symbol:job.symbol,side:job.side,orderType:job.orderType,qty:String(qty),price:job.price,clientOid:(job.id.replace(/[^A-Za-z0-9]/g,'').slice(0,15)+'_'+slice).slice(0,32),posSide:job.posSide,marginMode:job.marginMode,reduceOnly:job.reduceOnly,timeInForce:job.timeInForce},{bid:Number(market.bids?.[0]?.price||0),ask:Number(market.asks?.[0]?.price||0),bidQty:Number(market.bids?.[0]?.quantity||0),askQty:Number(market.asks?.[0]?.quantity||0),price:Number(market.bids?.[0]?.price||market.asks?.[0]?.price||0)});
       job.children.push({orderId:order.order.orderId,qty,clientOid:order.order.clientOid,status:order.order.status});
       job.completedSlices++;job.lastError=null;job.nextRunAt=now()+job.intervalSeconds*1000;
       if(job.completedSlices>=job.sliceCount)job.state='completed';
