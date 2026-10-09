@@ -46,7 +46,10 @@ function bitgetConfig(){
   const secret=String(process.env.BITGET_API_SECRET||'').trim();
   const passphrase=String(process.env.BITGET_API_PASSPHRASE||'').trim();
   if(!apiKey||!secret||!passphrase) throw new Error('Bitget execution is not configured. BITGET_API_KEY, BITGET_API_SECRET and BITGET_API_PASSPHRASE are required.');
-  return {apiKey,secret,passphrase,base:String(process.env.BITGET_API_BASE_URL||BITGET_BASE).trim().replace(/\/$/,'')};
+  const base=String(process.env.BITGET_API_BASE_URL||BITGET_BASE).trim().replace(/\/$/,'');let parsed:URL;
+  try{parsed=new URL(base)}catch{throw new Error('BITGET_API_BASE_URL is invalid. Use the official Bitget API base URL or remove the override.');}
+  if(parsed.protocol!=='https:'||!parsed.hostname.includes('.'))throw new Error('BITGET_API_BASE_URL must be a valid HTTPS API host.');
+  return {apiKey,secret,passphrase,base};
 }
 
 function clientOid(value:string){
