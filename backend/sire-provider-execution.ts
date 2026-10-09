@@ -347,12 +347,14 @@ export async function bitgetOwnerPlaceTriggerOrder(input:any){
   const tradeSide=String(input?.tradeSide||'open').trim().toLowerCase();
   const planType=String(input?.planType||'normal_plan').trim().toLowerCase();
   const qty=positiveNumber(input?.qty,'trigger quantity');
-  if(!['USDT-FUTURES','COIN-FUTURES','USDC-FUTURES'].includes(category))throw new Error('Trigger orders require a futures category.');
+  const spotCategory=category==='SPOT'||category==='MARGIN';
+  if(!['SPOT','MARGIN','USDT-FUTURES','COIN-FUTURES','USDC-FUTURES'].includes(category))throw new Error('Unsupported trigger order category.');
   if(!symbol||!['buy','sell'].includes(side)||!['open','close'].includes(tradeSide))throw new Error('Invalid trigger order symbol, side or trade side.');
   if(!['normal_plan','track_plan'].includes(planType))throw new Error('Unsupported trigger plan type.');
+  if(spotCategory&&planType!=='normal_plan')throw new Error('Spot trigger orders support normal trigger plans only.');
   const requestedPosSide=String(input?.posSide||'').toLowerCase();if(requestedPosSide&&!['long','short'].includes(requestedPosSide))throw new Error('Invalid position side.');
-  const holdMode=await bitgetHoldMode();if(holdMode==='hedge_mode'&&!requestedPosSide)throw new Error('Position side is required in Bitget hedge mode.');
-  const body:any={category,symbol,type:planType==='track_plan'?'trailing_stop':'trigger',side,...(holdMode==='hedge_mode'?{posSide:requestedPosSide}:{}),qty:String(qty),reduceOnly:String(input?.reduceOnly||'no')==='yes'?'yes':'no'};
+  const holdMode=spotCategory?'one_way_mode':await bitgetHoldMode();if(!spotCategory&&holdMode==='hedge_mode'&&!requestedPosSide)throw new Error('Position side is required in Bitget hedge mode.');
+  const body:any={category,symbol,type:planType==='track_plan'?'trailing_stop':'trigger',side,...(!spotCategory&&holdMode==='hedge_mode'?{posSide:requestedPosSide}:{}),qty:String(qty),clientOid:clientOid(String(input?.clientOid||'')),...(!spotCategory?{reduceOnly:String(input?.reduceOnly||'no')==='yes'?'yes':'no'}:{})};
   if(planType==='normal_plan'){
     const triggerPrice=positiveNumber(input?.triggerPrice,'trigger price');const orderType=String(input?.orderType||'market').toLowerCase();
     if(!['market','limit'].includes(orderType))throw new Error('Trigger execution type must be market or limit.');
