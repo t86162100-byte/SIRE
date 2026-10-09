@@ -1114,7 +1114,7 @@ const server = http.createServer(async (req,res) => {
         return res.writeHead(201,{'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify({ok:true,job}));
       } catch(cause) { return res.writeHead(400,{'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify({ok:false,error:cause instanceof Error?cause.message:String(cause)})); }
     }
-    const scheduleAction=pathname.match(/^\\/api\\/sire\\/bitget\\/schedules\\/([0-9a-f-]+)\\/(pause|resume|cancel)$/i);
+    const scheduleAction=pathname.match(/^\/api\/sire\/bitget\/schedules\/([0-9a-f-]+)\/(pause|resume|cancel)$/i);
     if(req.method==='POST'&&scheduleAction){
       try{
         const ownerEmail=String(process.env.SIRE_OWNER_EMAIL||'').trim().toLowerCase();const user=await currentUser(req);
