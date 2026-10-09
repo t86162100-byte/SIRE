@@ -47,7 +47,7 @@ function normalize(input:any,ownerEmail:string){
  if(kind==='twap'){
    durationSeconds=clampInt(input?.durationSeconds,60,86400,'TWAP duration');
    intervalSeconds=clampInt(input?.intervalSeconds??30,5,60,'TWAP frequency');
-   totalSlices=Math.min(10000,Math.max(1,Math.ceil(durationSeconds/intervalSeconds)));
+   totalSlices=Math.min(10000,Math.max(1,Math.ceil(totalQty/perOrderQty)));\n   if(totalSlices>Math.ceil(durationSeconds/intervalSeconds))throw new Error('TWAP duration is too short for the selected per-order quantity and frequency. Increase duration or increase quantity per order.');
  } else {
    totalSlices=kind==='iceberg'?Math.ceil(totalQty/perOrderQty):clampInt(input?.sliceCount,2,1000,'Split count');
    if(kind==='split'&&totalQty/totalSlices>perOrderQty)throw new Error('Split count is too small for the selected per-order quantity.');
@@ -58,7 +58,7 @@ function normalize(input:any,ownerEmail:string){
  if(orderType==='limit'&&!price)throw new Error('Limit orders require a price.');
  const marginMode=String(input?.marginMode||'crossed').toLowerCase();
  if(!['crossed','isolated'].includes(marginMode))throw new Error('Invalid margin mode.');
- const childQty=kind==='twap'?Math.min(perOrderQty,totalQty/totalSlices):perOrderQty;
+ const childQty=perOrderQty;
  const spec={category,symbol,side,posSide,orderType,price,marginMode,reduceOnly:input?.reduceOnly?'yes':'no',timeInForce:String(input?.timeInForce||'gtc').toLowerCase(),totalQty,perOrderQty,intervalSeconds,durationSeconds:durationSeconds||null,childQty,preference:String(input?.preference||'Faster execution'),queueType:String(input?.queueType||'Queue 1'),priceLimitEnabled:Boolean(input?.priceLimitEnabled),ownerEmail};
  if(!['gtc','ioc','fok','post_only'].includes(spec.timeInForce))throw new Error('Unsupported time in force.');
  return {kind,category,symbol,totalQty,totalSlices,intervalSeconds,spec};
