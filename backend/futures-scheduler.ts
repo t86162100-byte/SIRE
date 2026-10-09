@@ -8,7 +8,7 @@ const CHILD='sire_futures_algo_children_v1';
 const CATEGORIES=new Set(['USDT-FUTURES','COIN-FUTURES','USDC-FUTURES']);
 const STATES=new Set(['running','paused','cancel_requested','completed','cancelled','failed']);
 const now=()=>Date.now();
-function validBitgetBase(){try{const base=String(process.env.BITGET_API_BASE_URL||'https://api.bitget.com').trim();const u=new URL(base);return u.protocol==='https:'&&u.hostname.includes('.')}catch{return false}}
+function validBitgetBase(){try{const base=String(process.env.BITGET_API_BASE_URL||'https://api.bitget.com').trim();const u=new URL(base);return u.protocol==='https:'&&u.hostname.toLowerCase()==='api.bitget.com'}catch{return false}}
 function requirePool(){if(!pool)throw new Error('DATABASE_URL is required for durable Futures schedules.');return pool;}
 function num(v,n){const x=Number(v);if(!Number.isFinite(x)||x<=0)throw new Error(n+' must be greater than zero.');return x;}
 function clampInt(v,min,max,n){const x=Number(v);if(!Number.isInteger(x)||x<min||x>max)throw new Error(n+' must be between '+min+' and '+max+'.');return x;}
