@@ -60,7 +60,6 @@ function normalize(input:any,ownerEmail:string){
  if(kind==='iceberg'&&preference==='Fixed distance'&&(!price||price>5))throw new Error('Fixed distance must be greater than 0 and at most 5%.');
  const marginMode=String(input?.marginMode||'crossed').toLowerCase();
  if(!['crossed','isolated'].includes(marginMode))throw new Error('Invalid margin mode.');
- const childQty=perOrderQty;
  const childQty=kind==='twap'?totalQty/totalSlices:perOrderQty;
  const spec={category,symbol,side,posSide,orderType,price,marginMode,reduceOnly:input?.reduceOnly?'yes':'no',timeInForce:String(input?.timeInForce||'gtc').toLowerCase(),totalQty,perOrderQty,intervalSeconds,durationSeconds:durationSeconds||null,childQty,preference,queueType:String(input?.queueType||'Queue 1'),priceLimitEnabled:Boolean(input?.priceLimitEnabled),ownerEmail};
  if(!['gtc','ioc','fok','post_only'].includes(spec.timeInForce))throw new Error('Unsupported time in force.');
