@@ -58,7 +58,7 @@ function normalize(input:any,ownerEmail:string){
  const price=input?.price==null||input.price===''?undefined:num(input.price,preference==='Fixed distance'?'Price distance':'Limit price');
  if(orderType==='limit'&&!price)throw new Error('Limit orders require a price or distance.');
  if(kind==='iceberg'&&Boolean(input?.priceLimitEnabled)&&!price)throw new Error('Price limit is enabled but no limit price was supplied.');
- if(kind==='iceberg'&&preference==='Fixed distance'&&(!price||price>5))throw new Error('Fixed distance must be greater than 0 and at most 5%.');
+ if(kind==='iceberg'&&preference==='Fixed distance'&&!Boolean(input?.priceLimitEnabled)&&(!price||price>5))throw new Error('Fixed distance must be greater than 0 and at most 5%.');
  const marginMode=String(input?.marginMode||'crossed').toLowerCase();
  if(!['crossed','isolated'].includes(marginMode))throw new Error('Invalid margin mode.');
  const childQty=(kind==='twap'||kind==='split')?totalQty/totalSlices:perOrderQty;
@@ -102,7 +102,7 @@ async function reconcileOrPlace(child:any,spec:any){
   const message=e instanceof Error?e.message:String(e);
   if(!/not found|no order|order does not exist|400172|43025/i.test(message))throw e;
  }
- const order=await bitgetOwnerPlaceOrder({category:spec.category,symbol:spec.symbol,side:spec.side,orderType:spec.orderType,qty:String(child.qty),price:spec.price,clientOid:child.client_oid,posSide:spec.posSide,marginMode:spec.marginMode,reduceOnly:spec.reduceOnly,timeInForce:spec.timeInForce});
+ const order=await bitgetOwnerPlaceOrder({category:spec.category,symbol:spec.symbol,side:spec.side,orderType:spec.orderType,qty:String(child.qty),price:spec.price,clientOid:child.client_oid,posSide:spec.posSide,marginMode:spec.marginMode,reduceOnly:spec.reduceOnly,timeInForce:spec.timeInForce,takeProfit:spec.takeProfit,stopLoss:spec.stopLoss});
  return {ok:true,data:order};
 }
 export async function runFuturesScheduleBatch(){
@@ -130,7 +130,7 @@ export async function runFuturesScheduleBatch(){
       child=created.rows[0];
     }
     let result:any;
-    if(job.kind==='iceberg'&&spec.orderType==='limit'&&spec.preference==='Fixed distance'){
+    if(job.kind==='iceberg'&&spec.orderType==='limit'&&spec.preference==='Fixed distance'&&!spec.priceLimitEnabled){
       const book=await bitgetMarketOrderBook(spec.category,spec.symbol,5);const bid=Number(book.bids?.[0]?.price||0);const ask=Number(book.asks?.[0]?.price||0);const distance=Number(spec.price)/100;
       if(!(bid>0&&ask>0&&distance>0))throw new Error('Could not calculate a live Fixed distance price from Bitget order book.');
       const anchor=spec.side==='buy'?(spec.queueType==='Queue 1'?bid:ask):(spec.queueType==='Queue 1'?ask:bid);
