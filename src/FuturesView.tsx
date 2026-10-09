@@ -180,7 +180,7 @@ export default function FuturesView({initialSymbol}:Props){
           <label><span>Price</span><input inputMode="decimal" value={price} onChange={e=>setPrice(e.target.value.replace(/[^0-9.]/g,''))}/><em>USDT</em></label>
           {orderType==='Limit'&&<button type="button" onClick={()=>setPrice(priceFmt(marketPrice).replace(/,/g,''))}>BBO</button>}
         </div>}
-        <label className="sire-futures-input"><span>Quantity</span><input inputMode="decimal" value={qty} onChange={e=>setQty(e.target.value.replace(/[^0-9.]/g,''))}/><span className="sire-futures-quantity-unit"><b>{selected?.baseAsset||'BTC'}</b><ChevronDown size={11}/></span></label>
+        {orderType!=='TWAP'&&<><label className="sire-futures-input"><span>Quantity</span><input inputMode="decimal" value={qty} onChange={e=>setQty(e.target.value.replace(/[^0-9.]/g,''))}/><span className="sire-futures-quantity-unit"><b>{selected?.baseAsset||'BTC'}</b><ChevronDown size={11}/></span></label>
         <div className="sire-futures-slider">
           <div className="sire-futures-range-track">
             <input type="range" min="0" max="100" step="1" value={qtyPercent} onChange={e=>{const v=Number(e.target.value);setQtyPercent(v);setQty(v===0?'':String(v))}}/>
@@ -188,10 +188,10 @@ export default function FuturesView({initialSymbol}:Props){
               {[0,25,50,75,100].map(v=><button key={v} type="button" className={qtyPercent===v?'active':''} aria-label={v+'%'} onClick={()=>{setQtyPercent(v);setQty(v===0?'':String(v))}}><i/></button>)}
             </div>
           </div>
-        </div>
+        </div></>}
 
         <div className="sire-futures-toggle-stack">
-          {orderType==='Iceberg order'?<label className="sire-futures-inline-toggle"><input type="checkbox" checked={priceLimitEnabled} onChange={e=>setPriceLimitEnabled(e.target.checked)} aria-label="Toggle price limit"/><span>Price limit</span></label>:<>
+          {orderType==='TWAP'?<label className="sire-futures-inline-toggle"><input type="checkbox" checked={twapAdvanced} onChange={e=>setTwapAdvanced(e.target.checked)} aria-label="Toggle advanced"/><span>Advanced</span></label>:orderType==='Iceberg order'?<label className="sire-futures-inline-toggle"><input type="checkbox" checked={priceLimitEnabled} onChange={e=>setPriceLimitEnabled(e.target.checked)} aria-label="Toggle price limit"/><span>Price limit</span></label>:<>
           {orderType==='Market'&&<label className="sire-futures-inline-toggle"><input type="checkbox" checked={slippageEnabled} onChange={e=>setSlippageEnabled(e.target.checked)} aria-label="Toggle slippage protection"/><span>Slippage</span>{slippageEnabled&&<b>0.5%</b>}</label>}
           <label className="sire-futures-inline-toggle"><input type="checkbox" aria-label="Toggle TP/SL"/><span>TP/SL</span></label>
           <label className="sire-futures-inline-toggle"><input type="checkbox" checked={reduceOnly} onChange={e=>setReduceOnly(e.target.checked)} aria-label="Toggle Reduce Only"/><span>Reduce Only</span></label></>}
