@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  paperReset, paperPlaceOrder, paperCancelOrder, paperModifyOrder,
+  paperReset, paperPlaceOrder, paperGetOrder, paperCancelOrder, paperModifyOrder,
   paperPlaceTrigger, paperCancelTrigger, paperModifyTrigger,
   paperListOrders, paperListTriggers, paperPositions, paperSetLeverage, paperAccount
 } from './sire-paper-exchange.mjs';
@@ -30,6 +30,7 @@ test('limit order can be amended and cancelled; terminal order cannot be amended
   paperReset();
   const placed=paperPlaceOrder({category:'SPOT',symbol:'ETHUSDT',side:'buy',orderType:'limit',qty:'0.5',price:'1000',clientOid:'limit-lifecycle-1'},{ask:2000,bid:1999});
   assert.equal(placed.order.status,'new');
+  assert.equal(paperGetOrder({clientOid:'limit-lifecycle-1'}).order.orderId,placed.order.orderId);
   const amended=paperModifyOrder({orderId:placed.order.orderId,price:'900',qty:'0.75'});
   assert.equal(amended.order.price,900);
   assert.equal(amended.order.qty,0.75);
