@@ -18,8 +18,9 @@ import { saveLimitOrder, listLimitOrders, cancelLimitOrder, runLimitOrderMonitor
 import { fetchBinanceCatalogServer, fetchBinanceMarketSnapshotServer, fetchBinanceHistoryServer } from './backend/binance-catalog.ts';
 import { fetchBitgetCatalogServer, bitgetCatalogStatus } from './backend/bitget-catalog.ts';
 import { bitgetMarketSubscribe, bitgetMarketUnsubscribe, bitgetMarketDisconnect, startBitgetLiveDiagnostics, bitgetLiveStatus } from './backend/bitget-live-market.ts';
-import { bitgetAuthenticatedHealth, bitgetMarketOrderBook, bitgetOwnerAccount, bitgetOwnerPlaceOrder, bitgetOwnerFuturesPositions, bitgetOwnerSetFuturesLeverage, bitgetOwnerCancelOrder, bitgetOwnerOpenOrders, bitgetOwnerOrderHistory, bitgetOwnerPlaceTriggerOrder } from './backend/sire-provider-execution.ts';
+import { bitgetAuthenticatedHealth, bitgetMarketOrderBook, bitgetOwnerAccount, bitgetOwnerPlaceOrder, bitgetOwnerFuturesPositions, bitgetOwnerSetFuturesLeverage, bitgetOwnerCancelOrder, bitgetOwnerCancelAllOrders, bitgetOwnerModifyOrder, bitgetOwnerOpenOrders, bitgetOwnerOrderHistory, bitgetOwnerOrderInfo, bitgetOwnerPlaceTriggerOrder } from './backend/sire-provider-execution.ts';
 import { fetchSireSpotCatalogServer, sireSpotCatalogStatus } from './backend/sire-spot-catalog.ts';
+import { createFuturesSchedule, listFuturesSchedules, controlFuturesSchedule, runFuturesScheduleBatch } from './backend/futures-scheduler.ts';
 import { ensureSireSpotTables, getSpotBook, placeSpotOrder, cancelSpotOrder, getSpotAccount, getSpotOrders, getSpotTrades, spotEngineStatus, spotSubscribe, spotUnsubscribe, spotDisconnect } from './backend/sire-spot-engine.ts';
 import { getRoutedSpotLiquidity, spotLiquidityStatus } from './backend/sire-spot-liquidity.ts';
 import { universalLiquidityStatus, liquidityRoute } from './backend/sire-liquidity-router.ts';
@@ -1066,14 +1067,14 @@ const server = http.createServer(async (req,res) => {
       }
     }
 
-    if (['POST'].includes(req.method) && ['/api/sire/bitget/order/cancel','/api/sire/bitget/order/trigger'].includes(pathname)) {
+    if (['POST'].includes(req.method) && ['/api/sire/bitget/order/cancel','/api/sire/bitget/order/cancel-all','/api/sire/bitget/order/modify','/api/sire/bitget/order/trigger'].includes(pathname)) {
       try {
         const ownerEmail = String(process.env.SIRE_OWNER_EMAIL || '').trim().toLowerCase();
         if (!ownerEmail) return res.writeHead(503,{'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify({ok:false,error:'SIRE_OWNER_EMAIL is not configured for direct Bitget trading.'}));
         const user = await currentUser(req);
         if (!user || String(user.email || '').toLowerCase() !== ownerEmail) return res.writeHead(401,{'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify({ok:false,error:'Sign in with the SIRE owner account to manage Bitget orders.'}));
         const parsed = body ? JSON.parse(body) : {};
-        const result = pathname.endsWith('/cancel') ? await bitgetOwnerCancelOrder(parsed) : await bitgetOwnerPlaceTriggerOrder(parsed);
+        const result = pathname.endsWith('/cancel-all') ? await bitgetOwnerCancelAllOrders(parsed.category,parsed.symbol||'') : pathname.endsWith('/modify') ? await bitgetOwnerModifyOrder(parsed) : pathname.endsWith('/cancel') ? await bitgetOwnerCancelOrder(parsed) : await bitgetOwnerPlaceTriggerOrder(parsed);
         return res.writeHead(200,{'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify(result));
       } catch (cause) {
         return res.writeHead(400,{'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify({ok:false,error:cause instanceof Error ? cause.message : String(cause)}));
@@ -1093,6 +1094,35 @@ const server = http.createServer(async (req,res) => {
       } catch (cause) {
         return res.writeHead(502,{'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify({ok:false,error:cause instanceof Error ? cause.message : String(cause)}));
       }
+    }
+    if (req.method === 'GET' && pathname === '/api/sire/bitget/schedules') {
+      try {
+        const ownerEmail=String(process.env.SIRE_OWNER_EMAIL||'').trim().toLowerCase();
+        const user=await currentUser(req);
+        if(!ownerEmail) return res.writeHead(503,{'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify({ok:false,error:'SIRE_OWNER_EMAIL is not configured.'}));
+        if(!user||String(user.email||'').toLowerCase()!==ownerEmail) return res.writeHead(401,{'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify({ok:false,error:'Sign in with the SIRE owner account to manage Futures schedules.'}));
+        return res.writeHead(200,{'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify(await listFuturesSchedules(ownerEmail)));
+      } catch(cause) { return res.writeHead(503,{'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify({ok:false,error:cause instanceof Error?cause.message:String(cause)})); }
+    }
+    if (req.method === 'POST' && pathname === '/api/sire/bitget/schedules') {
+      try {
+        const ownerEmail=String(process.env.SIRE_OWNER_EMAIL||'').trim().toLowerCase();
+        const user=await currentUser(req);
+        if(!ownerEmail) return res.writeHead(503,{'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify({ok:false,error:'SIRE_OWNER_EMAIL is not configured.'}));
+        if(!user||String(user.email||'').toLowerCase()!==ownerEmail) return res.writeHead(401,{'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify({ok:false,error:'Sign in with the SIRE owner account to create Futures schedules.'}));
+        const parsed=body?JSON.parse(body):{};const job=await createFuturesSchedule(parsed,ownerEmail);
+        return res.writeHead(201,{'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify({ok:true,job}));
+      } catch(cause) { return res.writeHead(400,{'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify({ok:false,error:cause instanceof Error?cause.message:String(cause)})); }
+    }
+    const scheduleAction=pathname.match(/^\\/api\\/sire\\/bitget\\/schedules\\/([0-9a-f-]+)\\/(pause|resume|cancel)$/i);
+    if(req.method==='POST'&&scheduleAction){
+      try{
+        const ownerEmail=String(process.env.SIRE_OWNER_EMAIL||'').trim().toLowerCase();const user=await currentUser(req);
+        if(!ownerEmail)return res.writeHead(503,{'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify({ok:false,error:'SIRE_OWNER_EMAIL is not configured.'}));
+        if(!user||String(user.email||'').toLowerCase()!==ownerEmail)return res.writeHead(401,{'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify({ok:false,error:'Sign in with the SIRE owner account to manage Futures schedules.'}));
+        const result=await controlFuturesSchedule(scheduleAction[1],scheduleAction[2],ownerEmail);
+        return res.writeHead(200,{'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify(result));
+      }catch(cause){return res.writeHead(400,{'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify({ok:false,error:cause instanceof Error?cause.message:String(cause)}));}
     }
     if (req.method === 'GET' && pathname === '/api/sire/bitget/live/status') {
       return res.writeHead(200,{'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify(bitgetLiveStatus()));
@@ -1346,5 +1376,6 @@ server.listen(PORT,HOST,async()=>{
   void ensureSireSpotTables().catch(error => console.warn('[SIRE SPOT ENGINE]', error instanceof Error ? error.message : String(error)));
   console.log('[LIMIT ORDER MONITOR] server-side 0x monitor starting');
   void runLimitOrderMonitorBatch(2).catch(error => console.warn('[LIMIT ORDER MONITOR]', error instanceof Error ? error.message : String(error)));
+  void runFuturesScheduleBatch().catch(error => console.warn('[FUTURES SCHEDULE]', error instanceof Error ? error.message : String(error)));
   setInterval(() => void runLimitOrderMonitorBatch(2).catch(error => console.warn('[LIMIT ORDER MONITOR]', error instanceof Error ? error.message : String(error))), 5000);
 });
