@@ -18,13 +18,13 @@ import { saveLimitOrder, listLimitOrders, cancelLimitOrder, runLimitOrderMonitor
 import { fetchBinanceCatalogServer, fetchBinanceMarketSnapshotServer, fetchBinanceHistoryServer } from './backend/binance-catalog.ts';
 import { fetchBitgetCatalogServer, bitgetCatalogStatus } from './backend/bitget-catalog.ts';
 import { bitgetMarketSubscribe, bitgetMarketUnsubscribe, bitgetMarketDisconnect, startBitgetLiveDiagnostics, bitgetLiveStatus } from './backend/bitget-live-market.ts';
-import { bitgetAuthenticatedHealth, bitgetMarketOrderBook, bitgetOwnerAccount, bitgetOwnerPlaceOrder, bitgetOwnerFuturesPositions, bitgetOwnerSetFuturesLeverage, bitgetOwnerCancelOrder, bitgetOwnerCancelAllOrders, bitgetOwnerModifyOrder, bitgetOwnerOpenOrders, bitgetOwnerOrderHistory, bitgetOwnerOrderInfo, bitgetOwnerPlaceTriggerOrder, bitgetOwnerPendingTriggerOrders, bitgetOwnerCancelTriggerOrder, bitgetOwnerModifyTriggerOrder, bitgetOwnerStrategyOrderHistory } from './backend/sire-provider-execution.ts';
+import { bitgetAuthenticatedHealth, bitgetMarketOrderBook, bitgetOwnerAccount, bitgetOwnerPlaceOrder, bitgetOwnerFuturesPositions, bitgetOwnerSetFuturesLeverage, bitgetOwnerCancelOrder, bitgetOwnerCancelAllOrders, bitgetOwnerModifyOrder, bitgetOwnerOpenOrders, bitgetOwnerOrderHistory, bitgetOwnerOrderInfo, bitgetOwnerPlaceTriggerOrder, bitgetOwnerPendingTriggerOrders, bitgetOwnerCancelTriggerOrder, bitgetOwnerModifyTriggerOrder, bitgetOwnerStrategyOrderHistory, bitgetOwnerOrderInfo } from './backend/sire-provider-execution.ts';
 import { fetchSireSpotCatalogServer, sireSpotCatalogStatus } from './backend/sire-spot-catalog.ts';
 import { createFuturesSchedule, listFuturesSchedules, controlFuturesSchedule, cancelAllFuturesSchedules, runFuturesScheduleBatch } from './backend/futures-scheduler.ts';
 import { ensureSireSpotTables, getSpotBook, placeSpotOrder, cancelSpotOrder, getSpotAccount, getSpotOrders, getSpotTrades, spotEngineStatus, spotSubscribe, spotUnsubscribe, spotDisconnect } from './backend/sire-spot-engine.ts';
 import { getRoutedSpotLiquidity, spotLiquidityStatus } from './backend/sire-spot-liquidity.ts';
 import { universalLiquidityStatus, liquidityRoute } from './backend/sire-liquidity-router.ts';
-import { paperPlaceOrder, paperPlaceTrigger, paperCancelOrder, paperModifyOrder, paperCancelTrigger, paperModifyTrigger, paperCancelAll, paperListOrders, paperListTriggers, paperPositions, paperAccount, paperSetLeverage, paperReset } from './backend/sire-paper-exchange.mjs';
+import { paperPlaceOrder, paperPlaceTrigger, paperGetOrder, paperCancelOrder, paperModifyOrder, paperCancelTrigger, paperModifyTrigger, paperCancelAll, paperListOrders, paperListTriggers, paperPositions, paperAccount, paperSetLeverage, paperReset } from './backend/sire-paper-exchange.mjs';
 
 const SIRE_PAPER_MODE = () => String(process.env.SIRE_TRADING_MODE || '').trim().toUpperCase() === 'PAPER';
 
@@ -1102,6 +1102,17 @@ const server = http.createServer(async (req,res) => {
         const plans=SIRE_PAPER_MODE()?null:await Promise.all(['normal_plan','track_plan'].map(planType=>bitgetOwnerPendingTriggerOrders(category,symbol,planType)));const orders=SIRE_PAPER_MODE()?paperListTriggers(category,symbol).orders:plans.flatMap(p=>p.orders.map((o)=>({...o,isTrigger:true,category,orderType:'trigger'})));
         return res.writeHead(200,{'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify({ok:true,orders}));
       }catch(cause){return res.writeHead(502,{'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify({ok:false,error:cause instanceof Error?cause.message:String(cause)}));}
+    }
+    if (req.method === 'GET' && pathname === '/api/sire/bitget/order/info') {
+      try {
+        const ownerEmail=String(process.env.SIRE_OWNER_EMAIL||'').trim().toLowerCase();const user=await currentUser(req);
+        if(!ownerEmail)return res.writeHead(503,{'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify({ok:false,error:'SIRE_OWNER_EMAIL is not configured.'}));
+        if(!user||String(user.email||'').toLowerCase()!==ownerEmail)return res.writeHead(401,{'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify({ok:false,error:'Sign in with the SIRE owner account to reconcile orders.'}));
+        const url=new URL(req.url||'/','http://sire.local');const orderId=String(url.searchParams.get('orderId')||'');const clientOid=String(url.searchParams.get('clientOid')||'');
+        if(!orderId&&!clientOid)return res.writeHead(400,{'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify({ok:false,error:'orderId or clientOid is required.'}));
+        const order=SIRE_PAPER_MODE()?paperGetOrder({orderId,clientOid}):await bitgetOwnerOrderInfo(orderId||clientOid);
+        return res.writeHead(200,{'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify({ok:true,mode:SIRE_PAPER_MODE()?'PAPER':'LIVE',order}));
+      } catch(cause) { return res.writeHead(404,{'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify({ok:false,error:cause instanceof Error?cause.message:String(cause)})); }
     }
     if (req.method === 'GET' && ['/api/sire/bitget/orders/open','/api/sire/bitget/orders/history'].includes(pathname)) {
       try {
