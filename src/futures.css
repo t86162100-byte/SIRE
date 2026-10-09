@@ -86,3 +86,18 @@
 .sire-futures-trigger-execute{display:flex;align-items:center;justify-content:space-between;gap:8px;min-height:35px;margin:0 0 6px;padding:0 10px;border:1px solid #252b34;border-radius:6px;background:#0b0b0b;color:#dce1e7;box-sizing:border-box}
 .sire-futures-trigger-execute>span{font-size:8px;font-weight:900}
 .sire-futures-trigger-execute button{display:flex;align-items:center;gap:5px;border:0;background:transparent;color:#fff;font-size:9px;font-weight:950;cursor:pointer}
+
+
+/* Trailing-stop order controls */
+.sire-futures-plain-label{margin:2px 0 5px;color:#dce1e7;font-size:9px;font-weight:850;letter-spacing:.01em}
+.sire-futures-trailing-source-card{cursor:default}
+.sire-futures-trailing-source-card .sire-futures-trailing-price-label{font-size:9px;font-weight:900;color:#f4f5f7}
+.sire-futures-plain-select{display:flex;align-items:center;justify-content:space-between;gap:8px;width:100%;min-height:27px;margin:2px 0 4px;padding:2px 1px;border:0;background:transparent;color:#dce1e7;text-align:left;font-size:9px;font-weight:850;cursor:pointer}
+.sire-futures-plain-select svg{flex-shrink:0;color:#c6cbd2}
+.sire-futures-trailing-variance-card{display:grid;grid-template-columns:auto minmax(0,1fr) minmax(38px,auto);align-items:center;gap:8px;min-height:35px;padding:0 10px;border:1px solid #252b34;border-radius:6px;background:#0b0b0b;box-sizing:border-box}
+.sire-futures-trailing-percent{font-size:10px;font-weight:950;color:#f5f6f7}
+.sire-futures-trailing-variance-title{font-size:9px;font-weight:800;color:#c9ced5}
+.sire-futures-trailing-variance-card input{width:100%;min-width:0;height:26px;padding:0;border:0;outline:0;background:transparent;color:#fff;text-align:right;font-size:10px;font-weight:950}
+.sire-futures-trailing-presets{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;margin:6px 0 8px}
+.sire-futures-trailing-presets button{min-height:27px;border:1px solid #282e37;border-radius:5px;background:#101010;color:#cbd0d7;font-size:9px;font-weight:900;cursor:pointer}
+.sire-futures-trailing-presets button.active{border-color:#f4f5f6;background:#f4f5f6;color:#080808}
