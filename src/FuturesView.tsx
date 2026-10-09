@@ -60,6 +60,9 @@ export default function FuturesView({initialSymbol}:Props){
   const [leverage,setLeverage]=useState('10');
   const [marginMode,setMarginMode]=useState<'Cross'|'Isolated'>('Cross');
   const [reduceOnly,setReduceOnly]=useState(false);
+  const [tpSlEnabled,setTpSlEnabled]=useState(false);
+  const [takeProfitPrice,setTakeProfitPrice]=useState('');
+  const [stopLossPrice,setStopLossPrice]=useState('');
   const [snapshot,setSnapshot]=useState<{price?:number;bid?:number;ask?:number;percent?:number}>({});
   const [book,setBook]=useState<Book>({asks:[],bids:[]});
   const [positions,setPositions]=useState<Position[]>([]);
@@ -128,8 +131,11 @@ export default function FuturesView({initialSymbol}:Props){
     const isTrigger=orderType==='Trigger order'||orderType==='Trailing stop order';
     const limitBasedOrder=orderType==='Limit'||orderType==='Advanced limit order'||(isTrigger&&executeType==='Limit');
     if(limitBasedOrder&&(!Number(price)||Number(price)<=0)){setError('Enter a valid limit price.');return}
-    if(isTrigger&&(!Number(triggerPrice)||Number(triggerPrice)<=0)){setError('Enter a valid trigger price.');return}
+    if(isTrigger&&orderType==='Trigger order'&&(!Number(triggerPrice)||Number(triggerPrice)<=0)){setError('Enter a valid trigger price.');return}
+    if(orderType==='Trailing stop order'&&(!Number(activationPrice)||Number(activationPrice)<=0)){setError('Enter a valid activation price.');return}
     if(orderType==='Trailing stop order'&&(!Number(trailVariance)||Number(trailVariance)<=0)){setError('Enter a valid trailing callback rate.');return}
+    if(tpSlEnabled&&takeProfitPrice&&(!Number(takeProfitPrice)||Number(takeProfitPrice)<=0)){setError('Enter a valid take-profit price.');return}
+    if(tpSlEnabled&&stopLossPrice&&(!Number(stopLossPrice)||Number(stopLossPrice)<=0)){setError('Enter a valid stop-loss price.');return}
     if(orderType==='TWAP'){setError('TWAP scheduler is not enabled yet; no orders were submitted.');return}
     if(orderType==='Iceberg order'){setError('Iceberg scheduler is not enabled yet; no orders were submitted.');return}
     if(orderType==='Split large order'){setError('Split-order scheduler is not enabled yet; no orders were submitted.');return}
@@ -149,14 +155,14 @@ export default function FuturesView({initialSymbol}:Props){
         if(!created?.ok)throw new Error(created?.error||'Could not create schedule.');
         setError('Schedule '+String(created.job?.id||'created').slice(0,8)+' started.');setQty('');setQtyPercent(0);await refreshSchedules();return;
       }
-      const payload:any={category,symbol:selected.symbol,side:orderSideValue,orderType:limitBasedOrder?'limit':'market',qty:String(n),price:limitBasedOrder?String(price):undefined,posSide:orderSide.toLowerCase(),tradeSide:isClose?'close':'open',marginMode:marginMode==='Cross'?'crossed':'isolated',reduceOnly:isClose?'yes':'no',timeInForce:orderType==='Advanced limit order'?({'Post only':'post_only','IOC':'ioc','FOK':'fok'} as any)[timeInForce]:'gtc',slippagePercent:slippageEnabled&&orderType==='Market'?0.5:undefined,referencePrice:slippageEnabled&&orderType==='Market'?marketPrice:undefined};
+      const payload:any={category,symbol:selected.symbol,side:orderSideValue,orderType:limitBasedOrder?'limit':'market',qty:String(n),price:limitBasedOrder?String(price):undefined,posSide:orderSide.toLowerCase(),tradeSide:isClose?'close':'open',marginMode:marginMode==='Cross'?'crossed':'isolated',reduceOnly:isClose?'yes':'no',timeInForce:orderType==='Advanced limit order'?({'Post only':'post_only','IOC':'ioc','FOK':'fok'} as any)[timeInForce]:'gtc',slippagePercent:slippageEnabled&&orderType==='Market'?0.5:undefined,referencePrice:slippageEnabled&&orderType==='Market'?marketPrice:undefined,takeProfit:tpSlEnabled&&takeProfitPrice?takeProfitPrice:undefined,stopLoss:tpSlEnabled&&stopLossPrice?stopLossPrice:undefined};
       if(isTrigger){
         payload.planType=orderType==='Trailing stop order'?'track_plan':'normal_plan';
         payload.triggerPrice=triggerPrice;
         payload.triggerType=triggerSource==='Mark price'?'mark_price':'fill_price';
         payload.orderType=executeType.toLowerCase();
         payload.price=executeType==='Limit'?String(price):undefined;
-        if(orderType==='Trailing stop order')payload.callbackRatio=trailVariance;
+        if(orderType==='Trailing stop order'){payload.callbackRatio=trailVarianceMode==='By spread (USDT)'?Number(trailVariance)/Math.max(marketPrice,1e-12)*100:Number(trailVariance);if(!Number.isFinite(payload.callbackRatio)||payload.callbackRatio<=0||payload.callbackRatio>10)throw new Error('Trailing callback must convert to a Bitget-supported value between 0 and 10%.');}
         const result=await fetch('/api/sire/bitget/order/trigger',{method:'POST',headers:{'Content-Type':'application/json',Accept:'application/json'},body:JSON.stringify(payload)}).then(r=>readJson(r,'Bitget trigger order'));
         if(!result?.ok)throw new Error(result?.error||'Trigger order failed.');
       }else{
@@ -197,10 +203,10 @@ export default function FuturesView({initialSymbol}:Props){
         </div>
 
         {orderType==='Advanced limit order'&&<button type="button" className="sire-futures-tif-card" onClick={()=>setTimeInForceDrawer(true)}><span><small>Time in force</small><b>{timeInForce}</b></span><ChevronDown size={13}/></button>}
-        {orderType==='Iceberg order'&&<>
+        {(orderType==='Iceberg order'||orderType==='Split large order')&&<>
           <button type="button" className="sire-futures-plain-select sire-futures-iceberg-split-trigger" onClick={()=>setSplitSettingsDrawer(true)}><span>Qty. per order</span><ChevronDown size={13}/></button>
           <label className="sire-futures-input sire-futures-iceberg-quantity"><span>Quantity</span><input aria-label="Iceberg quantity" inputMode="decimal" value={qtyPerOrder} onChange={e=>setQtyPerOrder(e.target.value.replace(/[^0-9.]/g,''))}/><span className="sire-futures-quantity-unit"><b>{selected?.baseAsset||'BTC'}</b></span></label>
-          <button type="button" className="sire-futures-plain-select sire-futures-iceberg-preferences-trigger" onClick={()=>setOrderPreferencesDrawer(true)}><span>{orderPreferences}</span><ChevronDown size={13}/></button>
+          {orderType==='Iceberg order'&&<><button type="button" className="sire-futures-plain-select sire-futures-iceberg-preferences-trigger" onClick={()=>setOrderPreferencesDrawer(true)}><span>{orderPreferences}</span><ChevronDown size={13}/></button>{orderPreferences!=='Faster execution'&&<div className="sire-futures-price-row single-price"><label><span>{orderPreferences==='Fixed price'?'Limit price':'Distance (%)'}</span><input aria-label={orderPreferences==='Fixed price'?'Iceberg fixed price':'Iceberg price distance'} inputMode="decimal" value={price} onChange={e=>setPrice(e.target.value.replace(/[^0-9.]/g,''))}/><em>{orderPreferences==='Fixed price'?'Price':'%'}</em></label></div>}</>}
           <button type="button" className="sire-futures-tif-card sire-futures-iceberg-queue" onClick={()=>setQueueDrawer(true)}><span>{queueType}</span><ChevronDown size={13}/></button>
         </>}
         {orderType==='Trailing stop order'&&<><div className="sire-futures-plain-label">Activation price</div><div className="sire-futures-tif-card sire-futures-trigger-card sire-futures-trailing-source-card"><span className="sire-futures-trailing-price-label">Price</span><input aria-label="Activation price" inputMode="decimal" value={activationPrice} onChange={e=>setActivationPrice(e.target.value.replace(/[^0-9.]/g,''))} placeholder="Enter price"/><button type="button" onClick={()=>setTrailingSourceDrawer(true)}>{trailingSource}<ChevronDown size={13}/></button></div><button type="button" className="sire-futures-plain-select" onClick={()=>setTrailVarianceDrawer(true)}><span>Trail variance – {trailVarianceMode}</span><ChevronDown size={13}/></button><div className="sire-futures-trailing-variance-card"><span className="sire-futures-trailing-percent">{trailVarianceMode==='By percentage (%)'?'%':'USDT'}</span><span className="sire-futures-trailing-variance-title">Trail variance</span><input aria-label="Trail variance" inputMode="decimal" value={trailVariance} onChange={e=>setTrailVariance(e.target.value.replace(/[^0-9.]/g,''))}/></div><div className="sire-futures-trailing-presets">{(trailVarianceMode==='By percentage (%)'?['1%','5%','10%']:['1','5','10']).map(v=><button type="button" key={v} className={trailVariance===(trailVarianceMode==='By percentage (%)'?v.replace('%',''):v)?'active':''} onClick={()=>setTrailVariance(v.replace('%',''))}>{v}</button>)}</div></>}
@@ -229,7 +235,8 @@ export default function FuturesView({initialSymbol}:Props){
         <div className="sire-futures-toggle-stack">
           {orderType==='TWAP'?<label className="sire-futures-inline-toggle"><input type="checkbox" checked={twapAdvanced} onChange={e=>setTwapAdvanced(e.target.checked)} aria-label="Toggle advanced"/><span>Advanced</span></label>:orderType==='Iceberg order'?<label className="sire-futures-inline-toggle"><input type="checkbox" checked={priceLimitEnabled} onChange={e=>setPriceLimitEnabled(e.target.checked)} aria-label="Toggle price limit"/><span>Price limit</span></label>:<>
           {orderType==='Market'&&<label className="sire-futures-inline-toggle"><input type="checkbox" checked={slippageEnabled} onChange={e=>setSlippageEnabled(e.target.checked)} aria-label="Toggle slippage protection"/><span>Slippage</span>{slippageEnabled&&<b>0.5%</b>}</label>}
-          <label className="sire-futures-inline-toggle"><input type="checkbox" aria-label="Toggle TP/SL"/><span>TP/SL</span></label>
+          <label className="sire-futures-inline-toggle"><input type="checkbox" checked={tpSlEnabled} onChange={e=>setTpSlEnabled(e.target.checked)} aria-label="Toggle TP/SL"/><span>TP/SL</span></label>
+          {tpSlEnabled&&<div className="sire-futures-price-row"><label><span>Take profit</span><input aria-label="Take-profit price" inputMode="decimal" value={takeProfitPrice} onChange={e=>setTakeProfitPrice(e.target.value.replace(/[^0-9.]/g,''))} placeholder="Optional"/></label><label><span>Stop loss</span><input aria-label="Stop-loss price" inputMode="decimal" value={stopLossPrice} onChange={e=>setStopLossPrice(e.target.value.replace(/[^0-9.]/g,''))} placeholder="Optional"/></label></div>}
           <label className="sire-futures-inline-toggle"><input type="checkbox" checked={reduceOnly} onChange={e=>setReduceOnly(e.target.checked)} aria-label="Toggle Reduce Only"/><span>Reduce Only</span></label></>}
         </div>
         <div className="sire-futures-costs">
