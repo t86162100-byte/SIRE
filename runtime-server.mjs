@@ -18,7 +18,7 @@ import { saveLimitOrder, listLimitOrders, cancelLimitOrder, runLimitOrderMonitor
 import { fetchBinanceCatalogServer, fetchBinanceMarketSnapshotServer, fetchBinanceHistoryServer } from './backend/binance-catalog.ts';
 import { fetchBitgetCatalogServer, bitgetCatalogStatus } from './backend/bitget-catalog.ts';
 import { bitgetMarketSubscribe, bitgetMarketUnsubscribe, bitgetMarketDisconnect, startBitgetLiveDiagnostics, bitgetLiveStatus } from './backend/bitget-live-market.ts';
-import { bitgetAuthenticatedHealth, bitgetMarketOrderBook, bitgetOwnerAccount, bitgetOwnerPlaceOrder, bitgetOwnerFuturesPositions, bitgetOwnerSetFuturesLeverage, bitgetOwnerCancelOrder, bitgetOwnerCancelAllOrders, bitgetOwnerModifyOrder, bitgetOwnerOpenOrders, bitgetOwnerOrderHistory, bitgetOwnerOrderInfo, bitgetOwnerPlaceTriggerOrder } from './backend/sire-provider-execution.ts';
+import { bitgetAuthenticatedHealth, bitgetMarketOrderBook, bitgetOwnerAccount, bitgetOwnerPlaceOrder, bitgetOwnerFuturesPositions, bitgetOwnerSetFuturesLeverage, bitgetOwnerCancelOrder, bitgetOwnerCancelAllOrders, bitgetOwnerModifyOrder, bitgetOwnerOpenOrders, bitgetOwnerOrderHistory, bitgetOwnerOrderInfo, bitgetOwnerPlaceTriggerOrder, bitgetOwnerPendingTriggerOrders, bitgetOwnerCancelTriggerOrder, bitgetOwnerModifyTriggerOrder } from './backend/sire-provider-execution.ts';
 import { fetchSireSpotCatalogServer, sireSpotCatalogStatus } from './backend/sire-spot-catalog.ts';
 import { createFuturesSchedule, listFuturesSchedules, controlFuturesSchedule, runFuturesScheduleBatch } from './backend/futures-scheduler.ts';
 import { ensureSireSpotTables, getSpotBook, placeSpotOrder, cancelSpotOrder, getSpotAccount, getSpotOrders, getSpotTrades, spotEngineStatus, spotSubscribe, spotUnsubscribe, spotDisconnect } from './backend/sire-spot-engine.ts';
@@ -1080,11 +1080,20 @@ const server = http.createServer(async (req,res) => {
         const user = await currentUser(req);
         if (!user || String(user.email || '').toLowerCase() !== ownerEmail) return res.writeHead(401,{'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify({ok:false,error:'Sign in with the SIRE owner account to manage Bitget orders.'}));
         const parsed = body ? JSON.parse(body) : {};
-        const result = pathname.endsWith('/cancel-all') ? await bitgetOwnerCancelAllOrders(parsed.category,parsed.symbol||'') : pathname.endsWith('/modify') ? await bitgetOwnerModifyOrder(parsed) : pathname.endsWith('/cancel') ? await bitgetOwnerCancelOrder(parsed) : await bitgetOwnerPlaceTriggerOrder(parsed);
+        const result = pathname.endsWith('/cancel-all') ? await bitgetOwnerCancelAllOrders(parsed.category,parsed.symbol||'') : pathname.endsWith('/modify') ? (parsed.isTrigger?await bitgetOwnerModifyTriggerOrder(parsed):await bitgetOwnerModifyOrder(parsed)) : pathname.endsWith('/cancel') ? (parsed.isTrigger?await bitgetOwnerCancelTriggerOrder(parsed):await bitgetOwnerCancelOrder(parsed)) : await bitgetOwnerPlaceTriggerOrder(parsed);
         return res.writeHead(200,{'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify(result));
       } catch (cause) {
         return res.writeHead(400,{'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify({ok:false,error:cause instanceof Error ? cause.message : String(cause)}));
       }
+    }
+    if(req.method==='GET'&&pathname==='/api/sire/bitget/orders/triggers'){
+      try{const ownerEmail=String(process.env.SIRE_OWNER_EMAIL||'').trim().toLowerCase();const user=await currentUser(req);
+        if(!ownerEmail)return res.writeHead(503,{'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify({ok:false,error:'SIRE_OWNER_EMAIL is not configured.'}));
+        if(!user||String(user.email||'').toLowerCase()!==ownerEmail)return res.writeHead(401,{'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify({ok:false,error:'Sign in with the SIRE owner account to view trigger orders.'}));
+        const url=new URL(req.url||'/','http://sire.local');const category=String(url.searchParams.get('category')||'USDT-FUTURES').toUpperCase();const symbol=String(url.searchParams.get('symbol')||'').toUpperCase();
+        const plans=await Promise.all(['normal_plan','track_plan'].map(planType=>bitgetOwnerPendingTriggerOrders(category,symbol,planType)));const orders=plans.flatMap(p=>p.orders.map((o:any)=>({...o,isTrigger:true,category,orderType:'trigger'})));
+        return res.writeHead(200,{'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify({ok:true,orders}));
+      }catch(cause){return res.writeHead(502,{'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify({ok:false,error:cause instanceof Error?cause.message:String(cause)}));}
     }
     if (req.method === 'GET' && ['/api/sire/bitget/orders/open','/api/sire/bitget/orders/history'].includes(pathname)) {
       try {
