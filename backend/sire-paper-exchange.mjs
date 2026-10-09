@@ -162,7 +162,7 @@ export function paperCreateSchedule(input) {
   const durationSeconds=Number(input?.durationSeconds||0);
   if(kind==='twap'&&(!Number.isInteger(durationSeconds)||durationSeconds<60||durationSeconds>86400||durationSeconds<(sliceCount-1)*intervalSeconds))throw new Error('TWAP duration is invalid for the selected interval and slice count.');
   const price=orderType==='limit'?positive(input?.price,'Limit price'):undefined;
-  const id=idOf('SCHEDULE');
+  const id=idOf('SCHEDULE').toLowerCase().replace(/[^0-9a-f-]/g,'');
   const job={id,kind,category,symbol,side,orderType,totalQty,perOrderQty,sliceCount,intervalSeconds,durationSeconds,price,posSide:String(input?.posSide||'').toLowerCase(),marginMode:String(input?.marginMode||'crossed'),reduceOnly:input?.reduceOnly?'yes':'no',timeInForce:String(input?.timeInForce||'gtc'),state:'running',completedSlices:0,createdAt:now(),nextRunAt:now(),lastError:null,children:[]};
   schedules.set(id,job);
   return {ok:true,mode:'PAPER',job:serial(job)};
