@@ -101,3 +101,18 @@
 .sire-futures-trailing-presets{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;margin:6px 0 8px}
 .sire-futures-trailing-presets button{min-height:27px;border:1px solid #282e37;border-radius:5px;background:#101010;color:#cbd0d7;font-size:9px;font-weight:900;cursor:pointer}
 .sire-futures-trailing-presets button.active{border-color:#f4f5f6;background:#f4f5f6;color:#080808}
+
+
+/* Iceberg split-order controls */
+.sire-futures-iceberg-split-trigger{margin-top:3px;margin-bottom:5px}
+.sire-futures-iceberg-quantity{margin-top:0}
+.sire-futures-iceberg-preferences-trigger{margin-top:5px;margin-bottom:5px}
+.sire-futures-iceberg-queue{min-height:35px;display:flex;align-items:center;justify-content:space-between;width:100%;padding:0 10px;margin:0 0 7px;border-radius:6px;text-align:left;font-size:10px;font-weight:850}
+.sire-futures-iceberg-drawer{max-height:min(78vh,640px);overflow-y:auto}
+.sire-futures-iceberg-setting{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:13px 0;border-bottom:1px solid #242a32;color:#f4f5f7}
+.sire-futures-iceberg-setting>span{display:flex;flex-direction:column;gap:5px;min-width:0}
+.sire-futures-iceberg-setting b{font-size:12px;font-weight:900}
+.sire-futures-iceberg-setting small{font-size:10px;line-height:1.45;color:#9da5af}
+.sire-futures-iceberg-setting input{width:88px;flex:0 0 88px;min-width:0;height:34px;box-sizing:border-box;padding:0 8px;border:1px solid #303640;border-radius:5px;background:#0b0b0b;color:#fff;text-align:right;font-size:12px;font-weight:850;outline:none}
+.sire-futures-iceberg-setting input:focus{border-color:#aeb5bf}
+.sire-futures-iceberg-done{width:100%;min-height:38px;margin-top:15px;border:0;border-radius:6px;background:#f4f5f6;color:#090909;font-size:11px;font-weight:950;cursor:pointer}
