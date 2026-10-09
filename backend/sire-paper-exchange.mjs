@@ -58,11 +58,12 @@ export function paperPlaceOrder(input, market = {}) {
   if (!/^[A-Z0-9_]{3,32}$/.test(symbol)) throw new Error('A valid symbol is required.');
   if (!['buy','sell'].includes(side)) throw new Error('Side must be buy or sell.');
   if (!['market','limit'].includes(orderType)) throw new Error('Order type must be market or limit.');
-  const qty = positive(input?.qty, 'Quantity');
+  const requestedQty = positive(input?.qty, 'Quantity');
   const price = orderType === 'limit' ? positive(input?.price, 'Limit price') : positive(side === 'buy' ? (market.ask || market.price) : (market.bid || market.price), 'Paper market price');
+  const qty = category === 'SPOT' && orderType === 'market' && side === 'buy' ? requestedQty / price : requestedQty;
   const clientOid = oidOf(input?.clientOid);
   if (clientIds.has(clientOid)) return { ok:true, mode:'PAPER', duplicate:true, order:serial(orders.get(clientIds.get(clientOid))) };
-  const row = { orderId:idOf('ORDER'), clientOid, category, symbol, side, orderType, price:orderType==='limit'?price:null, qty, remaining:qty, filledQty:0, avgPrice:0, status:'new', tradeSide:String(input?.tradeSide||'open'), posSide:String(input?.posSide||'').toLowerCase(), marginMode:String(input?.marginMode||'crossed'), reduceOnly:String(input?.reduceOnly||'no'), timeInForce:String(input?.timeInForce||'gtc'), createdAt:now(), updatedAt:now(), fills:[] };
+  const row = { orderId:idOf('ORDER'), clientOid, category, symbol, side, orderType, price:orderType==='limit'?price:null, requestedQty, qty, remaining:qty, filledQty:0, avgPrice:0, status:'new', tradeSide:String(input?.tradeSide||'open'), posSide:String(input?.posSide||'').toLowerCase(), marginMode:String(input?.marginMode||'crossed'), reduceOnly:String(input?.reduceOnly||'no'), timeInForce:String(input?.timeInForce||'gtc'), createdAt:now(), updatedAt:now(), fills:[] };
   orders.set(row.orderId,row); clientIds.set(clientOid,row.orderId);
   if (orderType === 'market') applyFill(row, price, qty);
   else {
