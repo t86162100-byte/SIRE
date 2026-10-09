@@ -220,7 +220,7 @@ export default function FuturesView({initialSymbol}:Props){
         {orderType==='Advanced limit order'&&<button type="button" className="sire-futures-tif-card" onClick={()=>setTimeInForceDrawer(true)}><span><small>Time in force</small><b>{timeInForce}</b></span><ChevronDown size={13}/></button>}
         {(orderType==='Iceberg order'||orderType==='Split large order')&&<>
           <button type="button" className="sire-futures-plain-select sire-futures-iceberg-split-trigger" onClick={()=>setSplitSettingsDrawer(true)}><span>Qty. per order</span><ChevronDown size={13}/></button>
-          <label className="sire-futures-input sire-futures-iceberg-quantity"><span>Quantity</span><input aria-label="Iceberg quantity" inputMode="decimal" value={qtyPerOrder} onChange={e=>setQtyPerOrder(e.target.value.replace(/[^0-9.]/g,''))}/><span className="sire-futures-quantity-unit"><b>{selected?.baseAsset||'BTC'}</b></span></label>
+          <label className="sire-futures-input sire-futures-iceberg-quantity"><span>Quantity</span><input aria-label="Iceberg quantity" inputMode="decimal" value={qtyPerOrder} onChange={e=>setQtyPerOrder(e.target.value.replace(/[^0-9.]/g,''))}/><span className="sire-futures-quantity-unit"><b>{contractTab==='COIN-M'?(selected?.quote||'USD'):(selected?.baseAsset||'BTC')}</b></span></label>
           {orderType==='Iceberg order'&&<><button type="button" className="sire-futures-plain-select sire-futures-iceberg-preferences-trigger" onClick={()=>setOrderPreferencesDrawer(true)}><span>{orderPreferences}</span><ChevronDown size={13}/></button>{(orderPreferences!=='Faster execution'||priceLimitEnabled)&&<div className="sire-futures-price-row single-price"><label><span>{priceLimitEnabled?'Price limit':orderPreferences==='Fixed price'?'Limit price':'Distance (%)'}</span><input aria-label={priceLimitEnabled?'Iceberg price limit':orderPreferences==='Fixed price'?'Iceberg fixed price':'Iceberg price distance'} inputMode="decimal" value={price} onChange={e=>setPrice(e.target.value.replace(/[^0-9.]/g,''))}/><em>{priceLimitEnabled||orderPreferences==='Fixed price'?'Price':'%'}</em></label></div>}</>}
           <button type="button" className="sire-futures-tif-card sire-futures-iceberg-queue" onClick={()=>setQueueDrawer(true)}><span>{queueType}</span><ChevronDown size={13}/></button>
         </>}
@@ -234,7 +234,7 @@ export default function FuturesView({initialSymbol}:Props){
           <label className="sire-futures-input sire-futures-twap-per-order"><span>Per order</span><input aria-label="Quantity per order" inputMode="decimal" value={qtyPerOrder} onChange={e=>setQtyPerOrder(e.target.value.replace(/[^0-9.]/g,''))}/><span className="sire-futures-quantity-unit"><b>{selected?.baseAsset||'BTC'}</b></span></label>
         </>}
         {(orderType==='Limit'||orderType==='Advanced limit order')&&<div className={'sire-futures-price-row '+(orderType==='Advanced limit order'?'single-price':'')}>
-          <label><span>Price</span><input inputMode="decimal" value={price} onChange={e=>setPrice(e.target.value.replace(/[^0-9.]/g,''))}/><em>USDT</em></label>
+          <label><span>Price</span><input inputMode="decimal" value={price} onChange={e=>setPrice(e.target.value.replace(/[^0-9.]/g,''))}/><em>{contractTab==='COIN-M'?'USD':contractTab==='USDC-M'?'USDC':'USDT'}</em></label>
           {orderType==='Limit'&&<button type="button" onClick={()=>setPrice(priceFmt(marketPrice).replace(/,/g,''))}>BBO</button>}
         </div>}
         {orderType!=='TWAP'&&<><label className="sire-futures-input"><span>Quantity</span><input inputMode="decimal" value={qty} onChange={e=>setQty(e.target.value.replace(/[^0-9.]/g,''))}/><span className="sire-futures-quantity-unit"><b>{selected?.baseAsset||'BTC'}</b><ChevronDown size={11}/></span></label>
@@ -280,7 +280,7 @@ export default function FuturesView({initialSymbol}:Props){
           <ChevronDown size={13} aria-hidden="true"/>
         </div>
         <div className="sire-futures-book-controls"><button onClick={()=>setBookView(bookView==='both'?'bids':bookView==='bids'?'asks':'both')}><SlidersHorizontal size={12}/><span>Book</span></button><span>LIVE</span></div>
-        <div className="sire-futures-book-head"><span>Price (USDT)</span><span>Size</span></div>
+        <div className="sire-futures-book-head"><span>Price ({contractTab==='COIN-M'?'USD':contractTab==='USDC-M'?'USDC':'USDT'})</span><span>Size</span></div>
         <div className={'sire-futures-book-side asks '+(bookView==='bids'?'hidden':'')}>{book.asks.slice(0,6).reverse().map((x,i)=><div key={i} style={{'--depth-width':(maxDepthAsk?Math.max(3,Math.min(100,x.quantity/maxDepthAsk*100)):3)+'%'} as any}><span>{priceFmt(x.price)}</span><b>{money(x.quantity,4)}</b></div>)}</div>
         <div className="sire-futures-mid"><strong>{priceFmt(marketPrice)}</strong><span className={change>=0?'up':'down'}>{change>=0?'▲':'▼'} {Math.abs(change).toFixed(2)}%</span></div>
         <div className={'sire-futures-book-side bids '+(bookView==='asks'?'hidden':'')}>{book.bids.slice(0,6).map((x,i)=><div key={i} style={{'--depth-width':(maxDepthBid?Math.max(3,Math.min(100,x.quantity/maxDepthBid*100)):3)+'%'} as any}><span>{priceFmt(x.price)}</span><b>{money(x.quantity,4)}</b></div>)}</div>
