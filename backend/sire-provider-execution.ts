@@ -411,7 +411,7 @@ export async function bitgetOwnerCancelAllOrders(category:string,symbol=''){
   if(cursor)throw new Error('Cancel-all stopped after 10 pages; retry to cancel remaining orders.');
   if(safeCategory.endsWith('FUTURES')){
     for(const type of ['trigger','trailing_stop','iceberg','twap','oco']){
-      const qs='category='+encodeURIComponent(safeCategory.toLowerCase())+'&type='+encodeURIComponent(type);
+      const qs='category='+encodeURIComponent(safeCategory)+'&type='+encodeURIComponent(type);
       try{const page=await bitgetRequest('GET','/api/v3/trade/unfilled-strategy-orders?'+qs);const orders=Array.isArray(page?.data)?page.data:[];for(const order of orders){const orderId=String(order?.orderId||'');const clientOidValue=String(order?.clientOid||'');if(!orderId&&!clientOidValue)continue;try{const d=await bitgetRequest('POST','/api/v3/trade/cancel-strategy-order',{...(orderId?{orderId}:{}),...(clientOidValue?{clientOid:clientOidValue}:{})});results.push({ok:true,orderId,clientOid:clientOidValue,data:d?.data||null});}catch(e){results.push({ok:false,orderId,error:e instanceof Error?e.message:String(e)});}}}
       catch(e){results.push({ok:false,strategyType:type,error:e instanceof Error?e.message:String(e)});}
     }
