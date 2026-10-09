@@ -24,7 +24,7 @@ import { createFuturesSchedule, listFuturesSchedules, controlFuturesSchedule, ca
 import { ensureSireSpotTables, getSpotBook, placeSpotOrder, cancelSpotOrder, getSpotAccount, getSpotOrders, getSpotTrades, spotEngineStatus, spotSubscribe, spotUnsubscribe, spotDisconnect } from './backend/sire-spot-engine.ts';
 import { getRoutedSpotLiquidity, spotLiquidityStatus } from './backend/sire-spot-liquidity.ts';
 import { universalLiquidityStatus, liquidityRoute } from './backend/sire-liquidity-router.ts';
-import { paperPlaceOrder, paperPlaceTrigger, paperGetOrder, paperCancelOrder, paperModifyOrder, paperCancelTrigger, paperModifyTrigger, paperCancelAll, paperListOrders, paperListTriggers, paperPositions, paperAccount, paperSetLeverage, paperReset, paperCreateSchedule, paperListSchedules, paperControlSchedule, paperCancelAllSchedules, paperRunScheduleBatch } from './backend/sire-paper-exchange.mjs';
+import { paperPlaceOrder, paperPlaceTrigger, paperGetOrder, paperCancelOrder, paperModifyOrder, paperCancelTrigger, paperModifyTrigger, paperCancelAll, paperListOrders, paperListTriggers, paperPositions, paperAccount, paperSetLeverage, paperReset, paperCreateSchedule, paperListSchedules, paperControlSchedule, paperCancelAllSchedules, paperRunScheduleBatch, paperEvaluateTriggers } from './backend/sire-paper-exchange.mjs';
 
 const SIRE_PAPER_MODE = () => !['LIVE','BITGET_DEMO'].includes(String(process.env.SIRE_TRADING_MODE || 'PAPER').trim().toUpperCase());
 
@@ -1418,7 +1418,8 @@ server.listen(PORT,HOST,async()=>{
   void ensureSireSpotTables().catch(error => console.warn('[SIRE SPOT ENGINE]', error instanceof Error ? error.message : String(error)));
   console.log('[LIMIT ORDER MONITOR] server-side 0x monitor starting');
   void runLimitOrderMonitorBatch(2).catch(error => console.warn('[LIMIT ORDER MONITOR]', error instanceof Error ? error.message : String(error)));
-  const runScheduleTick=()=>SIRE_PAPER_MODE()?paperRunScheduleBatch(async(category,symbol)=>await bitgetMarketOrderBook(category,symbol,5)):runFuturesScheduleBatch();
+  const paperMarket=async(category,symbol)=>await bitgetMarketOrderBook(category,symbol,5);
+  const runScheduleTick=async()=>{if(SIRE_PAPER_MODE()){await paperEvaluateTriggers(paperMarket);return paperRunScheduleBatch(paperMarket);}return runFuturesScheduleBatch();};
   void runScheduleTick().catch(error => console.warn('[FUTURES SCHEDULE]', error instanceof Error ? error.message : String(error)));
   setInterval(() => void runLimitOrderMonitorBatch(2).catch(error => console.warn('[LIMIT ORDER MONITOR]', error instanceof Error ? error.message : String(error))), 5000);
   setInterval(() => void runScheduleTick().catch(error => console.warn('[FUTURES SCHEDULE]', error instanceof Error ? error.message : String(error))), 5000);
