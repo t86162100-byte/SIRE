@@ -16,6 +16,15 @@ test('paper mode blocks authenticated Bitget order writes before credentials or 
   );
 });
 
+test('an unset trading mode fails closed to paper-only writes', async () => {
+  delete process.env.SIRE_TRADING_MODE;
+  await assert.rejects(
+    bitgetOwnerPlaceOrder({category:'SPOT',symbol:'BTCUSDT',side:'buy',orderType:'market',qty:'10'}),
+    /Safety lock.*require SIRE_TRADING_MODE/
+  );
+  process.env.SIRE_TRADING_MODE='PAPER';
+});
+
 test('paper and Bitget demo modes cannot start the live Futures scheduler', async () => {
   process.env.SIRE_TRADING_MODE='PAPER';
   assert.deepEqual(await runFuturesScheduleBatch(),{enabled:false,reason:'live_scheduler_safety_lock',processed:0});
