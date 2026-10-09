@@ -12,7 +12,8 @@
     "autonomous:market-worker": "node autonomous/market-worker.mjs",
     "autonomous:free-poll": "node autonomous/free-market-poll.mjs",
     "autonomous:sire-cycle": "tsx autonomous/sire-autonomous-cycle.ts",
-    "test:paper": "node --import tsx --test backend/sire-paper-exchange.test.mjs backend/trading-safety.test.mjs"
+    "test:paper": "node --import tsx --test backend/sire-paper-exchange.test.mjs backend/trading-safety.test.mjs",
+    "test:bitget-demo": "node --import tsx --test backend/bitget-demo-lifecycle.test.mjs"
   },
   "dependencies": {
     "@appdeploy/client": "file:./compat/appdeploy-client",
