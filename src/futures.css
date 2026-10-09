@@ -125,3 +125,7 @@
 .sire-futures-twap-time-row label{display:flex;align-items:center;justify-content:space-between;height:30px;padding:0 8px;border:1px solid #252b34;border-radius:5px;background:#0b0b0b;box-sizing:border-box}
 .sire-futures-twap-time-row input{width:100%;min-width:0;border:0;outline:0;background:transparent;color:#fff;font-size:10px;font-weight:900}
 .sire-futures-twap-time-row span{color:#aeb5bf;font-size:10px;font-weight:900}
+
+.sire-futures-twap-frequency{display:flex;align-items:center;justify-content:space-between;min-height:31px;padding:0 9px;margin:0 0 5px;border-radius:5px;font-size:9px;font-weight:850}
+.sire-futures-twap-frequency-value{display:flex;align-items:center;gap:5px;color:#f4f5f6}
+.sire-futures-twap-per-order{margin-top:0;margin-bottom:4px}
