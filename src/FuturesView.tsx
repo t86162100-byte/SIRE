@@ -24,7 +24,8 @@ export default function FuturesView({initialSymbol}:Props){
   const [contractTab,setContractTab]=useState<'USDT-M'|'COIN-M'|'USDC-M'>('USDT-M');
   const [side,setSide]=useState<'Long'|'Short'>('Long');
   const [action,setAction]=useState<'Open'|'Close'>('Open');
-  const [orderType,setOrderType]=useState<'Market'|'Limit'>('Market');
+  const [orderType,setOrderType]=useState('Market');
+  const [orderDrawer,setOrderDrawer]=useState(false);
   const [qty,setQty]=useState('');
   const [qtyPercent,setQtyPercent]=useState(0);
   const [price,setPrice]=useState('');
@@ -91,11 +92,12 @@ export default function FuturesView({initialSymbol}:Props){
   const submit=async(orderSide: 'Long'|'Short'=side, orderAction: 'Open'|'Close'=action, orderReduceOnly=reduceOnly)=>{
     setError('');if(!selected)return;
     const n=Number(qty);if(!Number.isFinite(n)||n<=0){setError('Enter a valid contract quantity.');return}
-    if(orderType==='Limit'&&(!Number(price)||Number(price)<=0)){setError('Enter a valid limit price.');return}
+    const limitBasedOrder=orderType==='Limit'||orderType==='Advanced limit order';
+    if(limitBasedOrder&&(!Number(price)||Number(price)<=0)){setError('Enter a valid limit price.');return}
     setBusy(true);
     try{
       const isClose=orderAction==='Close'||orderReduceOnly;
-      const payload={category,symbol:selected.symbol,side:orderSide==='Long'?(isClose?'sell':'buy'):(isClose?'buy':'sell'),orderType:orderType.toLowerCase(),qty:String(n),price:orderType==='Limit'?String(price):undefined,posSide:orderSide.toLowerCase(),marginMode:marginMode.toLowerCase(),reduceOnly:isClose?'yes':'no'};
+      const payload={category,symbol:selected.symbol,side:orderSide==='Long'?(isClose?'sell':'buy'):(isClose?'buy':'sell'),orderType:limitBasedOrder?'limit':'market',qty:String(n),price:limitBasedOrder?String(price):undefined,posSide:orderSide.toLowerCase(),marginMode:marginMode.toLowerCase(),reduceOnly:isClose?'yes':'no'};
       const result=await fetch('/api/sire/bitget/order',{method:'POST',headers:{'Content-Type':'application/json',Accept:'application/json'},body:JSON.stringify(payload)}).then(r=>readJson(r,'Bitget futures order'));
       if(!result?.ok)throw new Error(result?.error||'Futures order failed.');
       setQty('');setQtyPercent(0);refreshPositions();
@@ -128,7 +130,7 @@ export default function FuturesView({initialSymbol}:Props){
         </div>
 
         <div className="sire-futures-control-row">
-          <button onClick={()=>setOrderType(orderType==='Market'?'Limit':'Market')}><span>Order</span><b>{orderType}</b><ChevronDown size={12}/></button>
+          <button type="button" onClick={()=>setOrderDrawer(true)}><span>Order</span><b>{orderType}</b><ChevronDown size={12}/></button>
         </div>
 
         <div className="sire-futures-price-row">
@@ -181,6 +183,35 @@ export default function FuturesView({initialSymbol}:Props){
         <div className="sire-futures-book-foot"><span>Bid {bid?priceFmt(bid):'—'}</span><span>Ask {ask?priceFmt(ask):'—'}</span></div>
       </aside>
     </main>
+
+
+    {orderDrawer&&<div className="sire-futures-order-backdrop" onClick={()=>setOrderDrawer(false)}>
+      <section className="sire-futures-order-drawer" role="dialog" aria-modal="true" aria-label="Choose order type" onClick={e=>e.stopPropagation()}>
+        <div className="sire-futures-order-drawer-head"><strong>Order type</strong><button type="button" aria-label="Close order type drawer" onClick={()=>setOrderDrawer(false)}>×</button></div>
+        <div className="sire-futures-order-group-title">Basic order</div>
+        {[
+          {name:'Limit order',description:'Buy or sell at the specified price or better.'},
+          {name:'Market order',description:'Buy or sell immediately at the best market price.'}
+        ].map(item=><button type="button" key={item.name} className={'sire-futures-order-option '+((orderType===item.name.replace(' order','')||orderType===item.name)?'selected':'')} onClick={()=>{setOrderType(item.name==='Limit order'?'Limit':'Market');setOrderDrawer(false)}}>
+          <span className="sire-futures-order-option-copy"><b>{item.name}</b><small>{item.description}</small></span><i aria-hidden="true">{(orderType===(item.name==='Limit order'?'Limit':'Market'))?'✓':''}</i>
+        </button>)}
+        <div className="sire-futures-order-group-title">Advanced order</div>
+        {[
+          {name:'Advanced limit order',description:'Includes Post Only, Fill or Kill (FOK), and Immediate or Cancel (IOC).'},
+          {name:'Trigger order',description:'When the preset target price is reached, it triggers a limit or market order.'},
+          {name:'Trailing stop order',description:'During a market pullback, it triggers a limit or market order when the set trail variance is reached.'}
+        ].map(item=><button type="button" key={item.name} className={'sire-futures-order-option '+(orderType===item.name?'selected':'')} onClick={()=>{setOrderType(item.name);setOrderDrawer(false)}}>
+          <span className="sire-futures-order-option-copy"><b>{item.name}</b><small>{item.description}</small></span><i aria-hidden="true">{orderType===item.name?'✓':''}</i>
+        </button>)}
+        <div className="sire-futures-order-group-title">Split large order</div>
+        {[
+          {name:'Iceberg order',description:'Split large orders to reduce slippage.'},
+          {name:'TWAP',description:'Triggers limit or market orders at custom time intervals.'}
+        ].map(item=><button type="button" key={item.name} className={'sire-futures-order-option '+(orderType===item.name?'selected':'')} onClick={()=>{setOrderType(item.name);setOrderDrawer(false)}}>
+          <span className="sire-futures-order-option-copy"><b>{item.name}</b><small>{item.description}</small></span><i aria-hidden="true">{orderType===item.name?'✓':''}</i>
+        </button>)}
+      </section>
+    </div>}
 
     {picker&&<div className="sire-futures-picker-backdrop" onClick={()=>setPicker(false)}><section className="sire-futures-picker" onClick={e=>e.stopPropagation()}>
       <div className="sire-futures-picker-head"><strong>Select futures contract</strong><button onClick={()=>setPicker(false)}>×</button></div>
