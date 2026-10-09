@@ -142,7 +142,7 @@ export default function FuturesView({initialSymbol}:Props){
     const n=Number(qty);if(!Number.isFinite(n)||n<=0){setError('Enter a valid contract quantity.');return}
     const isClose=orderAction==='Close'||orderReduceOnly;
     const isTrigger=orderType==='Trigger order'||orderType==='Trailing stop order';
-    const limitBasedOrder=orderType==='Limit'||orderType==='Advanced limit order'||(isTrigger&&executeType==='Limit');
+    const limitBasedOrder=orderType==='Limit'||orderType==='Advanced limit order'||(orderType==='Trigger order'&&executeType==='Limit');
     if(limitBasedOrder&&(!Number(price)||Number(price)<=0)){setError('Enter a valid limit price.');return}
     if(isTrigger&&orderType==='Trigger order'&&(!Number(triggerPrice)||Number(triggerPrice)<=0)){setError('Enter a valid trigger price.');return}
     if(orderType==='Trailing stop order'&&(!Number(activationPrice)||Number(activationPrice)<=0)){setError('Enter a valid activation price.');return}
