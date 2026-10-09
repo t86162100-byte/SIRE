@@ -1166,6 +1166,10 @@ const server = http.createServer(async (req,res) => {
         return res.writeHead(200,{'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify(paperReset()));
       }catch(cause){return res.writeHead(400,{'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify({ok:false,error:cause instanceof Error?cause.message:String(cause)}));}
     }
+    if(req.method==='GET'&&pathname==='/api/sire/bitget/trading-mode'){
+      const mode=SIRE_PAPER_MODE()?'PAPER':String(process.env.SIRE_TRADING_MODE||'LIVE').trim().toUpperCase();
+      return res.writeHead(200,{'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify({ok:true,mode,simulated:mode==='PAPER',liveWritesEnabled:mode==='LIVE'}));
+    }
     if (req.method === 'GET' && pathname === '/api/sire/bitget/live/status') {
       return res.writeHead(200,{'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify(bitgetLiveStatus()));
     }
