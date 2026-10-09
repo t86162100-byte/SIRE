@@ -174,9 +174,25 @@ export async function bitgetOwnerPlaceOrder(input:any){
     if(posSide) body.posSide=posSide;
     body.marginMode=marginMode;
     if(String(input?.reduceOnly||'').toLowerCase()==='yes') body.reduceOnly='yes';
+    else body.reduceOnly='no';
+    if(input?.takeProfit!=null && input.takeProfit!=='') body.takeProfit=String(positiveNumber(input.takeProfit,'take-profit price'));
+    if(input?.stopLoss!=null && input.stopLoss!=='') body.stopLoss=String(positiveNumber(input.stopLoss,'stop-loss price'));
+    if(input?.tpTriggerBy) body.tpTriggerBy=String(input.tpTriggerBy);
+    if(input?.slTriggerBy) body.slTriggerBy=String(input.slTriggerBy);
   }
-  if(orderType==='limit'){body.price=String(price);body.timeInForce='gtc';}
+  const requestedTif=String(input?.timeInForce||'').toLowerCase();
+  const allowedTif=['gtc','ioc','fok','post_only'];
+  if(requestedTif && !allowedTif.includes(requestedTif)) throw new Error('Unsupported time-in-force. Use GTC, IOC, FOK or Post Only.');
+  if(orderType==='limit'){body.price=String(price);body.timeInForce=requestedTif||'gtc';}
   else body.timeInForce='ioc';
+  if(input?.slippagePercent!=null && Number(input.slippagePercent)>0){
+    const slippage=Number(input.slippagePercent);
+    if(!Number.isFinite(slippage)||slippage>5) throw new Error('Slippage protection must be between 0 and 5%.');
+    const ticker=await bitgetPublic('/api/v3/market/tickers?category='+encodeURIComponent(category)+'&symbol='+encodeURIComponent(symbol));
+    const row=Array.isArray(ticker?.data)?ticker.data[0]:ticker?.data;
+    const last=positiveNumber(row?.lastPrice??row?.last,'Bitget last price');
+    if(orderType==='market' && ((side==='buy' && last*(1+slippage/100)<last) || (side==='sell' && last*(1-slippage/100)>last))) throw new Error('Slippage protection validation failed.');
+  }
   const placed=await bitgetRequest('POST','/api/v3/trade/place-order',body);
   return {ok:true,provider:'BITGET',category,symbol,side,orderType,qty,price:price??null,orderId:String(placed?.data?.orderId||''),clientOid:String(placed?.data?.clientOid||oid)};
 }
@@ -281,4 +297,52 @@ export async function externalSpotExecute(request:ExternalSpotRequest):Promise<E
     price:avg,quantity:filled,fee:Number.isFinite(fee)?fee:undefined,feeAsset,
     status:finalStatus==='filled'?'FILLED':'PARTIAL'
   }];
+}
+
+export async function bitgetOwnerCancelOrder(input:any){
+  const category=String(input?.category||'USDT-FUTURES').toUpperCase();
+  const orderId=String(input?.orderId||'').trim();
+  const clientOidValue=String(input?.clientOid||'').trim();
+  if(!['SPOT','MARGIN','USDT-FUTURES','COIN-FUTURES','USDC-FUTURES'].includes(category)) throw new Error('Unsupported Bitget order category.');
+  if(!orderId&&!clientOidValue) throw new Error('orderId or clientOid is required to cancel an order.');
+  const data=await bitgetRequest('POST','/api/v3/trade/cancel-order',{category,...(orderId?{orderId}:{}),...(clientOidValue?{clientOid:clientOidValue}:{})});
+  return {ok:true,provider:'BITGET',category,data:data?.data||null};
+}
+
+export async function bitgetOwnerOpenOrders(category:string,symbol=''){
+  const safeCategory=String(category||'USDT-FUTURES').toUpperCase();
+  if(!['SPOT','MARGIN','USDT-FUTURES','COIN-FUTURES','USDC-FUTURES'].includes(safeCategory)) throw new Error('Unsupported Bitget order category.');
+  const qs='category='+encodeURIComponent(safeCategory)+(symbol?'&symbol='+encodeURIComponent(String(symbol).toUpperCase()):'');
+  const data=await bitgetRequest('GET','/api/v3/trade/unfilled-orders?'+qs);
+  return {ok:true,provider:'BITGET',category:safeCategory,orders:Array.isArray(data?.data?.list)?data.data.list:Array.isArray(data?.data)?data.data:[]};
+}
+
+export async function bitgetOwnerOrderHistory(category:string,symbol=''){
+  const safeCategory=String(category||'USDT-FUTURES').toUpperCase();
+  if(!['SPOT','MARGIN','USDT-FUTURES','COIN-FUTURES','USDC-FUTURES'].includes(safeCategory)) throw new Error('Unsupported Bitget order category.');
+  const qs='category='+encodeURIComponent(safeCategory)+(symbol?'&symbol='+encodeURIComponent(String(symbol).toUpperCase()):'');
+  const data=await bitgetRequest('GET','/api/v3/trade/order-history?'+qs);
+  return {ok:true,provider:'BITGET',category:safeCategory,orders:Array.isArray(data?.data?.list)?data.data.list:Array.isArray(data?.data)?data.data:[]};
+}
+
+export async function bitgetOwnerPlaceTriggerOrder(input:any){
+  const category=String(input?.category||'USDT-FUTURES').toUpperCase();
+  const symbol=String(input?.symbol||'').trim().toUpperCase();
+  const side=String(input?.side||'').trim().toLowerCase();
+  const tradeSide=String(input?.tradeSide||'open').trim().toLowerCase();
+  const planType=String(input?.planType||'normal_plan').trim().toLowerCase();
+  const size=positiveNumber(input?.qty,'trigger quantity');
+  const triggerPrice=positiveNumber(input?.triggerPrice,'trigger price');
+  const marginMode=String(input?.marginMode||'crossed').toLowerCase();
+  const orderType=String(input?.orderType||'market').toLowerCase();
+  if(!['USDT-FUTURES','COIN-FUTURES','USDC-FUTURES'].includes(category)) throw new Error('Trigger orders require a futures category.');
+  if(!symbol||!['buy','sell'].includes(side)||!['open','close'].includes(tradeSide)) throw new Error('Invalid trigger order symbol, side or trade side.');
+  if(!['normal_plan','track_plan'].includes(planType)) throw new Error('Unsupported trigger plan type.');
+  if(!['crossed','isolated'].includes(marginMode)) throw new Error('Invalid margin mode.');
+  if(planType==='track_plan' && (!Number.isFinite(Number(input?.callbackRatio))||Number(input.callbackRatio)<=0||Number(input.callbackRatio)>10)) throw new Error('Trailing stop callback ratio must be greater than 0 and at most 10%.');
+  const body:any={planType,productType:category,symbol,marginMode,marginCoin:String(input?.marginCoin|| (category==='COIN-FUTURES'?'BTC':category==='USDC-FUTURES'?'USDC':'USDT')).toUpperCase(),size:String(size),triggerPrice:String(triggerPrice),triggerType:['mark_price','fill_price'].includes(String(input?.triggerType))?String(input.triggerType):'fill_price',side,orderType:planType==='track_plan'?'market':orderType,price:planType==='track_plan'?'':(orderType==='limit'?String(positiveNumber(input?.price,'limit price')):''),tradeSide};
+  if(planType==='track_plan') body.callbackRatio=String(input.callbackRatio);
+  if(input?.clientOid) body.clientOid=clientOid(String(input.clientOid));
+  const data=await bitgetRequest('POST','/api/v2/mix/order/place-plan-order',body);
+  return {ok:true,provider:'BITGET',category,symbol,data:data?.data||null};
 }
