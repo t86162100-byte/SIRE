@@ -93,7 +93,11 @@ export default function HomeView({ instruments, onSelectInstrument, onNavigate, 
   const [fundingFiatQuoteRequested, setFundingFiatQuoteRequested] = useState(false);
   const fundingFiatCrypto = [...new Set(instruments
     .filter(item => String(item.marketType || item.category || '').toUpperCase() === 'SPOT')
-    .map(item => String((item as any).baseAsset || item.symbol?.split(/[\/_-]/)[0] || '').toUpperCase())
+    .map(item => {
+      const raw = String((item as any).baseAsset || item.displaySymbol || item.symbol || '').toUpperCase();
+      const separated = raw.split(/[\/_-]/)[0];
+      return separated !== raw ? separated : raw.replace(/(USDT|USDC|FDUSD|USDE|BUSD|USD|BTC|ETH|EUR|NGN)$/, '');
+    })
     .filter(coin => /^[A-Z0-9]{2,20}$/.test(coin)))].sort();
 
   const accountValue: string | null = null;
