@@ -21,7 +21,7 @@ function num(value?: string | number) {
   return Number.isFinite(n) ? n.toLocaleString(undefined,{maximumFractionDigits:8}) : '0';
 }
 
-export default function SireWalletPanel({ initialOpen = false }: { initialOpen?: boolean }) {
+export default function SireWalletPanel({ initialOpen = false, initialDepositOpen = false, onDepositChoiceOpened }: { initialOpen?: boolean; initialDepositOpen?: boolean; onDepositChoiceOpened?: () => void }) {
   const [open, setOpen] = useState(initialOpen);
   const [evmNetworks, setEvmNetworks] = useState<WalletNetwork[]>(FALLBACK_EVM_NETWORKS);
   const [network, setNetwork] = useState<WalletNetwork>('Ethereum');
@@ -58,6 +58,13 @@ export default function SireWalletPanel({ initialOpen = false }: { initialOpen?:
   const [tokenCatalog, setTokenCatalog] = useState<any[]>([]);
   const [tokenCatalogSearch, setTokenCatalogSearch] = useState('');
   const allNetworks = useMemo(() => [...evmNetworks, 'Solana', 'TRON'], [evmNetworks]);
+
+  useEffect(() => {
+    if (!initialDepositOpen) return;
+    setOpen(true);
+    setDepositChoiceOpen(true);
+    onDepositChoiceOpened?.();
+  }, [initialDepositOpen, onDepositChoiceOpened]);
 
   useEffect(() => {
     const onOpen = () => setOpen(true);
