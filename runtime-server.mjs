@@ -808,9 +808,18 @@ const server = http.createServer(async (req,res) => {
             alchemyPayRequest('GET','/open/api/v4/merchant/fiat/list?type=BUY'),
             alchemyPayRequest('GET','/open/api/v4/merchant/crypto/list?fiat='+encodeURIComponent(fiat))
           ]);
-          const methods=(Array.isArray(fiatData.data)?fiatData.data:[]).filter((x)=>String(x.currency||'').toUpperCase()===fiat);
+          const fiatMethods=(Array.isArray(fiatData.data)?fiatData.data:[]).filter((x)=>String(x.currency||'').toUpperCase()===fiat);
           const cryptos=(Array.isArray(cryptoData.data)?cryptoData.data:[]).filter((x)=>Number(x.buyEnable)===1&&x.crypto&&x.network);
-          return json(200,{ok:true,provider:'ALCHEMY_PAY',fiatCurrencies:[...new Set((Array.isArray(fiatData.data)?fiatData.data:[]).map(x=>String(x.currency||'').toUpperCase()).filter(x=>/^[A-Z]{3}$/.test(x)))].sort(),fiat,cryptoAssets:cryptos,paymentMethods:methods,bankTransferMethods:methods.filter(x=>/bank|transfer/i.test(String(x.payWayName||''))),configured:true});
+          const selectedCrypto=String(url.searchParams.get('crypto')||'').trim().toUpperCase();
+          const selectedNetwork=String(url.searchParams.get('network')||'').trim().toUpperCase();
+          let methods=fiatMethods;
+          if(selectedCrypto&&selectedNetwork){
+            const methodData=await alchemyPayRequest('POST','/open/api/v4/merchant/query/cryptoFiatMethod',{fiat,crypto:selectedCrypto,network:selectedNetwork,side:'BUY'});
+            const eligible=Array.isArray(methodData.data)?methodData.data:[];
+            methods=eligible.map(x=>({...x,...(fiatMethods.find(m=>String(m.payWayCode)===String(x.payWayCode))||{})}));
+          }
+          const bankMethods=methods.filter(x=>/bank|transfer|african/i.test(String(x.payWayName||'')));
+          return json(200,{ok:true,provider:'ALCHEMY_PAY',fiatCurrencies:[...new Set((Array.isArray(fiatData.data)?fiatData.data:[]).map(x=>String(x.currency||'').toUpperCase()).filter(x=>/^[A-Z]{3}$/.test(x)))].sort(),fiat,cryptoAssets:cryptos,paymentMethods:methods,bankTransferMethods:bankMethods,configured:true});
         }
         const crypto=String(parsed.crypto||'').trim().toUpperCase();
         const network=String(parsed.network||'').trim().toUpperCase();
