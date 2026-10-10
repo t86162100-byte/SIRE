@@ -97,7 +97,8 @@ export async function placeSpotOrder(input:any){
   const price=type==='LIMIT'?positive(input.price,'price'):null;
   const clientOrderId=String(input.clientOrderId||randomUUID()).trim().slice(0,100);
   const externalMode=String(process.env.SIRE_SPOT_EXECUTION_MODE||'SIRE').toUpperCase()==='EXTERNAL';
-  const externalProvider=String(process.env.SIRE_SPOT_EXTERNAL_PROVIDER||'WINTERMUTE').toUpperCase();
+  const externalProvider=String(process.env.SIRE_SPOT_EXTERNAL_PROVIDER||'BITGET').toUpperCase();
+  if(externalMode && type==='LIMIT') throw new Error('External Bitget Spot LIMIT orders are not yet connected to the SIRE ledger lifecycle; no order was sent. Use SIRE internal mode or the authenticated Bitget order endpoint.');
 
   // External market execution is opt-in. SIRE remains the account/ledger authority.
   if(externalMode && type==='MARKET'){

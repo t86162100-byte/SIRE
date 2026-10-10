@@ -1,0 +1,22 @@
+name: SIRE paper lifecycle tests
+on:
+  pull_request:
+    branches: [render-migration]
+permissions:
+  contents: read
+jobs:
+  paper-lifecycle:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm install --ignore-scripts --no-audit --no-fund
+      - run: npm run test:paper
+      - run: npm run test:bitget-contract
+      - run: node --check runtime-server.mjs
+      - run: node --check backend/bitget-demo-lifecycle.test.mjs
+      - run: node --check backend/bitget-provider-contract.test.mjs
+      - run: npm run build

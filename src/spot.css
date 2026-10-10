@@ -145,3 +145,5 @@
 /* Keep the order-book geometry identical in every display mode. Hidden side still reserves its full row height. */
 .sire-spot-book-side.is-hidden{visibility:hidden}
 .sire-spot-book-side.asks,.sire-spot-book-side.bids{flex:none}
+
+.sire-trading-mode-banner{display:flex;align-items:center;gap:6px;margin:10px 0 0;padding:6px 8px;border:1px solid #252b34;border-radius:6px;background:#080808;color:#aeb7c3;font-size:8px;line-height:1.2;box-sizing:border-box}.sire-trading-mode-banner b{font-size:7px;letter-spacing:.08em;color:#fff;background:#20252d;border-radius:3px;padding:3px 5px}.sire-trading-mode-banner.live b{background:#3a2024;color:#f05d68}.sire-trading-mode-banner.demo b{background:#1d2a3a;color:#9ac7ff}

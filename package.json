@@ -11,7 +11,10 @@
     "postinstall": "if [ \"$RENDER\" = \"true\" ]; then echo \"Skipping Puppeteer Chrome download on Render\"; else puppeteer browsers install chrome; fi",
     "autonomous:market-worker": "node autonomous/market-worker.mjs",
     "autonomous:free-poll": "node autonomous/free-market-poll.mjs",
-    "autonomous:sire-cycle": "tsx autonomous/sire-autonomous-cycle.ts"
+    "autonomous:sire-cycle": "tsx autonomous/sire-autonomous-cycle.ts",
+    "test:paper": "node --import tsx --test backend/sire-paper-exchange.test.mjs backend/trading-safety.test.mjs",
+    "test:bitget-contract": "node --import tsx --test backend/bitget-provider-contract.test.mjs",
+    "test:bitget-demo": "node --import tsx --test backend/bitget-demo-lifecycle.test.mjs"
   },
   "dependencies": {
     "@appdeploy/client": "file:./compat/appdeploy-client",

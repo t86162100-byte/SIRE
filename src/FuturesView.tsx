@@ -11,6 +11,8 @@ type FuturesMarket = {
 type Level = { price:number; quantity:number };
 type Book = { asks:Level[]; bids:Level[] };
 type Position = { symbol:string; posSide?:string; total?:string; available?:string; avgPrice?:string; markPrice?:string; leverage?:string; unrealisedPnl?:string; liquidationPrice?:string; marginMode?:string };
+type ScheduleJob = {id:string;kind:string;state:string;spec?:any;totalSlices:number;completedSlices:number;lastError?:string|null};
+type LiveOrder = {orderId?:string;clientOid?:string;symbol?:string;side?:string;orderType?:string;price?:string;qty?:string;cumExecQty?:string;orderStatus?:string;status?:string;category?:string;timeInForce?:string;isTrigger?:boolean;planType?:string;triggerPrice?:string;callbackRatio?:string};
 
 const money=(v:number,d=2)=>Number.isFinite(v)?v.toLocaleString(undefined,{maximumFractionDigits:d}):'—';
 const priceFmt=(v:number)=>Number.isFinite(v)?v.toLocaleString(undefined,{minimumFractionDigits:v<1?6:2,maximumFractionDigits:v<1?8:2}):'—';
@@ -59,15 +61,33 @@ export default function FuturesView({initialSymbol}:Props){
   const [leverage,setLeverage]=useState('10');
   const [marginMode,setMarginMode]=useState<'Cross'|'Isolated'>('Cross');
   const [reduceOnly,setReduceOnly]=useState(false);
+  const [tpSlEnabled,setTpSlEnabled]=useState(false);
+  const [takeProfitPrice,setTakeProfitPrice]=useState('');
+  const [stopLossPrice,setStopLossPrice]=useState('');
   const [snapshot,setSnapshot]=useState<{price?:number;bid?:number;ask?:number;percent?:number}>({});
   const [book,setBook]=useState<Book>({asks:[],bids:[]});
   const [positions,setPositions]=useState<Position[]>([]);
+  const [schedules,setSchedules]=useState<ScheduleJob[]>([]);
+  const [openOrders,setOpenOrders]=useState<LiveOrder[]>([]);
+  const [orderHistory,setOrderHistory]=useState<LiveOrder[]>([]);
+  const [ordersTab,setOrdersTab]=useState<'open'|'history'>('open');
+  const [editingOrder,setEditingOrder]=useState<LiveOrder|null>(null);
+  const [editQty,setEditQty]=useState('');
+  const [editPrice,setEditPrice]=useState('');
+  const [orderActionBusy,setOrderActionBusy]=useState(false);
   const [loading,setLoading]=useState(true);
   const [busy,setBusy]=useState(false);
   const [error,setError]=useState('');
+  const [tradingMode,setTradingMode]=useState<'PAPER'|'BITGET_DEMO'|'LIVE'>('PAPER');
   const [bookView,setBookView]=useState<'both'|'asks'|'bids'>('both');
 
   const category=contractTab==='USDT-M'?'USDT-FUTURES':contractTab==='COIN-M'?'COIN-FUTURES':'USDC-FUTURES';
+  const refreshSchedules=async()=>{try{const p=await fetch('/api/sire/bitget/schedules',{cache:'no-store',headers:{Accept:'application/json'}}).then(r=>readJson(r,'Futures schedules'));setSchedules(Array.isArray(p?.jobs)?p.jobs:[])}catch{}};
+  const refreshOrders=async()=>{const suffix='?category='+encodeURIComponent(category);const safe=async(url:string,label:string)=>{try{return await fetch(url,{cache:'no-store',headers:{Accept:'application/json'}}).then(r=>readJson(r,label))}catch{return {orders:[]}}};const [o,h,t]=await Promise.all([safe('/api/sire/bitget/orders/open'+suffix,'Open Futures orders'),safe('/api/sire/bitget/orders/history'+suffix,'Futures order history'),safe('/api/sire/bitget/orders/triggers'+suffix,'Trigger Futures orders')]);setOpenOrders([...(Array.isArray(o?.orders)?o.orders:[]),...(Array.isArray(t?.orders)?t.orders:[])]);setOrderHistory(Array.isArray(h?.orders)?h.orders:[])};
+  const cancelExchangeOrder=async(order:LiveOrder)=>{setOrderActionBusy(true);try{await fetch('/api/sire/bitget/order/cancel',{method:'POST',headers:{'Content-Type':'application/json',Accept:'application/json'},body:JSON.stringify({category,orderId:order.orderId,clientOid:order.clientOid,isTrigger:Boolean(order.isTrigger),planType:order.planType,symbol:order.symbol})}).then(r=>readJson(r,'Cancel order'));await refreshOrders()}catch(e){setError(e instanceof Error?e.message:String(e))}finally{setOrderActionBusy(false)}};
+  const cancelAllExchangeOrders=async()=>{setOrderActionBusy(true);try{await fetch('/api/sire/bitget/order/cancel-all',{method:'POST',headers:{'Content-Type':'application/json',Accept:'application/json'},body:JSON.stringify({category,symbol:''})}).then(r=>readJson(r,'Cancel all orders'));await refreshOrders()}catch(e){setError(e instanceof Error?e.message:String(e))}finally{setOrderActionBusy(false)}};
+  const saveOrderEdit=async()=>{if(!editingOrder)return;setOrderActionBusy(true);try{await fetch('/api/sire/bitget/order/modify',{method:'POST',headers:{'Content-Type':'application/json',Accept:'application/json'},body:JSON.stringify({category,symbol:editingOrder.symbol,orderId:editingOrder.orderId,clientOid:editingOrder.clientOid,isTrigger:Boolean(editingOrder.isTrigger),planType:editingOrder.planType,qty:editQty||undefined,price:editingOrder.isTrigger?undefined:(editPrice||undefined),triggerPrice:editingOrder.isTrigger?(editPrice||undefined):undefined,orderType:editingOrder.orderType})}).then(r=>readJson(r,'Modify order'));setEditingOrder(null);await refreshOrders()}catch(e){setError(e instanceof Error?e.message:String(e))}finally{setOrderActionBusy(false)}};
+  const controlSchedule=async(id:string,action:'pause'|'resume'|'cancel')=>{try{await fetch('/api/sire/bitget/schedules/'+encodeURIComponent(id)+'/'+action,{method:'POST',headers:{Accept:'application/json'}}).then(r=>readJson(r,'Schedule '+action));await refreshSchedules()}catch(e){setError(e instanceof Error?e.message:String(e))}};
   const filtered=useMemo(()=>markets.filter(m=>!search||m.symbol.toLowerCase().includes(search.toLowerCase())||m.name.toLowerCase().includes(search.toLowerCase())),[markets,search]);
   const activePosition=positions.find(p=>p.symbol===selected?.symbol && Number(p.total||0)>0);
   const marketPrice=Number(snapshot.price||selected?.price||0);
@@ -78,7 +98,8 @@ export default function FuturesView({initialSymbol}:Props){
   const maxDepthAsk=Math.max(0,...book.asks.slice(0,5).map(x=>x.quantity));
   const maxDepthBid=Math.max(0,...book.bids.slice(0,5).map(x=>x.quantity));
 
-  useEffect(()=>{let cancelled=false;setLoading(true);setError('');
+  useEffect(()=>{let cancelled=false;fetch('/api/sire/bitget/trading-mode',{cache:'no-store',headers:{Accept:'application/json'}}).then(r=>readJson(r,'Trading mode')).then(p=>{if(!cancelled&&p?.ok&&['PAPER','BITGET_DEMO','LIVE'].includes(p.mode))setTradingMode(p.mode)}).catch(()=>{if(!cancelled)setTradingMode('PAPER')});return()=>{cancelled=true}},[]);
+    useEffect(()=>{let cancelled=false;setLoading(true);setError('');
     fetch('/api/sire/bitget/catalog?t='+Date.now(),{cache:'no-store',headers:{Accept:'application/json'}}).then(r=>readJson(r,'Bitget catalog')).then(p=>{
       if(cancelled)return;
       const all=(Array.isArray(p?.instruments)?p.instruments:[]).filter((m:FuturesMarket)=>m.status==='TRADING'&&m.marketType==='Futures');
@@ -113,20 +134,58 @@ export default function FuturesView({initialSymbol}:Props){
 
   const refreshPositions=()=>{if(!selected)return;fetch('/api/sire/bitget/positions?category='+category+'&symbol='+encodeURIComponent(selected.symbol),{cache:'no-store',headers:{Accept:'application/json'}}).then(r=>readJson(r,'Bitget positions')).then(p=>setPositions(Array.isArray(p?.positions)?p.positions:[])).catch(()=>{})};
   useEffect(()=>{refreshPositions()},[selected?.symbol,category]);
+  useEffect(()=>{void refreshSchedules();const timer=setInterval(()=>void refreshSchedules(),3000);return()=>clearInterval(timer)},[]);
+  useEffect(()=>{void refreshOrders();const timer=setInterval(()=>void refreshOrders(),5000);return()=>clearInterval(timer)},[category]);
 
   const applyLeverage=async(next:string)=>{setLeverage(next);if(!selected)return;try{await fetch('/api/sire/bitget/leverage',{method:'POST',headers:{'Content-Type':'application/json',Accept:'application/json'},body:JSON.stringify({category,symbol:selected.symbol,leverage:next,marginMode:marginMode.toLowerCase()})}).then(r=>readJson(r,'Bitget leverage'))}catch(e){setError(e instanceof Error?e.message:String(e))}};
 
   const submit=async(orderSide: 'Long'|'Short'=side, orderAction: 'Open'|'Close'=action, orderReduceOnly=reduceOnly)=>{
     setError('');if(!selected)return;
     const n=Number(qty);if(!Number.isFinite(n)||n<=0){setError('Enter a valid contract quantity.');return}
-    const limitBasedOrder=orderType==='Limit'||orderType==='Advanced limit order';
+    const isClose=orderAction==='Close'||orderReduceOnly;
+    const isTrigger=orderType==='Trigger order'||orderType==='Trailing stop order';
+    const limitBasedOrder=orderType==='Limit'||orderType==='Advanced limit order'||(orderType==='Trigger order'&&executeType==='Limit');
     if(limitBasedOrder&&(!Number(price)||Number(price)<=0)){setError('Enter a valid limit price.');return}
+    if(isTrigger&&orderType==='Trigger order'&&(!Number(triggerPrice)||Number(triggerPrice)<=0)){setError('Enter a valid trigger price.');return}
+    if(orderType==='Trailing stop order'&&(!Number(activationPrice)||Number(activationPrice)<=0)){setError('Enter a valid activation price.');return}
+    if(orderType==='Trailing stop order'&&(!Number(trailVariance)||Number(trailVariance)<=0)){setError('Enter a valid trailing callback rate.');return}
+    if(orderType==='Trailing stop order'&&executeType==='Limit'&&(!Number(price)||Number(price)<=0)){setError('Enter a valid trailing execution limit price.');return}
+    if(orderType==='Trailing stop order'&&trailingSource==='Index'){setError('Bitget UTA trailing strategies support market or mark activation, not index price.');return}
+    if(orderType==='Trailing stop order'&&trailVarianceMode==='By spread (USDT)'){setError('Bitget trailing strategy is currently wired for percentage variance; choose By percentage (%).');return}
+    const algorithmic=['TWAP','Iceberg order','Split large order'].includes(orderType);
+    if(tpSlEnabled&&takeProfitPrice&&(!Number(takeProfitPrice)||Number(takeProfitPrice)<=0)){setError('Enter a valid take-profit price.');return}
+    if(tpSlEnabled&&stopLossPrice&&(!Number(stopLossPrice)||Number(stopLossPrice)<=0)){setError('Enter a valid stop-loss price.');return}
     setBusy(true);
     try{
-      const isClose=orderAction==='Close'||orderReduceOnly;
-      const payload={category,symbol:selected.symbol,side:orderSide==='Long'?(isClose?'sell':'buy'):(isClose?'buy':'sell'),orderType:limitBasedOrder?'limit':'market',qty:String(n),price:limitBasedOrder?String(price):undefined,posSide:orderSide.toLowerCase(),marginMode:marginMode.toLowerCase(),reduceOnly:isClose?'yes':'no'};
-      const result=await fetch('/api/sire/bitget/order',{method:'POST',headers:{'Content-Type':'application/json',Accept:'application/json'},body:JSON.stringify(payload)}).then(r=>readJson(r,'Bitget futures order'));
-      if(!result?.ok)throw new Error(result?.error||'Futures order failed.');
+      const orderSideValue=orderSide==='Long'?(isClose?'sell':'buy'):(isClose?'buy':'sell');
+      if(algorithmic){
+        const perQty=Number(qtyPerOrder);if(!Number.isFinite(perQty)||perQty<=0)throw new Error('Enter a valid quantity per order.');
+        const durationSeconds=Number(twapHours||0)*3600+Number(twapMinutes||0)*60;
+        const frequencySeconds=Number(String(twapFrequency).replace(/[^0-9]/g,''))||30;
+        const preference=orderPreferences;
+        const scheduledOrderType=orderType==='Iceberg order'&&(preference!=='Faster execution'||priceLimitEnabled)?'limit':'market';
+        if(orderType==='TWAP'&&durationSeconds<60)throw new Error('TWAP duration must be at least 1 minute.');
+        if(scheduledOrderType==='limit'&&(!Number(price)||Number(price)<=0))throw new Error('Enter the limit price for this Iceberg preference.');
+        const schedulePayload:any={requestId:'SIRE_SCHED_'+crypto.randomUUID().replace(/-/g,'').slice(0,20),kind:orderType==='TWAP'?'twap':orderType==='Iceberg order'?'iceberg':'split',category,symbol:selected.symbol,side:orderSideValue,posSide:orderSide.toLowerCase(),marginMode:marginMode==='Cross'?'crossed':'isolated',reduceOnly:isClose||reduceOnly,orderType:scheduledOrderType,totalQty:n,perOrderQty:perQty,intervalSeconds:orderType==='TWAP'?frequencySeconds:5,durationSeconds:Math.max(60,durationSeconds),sliceCount:Number(splitOrderCount),price:scheduledOrderType==='limit'?Number(price):undefined,timeInForce:'gtc',preference,queueType,priceLimitEnabled,slippagePercent:slippageEnabled?0.5:undefined,takeProfit:tpSlEnabled&&takeProfitPrice?takeProfitPrice:undefined,stopLoss:tpSlEnabled&&stopLossPrice?stopLossPrice:undefined};
+        const created=await fetch('/api/sire/bitget/schedules',{method:'POST',headers:{'Content-Type':'application/json',Accept:'application/json'},body:JSON.stringify(schedulePayload)}).then(r=>readJson(r,'Create Futures schedule'));
+        if(!created?.ok)throw new Error(created?.error||'Could not create schedule.');
+        setError('Schedule '+String(created.job?.id||'created').slice(0,8)+' started.');setQty('');setQtyPercent(0);await refreshSchedules();return;
+      }
+      const payload:any={category,symbol:selected.symbol,side:orderSideValue,orderType:limitBasedOrder?'limit':'market',qty:String(n),clientOid:'SIRE_'+crypto.randomUUID().replace(/-/g,'').slice(0,20),marginCoin:category==='COIN-FUTURES'?selected.baseAsset:category==='USDC-FUTURES'?'USDC':'USDT',price:limitBasedOrder?String(price):undefined,posSide:orderSide.toLowerCase(),tradeSide:isClose?'close':'open',marginMode:marginMode==='Cross'?'crossed':'isolated',reduceOnly:isClose?'yes':'no',timeInForce:orderType==='Advanced limit order'?({'Post only':'post_only','IOC':'ioc','FOK':'fok'} as any)[timeInForce]:'gtc',slippagePercent:slippageEnabled&&orderType==='Market'?0.5:undefined,referencePrice:slippageEnabled&&orderType==='Market'?marketPrice:undefined,takeProfit:tpSlEnabled&&takeProfitPrice?takeProfitPrice:undefined,stopLoss:tpSlEnabled&&stopLossPrice?stopLossPrice:undefined};
+      if(isTrigger){
+        payload.planType=orderType==='Trailing stop order'?'track_plan':'normal_plan';
+        payload.triggerPrice=orderType==='Trailing stop order'?activationPrice:triggerPrice;
+        if(orderType==='Trigger order'&&triggerSource==='Index price')throw new Error('Bitget trigger orders support Last price or Mark price; Index price is not supported by this endpoint.');
+        payload.triggerType=orderType==='Trailing stop order'?(trailingSource==='Mark'?'mark_price':'fill_price'):(triggerSource==='Mark price'?'mark_price':'fill_price');payload.trailType='percentage';
+        payload.orderType=executeType.toLowerCase();
+        payload.price=executeType==='Limit'?String(price):undefined;
+        if(orderType==='Trailing stop order'){payload.callbackRatio=trailVarianceMode==='By spread (USDT)'?Number(trailVariance)/Math.max(marketPrice,1e-12)*100:Number(trailVariance);if(!Number.isFinite(payload.callbackRatio)||payload.callbackRatio<=0||payload.callbackRatio>10)throw new Error('Trailing callback must convert to a Bitget-supported value between 0 and 10%.');}
+        const result=await fetch('/api/sire/bitget/order/trigger',{method:'POST',headers:{'Content-Type':'application/json',Accept:'application/json'},body:JSON.stringify(payload)}).then(r=>readJson(r,'Bitget trigger order'));
+        if(!result?.ok)throw new Error(result?.error||'Trigger order failed.');
+      }else{
+        const result=await fetch('/api/sire/bitget/order',{method:'POST',headers:{'Content-Type':'application/json',Accept:'application/json'},body:JSON.stringify(payload)}).then(r=>readJson(r,'Bitget futures order'));
+        if(!result?.ok)throw new Error(result?.error||'Futures order failed.');
+      }
       setQty('');setQtyPercent(0);refreshPositions();
     }catch(e){setError(e instanceof Error?e.message:String(e))}finally{setBusy(false)}
   };
@@ -139,7 +198,7 @@ export default function FuturesView({initialSymbol}:Props){
             <span className="sire-futures-logo">{selected?.baseAsset?.slice(0,1)||'F'}</span>
             <span><b>{selected?.symbol||'Select contract'}</b><small>{selected?.name||'Futures contract'}</small></span><ChevronDown size={14}/>
           </button>
-          
+          <span className={'sire-trading-mode-banner '+(tradingMode==='LIVE'?'live':tradingMode==='BITGET_DEMO'?'demo':'paper')}><b>{tradingMode}</b><span>{tradingMode==='PAPER'?'Simulated · no funds used':tradingMode==='BITGET_DEMO'?'Bitget demo':'Live exchange'}</span></span>
         </div>
 
         <div className="sire-futures-settings-row">
@@ -161,10 +220,10 @@ export default function FuturesView({initialSymbol}:Props){
         </div>
 
         {orderType==='Advanced limit order'&&<button type="button" className="sire-futures-tif-card" onClick={()=>setTimeInForceDrawer(true)}><span><small>Time in force</small><b>{timeInForce}</b></span><ChevronDown size={13}/></button>}
-        {orderType==='Iceberg order'&&<>
+        {(orderType==='Iceberg order'||orderType==='Split large order')&&<>
           <button type="button" className="sire-futures-plain-select sire-futures-iceberg-split-trigger" onClick={()=>setSplitSettingsDrawer(true)}><span>Qty. per order</span><ChevronDown size={13}/></button>
-          <label className="sire-futures-input sire-futures-iceberg-quantity"><span>Quantity</span><input aria-label="Iceberg quantity" inputMode="decimal" value={qtyPerOrder} onChange={e=>setQtyPerOrder(e.target.value.replace(/[^0-9.]/g,''))}/><span className="sire-futures-quantity-unit"><b>{selected?.baseAsset||'BTC'}</b></span></label>
-          <button type="button" className="sire-futures-plain-select sire-futures-iceberg-preferences-trigger" onClick={()=>setOrderPreferencesDrawer(true)}><span>{orderPreferences}</span><ChevronDown size={13}/></button>
+          <label className="sire-futures-input sire-futures-iceberg-quantity"><span>Quantity</span><input aria-label="Iceberg quantity" inputMode="decimal" value={qtyPerOrder} onChange={e=>setQtyPerOrder(e.target.value.replace(/[^0-9.]/g,''))}/><span className="sire-futures-quantity-unit"><b>{contractTab==='COIN-M'?(selected?.quote||'USD'):(selected?.baseAsset||'BTC')}</b></span></label>
+          {orderType==='Iceberg order'&&<><button type="button" className="sire-futures-plain-select sire-futures-iceberg-preferences-trigger" onClick={()=>setOrderPreferencesDrawer(true)}><span>{orderPreferences}</span><ChevronDown size={13}/></button>{(orderPreferences!=='Faster execution'||priceLimitEnabled)&&<div className="sire-futures-price-row single-price"><label><span>{priceLimitEnabled?'Price limit':orderPreferences==='Fixed price'?'Limit price':'Distance (%)'}</span><input aria-label={priceLimitEnabled?'Iceberg price limit':orderPreferences==='Fixed price'?'Iceberg fixed price':'Iceberg price distance'} inputMode="decimal" value={price} onChange={e=>setPrice(e.target.value.replace(/[^0-9.]/g,''))}/><em>{priceLimitEnabled||orderPreferences==='Fixed price'?'Price':'%'}</em></label></div>}</>}
           <button type="button" className="sire-futures-tif-card sire-futures-iceberg-queue" onClick={()=>setQueueDrawer(true)}><span>{queueType}</span><ChevronDown size={13}/></button>
         </>}
         {orderType==='Trailing stop order'&&<><div className="sire-futures-plain-label">Activation price</div><div className="sire-futures-tif-card sire-futures-trigger-card sire-futures-trailing-source-card"><span className="sire-futures-trailing-price-label">Price</span><input aria-label="Activation price" inputMode="decimal" value={activationPrice} onChange={e=>setActivationPrice(e.target.value.replace(/[^0-9.]/g,''))} placeholder="Enter price"/><button type="button" onClick={()=>setTrailingSourceDrawer(true)}>{trailingSource}<ChevronDown size={13}/></button></div><button type="button" className="sire-futures-plain-select" onClick={()=>setTrailVarianceDrawer(true)}><span>Trail variance – {trailVarianceMode}</span><ChevronDown size={13}/></button><div className="sire-futures-trailing-variance-card"><span className="sire-futures-trailing-percent">{trailVarianceMode==='By percentage (%)'?'%':'USDT'}</span><span className="sire-futures-trailing-variance-title">Trail variance</span><input aria-label="Trail variance" inputMode="decimal" value={trailVariance} onChange={e=>setTrailVariance(e.target.value.replace(/[^0-9.]/g,''))}/></div><div className="sire-futures-trailing-presets">{(trailVarianceMode==='By percentage (%)'?['1%','5%','10%']:['1','5','10']).map(v=><button type="button" key={v} className={trailVariance===(trailVarianceMode==='By percentage (%)'?v.replace('%',''):v)?'active':''} onClick={()=>setTrailVariance(v.replace('%',''))}>{v}</button>)}</div></>}
@@ -177,7 +236,7 @@ export default function FuturesView({initialSymbol}:Props){
           <label className="sire-futures-input sire-futures-twap-per-order"><span>Per order</span><input aria-label="Quantity per order" inputMode="decimal" value={qtyPerOrder} onChange={e=>setQtyPerOrder(e.target.value.replace(/[^0-9.]/g,''))}/><span className="sire-futures-quantity-unit"><b>{selected?.baseAsset||'BTC'}</b></span></label>
         </>}
         {(orderType==='Limit'||orderType==='Advanced limit order')&&<div className={'sire-futures-price-row '+(orderType==='Advanced limit order'?'single-price':'')}>
-          <label><span>Price</span><input inputMode="decimal" value={price} onChange={e=>setPrice(e.target.value.replace(/[^0-9.]/g,''))}/><em>USDT</em></label>
+          <label><span>Price</span><input inputMode="decimal" value={price} onChange={e=>setPrice(e.target.value.replace(/[^0-9.]/g,''))}/><em>{contractTab==='COIN-M'?'USD':contractTab==='USDC-M'?'USDC':'USDT'}</em></label>
           {orderType==='Limit'&&<button type="button" onClick={()=>setPrice(priceFmt(marketPrice).replace(/,/g,''))}>BBO</button>}
         </div>}
         {orderType!=='TWAP'&&<><label className="sire-futures-input"><span>Quantity</span><input inputMode="decimal" value={qty} onChange={e=>setQty(e.target.value.replace(/[^0-9.]/g,''))}/><span className="sire-futures-quantity-unit"><b>{selected?.baseAsset||'BTC'}</b><ChevronDown size={11}/></span></label>
@@ -193,7 +252,8 @@ export default function FuturesView({initialSymbol}:Props){
         <div className="sire-futures-toggle-stack">
           {orderType==='TWAP'?<label className="sire-futures-inline-toggle"><input type="checkbox" checked={twapAdvanced} onChange={e=>setTwapAdvanced(e.target.checked)} aria-label="Toggle advanced"/><span>Advanced</span></label>:orderType==='Iceberg order'?<label className="sire-futures-inline-toggle"><input type="checkbox" checked={priceLimitEnabled} onChange={e=>setPriceLimitEnabled(e.target.checked)} aria-label="Toggle price limit"/><span>Price limit</span></label>:<>
           {orderType==='Market'&&<label className="sire-futures-inline-toggle"><input type="checkbox" checked={slippageEnabled} onChange={e=>setSlippageEnabled(e.target.checked)} aria-label="Toggle slippage protection"/><span>Slippage</span>{slippageEnabled&&<b>0.5%</b>}</label>}
-          <label className="sire-futures-inline-toggle"><input type="checkbox" aria-label="Toggle TP/SL"/><span>TP/SL</span></label>
+          <label className="sire-futures-inline-toggle"><input type="checkbox" checked={tpSlEnabled} onChange={e=>setTpSlEnabled(e.target.checked)} aria-label="Toggle TP/SL"/><span>TP/SL</span></label>
+          {tpSlEnabled&&<div className="sire-futures-price-row"><label><span>Take profit</span><input aria-label="Take-profit price" inputMode="decimal" value={takeProfitPrice} onChange={e=>setTakeProfitPrice(e.target.value.replace(/[^0-9.]/g,''))} placeholder="Optional"/></label><label><span>Stop loss</span><input aria-label="Stop-loss price" inputMode="decimal" value={stopLossPrice} onChange={e=>setStopLossPrice(e.target.value.replace(/[^0-9.]/g,''))} placeholder="Optional"/></label></div>}
           <label className="sire-futures-inline-toggle"><input type="checkbox" checked={reduceOnly} onChange={e=>setReduceOnly(e.target.checked)} aria-label="Toggle Reduce Only"/><span>Reduce Only</span></label></>}
         </div>
         <div className="sire-futures-costs">
@@ -209,6 +269,7 @@ export default function FuturesView({initialSymbol}:Props){
           </div>
         </div>
         {error&&<div className="sire-futures-error">{error}</div>}
+        {schedules.filter(j=>['running','paused','cancel_requested'].includes(j.state)).slice(0,3).map(j=><div className="sire-futures-error" key={j.id}><span>{j.kind.toUpperCase()} · {j.state} · {j.completedSlices}/{j.totalSlices}</span>{j.lastError&&<small> {j.lastError}</small>}<span style={{float:'right',display:'inline-flex',gap:6}}>{j.state==='running'&&<button type="button" onClick={()=>void controlSchedule(j.id,'pause')}>Pause</button>}{j.state==='paused'&&<button type="button" onClick={()=>void controlSchedule(j.id,'resume')}>Resume</button>}<button type="button" onClick={()=>void controlSchedule(j.id,'cancel')}>Cancel</button></span></div>)}
       </section>
 
       <aside className="sire-futures-book-card">
@@ -221,7 +282,7 @@ export default function FuturesView({initialSymbol}:Props){
           <ChevronDown size={13} aria-hidden="true"/>
         </div>
         <div className="sire-futures-book-controls"><button onClick={()=>setBookView(bookView==='both'?'bids':bookView==='bids'?'asks':'both')}><SlidersHorizontal size={12}/><span>Book</span></button><span>LIVE</span></div>
-        <div className="sire-futures-book-head"><span>Price (USDT)</span><span>Size</span></div>
+        <div className="sire-futures-book-head"><span>Price ({contractTab==='COIN-M'?'USD':contractTab==='USDC-M'?'USDC':'USDT'})</span><span>Size</span></div>
         <div className={'sire-futures-book-side asks '+(bookView==='bids'?'hidden':'')}>{book.asks.slice(0,6).reverse().map((x,i)=><div key={i} style={{'--depth-width':(maxDepthAsk?Math.max(3,Math.min(100,x.quantity/maxDepthAsk*100)):3)+'%'} as any}><span>{priceFmt(x.price)}</span><b>{money(x.quantity,4)}</b></div>)}</div>
         <div className="sire-futures-mid"><strong>{priceFmt(marketPrice)}</strong><span className={change>=0?'up':'down'}>{change>=0?'▲':'▼'} {Math.abs(change).toFixed(2)}%</span></div>
         <div className={'sire-futures-book-side bids '+(bookView==='asks'?'hidden':'')}>{book.bids.slice(0,6).map((x,i)=><div key={i} style={{'--depth-width':(maxDepthBid?Math.max(3,Math.min(100,x.quantity/maxDepthBid*100)):3)+'%'} as any}><span>{priceFmt(x.price)}</span><b>{money(x.quantity,4)}</b></div>)}</div>
@@ -232,6 +293,12 @@ export default function FuturesView({initialSymbol}:Props){
 
 
 
+    <section className="sire-futures-lifecycle" aria-label="Futures order lifecycle">
+      <header><strong>Orders</strong><div><button type="button" className={ordersTab==='open'?'active':''} onClick={()=>setOrdersTab('open')}>Open ({openOrders.length})</button><button type="button" className={ordersTab==='history'?'active':''} onClick={()=>setOrdersTab('history')}>History</button>{ordersTab==='open'&&openOrders.length>0&&<button type="button" disabled={orderActionBusy} onClick={()=>void cancelAllExchangeOrders()}>Cancel all</button>}</div></header>
+      {(ordersTab==='open'?openOrders:orderHistory).slice(0,12).map((o,i)=><div className="sire-futures-lifecycle-row" key={String(o.orderId||o.clientOid||i)}><span><b>{o.symbol||'—'}</b><small>{String(o.side||'').toUpperCase()} · {o.orderType||'—'} · {o.orderStatus||o.status||'—'}</small></span><span><b>{o.isTrigger?'Trigger '+(o.triggerPrice||'—'):o.price&&Number(o.price)>0?priceFmt(Number(o.price)):'Market'}</b><small>{money(Number(o.cumExecQty||0),6)} / {money(Number(o.qty||o.size||0),6)}</small></span>{ordersTab==='open'&&<span className="sire-futures-lifecycle-actions">{(o.isTrigger||String(o.orderType).toLowerCase()==='limit')&&<button type="button" disabled={orderActionBusy} onClick={()=>{setEditingOrder(o);setEditQty(String(o.qty||''));setEditPrice(String(o.isTrigger?o.triggerPrice||'':o.price||''))}}>Edit</button>}<button type="button" disabled={orderActionBusy} onClick={()=>void cancelExchangeOrder(o)}>Cancel</button></span>}</div>)}
+      {(ordersTab==='open'?openOrders:orderHistory).length===0&&<div className="sire-futures-lifecycle-empty">{ordersTab==='open'?'No open Futures orders.':'No recent Futures order history.'}</div>}
+    </section>
+    {editingOrder&&<div className="sire-futures-order-backdrop" onClick={()=>setEditingOrder(null)}><section className="sire-futures-order-drawer sire-futures-edit-order" role="dialog" aria-modal="true" aria-label="Edit Futures order" onClick={e=>e.stopPropagation()}><div className="sire-futures-order-drawer-head"><strong>Edit / replace order</strong><button type="button" onClick={()=>setEditingOrder(null)}>×</button></div><label className="sire-futures-input"><span>Quantity</span><input inputMode="decimal" value={editQty} onChange={e=>setEditQty(e.target.value.replace(/[^0-9.]/g,''))}/></label><label className="sire-futures-input"><span>{editingOrder.isTrigger?'Trigger price':'Limit price'}</span><input inputMode="decimal" value={editPrice} onChange={e=>setEditPrice(e.target.value.replace(/[^0-9.]/g,''))}/></label><button className="sire-futures-iceberg-done" type="button" disabled={orderActionBusy||(!editQty&&!editPrice)} onClick={()=>void saveOrderEdit()}>{orderActionBusy?'Saving…':'Save changes'}</button></section></div>}
     {twapFrequencyDrawer&&<div className="sire-futures-order-backdrop" onClick={()=>setTwapFrequencyDrawer(false)}><section className="sire-futures-order-drawer sire-futures-choice-drawer" role="dialog" aria-modal="true" aria-label="Select TWAP frequency" onClick={e=>e.stopPropagation()}><div className="sire-futures-order-drawer-head"><strong>Frequency</strong><button type="button" aria-label="Close frequency drawer" onClick={()=>setTwapFrequencyDrawer(false)}>×</button></div>{['5s','10s','20s','30s','60s'].map(item=><button type="button" key={item} className={'sire-futures-order-option '+(twapFrequency===item?'selected':'')} onClick={()=>{setTwapFrequency(item);setTwapFrequencyDrawer(false)}}><span className="sire-futures-order-option-copy"><b>{item}</b></span><i aria-hidden="true">{twapFrequency===item?'✓':''}</i></button>)}</section></div>}{splitSettingsDrawer&&<div className="sire-futures-order-backdrop" onClick={()=>setSplitSettingsDrawer(false)}><section className="sire-futures-order-drawer sire-futures-choice-drawer sire-futures-iceberg-drawer" role="dialog" aria-modal="true" aria-label="Split settings" onClick={e=>e.stopPropagation()}><div className="sire-futures-order-drawer-head"><strong>Split settings</strong><button type="button" aria-label="Close split settings" onClick={()=>setSplitSettingsDrawer(false)}>×</button></div><label className="sire-futures-iceberg-setting"><span><b>Qty. per order</b><small>Set the quantity for each sub-order.</small></span><input aria-label="Quantity per order" inputMode="decimal" value={qtyPerOrder} onChange={e=>setQtyPerOrder(e.target.value.replace(/[^0-9.]/g,''))}/></label><label className="sire-futures-iceberg-setting"><span><b>No. of split orders</b><small>Set the total number of split orders.</small></span><input aria-label="Number of split orders" inputMode="numeric" value={splitOrderCount} onChange={e=>setSplitOrderCount(e.target.value.replace(/[^0-9]/g,''))}/></label><button type="button" className="sire-futures-iceberg-done" onClick={()=>setSplitSettingsDrawer(false)}>Confirm</button></section></div>}
         {orderPreferencesDrawer&&<div className="sire-futures-order-backdrop" onClick={()=>setOrderPreferencesDrawer(false)}><section className="sire-futures-order-drawer sire-futures-choice-drawer" role="dialog" aria-modal="true" aria-label="Order preferences" onClick={e=>e.stopPropagation()}><div className="sire-futures-order-drawer-head"><strong>Order preferences</strong><button type="button" aria-label="Close order preferences" onClick={()=>setOrderPreferencesDrawer(false)}>×</button></div>{[{name:'Faster execution' as const,description:'Ensures that each order is placed at the best price, with the prices continuously adjusted as the market changes to enable faster execution.'},{name:'Fixed distance' as const,description:'Distance from Bid 1/Ask 1. Ensures that each order is placed at a fixed distance from the best price, with the prices continuously adjusted as the market changes to achieve a better execution price.'},{name:'Fixed price' as const,description:'Each sub-order is placed at a fixed price.'}].map(item=><button type="button" key={item.name} className={'sire-futures-order-option '+(orderPreferences===item.name?'selected':'')} onClick={()=>{setOrderPreferences(item.name);setOrderPreferencesDrawer(false)}}><span className="sire-futures-order-option-copy"><b>{item.name}</b><small>{item.description}</small></span><i aria-hidden="true">{orderPreferences===item.name?'✓':''}</i></button>)}</section></div>}
         {queueDrawer&&<div className="sire-futures-order-backdrop" onClick={()=>setQueueDrawer(false)}><section className="sire-futures-order-drawer sire-futures-choice-drawer" role="dialog" aria-modal="true" aria-label="Select queue" onClick={e=>e.stopPropagation()}><div className="sire-futures-order-drawer-head"><strong>Queue preference</strong><button type="button" aria-label="Close queue preferences" onClick={()=>setQueueDrawer(false)}>×</button></div>{(['Queue 1','Counterparty 1'] as const).map(item=><button type="button" key={item} className={'sire-futures-order-option '+(queueType===item?'selected':'')} onClick={()=>{setQueueType(item);setQueueDrawer(false)}}><span className="sire-futures-order-option-copy"><b>{item}</b></span><i aria-hidden="true">{queueType===item?'✓':''}</i></button>)}</section></div>}
@@ -293,7 +360,8 @@ export default function FuturesView({initialSymbol}:Props){
         <div className="sire-futures-order-group-title">Split large order</div>
         {[
           {name:'Iceberg order',description:'Split large orders to reduce slippage.'},
-          {name:'TWAP',description:'Triggers limit or market orders at custom time intervals.'}
+          {name:'TWAP',description:'Triggers limit or market orders at custom time intervals.'},
+          {name:'Split large order',description:'Split the total quantity into a set number of child orders.'}
         ].map(item=><button type="button" key={item.name} className={'sire-futures-order-option '+(orderType===item.name?'selected':'')} onClick={()=>{setOrderType(item.name);setOrderDrawer(false)}}>
           <span className="sire-futures-order-option-copy"><b>{item.name}</b><small>{item.description}</small></span><i aria-hidden="true">{orderType===item.name?'✓':''}</i>
         </button>)}

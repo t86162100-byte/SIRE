@@ -2,9 +2,27 @@ import pg from 'pg';
 import { randomUUID } from 'node:crypto';
 
 const { Pool } = pg;
-const pool = process.env.DATABASE_URL
+function resolveDatabaseUrl() {
+  const value = String(process.env.DATABASE_URL || '').trim();
+  if (!value) return null;
+  try {
+    const parsed = new URL(value);
+    // "base" is a placeholder hostname, not a reachable Render Postgres host.
+    if (!parsed.hostname || parsed.hostname.toLowerCase() === 'base') {
+      console.warn('[LIMIT ORDER MONITOR] DATABASE_URL has an invalid placeholder host; configure the real Render Postgres internal URL. Monitoring is disabled until fixed.');
+      return null;
+    }
+    return value;
+  } catch {
+    console.warn('[LIMIT ORDER MONITOR] DATABASE_URL is not a valid connection URL. Monitoring is disabled until fixed.');
+    return null;
+  }
+}
+
+const databaseUrl = resolveDatabaseUrl();
+const pool = databaseUrl
   ? new Pool({
-      connectionString: process.env.DATABASE_URL,
+      connectionString: databaseUrl,
       ssl: process.env.PGSSLMODE === 'disable' ? false : { rejectUnauthorized: false },
       max: Math.max(2, Math.min(10, Number(process.env.SIRE_LIMIT_DB_POOL || 6))),
     })
