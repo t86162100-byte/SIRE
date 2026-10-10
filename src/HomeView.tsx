@@ -211,7 +211,7 @@ export default function HomeView({ instruments, onSelectInstrument, videoSrc = '
             <div><span className="sire-home-kicker">ACCOUNT OVERVIEW</span><div className="sire-home-account-label">Portfolio value <button type="button" className="sire-home-balance-eye" aria-label={balanceVisible ? 'Hide balance' : 'Show balance'} onClick={() => setBalanceVisible(value => !value)}>{balanceVisible ? <Eye size={15} /> : <EyeOff size={15} />}</button></div></div>
             <button type="button" className="sire-home-account-wallet"><Wallet size={15} /> Wallet <ChevronRight size={14} /></button>
           </div>
-          <div className="sire-home-account-value">{balanceVisible ? '$0.00' : '••••••'} <small>USD</small></div>
+          <div className="sire-home-account-value">{balanceVisible ? '—' : '••••••'} <small>USD</small></div>
           <div className="sire-home-account-foot"><span><i /> Available balance</span><strong>{balanceVisible ? '$0.00' : '••••••'}</strong><span className="sire-home-account-note">Live account data</span></div>
           <div className="sire-home-account-actions">
             <button type="button" aria-label="Deposit"><span><ArrowDownToLine size={18} /></span><b>Deposit</b></button>
