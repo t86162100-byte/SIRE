@@ -5,8 +5,8 @@ export type SireUser = { id:string; email:string; name:string; createdAt:string 
 
 type Props = { user:SireUser|null; onUser:(user:SireUser|null)=>void; initialMode?:'login'|'signup'; onClose?:()=>void };
 
-export default function AuthGate({ user, onUser }: Props) {
-  const [mode,setMode]=useState<'login'|'signup'>('login');
+export default function AuthGate({ user, onUser, initialMode = 'login', onClose }: Props) {
+  const [mode,setMode]=useState<'login'|'signup'>(initialMode);
   const [name,setName]=useState(''); const [email,setEmail]=useState(''); const [password,setPassword]=useState('');
   const [busy,setBusy]=useState(false); const [error,setError]=useState('');
   useEffect(()=>{ if(user) return; fetch('/api/auth/me',{credentials:'same-origin',cache:'no-store'}).then(r=>r.json()).then(d=>{if(d.user) onUser(d.user);}).catch(()=>{}); },[user,onUser]);
