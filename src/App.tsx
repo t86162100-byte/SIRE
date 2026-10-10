@@ -303,6 +303,7 @@ export default function App() {
   const [homeOpen, setHomeOpen] = useState(true);
   const [tradeOpen, setTradeOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<AppTab>('home');
+  const [openDepositOnWallet, setOpenDepositOnWallet] = useState(false);
   const [spotReturnToTrade, setSpotReturnToTrade] = useState(false);
   const [chartLayout, setChartLayout] = useState<1 | 2>(1);
   const [activeChartIndex, setActiveChartIndex] = useState(0);
@@ -339,6 +340,17 @@ export default function App() {
     };
     window.addEventListener('sire:open-market-for-spot', openSpotMarketPicker);
     return () => window.removeEventListener('sire:open-market-for-spot', openSpotMarketPicker);
+  }, []);
+
+  useEffect(() => {
+    const openWalletDeposit = () => {
+      setOpenDepositOnWallet(true);
+      setTradeOpen(false);
+      setActiveTab('portfolio');
+      window.dispatchEvent(new CustomEvent('sire:navigate-tab', { detail: { tab: 'portfolio' } }));
+    };
+    window.addEventListener('sire:open-wallet-deposit', openWalletDeposit);
+    return () => window.removeEventListener('sire:open-wallet-deposit', openWalletDeposit);
   }, []);
 
   useEffect(() => {
@@ -707,7 +719,7 @@ export default function App() {
   }
 
   if (activeTab === 'portfolio') {
-    return <SireWalletPanel initialOpen />;
+    return <SireWalletPanel initialOpen initialDepositOpen={openDepositOnWallet} onDepositChoiceOpened={() => setOpenDepositOnWallet(false)} />;
   }
 
   if (activeTab === 'discover') {
