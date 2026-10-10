@@ -35,6 +35,15 @@ export default function SireWalletPanel({ initialOpen = false }: { initialOpen?:
   const [balanceVisible, setBalanceVisible] = useState(true);
   const [sendOpen, setSendOpen] = useState(false);
   const [receiveOpen, setReceiveOpen] = useState(false);
+  const [depositChoiceOpen, setDepositChoiceOpen] = useState(false);
+  const [exchangeDepositOpen, setExchangeDepositOpen] = useState(false);
+  const [exchangeDepositCoin, setExchangeDepositCoin] = useState('USDT');
+  const [exchangeDepositChain, setExchangeDepositChain] = useState('');
+  const [exchangeDepositResult, setExchangeDepositResult] = useState<any>(null);
+  const [exchangeDepositHistory, setExchangeDepositHistory] = useState<any[]>([]);
+  const [exchangeDepositBusy, setExchangeDepositBusy] = useState(false);
+  const [exchangeDepositError, setExchangeDepositError] = useState('');
+
   const [tokenOpen, setTokenOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [networkOpen, setNetworkOpen] = useState(false);
@@ -129,6 +138,32 @@ export default function SireWalletPanel({ initialOpen = false }: { initialOpen?:
       String(token.address || '').toLowerCase().includes(q)
     );
   }, [tokenCatalog, tokenCatalogSearch]);
+
+  const loadBitgetDepositAddress = async () => {
+    const coin = exchangeDepositCoin.trim().toUpperCase();
+    if (!coin) { setExchangeDepositError('Enter a coin symbol first.'); return; }
+    setExchangeDepositBusy(true); setExchangeDepositError(''); setExchangeDepositResult(null);
+    try {
+      const params = new URLSearchParams({ coin, ...(exchangeDepositChain.trim() ? { chain: exchangeDepositChain.trim() } : {}) });
+      const response = await fetch('/api/sire/bitget/deposit/address?' + params.toString(), { credentials: 'include', cache: 'no-store' });
+      const data = await response.json();
+      if (!response.ok || !data?.ok) throw new Error(data?.error || 'Could not retrieve the Bitget deposit address.');
+      setExchangeDepositResult(data);
+    } catch (error) { setExchangeDepositError(error instanceof Error ? error.message : String(error)); }
+    finally { setExchangeDepositBusy(false); }
+  };
+
+  const loadBitgetDepositHistory = async () => {
+    setExchangeDepositBusy(true); setExchangeDepositError('');
+    try {
+      const params = new URLSearchParams({ ...(exchangeDepositCoin.trim() ? { coin: exchangeDepositCoin.trim().toUpperCase() } : {}), limit: '50' });
+      const response = await fetch('/api/sire/bitget/deposit/history?' + params.toString(), { credentials: 'include', cache: 'no-store' });
+      const data = await response.json();
+      if (!response.ok || !data?.ok) throw new Error(data?.error || 'Could not retrieve Bitget deposit history.');
+      setExchangeDepositHistory(Array.isArray(data.records) ? data.records : []);
+    } catch (error) { setExchangeDepositError(error instanceof Error ? error.message : String(error)); }
+    finally { setExchangeDepositBusy(false); }
+  };
 
   const copy = async (value: string) => {
     if (!value) return;
@@ -253,7 +288,7 @@ export default function SireWalletPanel({ initialOpen = false }: { initialOpen?:
                 <button className="sire-wallet-eye" onClick={() => setBalanceVisible(v => !v)}>{balanceVisible ? <Eye size={14}/> : <EyeOff size={14}/>} {balanceVisible ? 'Visible' : 'Hidden'}</button>
                 <strong><span className="sire-wallet-currency">$</span><span className="sire-wallet-leading-digit">{balanceVisible ? '0' : '•'}</span><span className="sire-wallet-decimal">{balanceVisible ? '.00' : '••'}</span></strong>
               </div>
-              <button className="sire-wallet-deposit-pill" type="button" onClick={() => setReceiveOpen(true)}>Deposit</button>
+              <button className="sire-wallet-deposit-pill" type="button" onClick={() => setDepositChoiceOpen(true)}>Deposit</button>
             </div>
             <div className="sire-wallet-wallet-actions">
               <button className="sire-wallet-action-pill" type="button" onClick={() => setSendOpen(true)}>Send</button>
@@ -332,6 +367,34 @@ export default function SireWalletPanel({ initialOpen = false }: { initialOpen?:
           {(network === 'Solana' || network === 'TRON') && <input type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="Wallet password to authorize"/>}
           <div className="sire-wallet-review"><ShieldCheck size={15}/><span>Review the network and destination carefully before signing.</span></div>
           <button className="sire-wallet-primary" disabled={busy} onClick={() => void send()}>{busy ? 'Signing…' : 'Review & Send'}</button>
+        </div></div>}
+
+        {depositChoiceOpen && <div className="sire-wallet-modal-backdrop" onMouseDown={() => setDepositChoiceOpen(false)}><div className="sire-wallet-modal" onMouseDown={e => e.stopPropagation()}>
+          <div className="sire-wallet-modal-head"><div><span>DEPOSIT TO SIRE</span><h3>Choose destination</h3></div><button onClick={() => setDepositChoiceOpen(false)}><X size={17}/></button></div>
+          <button className="sire-wallet-primary" onClick={() => { setDepositChoiceOpen(false); setReceiveOpen(true); }}>SIRE Wallet · Receive on-chain</button>
+          <button className="sire-wallet-secondary" onClick={() => { setDepositChoiceOpen(false); setExchangeDepositOpen(true); setExchangeDepositResult(null); setExchangeDepositError(''); }}>Bitget Exchange · Deposit to trading account</button>
+          <p>These are different destinations. Always choose the exchange network that matches the sending platform.</p>
+        </div></div>}
+
+        {exchangeDepositOpen && <div className="sire-wallet-modal-backdrop" onMouseDown={() => setExchangeDepositOpen(false)}><div className="sire-wallet-modal sire-wallet-receive" onMouseDown={e => e.stopPropagation()}>
+          <div className="sire-wallet-modal-head"><div><span>BITGET EXCHANGE</span><h3>Deposit crypto</h3></div><button onClick={() => setExchangeDepositOpen(false)}><X size={17}/></button></div>
+          <input value={exchangeDepositCoin} onChange={e => setExchangeDepositCoin(e.target.value.toUpperCase())} placeholder="Coin, e.g. USDT"/>
+          <input value={exchangeDepositChain} onChange={e => setExchangeDepositChain(e.target.value)} placeholder="Network/chain (optional, e.g. TRC20)"/>
+          <button className="sire-wallet-primary" disabled={exchangeDepositBusy} onClick={() => void loadBitgetDepositAddress()}>{exchangeDepositBusy ? 'Loading…' : 'Get Bitget deposit address'}</button>
+          {exchangeDepositResult?.addresses?.map((row:any, index:number) => <div className="sire-wallet-address-box" key={row.chain + row.address + index}>
+            <span>{row.coin} · {row.chain || 'Network not specified'}</span><code>{row.address}</code>
+            {row.tag && <><span>MEMO / TAG — REQUIRED IF SHOWN</span><code>{row.tag}</code></>}
+            <button className="sire-wallet-secondary" onClick={() => void copy(row.address)}>Copy address</button>
+            {row.tag && <button className="sire-wallet-secondary" onClick={() => void copy(row.tag)}>Copy memo/tag</button>}
+          </div>)}
+          {exchangeDepositResult && !exchangeDepositResult.addresses?.length && <p>No deposit address was returned for that coin/network. Check the coin and chain name supported by Bitget.</p>}
+          <button className="sire-wallet-secondary" disabled={exchangeDepositBusy} onClick={() => void loadBitgetDepositHistory()}>Load deposit history</button>
+          {exchangeDepositHistory.map((row:any, index:number) => <div className="sire-wallet-address-box" key={row.orderId || row.recordId || index}>
+            <span>{row.coin} · {row.chain || row.destination || 'Deposit'}</span><code>{row.amount} · {row.status}</code>
+            <small>{row.createdTime ? new Date(Number(row.createdTime)).toLocaleString() : ''}</small>
+          </div>)}
+          {exchangeDepositError && <small className="sire-wallet-error">{exchangeDepositError}</small>}
+          <p>Only send the selected asset over the exact matching network. Check any required memo/tag before sending. This screen only retrieves address/history; it does not move funds.</p>
         </div></div>}
 
         {receiveOpen && <div className="sire-wallet-modal-backdrop" onMouseDown={() => setReceiveOpen(false)}><div className="sire-wallet-modal sire-wallet-receive" onMouseDown={e => e.stopPropagation()}>
