@@ -180,9 +180,25 @@ export default function SireWalletPanel({ initialOpen = false, initialDepositOpe
   };
 
   const copy = async (value: string) => {
-    if (!value) return;
-    await navigator.clipboard?.writeText(value);
-    setMessage('Address copied');
+    if (!value) { setMessage('No address is available to copy for this network.'); return; }
+    try {
+      if (!navigator.clipboard?.writeText) throw new Error('Clipboard access is unavailable on this device.');
+      await navigator.clipboard.writeText(value);
+      setMessage('Copied to clipboard');
+    } catch (error) { setMessage(error instanceof Error ? error.message : 'Could not copy to clipboard.'); }
+  };
+
+  const createReceiveAddress = async () => {
+    if (network !== 'Solana' && network !== 'TRON') return;
+    if (!password) { setMessage('Enter your SIRE Wallet password to create this network account.'); return; }
+    setBusy(true); setMessage('');
+    try {
+      if (network === 'Solana') await createSolanaAccount(password);
+      else await createTronAccount(password);
+      setAddresses(await getReceiveAddresses());
+      setMessage(network + ' receive address created.');
+    } catch (error) { setMessage(error instanceof Error ? error.message : String(error)); }
+    finally { setBusy(false); }
   };
 
   const createChains = async () => {
@@ -360,7 +376,7 @@ export default function SireWalletPanel({ initialOpen = false, initialDepositOpe
 
           {historyOpen && <section className="sire-wallet-activity">
             <div className="sire-wallet-section-head"><div><span>RECENT ACTIVITY</span><h3>Transactions</h3></div><button onClick={() => setHistoryOpen(false)}>Close</button></div>
-            {history.length ? history.map(item => <a key={item.id} href={item.explorerUrl} target="_blank" rel="noreferrer"><span>{item.direction === 'send' ? 'Sent' : item.direction === 'receive' ? 'Received' : 'Contract'} · {item.symbol || item.network}</span><b>{short(item.hash)}</b><ExternalLink size={12}/></a>) : <div className="sire-wallet-empty"><History size={20}/><span>No transactions found for this network.</span></div>}
+            {history.length ? history.map(item => <a key={item.id} href={item.explorerUrl} target="_blank" rel="noreferrer"><span>{item.direction === 'send' ? 'Sent' : item.direction === 'receive' ? 'Received' : 'Transaction'} · {item.symbol || item.network}<small>{String(item.status || 'unknown').toUpperCase()} · {item.timestamp ? new Date(item.timestamp).toLocaleString() : 'Time unavailable'}</small></span><b>{short(item.hash)}</b><ExternalLink size={12}/></a>) : <div className="sire-wallet-empty"><History size={20}/><span>No transactions found for this network.</span></div>}
           </section>}
 
           <section className="sire-wallet-multichain">
@@ -415,9 +431,9 @@ export default function SireWalletPanel({ initialOpen = false, initialDepositOpe
           <div className="sire-wallet-modal-head"><div><span>RECEIVE</span><h3>SIRE Wallet</h3></div><button onClick={() => setReceiveOpen(false)}><X size={17}/></button></div>
           <label className="sire-wallet-field-label">Network</label>
           <select value={network} onChange={event => setNetwork(event.target.value as WalletNetwork)}>{allNetworks.map(item => <option key={item} value={item}>{item}</option>)}</select>
-          <div className="sire-wallet-address-box"><span>YOUR {network.toUpperCase()} ADDRESS</span><code>{address || (unlocked ? 'No receive address available for this network yet.' : 'Unlock your SIRE Wallet to view your address.')}</code></div>
-          <button className="sire-wallet-primary" onClick={() => void copy(address)}>Copy address</button>
-          <p>Only send assets that belong to this network to this address.</p>
+          <div className="sire-wallet-address-box"><span>YOUR {network.toUpperCase()} ADDRESS</span><code>{address || (unlocked ? `No ${network} receive address exists on this device yet.` : 'Unlock your SIRE Wallet to view your address.')}</code></div>
+          {address ? <button className="sire-wallet-primary" onClick={() => void copy(address)}>Copy address</button> : (network === 'Solana' || network === 'TRON') ? <><input type="password" value={password} onChange={event => setPassword(event.target.value)} placeholder="Wallet password to create this network address"/><button className="sire-wallet-primary" disabled={busy} onClick={() => void createReceiveAddress()}>{busy ? 'Creating address…' : `Create ${network} address`}</button></> : <p>Wallet address unavailable. Reopen or unlock SIRE Wallet and try again.</p>}
+          <p>Network safety: only send assets on <b>{network}</b> to this address. A wallet address on one blockchain is not automatically compatible with another.</p>
         </div></div>}
 
         {tokenOpen && <div className="sire-wallet-modal-backdrop" onMouseDown={() => setTokenOpen(false)}><div className="sire-wallet-modal" onMouseDown={e => e.stopPropagation()}>
