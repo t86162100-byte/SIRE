@@ -69,6 +69,7 @@ function money(value?: number) {
 export default function HomeView({ instruments, onSelectInstrument, onNavigate, videoSrc = '/sire-home-hero.mp4' }: Props) {
   const [searchOpen, setSearchOpen] = useState(false);
   const [supportOpen, setSupportOpen] = useState(false);
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [balanceVisible, setBalanceVisible] = useState(true);
   const [activeEvent, setActiveEvent] = useState(0);
@@ -197,7 +198,7 @@ export default function HomeView({ instruments, onSelectInstrument, onNavigate, 
         <button type="button" className="sire-home-icon sire-home-profile-button" onClick={() => onNavigate?.('portfolio')} aria-label="Open profile and wallet"><CircleUserRound size={23} /></button>
         <div className="sire-home-header-actions">
           <button type="button" className="sire-home-icon" onClick={() => { setQuery(''); setSearchOpen(true); }} aria-label="Search SIRE"><Search size={21} /></button>
-          <button type="button" className="sire-home-icon" onClick={() => onNavigate?.('discover')} aria-label="Notifications"><Bell size={21} /></button>
+          <button type="button" className="sire-home-icon" onClick={() => setNotificationsOpen(true)} aria-label="Notifications"><Bell size={21} /></button>
           <button type="button" className="sire-home-icon" onClick={() => setSupportOpen(true)} aria-label="Help and support"><CircleHelp size={22} /></button>
         </div>
       </header>
@@ -310,6 +311,7 @@ export default function HomeView({ instruments, onSelectInstrument, onNavigate, 
           </div>
         </div>
       )}
+      {notificationsOpen && <div className="sire-home-support-overlay" onClick={()=>setNotificationsOpen(false)}><section className="sire-home-support-sheet" onClick={event=>event.stopPropagation()}><div className="sire-home-search-head"><strong>Notifications</strong><button type="button" onClick={()=>setNotificationsOpen(false)} aria-label="Close notifications">×</button></div><div className="sire-home-notifications-empty"><Bell size={24}/><b>You're all caught up</b><span>Important account and market updates will appear here.</span></div></section></div>}
       {supportOpen && <div className="sire-home-support-overlay" onClick={()=>setSupportOpen(false)}><section className="sire-home-support-sheet" onClick={event=>event.stopPropagation()}><div className="sire-home-search-head"><strong>Help & support</strong><button type="button" onClick={()=>setSupportOpen(false)} aria-label="Close support">×</button></div><p>What do you need help with?</p><button type="button" onClick={()=>{setSupportOpen(false);onNavigate?.('market')}}><span><b>Markets & prices</b><small>Finding instruments and understanding market data</small></span><ChevronRight size={16}/></button><button type="button" onClick={()=>{setSupportOpen(false);onNavigate?.('trade')}}><span><b>Trading</b><small>Open the Spot and Futures workspace</small></span><ChevronRight size={16}/></button><button type="button" onClick={()=>{setSupportOpen(false);onNavigate?.('portfolio')}}><span><b>Wallet & account</b><small>Open your portfolio and wallet tools</small></span><ChevronRight size={16}/></button></section></div>}
     </main>
   );
