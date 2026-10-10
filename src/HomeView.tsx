@@ -75,7 +75,7 @@ export default function HomeView({ instruments, onSelectInstrument, onNavigate, 
   const [accountUser, setAccountUser] = useState<SireUser | null>(null);
   const [authMode, setAuthMode] = useState<'login' | 'signup' | null>(null);
   const [totalValueVisible, setTotalValueVisible] = useState(true);
-  const [accountValue, setAccountValue] = useState<string | null>(null);
+  const accountValue: string | null = null;
 
   useEffect(() => {
     let active = true;
