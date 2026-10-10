@@ -25,13 +25,11 @@ import {
 } from './swapEngine';
 import { cancelPreparedNativeWallet, finalizePreparedNativeWallet, getNativeWalletAddress, hasNativeWallet, isNativeWalletUnlocked, prepareNativeWallet, unlockNativeWallet } from './sireWalletCore';
 import { limitMakingAmount, limitTakingAmount } from './limitOrderEngine';
-import SpotView from './SpotView';
-import FuturesView from './FuturesView';
 const loadLimitOrderEngine = () => import('./limitOrderEngine');
 
-type Props = { referencePrice?: number; referenceChange?: number; forceSpot?: boolean; spotSymbol?: string };
+type Props = { referencePrice?: number; referenceChange?: number };
 
-const PRODUCTS = ['Swap', 'Spot', 'Margin', 'Futures', 'Options', 'Alpha', 'Tokenized', 'TradFi'];
+const PRODUCTS = ['Swap'];
 
 const money = (value: number, digits = 2) =>
   Number.isFinite(value) ? value.toLocaleString(undefined, { maximumFractionDigits: digits }) : '—';
@@ -59,7 +57,7 @@ const LogoMark = ({ src, fallback, className = '' }: { src?: string; fallback: s
   </span>
 );
 
-export default function TradeView({ referencePrice = 0, forceSpot = false, spotSymbol }: Props) {
+export default function TradeView({ referencePrice = 0 }: Props) {
   const [network, setNetwork] = useState('');
   const [supportedNetworks, setSupportedNetworks] = useState<SwapNetwork[]>([]);
   const [tokens, setTokens] = useState<SwapToken[]>([]);
@@ -72,7 +70,6 @@ export default function TradeView({ referencePrice = 0, forceSpot = false, spotS
   const [walletChain, setWalletChain] = useState<number | null>(null);
   const [fromBalance, setFromBalance] = useState('0');
   const [tradeMode, setTradeMode] = useState<'Swap' | 'Limit'>('Swap');
-  const [tradeProduct, setTradeProduct] = useState<'Swap' | 'Spot' | 'Futures'>('Swap');
   const [slippage, setSlippage] = useState(0.005);
   const [routeOrder, setRouteOrder] = useState<SwapRouteOrder>('CHEAPEST');
   const [quote, setQuote] = useState<SwapQuote | null>(null);
@@ -126,14 +123,7 @@ export default function TradeView({ referencePrice = 0, forceSpot = false, spotS
   const [limitError, setLimitError] = useState('');
   const [limitOrders, setLimitOrders] = useState<any[]>([]);
 
-  useEffect(() => {
-    if (forceSpot) {
-      setTradeProduct('Spot');
-      window.dispatchEvent(new CustomEvent('sire:spot-return-consumed'));
-    }
-  }, [forceSpot]);
-
-  useEffect(() => {
+useEffect(() => {
     const syncNativeWallet = () => {
       setNativeWallet(getNativeWalletAddress());
       setNativeUnlocked(isNativeWalletUnlocked());
@@ -928,12 +918,7 @@ export default function TradeView({ referencePrice = 0, forceSpot = false, spotS
   return <div className="sire-swap-shell">
     <header className="sire-trade-productbar">
       <div className="sire-trade-product-scroll">
-        {PRODUCTS.map(product => (
-          <button key={product} type="button" className={tradeProduct === product ? 'active' : ''} disabled={product !== 'Swap' && product !== 'Spot' && product !== 'Futures'}
-            onClick={() => { if (product === 'Swap' || product === 'Spot' || product === 'Futures') setTradeProduct(product as 'Swap' | 'Spot' | 'Futures'); }}>
-            {product}
-          </button>
-        ))}
+        <button type="button" className="active" aria-current="page">Swap</button>
       </div>
       <div className="sire-trade-status">
         <span className="sire-status-dot" />
@@ -941,7 +926,7 @@ export default function TradeView({ referencePrice = 0, forceSpot = false, spotS
       </div>
     </header>
 
-    {tradeProduct === 'Futures' ? <FuturesView /> : tradeProduct === 'Spot' ? <SpotView wallet={wallet} initialSymbol={spotSymbol} onConnect={() => window.dispatchEvent(new CustomEvent('sire:open-native-wallet'))} /> : <>
+    <>
     <div className="sire-trade-mode-row" role="tablist" aria-label="Trade mode">
       <div className="sire-trade-mode-pills">
         {(['Swap', 'Limit'] as const).map(mode => (
@@ -1476,6 +1461,6 @@ export default function TradeView({ referencePrice = 0, forceSpot = false, spotS
         </div>
       </section>
     </div>}
-    </>}
+    </>
   </div>;
 }
