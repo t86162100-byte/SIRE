@@ -355,6 +355,16 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    const openFundingDrawer = () => {
+      setTradeOpen(false);
+      setActiveTab('home');
+      window.setTimeout(() => window.dispatchEvent(new CustomEvent('sire:show-funding-drawer')), 80);
+    };
+    window.addEventListener('sire:open-funding-drawer', openFundingDrawer);
+    return () => window.removeEventListener('sire:open-funding-drawer', openFundingDrawer);
+  }, []);
+
+  useEffect(() => {
     const openWalletReceive = () => {
       setOpenReceiveOnWallet(true);
       setOpenDepositOnWallet(false);
