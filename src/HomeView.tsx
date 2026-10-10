@@ -138,7 +138,7 @@ export default function HomeView({ instruments, onSelectInstrument, onNavigate, 
         if (!response.ok || !data?.ok) throw new Error(data?.error || 'Could not load live fiat purchase options.');
         if (!cancelled) {
           setFundingFiatCatalog(data);
-          if (!data.cryptoAssets?.some((x:any) => x.crypto === fundingFiatCoin)) {
+          if (!data.cryptoAssets?.some((x:any) => x.crypto === fundingFiatCoin && x.network === fundingFiatNetwork)) {
             setFundingFiatCoin(data.cryptoAssets?.[0]?.crypto || '');
             setFundingFiatNetwork(data.cryptoAssets?.[0]?.network || '');
           }
