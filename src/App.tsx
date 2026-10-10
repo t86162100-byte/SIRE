@@ -695,7 +695,7 @@ export default function App() {
     setMultiChartOpen(false);
   };
   if (activeTab === 'home') {
-    return <HomeView instruments={liveInstruments} onSelectInstrument={item => {
+    return <HomeView instruments={liveInstruments} onNavigate={tab => setActiveTab(tab)} onSelectInstrument={item => {
       const match = liveInstruments.find(candidate => candidate.id === item.id);
       if (match) selectInstrument(match);
     }} />;
