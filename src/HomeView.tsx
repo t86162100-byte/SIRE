@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
 import './home.css';
-import SireVisualEngine from './SireVisualEngine';
 import {
   ArrowRight, Bell, BrainCircuit, ChevronRight, CircleUserRound, Eye, EyeOff, Flame,
   Grid2X2, LineChart, Search, Sparkles, TrendingUp, Wallet, ArrowDownToLine, ArrowUpFromLine, Repeat2,
@@ -201,34 +200,11 @@ export default function HomeView({ instruments, onSelectInstrument, videoSrc = '
         </div>
       </header>
 
-      <SireVisualEngine className="sire-home-gpu" />
-
-      <div className="sire-home-liquid" aria-hidden="true">
-        <span className="sire-liquid-dark" />
-        <span className="sire-liquid-blue blue-a" />
-        <span className="sire-liquid-blue blue-b" />
-        <span className="sire-liquid-blue blue-c" />
-        <span className="sire-liquid-purple purple-a" />
-        <span className="sire-liquid-purple purple-b" />
-        <span className="sire-liquid-purple purple-c" />
-        <span className="sire-liquid-sheen" />
-      </div>
-
       <div className="sire-home-scroll">
-        <section className="sire-home-hero">
-          <video
-            className="sire-home-video"
-            autoPlay
-            muted
-            loop
-            playsInline
-            preload="auto"
-            onCanPlay={event => { event.currentTarget.play().catch(() => {}); }}
-          >
-            <source src={videoSrc} type="video/mp4" />
-            <source src="/sire-home-hero.mp4" type="video/mp4" />
-            <source src="/magichour_image_to_video-2026-09-28--1x-1-cmullyqw300zgi0017dnt2dar.mp4" type="video/mp4" />
-          </video>
+        <section className="sire-home-welcome">
+          <span>WELCOME TO SIRE</span>
+          <h1>Trade smarter. With SIRE.</h1>
+          <p>Real markets <i>•</i> Real tools <i>•</i> Real opportunities</p>
         </section>
 
         <section className="sire-home-balance" aria-label="Total balance">
@@ -265,46 +241,10 @@ export default function HomeView({ instruments, onSelectInstrument, videoSrc = '
           </div>
         </section>
 
-        <section className="sire-home-events-media" aria-label="SIRE events, notices and updates">
-          <div className="sire-home-events-media-stage" aria-live="polite">
-            <article className={`sire-home-event-media ${activeEvent === 0 ? 'is-active' : ''}`}>
-              <div className="sire-home-event-media-art event-art-notice">
-                <span className="sire-home-event-media-icon"><Megaphone size={22} /></span>
-                <div><b>NOTICE</b><strong>Important SIRE announcements</strong><small>New notices, maintenance updates and platform information.</small></div>
-              </div>
-            </article>
-            <article className={`sire-home-event-media ${activeEvent === 1 ? 'is-active' : ''}`}>
-              <div className="sire-home-event-media-art event-art-competition">
-                <span className="sire-home-event-media-icon"><Trophy size={22} /></span>
-                <div><b>COMPETITION</b><strong>Upcoming trading events</strong><small>Challenges, competitions and community events will appear here.</small></div>
-              </div>
-            </article>
-            <article className={`sire-home-event-media ${activeEvent === 2 ? 'is-active' : ''}`}>
-              <div className="sire-home-event-media-art event-art-update">
-                <span className="sire-home-event-media-icon"><CalendarClock size={22} /></span>
-                <div><b>UPCOMING</b><strong>New platform updates</strong><small>Product launches, market updates and new features.</small></div>
-              </div>
-            </article>
-            <article className={`sire-home-event-media ${activeEvent === 3 ? 'is-active' : ''}`}>
-              <div className="sire-home-event-media-art event-art-rewards">
-                <span className="sire-home-event-media-icon"><Gift size={22} /></span>
-                <div><b>INCENTIVES &amp; REWARDS</b><strong>New opportunities are coming</strong><small>Promotions and reward campaigns can be featured here.</small></div>
-              </div>
-            </article>
-          </div>
-          <div className="sire-home-events-dots" role="tablist" aria-label="Event slides">
-            {[0, 1, 2, 3].map(index => (
-              <button
-                key={index}
-                type="button"
-                role="tab"
-                aria-selected={activeEvent === index}
-                aria-label={`Show event ${index + 1} of 4`}
-                className={activeEvent === index ? 'is-active' : ''}
-                onClick={() => setActiveEvent(index)}
-              />
-            ))}
-          </div>
+        <section className="sire-home-promo">
+          <div className="sire-home-promo-icon"><LineChart size={22} /></div>
+          <div><span>SIRE MARKETS</span><strong>Spot, Futures and more — all in one place.</strong><p>Explore live market prices and trading tools from your SIRE workspace.</p></div>
+          <ChevronRight size={18} />
         </section>
 
         <section className="sire-home-section sire-home-markets">
