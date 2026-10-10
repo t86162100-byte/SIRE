@@ -47,13 +47,14 @@ test('Futures orders read holding mode before sending a position-aware order', a
   const calls = mockFetch((url) => url.endsWith('/api/v3/account/settings')
     ? response({ holdMode: 'hedge_mode' })
     : response({ orderId: '123456789013', clientOid: 'sire-futures' }));
-  await bitgetOwnerPlaceOrder({ category: 'USDT-FUTURES', symbol: 'BTCUSDT', side: 'buy', orderType: 'limit', qty: '0.001', price: '30000', posSide: 'long', marginMode: 'isolated', reduceOnly: 'no', timeInForce: 'gtc' });
+  await bitgetOwnerPlaceOrder({ category: 'USDT-FUTURES', symbol: 'BTCUSDT', side: 'buy', orderType: 'limit', qty: '0.001', price: '30000', posSide: 'long', marginMode: 'isolated', reduceOnly: 'no', tradeSide: 'close', timeInForce: 'gtc' });
   assert.equal(calls.length, 2);
   const body = JSON.parse(calls[1].options.body);
   assert.equal(body.category, 'USDT-FUTURES');
   assert.equal(body.posSide, 'long');
   assert.equal(body.marginMode, 'isolated');
   assert.equal(body.reduceOnly, 'no');
+  assert.equal(body.tradeSide, 'close');
 });
 
 test('Futures leverage uses the selected category, symbol, and margin mode', async () => {
