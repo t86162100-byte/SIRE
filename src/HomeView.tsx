@@ -550,7 +550,23 @@ export default function HomeView({ instruments, onSelectInstrument, onNavigate, 
               <div className="sire-funding-address"><span>SIRE NGN BALANCE</span><strong>₦{Number(pagaAccount?.balance || 0).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</strong><small>{pagaLoading ? 'Refreshing account…' : 'Verified deposits only'}</small></div>
               <label className="sire-funding-field"><span>Deposit amount · NGN</span><input type="number" min="0.01" step="0.01" inputMode="decimal" placeholder="Enter amount in naira" value={pagaAmount} onChange={event => { setPagaAmount(event.target.value); setPagaCheckout(null); setFundingError(''); }} /></label>
               <button type="button" className="sire-funding-primary" disabled={pagaBusy || !pagaAmount || Number(pagaAmount)<=0} onClick={() => void startPagaDeposit()}>{pagaBusy ? 'Preparing secure checkout…' : 'Continue with Paga'}</button>
-              {pagaCheckout && <div className="sire-funding-address"><span>PAYMENT REFERENCE</span><code>{pagaCheckout.reference}</code><small>Amount: ₦{Number(pagaCheckout.amount).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})} · Status: awaiting payment</small><div id="sire-paga-checkout-host" className="sire-paga-checkout-host" /><small>If the secure Paga button does not appear, check the provider configuration in Render.</small></div>}
+              {pagaCheckout && <div className="sire-funding-address"><span>PAYMENT REFERENCE</span><code>{pagaCheckout.reference}</code><small>Amount: ₦{Number(pagaCheckout.amount).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})} · Status: awaiting payment</small><div id="sire-paga-checkout-host" className="sire-paga-checkout-host" />
+                  <a
+                    className="sire-funding-primary"
+                    href={`${pagaCheckout.environment === 'live' ? 'https://checkout.paga.com' : 'https://beta-checkout.paga.com'}/checkout/params?${new URLSearchParams({
+                      public_key: String(pagaCheckout.publicKey || ''),
+                      amount: String(pagaCheckout.amount || ''),
+                      currency: 'NGN',
+                      payment_reference: String(pagaCheckout.reference || ''),
+                      charge_url: String(pagaCheckout.chargeUrl || ''),
+                      email: String(pagaCheckout.email || accountUser?.email || ''),
+                      callback_url: String(pagaCheckout.callbackUrl || ''),
+                      funding_sources: String(pagaCheckout.fundingSources || 'CARD,PAGA,TRANSFER,AGENT,USSD'),
+                    }).toString()}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >Open secure Paga checkout</a>
+                  <small>If the embedded payment button fails to load, use the secure checkout link above. SIRE will still verify payment on the server before crediting your NGN balance.</small></div>}
               <button type="button" className="sire-funding-secondary" disabled={pagaLoading} onClick={() => void refreshPagaAccount()}>{pagaLoading ? 'Refreshing…' : 'Refresh balance & history'}</button>
               {!!pagaAccount?.deposits?.length && <div className="sire-funding-history"><span className="sire-funding-kicker">RECENT FIAT DEPOSITS</span>{pagaAccount.deposits.map((row:any) => <div className="sire-funding-history-row" key={row.reference}><span><b>₦{Number(row.amount).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</b><small>{row.reference}</small></span><span><b>{String(row.status||'pending').toUpperCase()}</b><small>{formatFundingTime(row.paidAt || row.createdAt)}</small></span></div>)}</div>}
               {fundingError && <p className="sire-funding-note">{fundingError}</p>}
