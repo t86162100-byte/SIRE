@@ -201,12 +201,6 @@ export default function HomeView({ instruments, onSelectInstrument, videoSrc = '
       </header>
 
       <div className="sire-home-scroll">
-        <section className="sire-home-welcome">
-          <span>WELCOME TO SIRE</span>
-          <h1>Trade smarter. With SIRE.</h1>
-          <p>Real markets <i>•</i> Real tools <i>•</i> Real opportunities</p>
-        </section>
-
         <section className="sire-home-balance" aria-label="Total balance">
           <div className="sire-home-balance-head">
             <div className="sire-home-balance-title">
