@@ -212,7 +212,7 @@ export default function HomeView({ instruments, onSelectInstrument, videoSrc = '
             <button type="button" className="sire-home-account-wallet"><Wallet size={15} /> Wallet <ChevronRight size={14} /></button>
           </div>
           <div className="sire-home-account-value">{balanceVisible ? '—' : '••••••'} <small>USD</small></div>
-          <div className="sire-home-account-foot"><span><i /> Available balance</span><strong>{balanceVisible ? '$0.00' : '••••••'}</strong><span className="sire-home-account-note">Live account data</span></div>
+          <div className="sire-home-account-foot"><span><i /> Available balance</span><strong>{balanceVisible ? '—' : '••••••'}</strong><span className="sire-home-account-note">Connect account to view</span></div>
           <div className="sire-home-account-actions">
             <button type="button" aria-label="Deposit"><span><ArrowDownToLine size={18} /></span><b>Deposit</b></button>
             <button type="button" aria-label="Withdraw"><span><ArrowUpFromLine size={18} /></span><b>Withdraw</b></button>
@@ -255,7 +255,7 @@ export default function HomeView({ instruments, onSelectInstrument, videoSrc = '
               const raw=item as any;
               const change=Number(raw.change24h ?? raw.changePercent24h ?? raw.priceChangePercent ?? raw.percentChange24h ?? raw.changePercent);
               const volume=Number(raw.volume24h ?? raw.quoteVolume ?? raw.volume);
-              const displayBase=String(raw.base || item.displaySymbol || item.symbol).replace(/\\/USDT$|\\/USD$|USDT$|USD$/i,'').toUpperCase();
+              const displayBase=String(raw.base || item.displaySymbol || item.symbol).replace(new RegExp('/USDT$|/USD$|USDT$|USD$','i'),'').toUpperCase();
               const tone=Number.isFinite(change)?(change>0?'positive':change<0?'negative':'neutral'):'neutral';
               return <article key={item.id} className="sire-home-watch-row">
                 <button type="button" className="sire-home-watch-main" onClick={() => onSelectInstrument?.(item)}>
@@ -277,7 +277,7 @@ export default function HomeView({ instruments, onSelectInstrument, videoSrc = '
               const raw=item as any;
               const change=Number(raw.change24h??raw.changePercent24h??raw.priceChangePercent??raw.percentChange24h??raw.changePercent);
               const tone: 'positive'|'negative'|'neutral'=Number.isFinite(change)?(change>0?'positive':change<0?'negative':'neutral'):'neutral';
-              const base=String(raw.base||item.displaySymbol||item.symbol).replace(/\\/USDT$|\\/USD$|USDT$|USD$/i,'').toUpperCase();
+              const base=String(raw.base||item.displaySymbol||item.symbol).replace(new RegExp('/USDT$|/USD$|USDT$|USD$','i'),'').toUpperCase();
               return <article key={item.id} className={'sire-home-pulse-card sire-home-pulse-card--'+tone}><button type="button" className="sire-home-pulse-main" onClick={()=>onSelectInstrument?.(item)}>
                 <span className="sire-home-pulse-top"><span className="sire-home-pulse-identity"><span className="sire-home-pulse-logo"><img src={item.logoUrl||fallbackLogo(base)} alt="" onError={event=>{event.currentTarget.onerror=null;event.currentTarget.src=fallbackLogo(base)}}/></span><span className="sire-home-pulse-copy"><b>{base}</b><small>{String(item.name||item.displaySymbol||item.symbol).replace(/_/g,' ')}</small></span></span><span className="sire-home-pulse-source"><small>{String(item.providerLabel||item.provider||'MARKET').toUpperCase()}</small></span></span>
                 <span className="sire-home-pulse-value"><strong>{money(item.price)}</strong><b className={tone}>{Number.isFinite(change)?(change>=0?'+':'')+change.toFixed(2)+'%':'—'}</b></span>
