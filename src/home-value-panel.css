@@ -1,0 +1,14 @@
+/* Shared Home header/value surface with compact two-column balance layout */
+.sire-home-v2 .sire-home-value-card{margin-top:calc(-75px - env(safe-area-inset-top))!important;min-height:0!important;padding:calc(75px + env(safe-area-inset-top) + 13px) 19px 17px!important;border:1px solid #252a2d!important;border-top:0!important;border-radius:0 0 20px 20px!important;background:radial-gradient(ellipse at 83% 62%,rgba(255,255,255,.065),transparent 44%),linear-gradient(180deg,#050606 0%,#0b0d0e 72%,#101213 100%)!important;box-shadow:0 15px 34px rgba(0,0,0,.17)!important;margin-bottom:27px!important}
+.sire-home-v2 .sire-home-value-card:before{left:48%!important;right:5%!important;bottom:65px!important;height:65px!important;background:rgba(255,255,255,.055)!important;filter:blur(28px)!important}
+.sire-home-v2 .sire-home-value-main{display:grid!important;grid-template-columns:minmax(0,1fr) minmax(0,1fr)!important;align-items:center!important;gap:13px!important;min-width:0!important}
+.sire-home-v2 .sire-home-value-copy{min-width:0!important}
+.sire-home-v2 .sire-home-value-card-top{justify-content:flex-start!important;gap:9px!important}
+.sire-home-v2 .sire-home-value-card-top>button{width:27px!important;height:27px!important;flex:0 0 27px!important;border:0!important;background:transparent!important;color:#aeb5b9!important}
+.sire-home-v2 .sire-home-value-amount{flex-wrap:wrap!important;gap:5px!important;margin-top:9px!important;font-size:clamp(27px,7.4vw,39px)!important;line-height:1.08!important;letter-spacing:-.065em!important;overflow-wrap:anywhere!important}
+.sire-home-v2 .sire-home-value-amount small{font-size:9px!important;letter-spacing:.08em!important}
+.sire-home-v2 .sire-home-value-chart{height:76px!important;min-width:0!important;margin:0!important;overflow:visible!important;opacity:.92!important}
+.sire-home-v2 .sire-home-value-actions{grid-template-columns:1fr 1fr!important;gap:10px!important;margin-top:17px!important}
+.sire-home-v2 .sire-home-value-actions button,.sire-home-v2 .sire-home-value-add-funds{min-height:43px!important;font-size:12px!important}
+.sire-home-v2 .sire-home-value-add-funds{margin-top:17px!important}
+@media(max-width:380px){.sire-home-v2 .sire-home-value-card{padding:calc(75px + env(safe-area-inset-top) + 11px) 15px 15px!important;border-radius:0 0 17px 17px!important}.sire-home-v2 .sire-home-value-main{gap:8px!important}.sire-home-v2 .sire-home-value-amount{font-size:clamp(25px,7.2vw,32px)!important}.sire-home-v2 .sire-home-value-chart{height:67px!important}}
