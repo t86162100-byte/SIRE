@@ -21,7 +21,7 @@ function num(value?: string | number) {
   return Number.isFinite(n) ? n.toLocaleString(undefined,{maximumFractionDigits:8}) : '0';
 }
 
-export default function SireWalletPanel({ initialOpen = false, initialDepositOpen = false, onDepositChoiceOpened }: { initialOpen?: boolean; initialDepositOpen?: boolean; onDepositChoiceOpened?: () => void }) {
+export default function SireWalletPanel({ initialOpen = false, initialDepositOpen = false, initialReceiveOpen = false, onDepositChoiceOpened, onReceiveOpened }: { initialOpen?: boolean; initialDepositOpen?: boolean; initialReceiveOpen?: boolean; onDepositChoiceOpened?: () => void; onReceiveOpened?: () => void }) {
   const [open, setOpen] = useState(initialOpen);
   const [evmNetworks, setEvmNetworks] = useState<WalletNetwork[]>(FALLBACK_EVM_NETWORKS);
   const [network, setNetwork] = useState<WalletNetwork>('Ethereum');
@@ -65,6 +65,13 @@ export default function SireWalletPanel({ initialOpen = false, initialDepositOpe
     setDepositChoiceOpen(true);
     onDepositChoiceOpened?.();
   }, [initialDepositOpen, onDepositChoiceOpened]);
+  useEffect(() => {
+    if (!initialReceiveOpen) return;
+    setOpen(true);
+    if (isNativeWalletUnlocked()) setReceiveOpen(true);
+    else setMessage('Unlock your SIRE Wallet to view your receive address.');
+    onReceiveOpened?.();
+  }, [initialReceiveOpen, onReceiveOpened]);
 
   useEffect(() => {
     const onOpen = () => setOpen(true);
@@ -405,8 +412,10 @@ export default function SireWalletPanel({ initialOpen = false, initialDepositOpe
         </div></div>}
 
         {receiveOpen && <div className="sire-wallet-modal-backdrop" onMouseDown={() => setReceiveOpen(false)}><div className="sire-wallet-modal sire-wallet-receive" onMouseDown={e => e.stopPropagation()}>
-          <div className="sire-wallet-modal-head"><div><span>RECEIVE</span><h3>{network}</h3></div><button onClick={() => setReceiveOpen(false)}><X size={17}/></button></div>
-          <div className="sire-wallet-address-box"><span>YOUR ADDRESS</span><code>{address || 'Create this network account first.'}</code></div>
+          <div className="sire-wallet-modal-head"><div><span>RECEIVE</span><h3>SIRE Wallet</h3></div><button onClick={() => setReceiveOpen(false)}><X size={17}/></button></div>
+          <label className="sire-wallet-field-label">Network</label>
+          <select value={network} onChange={event => setNetwork(event.target.value as WalletNetwork)}>{allNetworks.map(item => <option key={item} value={item}>{item}</option>)}</select>
+          <div className="sire-wallet-address-box"><span>YOUR {network.toUpperCase()} ADDRESS</span><code>{address || (unlocked ? 'No receive address available for this network yet.' : 'Unlock your SIRE Wallet to view your address.')}</code></div>
           <button className="sire-wallet-primary" onClick={() => void copy(address)}>Copy address</button>
           <p>Only send assets that belong to this network to this address.</p>
         </div></div>}
