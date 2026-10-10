@@ -18,7 +18,7 @@ import { saveLimitOrder, listLimitOrders, cancelLimitOrder, runLimitOrderMonitor
 import { fetchBinanceCatalogServer, fetchBinanceMarketSnapshotServer, fetchBinanceHistoryServer } from './backend/binance-catalog.ts';
 import { fetchBitgetCatalogServer, bitgetCatalogStatus } from './backend/bitget-catalog.ts';
 import { bitgetMarketSubscribe, bitgetMarketUnsubscribe, bitgetMarketDisconnect, startBitgetLiveDiagnostics, bitgetLiveStatus } from './backend/bitget-live-market.ts';
-import { bitgetAuthenticatedHealth, bitgetMarketOrderBook, bitgetOwnerAccount, bitgetOwnerPlaceOrder, bitgetOwnerFuturesPositions, bitgetOwnerSetFuturesLeverage, bitgetOwnerCancelOrder, bitgetOwnerCancelAllOrders, bitgetOwnerModifyOrder, bitgetOwnerOpenOrders, bitgetOwnerOrderHistory, bitgetOwnerOrderInfo, bitgetOwnerPlaceTriggerOrder, bitgetOwnerPendingTriggerOrders, bitgetOwnerCancelTriggerOrder, bitgetOwnerModifyTriggerOrder, bitgetOwnerStrategyOrderHistory } from './backend/sire-provider-execution.ts';
+import { bitgetAuthenticatedHealth, bitgetMarketOrderBook, bitgetOwnerDepositAddress, bitgetOwnerDepositRecords, bitgetOwnerAccount, bitgetOwnerPlaceOrder, bitgetOwnerFuturesPositions, bitgetOwnerSetFuturesLeverage, bitgetOwnerCancelOrder, bitgetOwnerCancelAllOrders, bitgetOwnerModifyOrder, bitgetOwnerOpenOrders, bitgetOwnerOrderHistory, bitgetOwnerOrderInfo, bitgetOwnerPlaceTriggerOrder, bitgetOwnerPendingTriggerOrders, bitgetOwnerCancelTriggerOrder, bitgetOwnerModifyTriggerOrder, bitgetOwnerStrategyOrderHistory } from './backend/sire-provider-execution.ts';
 import { fetchSireSpotCatalogServer, sireSpotCatalogStatus } from './backend/sire-spot-catalog.ts';
 import { createFuturesSchedule, listFuturesSchedules, controlFuturesSchedule, cancelAllFuturesSchedules, runFuturesScheduleBatch } from './backend/futures-scheduler.ts';
 import { ensureSireSpotTables, getSpotBook, placeSpotOrder, cancelSpotOrder, getSpotAccount, getSpotOrders, getSpotTrades, spotEngineStatus, spotSubscribe, spotUnsubscribe, spotDisconnect } from './backend/sire-spot-engine.ts';
@@ -1050,6 +1050,21 @@ const server = http.createServer(async (req,res) => {
         return res.writeHead(200,{'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify(SIRE_PAPER_MODE()?paperSetLeverage(parsed):await bitgetOwnerSetFuturesLeverage(parsed)));
       } catch (cause) {
         return res.writeHead(400,{'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify({ok:false,error:cause instanceof Error ? cause.message : String(cause)}));
+      }
+    }
+    if (req.method === 'GET' && (pathname === '/api/sire/bitget/deposit/address' || pathname === '/api/sire/bitget/deposit/history')) {
+      try {
+        const ownerEmail=String(process.env.SIRE_OWNER_EMAIL||'').trim().toLowerCase();
+        const user=await currentUser(req);
+        if(!ownerEmail)return res.writeHead(503,{'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify({ok:false,error:'SIRE_OWNER_EMAIL is not configured.'}));
+        if(!user||String(user.email||'').toLowerCase()!==ownerEmail)return res.writeHead(401,{'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify({ok:false,error:'Sign in with the SIRE owner account to view Bitget deposit details.'}));
+        const url=new URL(req.url||'/','http://sire.local');
+        const result=pathname.endsWith('/address')
+          ? await bitgetOwnerDepositAddress(url.searchParams.get('coin')||'',url.searchParams.get('chain')||'')
+          : await bitgetOwnerDepositRecords({coin:url.searchParams.get('coin')||'',startTime:url.searchParams.get('startTime'),endTime:url.searchParams.get('endTime'),limit:url.searchParams.get('limit'),cursor:url.searchParams.get('cursor')});
+        return res.writeHead(200,{'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify(result));
+      } catch(cause) {
+        return res.writeHead(502,{'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify({ok:false,error:cause instanceof Error?cause.message:String(cause)}));
       }
     }
     if (req.method === 'GET' && pathname === '/api/sire/bitget/account') {
