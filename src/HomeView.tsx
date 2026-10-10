@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import './home.css';
 import {
-  ArrowRight, Bell, BrainCircuit, ChevronRight, CircleUserRound, Eye, EyeOff, Flame,
-  Grid2X2, LineChart, Search, Sparkles, TrendingUp, Wallet, ArrowDownToLine, ArrowUpFromLine, Repeat2,
-  BadgePercent, Megaphone, Trophy, CalendarClock, Gift, MoreHorizontal, CircleHelp,
+  ArrowRight, Bell, BrainCircuit, ChevronRight, CircleUserRound, Flame,
+  Grid2X2, LineChart, Search, Sparkles, TrendingUp, Wallet,
+  Megaphone, Trophy, CalendarClock, Gift, CircleHelp,
 } from 'lucide-react';
 
 type HomeInstrument = {
@@ -71,7 +71,6 @@ export default function HomeView({ instruments, onSelectInstrument, onNavigate, 
   const [supportOpen, setSupportOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [query, setQuery] = useState('');
-  const [balanceVisible, setBalanceVisible] = useState(true);
   const [activeEvent, setActiveEvent] = useState(0);
   const [activeMarketFilter, setActiveMarketFilter] = useState('Hot');
   const [activeMarketSubfilter, setActiveMarketSubfilter] = useState('Spot');
@@ -203,22 +202,6 @@ export default function HomeView({ instruments, onSelectInstrument, onNavigate, 
         </div>
       </header>
       <div className="sire-home-scroll">
-
-        <section className="sire-home-account" aria-label="Account overview">
-          <div className="sire-home-account-top">
-            <div><span className="sire-home-kicker">ACCOUNT OVERVIEW</span><div className="sire-home-account-label">Portfolio value <button type="button" className="sire-home-balance-eye" aria-label={balanceVisible ? 'Hide balance' : 'Show balance'} onClick={() => setBalanceVisible(value => !value)}>{balanceVisible ? <Eye size={15} /> : <EyeOff size={15} />}</button></div></div>
-            <button type="button" className="sire-home-account-wallet"><Wallet size={15} /> Wallet <ChevronRight size={14} /></button>
-          </div>
-          <div className="sire-home-account-value">{balanceVisible ? '—' : '••••••'} <small>USD</small></div>
-          <div className="sire-home-account-foot"><span><i /> Available balance</span><strong>{balanceVisible ? '—' : '••••••'}</strong><span className="sire-home-account-note">Connect account to view</span></div>
-          <div className="sire-home-account-actions">
-            <button type="button" aria-label="Deposit"><span><ArrowDownToLine size={18} /></span><b>Deposit</b></button>
-            <button type="button" aria-label="Withdraw"><span><ArrowUpFromLine size={18} /></span><b>Withdraw</b></button>
-            <button type="button" aria-label="Transfer"><span><Repeat2 size={18} /></span><b>Transfer</b></button>
-            <button type="button" aria-label="Rewards"><span><BadgePercent size={18} /></span><b>Rewards</b></button>
-            <button type="button" aria-label="More actions"><span><MoreHorizontal size={19} /></span><b>More</b></button>
-          </div>
-        </section>
 
         <section className="sire-home-launch">
           <div className="sire-home-section-heading"><div><span className="sire-home-kicker">GO DIRECT</span><h2>Open a workspace</h2></div><span className="sire-home-heading-index">01 — 04</span></div>
