@@ -1174,7 +1174,12 @@ const server = http.createServer(async (req,res) => {
       return res.writeHead(200,{'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify(bitgetLiveStatus()));
     }
     if (req.method === 'GET' && pathname === '/api/sire/bitget/auth-health') {
+      const ownerEmail = String(process.env.SIRE_OWNER_EMAIL || '').trim().toLowerCase();
+      if (!ownerEmail) return res.writeHead(503,{'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify({ok:false,error:'SIRE_OWNER_EMAIL is not configured.'}));
+      const user = await currentUser(req);
+      if (!user || String(user.email || '').toLowerCase() !== ownerEmail) return res.writeHead(401,{'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify({ok:false,error:'Sign in with the SIRE owner account to check Bitget authentication.'}));
       const result = await bitgetAuthenticatedHealth();
+      // Keep account equity and API permission details private to the SIRE owner.
       return res.writeHead(result.ok ? 200 : 502,{ 'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8' }).end(JSON.stringify(result));
     }
     if (req.method === 'GET' && pathname === '/api/sire/bitget/catalog') {
