@@ -187,229 +187,119 @@ export default function HomeView({ instruments, onSelectInstrument, videoSrc = '
   }, [pulseMarkets]);
 
 
+
   return (
-    <main className="sire-home">
+    <main className="sire-home sire-home-v2">
       <header className="sire-home-header">
-        <div className="sire-home-brand">
-          <img className="sire-home-logo" src="/sire-logo.svg" alt="SIRE" />
-        </div>
+        <div className="sire-home-brand"><img className="sire-home-logo" src="/sire-logo.svg" alt="SIRE" /><span className="sire-home-brand-caption">MARKETS / TERMINAL</span></div>
         <div className="sire-home-header-actions">
-          <button type="button" className="sire-home-icon" onClick={() => setSearchOpen(true)} aria-label="Search markets"><Search size={20} /></button>
-          <button type="button" className="sire-home-icon" aria-label="Notifications"><Bell size={19} /><i /></button>
-          <button type="button" className="sire-home-icon" aria-label="Profile"><CircleUserRound size={21} /></button>
+          <button type="button" className="sire-home-icon" onClick={() => setSearchOpen(true)} aria-label="Search markets"><Search size={19} /></button>
+          <button type="button" className="sire-home-icon" aria-label="Notifications"><Bell size={18} /><i /></button>
+          <button type="button" className="sire-home-icon" aria-label="Profile"><CircleUserRound size={20} /></button>
         </div>
       </header>
-
       <div className="sire-home-scroll">
-        <section className="sire-home-balance" aria-label="Total balance">
-          <div className="sire-home-balance-head">
-            <div className="sire-home-balance-title">
-              <span>TOTAL BALANCE</span>
-              <button type="button" className="sire-home-balance-eye" aria-label={balanceVisible ? 'Hide balance' : 'Show balance'} onClick={() => setBalanceVisible(value => !value)}>
-                {balanceVisible ? <Eye size={14} /> : <EyeOff size={14} />}
-              </button>
-            </div>
-            <button type="button" className="sire-home-balance-wallet"><Wallet size={14} /><span>Wallet</span><ChevronRight size={12} /></button>
-          </div>
+        <section className="sire-home-intro">
+          <div className="sire-home-intro-meta"><span>YOUR MARKET DESK</span><span className="sire-home-live-mark"><i /> MARKET FEED</span></div>
+          <h1>See the market.<br /><em>Make your move.</em></h1>
+          <p>One workspace for spot markets, futures and digital assets.</p>
+          <button type="button" className="sire-home-intro-search" onClick={() => setSearchOpen(true)}><Search size={17} /><span>Search assets, pairs and markets</span><kbd>/</kbd></button>
+        </section>
 
-          <div className="sire-home-balance-main">
-            <div className="sire-home-balance-value">{balanceVisible ? '$0.00' : '••••••'} <small>USD</small></div>
-            <div className="sire-home-balance-pnl">
-              <span>Today's P&amp;L</span>
-              <strong className="up">{balanceVisible ? '+$0.00' : '••••'}</strong>
-              <b className="up">{balanceVisible ? '0.00%' : '•••'}</b>
-            </div>
+        <section className="sire-home-account" aria-label="Account overview">
+          <div className="sire-home-account-top">
+            <div><span className="sire-home-kicker">ACCOUNT OVERVIEW</span><div className="sire-home-account-label">Portfolio value <button type="button" className="sire-home-balance-eye" aria-label={balanceVisible ? 'Hide balance' : 'Show balance'} onClick={() => setBalanceVisible(value => !value)}>{balanceVisible ? <Eye size={15} /> : <EyeOff size={15} />}</button></div></div>
+            <button type="button" className="sire-home-account-wallet"><Wallet size={15} /> Wallet <ChevronRight size={14} /></button>
           </div>
-
-          <div className="sire-home-balance-available">
-            <span>Available to trade</span>
-            <strong>{balanceVisible ? '$0.00 USD' : '••••••'}</strong>
-          </div>
-
-          <div className="sire-home-balance-actions" aria-label="Balance actions">
-            <button type="button" aria-label="Deposit"><span className="balance-action-icon"><ArrowDownToLine size={18} /></span><small>Deposit</small></button>
-            <button type="button" aria-label="Withdraw"><span className="balance-action-icon"><ArrowUpFromLine size={18} /></span><small>Withdraw</small></button>
-            <button type="button" aria-label="Transfer"><span className="balance-action-icon"><Repeat2 size={18} /></span><small>Transfer</small></button>
-            <button type="button" aria-label="Rewards"><span className="balance-action-icon">%</span><small>Rewards</small></button>
-            <button type="button" aria-label="More"><span className="balance-action-icon">•••</span><small>More</small></button>
+          <div className="sire-home-account-value">{balanceVisible ? '$0.00' : '••••••'} <small>USD</small></div>
+          <div className="sire-home-account-foot"><span><i /> Available balance</span><strong>{balanceVisible ? '$0.00' : '••••••'}</strong><span className="sire-home-account-note">Live account data</span></div>
+          <div className="sire-home-account-actions">
+            <button type="button" aria-label="Deposit"><span><ArrowDownToLine size={18} /></span><b>Deposit</b></button>
+            <button type="button" aria-label="Withdraw"><span><ArrowUpFromLine size={18} /></span><b>Withdraw</b></button>
+            <button type="button" aria-label="Transfer"><span><Repeat2 size={18} /></span><b>Transfer</b></button>
+            <button type="button" aria-label="Rewards"><span><BadgePercent size={18} /></span><b>Rewards</b></button>
+            <button type="button" aria-label="More actions"><span><MoreHorizontal size={19} /></span><b>More</b></button>
           </div>
         </section>
 
-        <section className="sire-home-promo">
-          <div className="sire-home-promo-icon"><LineChart size={22} /></div>
-          <div><span>SIRE MARKETS</span><strong>Spot, Futures and more — all in one place.</strong><p>Explore live market prices and trading tools from your SIRE workspace.</p></div>
-          <ChevronRight size={18} />
+        <section className="sire-home-launch">
+          <div className="sire-home-section-heading"><div><span className="sire-home-kicker">GO DIRECT</span><h2>Open a workspace</h2></div><span className="sire-home-heading-index">01 — 04</span></div>
+          <div className="sire-home-launch-grid">
+            <button type="button" className="sire-home-launch-tile sire-home-launch-primary"><span className="sire-home-launch-icon"><TrendingUp size={21}/></span><b>Spot</b><small>Buy and sell assets</small><ArrowRight size={16} className="sire-home-launch-arrow"/></button>
+            <button type="button" className="sire-home-launch-tile"><span className="sire-home-launch-icon"><LineChart size={21}/></span><b>Futures</b><small>Explore derivatives</small><ArrowRight size={16} className="sire-home-launch-arrow"/></button>
+            <button type="button" className="sire-home-launch-tile"><span className="sire-home-launch-icon"><Wallet size={20}/></span><b>Wallet</b><small>Manage assets</small><ArrowRight size={16} className="sire-home-launch-arrow"/></button>
+            <button type="button" className="sire-home-launch-tile"><span className="sire-home-launch-icon"><Grid2X2 size={20}/></span><b>Onchain</b><small>Discover networks</small><ArrowRight size={16} className="sire-home-launch-arrow"/></button>
+          </div>
         </section>
 
-        <section className="sire-home-section sire-home-markets">
-          <div className="sire-home-section-head">
-            <div><span>MARKET DISCOVERY</span><h2>Markets</h2></div>
-            <button type="button">See All <ChevronRight size={15} /></button>
-          </div>
+        <section className="sire-home-section sire-home-markets sire-home-markets-v2">
+          <div className="sire-home-section-head"><div><span className="sire-home-kicker">MARKET SCANNER</span><h2>Find your market</h2></div><button type="button" onClick={() => setSearchOpen(true)}>Search <Search size={14}/></button></div>
           <div className="sire-home-market-filter-shell" aria-label="Market discovery filters">
             <div className="sire-home-market-tabs" role="tablist" aria-label="Market filters">
-              {['Favorite', 'Hot', 'Spot', 'Futures', 'New', 'Gainers', 'Losers', 'Vol', 'Market Cap'].map(filter => (
-                <button
-                  key={filter}
-                  type="button"
-                  role="tab"
-                  aria-selected={activeMarketFilter === filter}
-                  className={activeMarketFilter === filter ? 'active' : ''}
-                  onClick={() => {
-                    setActiveMarketFilter(filter);
-                    setActiveMarketSubfilter(({
-                      Hot: 'Spot',
-                      Spot: 'All',
-                      Futures: 'USD-M',
-                      New: 'Spot',
-                      Gainers: 'Spot',
-                      Losers: 'Spot',
-                      Vol: 'Spot',
-                      'Market Cap': 'Spot',
-                    } as Record<string, string>)[filter] || '');
-                  }}
-                >
-                  {filter}
-                </button>
+              {['Hot','Favorite','Spot','Futures','New','Gainers','Losers','Vol','Market Cap'].map(filter => (
+                <button key={filter} type="button" role="tab" aria-selected={activeMarketFilter === filter} className={activeMarketFilter === filter ? 'active' : ''} onClick={() => {
+                  setActiveMarketFilter(filter);
+                  setActiveMarketSubfilter(({Hot:'Spot',Spot:'All',Futures:'USD-M',New:'Spot',Gainers:'Spot',Losers:'Spot',Vol:'Spot','Market Cap':'Spot'} as Record<string,string>)[filter] || '');
+                }}>{filter}</button>
               ))}
             </div>
-            {marketSubfilters.length > 0 && (
-              <div className="sire-home-market-subtabs" role="tablist" aria-label={activeMarketFilter + ' categories'}>
-                <span className="sire-home-market-subtabs-label">VIEW</span>
-                <div className="sire-home-market-subtabs-track">
-                  {marketSubfilters.map(filter => (
-                    <button
-                      key={filter}
-                      type="button"
-                      role="tab"
-                      aria-selected={activeMarketSubfilter === filter}
-                      className={activeMarketSubfilter === filter ? 'active' : ''}
-                      onClick={() => setActiveMarketSubfilter(filter)}
-                    >
-                      {filter}
-                    </button>
-                  ))}
-                </div>
+            {marketSubfilters.length > 0 && <div className="sire-home-market-subtabs" role="tablist" aria-label={activeMarketFilter + ' categories'}>
+              <span className="sire-home-market-subtabs-label">MARKET TYPE</span><div className="sire-home-market-subtabs-track">
+                {marketSubfilters.map(filter => <button key={filter} type="button" role="tab" aria-selected={activeMarketSubfilter === filter} className={activeMarketSubfilter === filter ? 'active' : ''} onClick={() => setActiveMarketSubfilter(filter)}>{filter}</button>)}
               </div>
-            )}
+            </div>}
           </div>
+          <div className="sire-home-market-table-head"><span>ASSET / SOURCE</span><span>LAST PRICE</span><span>24H</span></div>
           <div className="sire-home-watchlist" aria-label={activeMarketFilter + ' markets'}>
-            {marketRows.slice(0, 7).map(item => {
-              const raw = item as any;
-              const change = Number(raw.change24h ?? raw.changePercent24h ?? raw.priceChangePercent ?? raw.percentChange24h ?? raw.changePercent);
-              const volume = Number(raw.volume24h ?? raw.quoteVolume ?? raw.volume);
-              const isFavorite = favoriteIds.includes(item.id);
-              if (activeMarketFilter === 'Favorite' && !isFavorite) return null;
-              const displayBase = String(raw.base || item.displaySymbol || item.symbol).replace(/\/USDT$|\/USD$|USDT$|USD$/i, '').toUpperCase();
-              const tradeTone = Number.isFinite(change) ? (change > 0 ? 'positive' : change < 0 ? 'negative' : 'neutral') : 'neutral';
-              return (
-                <article key={item.id} className="sire-home-watch-row">
-                  <button type="button" className="sire-home-watch-main" onClick={() => onSelectInstrument?.(item)}>
-                    <span className="market-asset-logo">
-                      <img className="market-token-logo" src={item.logoUrl || fallbackLogo(displayBase)} alt="" onError={event => { event.currentTarget.onerror = null; event.currentTarget.src = fallbackLogo(displayBase); }} />
-                      <span className="market-source-logo" aria-label={String(item.providerLabel || item.provider || 'Market source')}>
-                        <img src={makeProviderLogoFallback(item)} alt="" onError={event => { event.currentTarget.onerror = null; event.currentTarget.src = fallbackLogo(String(item.providerLabel || item.provider || 'EX')); }} />
-                      </span>
-                    </span>
-                    <span className="market-asset-name">
-                      <b>{displayBase}</b>
-                      <small>{String(item.name || item.displaySymbol || item.symbol).replace(/_/g, ' ')} · {String(item.providerLabel || item.provider || 'MARKET').toUpperCase()}</small>
-                    </span>
-                    <span className="market-asset-price">
-                      <strong>{money(item.price)}</strong>
-                    </span>
-                    <span className="market-asset-volume"><small>24H VOL</small><b>{Number.isFinite(volume) ? money(volume) : '—'}</b></span>
-                  </button>
-                  <button type="button" className={`market-trade-button ${tradeTone}`} onClick={() => onSelectInstrument?.(item)} aria-label={Number.isFinite(change) ? `24 hour change ${change.toFixed(2)} percent` : '24 hour change unavailable'}>{Number.isFinite(change) ? ((change >= 0 ? '+' : '') + change.toFixed(2) + '%') : '—'}</button>
-                </article>
-              );
+            {marketRows.slice(0,7).map(item => {
+              const raw=item as any;
+              const change=Number(raw.change24h ?? raw.changePercent24h ?? raw.priceChangePercent ?? raw.percentChange24h ?? raw.changePercent);
+              const volume=Number(raw.volume24h ?? raw.quoteVolume ?? raw.volume);
+              const displayBase=String(raw.base || item.displaySymbol || item.symbol).replace(/\\/USDT$|\\/USD$|USDT$|USD$/i,'').toUpperCase();
+              const tone=Number.isFinite(change)?(change>0?'positive':change<0?'negative':'neutral'):'neutral';
+              return <article key={item.id} className="sire-home-watch-row">
+                <button type="button" className="sire-home-watch-main" onClick={() => onSelectInstrument?.(item)}>
+                  <span className="market-asset-logo"><img className="market-token-logo" src={item.logoUrl || fallbackLogo(displayBase)} alt="" onError={event=>{event.currentTarget.onerror=null;event.currentTarget.src=fallbackLogo(displayBase)}}/><span className="market-source-logo"><img src={makeProviderLogoFallback(item)} alt="" onError={event=>{event.currentTarget.onerror=null;event.currentTarget.src=fallbackLogo(String(item.providerLabel||item.provider||'EX'))}}/></span></span>
+                  <span className="market-asset-name"><b>{displayBase}</b><small>{String(item.name || item.displaySymbol || item.symbol).replace(/_/g,' ')} · {String(item.providerLabel || item.provider || 'MARKET').toUpperCase()}</small></span>
+                  <span className="market-asset-price"><strong>{money(item.price)}</strong><small>{Number.isFinite(volume)?'VOL '+money(volume):'VOLUME —'}</small></span>
+                </button>
+                <button type="button" className={'market-trade-button '+tone} onClick={() => onSelectInstrument?.(item)} aria-label={Number.isFinite(change)?'24 hour change '+change.toFixed(2)+' percent':'24 hour change unavailable'}>{Number.isFinite(change)?(change>=0?'+':'')+change.toFixed(2)+'%':'—'}</button>
+              </article>;
             })}
+            {!marketRows.length && <div className="sire-home-empty"><Search size={20}/><b>No markets in this view</b><span>Try another filter to explore available instruments.</span></div>}
           </div>
         </section>
 
-        <section className="sire-home-section sire-home-pulse">
-          <div className="sire-home-section-head"><div><span>LIVE MARKET</span><h2>Market Pulse</h2></div><button type="button">See All <ChevronRight size={15} /></button></div>
-          <div className="sire-home-pulse-viewport" aria-label="Live market pulse">
-            <div className="sire-home-pulse-track">
-              {[...pulseMarkets, ...pulseMarkets].map((item, index) => {
-                const raw=item as any;
-                const change=Number(raw.change24h??raw.changePercent24h??raw.priceChangePercent??raw.percentChange24h??raw.changePercent);
-                const tone: 'positive'|'negative'|'neutral'=Number.isFinite(change)?(change>0?'positive':change<0?'negative':'neutral'):'neutral';
-                const base=String(raw.base||item.displaySymbol||item.symbol).replace(/\/USDT$|\/USD$|USDT$|USD$/i,'').toUpperCase();
-                const source=String(item.providerLabel||item.provider||'Market source').toUpperCase();
-                return <article key={item.id + '-' + index} className={`sire-home-pulse-card sire-home-pulse-card--${tone}`}>
-                  <button type="button" className="sire-home-pulse-main" onClick={()=>onSelectInstrument?.(item)} aria-label={`Open ${base} on ${source}`}>
-                    <span className="sire-home-pulse-top">
-                      <span className="sire-home-pulse-identity">
-                        <span className="sire-home-pulse-logo"><img src={item.logoUrl||fallbackLogo(base)} alt="" decoding="async" onError={event=>{event.currentTarget.onerror=null;event.currentTarget.src=fallbackLogo(base)}}/></span>
-                        <span className="sire-home-pulse-copy"><b>{base}</b><small>{String(item.name||item.displaySymbol||item.symbol).replace(/_/g,' ')}</small></span>
-                      </span>
-                      <span className="sire-home-pulse-source"><img src={makeProviderLogoFallback(item)} alt="" decoding="async" onError={event=>{event.currentTarget.onerror=null;event.currentTarget.src=fallbackLogo(source)}}/><small>{source}</small></span>
-                    </span>
-                    <span className="sire-home-pulse-value">
-                      <strong>{money(item.price)}</strong>
-                      <b className={tone}>{Number.isFinite(change)?`${change>=0?'+':''}${change.toFixed(2)}%`:'—'}</b>
-                    </span>
-                    <span className="sire-home-pulse-chart"><Sparkline values={pulseHistory.get(item.id)||[]} tone={tone}/></span>
-                    <span className="sire-home-pulse-edge" aria-hidden="true"/>
-                  </button>
-                </article>;
-              })}
-            </div>
+        <section className="sire-home-section sire-home-pulse sire-home-pulse-v2">
+          <div className="sire-home-section-head"><div><span className="sire-home-kicker">PRICE SNAPSHOTS</span><h2>Market pulse</h2></div><span className="sire-home-heading-index">LIVE DATA</span></div>
+          <div className="sire-home-pulse-viewport" aria-label="Live market pulse"><div className="sire-home-pulse-track">
+            {pulseMarkets.map(item => {
+              const raw=item as any;
+              const change=Number(raw.change24h??raw.changePercent24h??raw.priceChangePercent??raw.percentChange24h??raw.changePercent);
+              const tone: 'positive'|'negative'|'neutral'=Number.isFinite(change)?(change>0?'positive':change<0?'negative':'neutral'):'neutral';
+              const base=String(raw.base||item.displaySymbol||item.symbol).replace(/\\/USDT$|\\/USD$|USDT$|USD$/i,'').toUpperCase();
+              return <article key={item.id} className={'sire-home-pulse-card sire-home-pulse-card--'+tone}><button type="button" className="sire-home-pulse-main" onClick={()=>onSelectInstrument?.(item)}>
+                <span className="sire-home-pulse-top"><span className="sire-home-pulse-identity"><span className="sire-home-pulse-logo"><img src={item.logoUrl||fallbackLogo(base)} alt="" onError={event=>{event.currentTarget.onerror=null;event.currentTarget.src=fallbackLogo(base)}}/></span><span className="sire-home-pulse-copy"><b>{base}</b><small>{String(item.name||item.displaySymbol||item.symbol).replace(/_/g,' ')}</small></span></span><span className="sire-home-pulse-source"><small>{String(item.providerLabel||item.provider||'MARKET').toUpperCase()}</small></span></span>
+                <span className="sire-home-pulse-value"><strong>{money(item.price)}</strong><b className={tone}>{Number.isFinite(change)?(change>=0?'+':'')+change.toFixed(2)+'%':'—'}</b></span>
+                <span className="sire-home-pulse-chart"><Sparkline values={pulseHistory.get(item.id)||[]} tone={tone}/></span>
+              </button></article>;
+            })}
+            {!pulseMarkets.length && <div className="sire-home-empty"><LineChart size={20}/><b>Market data will appear here</b><span>Price snapshots appear when instrument data is available.</span></div>}
+          </div></div>
+        </section>
+
+        <section className="sire-home-bottom-feature"><div className="sire-home-feature-number">02</div><div className="sire-home-feature-copy"><span className="sire-home-kicker">BUILT FOR ACTIVE MARKETS</span><h2>Less noise.<br/>More signal.</h2><p>Move from discovery to a selected instrument without losing your place.</p></div><div className="sire-home-feature-mark"><LineChart size={29}/></div></section>
+
+        <section className="sire-home-section sire-home-discover sire-home-discover-v2">
+          <div className="sire-home-section-head"><div><span className="sire-home-kicker">EXPLORE</span><h2>Discover more</h2></div><span className="sire-home-heading-index">03 — 04</span></div>
+          <div className="sire-home-new-grid">
+            <button type="button"><span className="sire-home-discover-icon"><Flame size={18}/></span><span>Trending markets</span><small>Explore active instruments</small><ChevronRight size={15}/></button>
+            <button type="button"><span className="sire-home-discover-icon"><Sparkles size={18}/></span><span>New listings</span><small>Recently added assets</small><ChevronRight size={15}/></button>
+            <button type="button"><span className="sire-home-discover-icon"><Trophy size={18}/></span><span>Top performers</span><small>Compare 24h movement</small><ChevronRight size={15}/></button>
+            <button type="button"><span className="sire-home-discover-icon"><CalendarClock size={18}/></span><span>Market calendar</span><small>Keep up with events</small><ChevronRight size={15}/></button>
           </div>
         </section>
-
-
-
-        <section className="sire-home-intelligence">
-          <div className="sire-home-intel-top">
-            <div className="sire-home-intel-icon"><BrainCircuit size={22} /></div>
-            <div><span>SIRE INTELLIGENCE</span><strong>Market conditions detected</strong></div>
-            <button type="button">Analyze <ArrowRight size={15} /></button>
-          </div>
-          <div className="sire-home-intel-stats">
-            <div><small>Trend</small><b className="up">↗ Bullish</b></div>
-            <div><small>Momentum</small><b className="up">↗ Strong</b></div>
-            <div><small>Volatility</small><b>〰 Medium</b></div>
-            <div><small>Structure</small><b className="up">↗ Higher Highs</b></div>
-          </div>
-          <div className="sire-home-intel-note"><Sparkles size={17} /><p><strong>SIRE AI</strong> BTC is showing increasing momentum while volatility remains elevated.</p></div>
-        </section>
-
-
-
-        <section className="sire-home-section">
-          <div className="sire-home-section-head"><div><span>ACTION</span><h2>Quick Trade</h2></div><button type="button">See All <ChevronRight size={15} /></button></div>
-          <div className="sire-home-actions-grid">
-            <button><TrendingUp size={20} /><b>Spot</b><small>Buy & sell</small></button>
-            <button><LineChart size={20} /><b>Futures</b><small>Perpetuals</small></button>
-            <button><Wallet size={20} /><b>Derivatives</b><small>Advanced markets</small></button>
-            <button><Grid2X2 size={20} /><b>Onchain</b><small>DEX markets</small></button>
-          </div>
-        </section>
-
-        <section className="sire-home-copy-card">
-          <div><span>COPY TRADING</span><h2>Follow strategies.<br />Trade with confidence.</h2><p>Discover traders, compare performance and follow strategies from one place.</p><button>Explore Copy Trading <ArrowRight size={15} /></button></div>
-          <div className="sire-home-copy-orbit"><div /><div /><div /></div>
-        </section>
-
-        <section className="sire-home-ai-card">
-          <div className="sire-home-ai-icon"><Sparkles size={22} /></div>
-          <div><span>ASK SIRE AI</span><h2>What do you want to know?</h2><div className="sire-home-prompts"><button>What's moving?</button><button>Find opportunities</button><button>Analyze BTC</button><button>Compare markets</button></div></div>
-          <button className="sire-home-ai-cta">Ask SIRE <ArrowRight size={16} /></button>
-        </section>
-
-        <section className="sire-home-section">
-          <div className="sire-home-section-head"><div><span>GROW YOUR ASSETS</span><h2>Earn</h2></div><button type="button">See All <ChevronRight size={15} /></button></div>
-          <div className="sire-home-earn-grid"><button><span>%</span><b>Flexible Earn</b><small>Earn on supported assets</small></button><button><span>◎</span><b>Staking</b><small>Put assets to work</small></button><button><Flame size={19} /><b>Opportunities</b><small>Explore current products</small></button></div>
-        </section>
-
-        <section className="sire-home-section sire-home-discover">
-          <div className="sire-home-section-head"><div><span>DISCOVERY</span><h2>What's New</h2></div><button type="button">See All <ChevronRight size={15} /></button></div>
-          <div className="sire-home-new-grid"><button><b>NEW</b><span>New Listings</span><small>Discover new assets</small><ChevronRight size={15} /></button><button><Flame size={18} /><span>Trending Tokens</span><small>Top gainers & losers</small><ChevronRight size={15} /></button><button><TrendingUp size={18} /><span>Hot Sectors</span><small>Explore trending sectors</small><ChevronRight size={15} /></button><button><Grid2X2 size={18} /><span>On-chain Activity</span><small>Live blockchain data</small><ChevronRight size={15} /></button></div>
-        </section>
-
-        <section className="sire-home-brief"><LineChart size={17} /><span>MARKET BRIEF</span><p>Market intelligence and important movements, summarized by SIRE.</p><ChevronRight size={16} /></section>
+        <footer className="sire-home-footer"><img src="/sire-logo.svg" alt="SIRE"/><span>MARKETS MOVE. STAY READY.</span><small>Prices and account values appear when live data is available.</small></footer>
         <div className="sire-home-bottom-spacer" />
       </div>
 
