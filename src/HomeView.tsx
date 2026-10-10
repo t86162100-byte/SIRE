@@ -85,6 +85,9 @@ export default function HomeView({ instruments, onSelectInstrument, onNavigate, 
   const [fundingAddress, setFundingAddress] = useState<any>(null);
   const [fundingError, setFundingError] = useState('');
   const [fundingAddressBusy, setFundingAddressBusy] = useState(false);
+  const [fundingHistory, setFundingHistory] = useState<any[]>([]);
+  const [fundingHistoryBusy, setFundingHistoryBusy] = useState(false);
+  const [fundingHistoryLoaded, setFundingHistoryLoaded] = useState(false);
 
   const accountValue: string | null = null;
   const openFunding = () => {
@@ -92,6 +95,8 @@ export default function HomeView({ instruments, onSelectInstrument, onNavigate, 
     setFundingStep('main');
     setFundingError('');
     setFundingAddress(null);
+    setFundingHistory([]);
+    setFundingHistoryLoaded(false);
   };
   useEffect(() => {
     const showFunding = () => openFunding();
@@ -118,18 +123,40 @@ export default function HomeView({ instruments, onSelectInstrument, onNavigate, 
     return () => { cancelled = true; };
   }, [fundingOpen, fundingStep, fundingCoins.length]);
   const requestFundingAddress = async () => {
-    if (!fundingCoin?.coin || !fundingNetwork) { setFundingError('Select a crypto and its supported deposit network.'); return; }
+    const coin = String(fundingCoin?.coin || '').toUpperCase();
+    const networkMeta = (fundingCoin?.networks || []).find((item:any) => String(item.chain || '') === fundingNetwork && item.depositEnabled !== false);
+    if (!coin || !fundingNetwork || !networkMeta) { setFundingError('Choose an asset and a deposit-enabled network from Bitget’s supported catalogue.'); return; }
     setFundingAddressBusy(true); setFundingError(''); setFundingAddress(null);
     try {
-      const params = new URLSearchParams({ coin: String(fundingCoin.coin), chain: fundingNetwork });
+      const params = new URLSearchParams({ coin, chain: fundingNetwork });
       const response = await fetch('/api/sire/bitget/deposit/address?' + params.toString(), { credentials: 'include', cache: 'no-store' });
       const data = await response.json();
       if (!response.ok || !data?.ok) throw new Error(data?.error || 'Could not retrieve a deposit address.');
-      const match = (Array.isArray(data.addresses) ? data.addresses : []).find((row:any) => String(row.chain||'') === fundingNetwork && row.address);
-      if (!match) throw new Error('The exchange did not return an address for this asset/network. No address was invented.');
+      const match = (Array.isArray(data.addresses) ? data.addresses : []).find((row:any) => String(row.coin || '').toUpperCase() === coin && String(row.chain || '') === fundingNetwork && String(row.address || '').trim());
+      if (!match) throw new Error('Bitget did not return an address matching the selected asset and network. No address was invented.');
+      if (networkMeta.memoRequired && !String(match.tag || '').trim()) throw new Error('Bitget marks this network as requiring a memo/tag, but the address response did not include one. For safety, the address is hidden.');
       setFundingAddress(match);
     } catch (error) { setFundingError(error instanceof Error ? error.message : String(error)); }
     finally { setFundingAddressBusy(false); }
+  };
+  const loadFundingHistory = async () => {
+    setFundingHistoryBusy(true); setFundingError(''); setFundingHistoryLoaded(false);
+    try {
+      const params = new URLSearchParams({ limit: '50', ...(fundingCoin?.coin ? { coin: String(fundingCoin.coin).toUpperCase() } : {}) });
+      const response = await fetch('/api/sire/bitget/deposit/history?' + params.toString(), { credentials: 'include', cache: 'no-store' });
+      const data = await response.json();
+      if (!response.ok || !data?.ok) throw new Error(data?.error || 'Could not retrieve Bitget deposit history.');
+      setFundingHistory(Array.isArray(data.records) ? data.records : []);
+      setFundingHistoryLoaded(true);
+    } catch (error) { setFundingError(error instanceof Error ? error.message : String(error)); }
+    finally { setFundingHistoryBusy(false); }
+  };
+  const formatFundingTime = (value:any) => {
+    if (value == null || value === '') return 'Time unavailable';
+    const raw = String(value);
+    const numeric = Number(raw);
+    const date = new Date(Number.isFinite(numeric) && numeric > 0 ? numeric : raw);
+    return Number.isNaN(date.getTime()) ? 'Time unavailable' : date.toLocaleString();
   };
   const copyFundingValue = async (value:string) => {
     if (!value) return;
@@ -420,7 +447,8 @@ export default function HomeView({ instruments, onSelectInstrument, onNavigate, 
                 <button type="button" className="sire-funding-change" onClick={() => { setFundingCoin(null); setFundingNetwork(''); setFundingAddress(null); }}>‹ Choose another crypto · {fundingCoin.coin}</button>
                 <label className="sire-funding-field"><span>Deposit network</span><select value={fundingNetwork} onChange={event => { setFundingNetwork(event.target.value); setFundingAddress(null); setFundingError(''); }}><option value="">Select network</option>{(fundingCoin.networks||[]).map((network:any) => <option key={network.chain} value={network.chain}>{network.chain}{network.memoRequired ? ' · Memo/tag required' : ''}</option>)}</select></label>
                 <button type="button" className="sire-funding-primary" disabled={!fundingNetwork || fundingAddressBusy} onClick={() => void requestFundingAddress()}>{fundingAddressBusy ? 'Retrieving address…' : 'Show deposit address'}</button>
-                {fundingAddress && <div className="sire-funding-address"><span>{fundingAddress.coin} · {fundingAddress.chain}</span><code>{fundingAddress.address}</code><button type="button" onClick={() => void copyFundingValue(fundingAddress.address)}>Copy address</button>{fundingAddress.tag && <><span>MEMO / TAG — REQUIRED</span><code>{fundingAddress.tag}</code><button type="button" onClick={() => void copyFundingValue(fundingAddress.tag)}>Copy memo/tag</button></>}</div>}
+                {fundingAddress && <div className="sire-funding-address"><span>{fundingAddress.coin} · {fundingAddress.chain}</span><code>{fundingAddress.address}</code><button type="button" onClick={() => void copyFundingValue(fundingAddress.address)}>Copy address</button>{fundingAddress.tag && <><span>MEMO / TAG — REQUIRED</span><code>{fundingAddress.tag}</code><button type="button" onClick={() => void copyFundingValue(fundingAddress.tag)}>Copy memo/tag</button></>}<small>Destination: Bitget Exchange · Asset: {fundingAddress.coin} · Network: {fundingAddress.chain}. Verify the sending network matches exactly.</small></div>}
+                <div className="sire-funding-history"><button type="button" className="sire-funding-secondary" disabled={fundingHistoryBusy} onClick={() => void loadFundingHistory()}>{fundingHistoryBusy ? 'Loading deposit history…' : `Load ${fundingCoin?.coin ? fundingCoin.coin + ' ' : ''}deposit history`}</button>{fundingHistoryLoaded && (fundingHistory.length ? fundingHistory.map((row:any,index:number) => <div className="sire-funding-history-row" key={String(row.orderId || row.recordId || index)}><span><b>{row.coin || 'Crypto'} · {row.chain || row.destination || 'Deposit'}</b><small>{formatFundingTime(row.createdTime)}</small></span><span><b>{row.amount ?? '—'}</b><small>{String(row.status || 'unknown').replace(/_/g,' ')}</small></span></div>) : <p className="sire-funding-note">No Bitget deposit records were returned for this filter and period.</p>)}</div>
               </>}
               {fundingError && <p className="sire-funding-note">{fundingError}</p>}
               <p className="sire-funding-warning">Only transfer the selected crypto over the exact network shown. Check the address and any memo/tag before sending.</p>
