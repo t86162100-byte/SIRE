@@ -302,7 +302,7 @@ export default function SireWalletPanel({ initialOpen = false, initialDepositOpe
                 <button className="sire-wallet-eye" onClick={() => setBalanceVisible(v => !v)}>{balanceVisible ? <Eye size={14}/> : <EyeOff size={14}/>} {balanceVisible ? 'Visible' : 'Hidden'}</button>
                 <strong><span className="sire-wallet-currency">$</span><span className="sire-wallet-leading-digit">{balanceVisible ? '0' : '•'}</span><span className="sire-wallet-decimal">{balanceVisible ? '.00' : '••'}</span></strong>
               </div>
-              <button className="sire-wallet-deposit-pill" type="button" onClick={() => setDepositChoiceOpen(true)}>Deposit</button>
+              <button className="sire-wallet-deposit-pill" type="button" onClick={() => window.dispatchEvent(new CustomEvent('sire:open-funding-drawer'))}>Deposit</button>
             </div>
             <div className="sire-wallet-wallet-actions">
               <button className="sire-wallet-action-pill" type="button" onClick={() => setSendOpen(true)}>Send</button>
