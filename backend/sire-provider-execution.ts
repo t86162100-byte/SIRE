@@ -187,6 +187,9 @@ export async function bitgetOwnerPlaceOrder(input:any){
     const holdMode=await bitgetHoldMode();
     if(holdMode==='hedge_mode'){if(!posSide)throw new Error('Position side is required in Bitget hedge mode.');body.posSide=posSide;}else delete body.posSide;
     body.marginMode=marginMode;
+    const tradeSide=String(input?.tradeSide||'').trim().toLowerCase();
+    if(tradeSide && !['open','close'].includes(tradeSide)) throw new Error('Futures trade side must be open or close.');
+    if(tradeSide) body.tradeSide=tradeSide;
     if(String(input?.reduceOnly||'').toLowerCase()==='yes') body.reduceOnly='yes';
     else body.reduceOnly='no';
     if(input?.takeProfit!=null && input.takeProfit!=='') body.takeProfit=String(positiveNumber(input.takeProfit,'take-profit price'));
