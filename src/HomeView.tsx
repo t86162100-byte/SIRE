@@ -176,6 +176,8 @@ export default function HomeView({ instruments, onSelectInstrument, onNavigate, 
     const host = document.getElementById('sire-paga-checkout-host');
     if (!host) return;
     host.replaceChildren();
+    const form = document.createElement('form');
+    form.method = 'POST';
     const script = document.createElement('script');
     script.src = String(pagaCheckout.checkoutScript || '');
     script.async = true;
@@ -189,7 +191,8 @@ export default function HomeView({ instruments, onSelectInstrument, onNavigate, 
     script.setAttribute('data-width', '220');
     script.setAttribute('data-callback_url', String(pagaCheckout.callbackUrl || ''));
     script.setAttribute('data-funding_sources', String(pagaCheckout.fundingSources || 'TRANSFER,CARD,PAGA,USSD'));
-    host.appendChild(script);
+    form.appendChild(script);
+    host.appendChild(form);
     return () => { host.replaceChildren(); };
   }, [pagaCheckout, fundingStep, accountUser]);
 
