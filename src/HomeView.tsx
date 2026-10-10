@@ -218,16 +218,19 @@ export default function HomeView({ instruments, onSelectInstrument, onNavigate, 
       <div className="sire-home-scroll">
 
         <section className="sire-home-value-card" aria-label="Total account value">
-          <div className="sire-home-value-card-top"><span>TOTAL VALUE</span><button type="button" onClick={() => setTotalValueVisible(value => !value)} aria-label={totalValueVisible ? 'Hide total value' : 'Show total value'}>{totalValueVisible ? <Eye size={17}/> : <EyeOff size={17}/>}</button></div>
-          <div className="sire-home-value-amount">{totalValueVisible ? (accountValue ?? '—') : '••••••'}<small>USD</small></div>
-          <div className="sire-home-value-chart" aria-label="Account value history unavailable until balance data is connected">
-            <svg viewBox="0 0 340 92" preserveAspectRatio="none" role="img" aria-label="Balance progress chart placeholder">
-              <defs><linearGradient id="sireBalanceArea" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#ffffff" stopOpacity=".22"/><stop offset="100%" stopColor="#ffffff" stopOpacity="0"/></linearGradient><filter id="sireBalanceGlow" x="-30%" y="-80%" width="160%" height="260%"><feGaussianBlur stdDeviation="5"/></filter></defs>
-              <path d="M0 73 C22 70 29 55 48 60 S78 72 98 51 S126 47 145 54 S176 35 197 43 S225 29 245 36 S280 20 299 28 S322 15 340 12 L340 92 L0 92 Z" fill="url(#sireBalanceArea)"/>
-              <path d="M0 73 C22 70 29 55 48 60 S78 72 98 51 S126 47 145 54 S176 35 197 43 S225 29 245 36 S280 20 299 28 S322 15 340 12" fill="none" stroke="#fff" strokeOpacity=".45" strokeWidth="7" filter="url(#sireBalanceGlow)"/>
-              <path d="M0 73 C22 70 29 55 48 60 S78 72 98 51 S126 47 145 54 S176 35 197 43 S225 29 245 36 S280 20 299 28 S322 15 340 12" fill="none" stroke="#f8f9f9" strokeWidth="1.7" strokeLinecap="round"/>
-            </svg>
-            {!accountValue && <span>Balance history will appear here</span>}
+          <div className="sire-home-value-main">
+            <div className="sire-home-value-copy">
+              <div className="sire-home-value-card-top"><span>TOTAL VALUE</span><button type="button" onClick={() => setTotalValueVisible(value => !value)} aria-label={totalValueVisible ? 'Hide total value' : 'Show total value'}>{totalValueVisible ? <Eye size={17}/> : <EyeOff size={17}/>}</button></div>
+              <div className="sire-home-value-amount">{totalValueVisible ? (accountValue ?? '—') : '••••••'}<small>USD</small></div>
+            </div>
+            <div className="sire-home-value-chart" aria-label="Illustrative balance progress; real history will appear when connected">
+              <svg viewBox="0 0 340 92" preserveAspectRatio="none" aria-hidden="true">
+                <defs><linearGradient id="sireBalanceArea" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#ffffff" stopOpacity=".22"/><stop offset="100%" stopColor="#ffffff" stopOpacity="0"/></linearGradient><filter id="sireBalanceGlow" x="-30%" y="-80%" width="160%" height="260%"><feGaussianBlur stdDeviation="5"/></filter></defs>
+                <path d="M0 73 C22 70 29 55 48 60 S78 72 98 51 S126 47 145 54 S176 35 197 43 S225 29 245 36 S280 20 299 28 S322 15 340 12 L340 92 L0 92 Z" fill="url(#sireBalanceArea)"/>
+                <path d="M0 73 C22 70 29 55 48 60 S78 72 98 51 S126 47 145 54 S176 35 197 43 S225 29 245 36 S280 20 299 28 S322 15 340 12" fill="none" stroke="#fff" strokeOpacity=".45" strokeWidth="7" filter="url(#sireBalanceGlow)"/>
+                <path d="M0 73 C22 70 29 55 48 60 S78 72 98 51 S126 47 145 54 S176 35 197 43 S225 29 245 36 S280 20 299 28 S322 15 340 12" fill="none" stroke="#f8f9f9" strokeWidth="1.7" strokeLinecap="round"/>
+              </svg>
+            </div>
           </div>
           {!accountUser ? <div className="sire-home-value-actions"><button type="button" className="sire-home-value-login" onClick={() => setAuthMode('login')}>Log in</button><button type="button" className="sire-home-value-signup" onClick={() => setAuthMode('signup')}>Sign up <ArrowRight size={15}/></button></div> : <button type="button" className="sire-home-value-add-funds" onClick={() => onNavigate?.('portfolio')}><Plus size={17}/> Add funds</button>}
         </section>
