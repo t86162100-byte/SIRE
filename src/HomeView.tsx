@@ -88,10 +88,13 @@ export default function HomeView({ instruments, onSelectInstrument, onNavigate, 
   const [fundingHistory, setFundingHistory] = useState<any[]>([]);
   const [fundingHistoryBusy, setFundingHistoryBusy] = useState(false);
   const [fundingHistoryLoaded, setFundingHistoryLoaded] = useState(false);
-  const [fundingFiatCrypto, setFundingFiatCrypto] = useState<string[]>([]);
-  const [fundingFiatCatalogBusy, setFundingFiatCatalogBusy] = useState(false);
   const [fundingFiatAmount, setFundingFiatAmount] = useState('');
   const [fundingFiatCoin, setFundingFiatCoin] = useState('USDT');
+  const [fundingFiatQuoteRequested, setFundingFiatQuoteRequested] = useState(false);
+  const fundingFiatCrypto = [...new Set(instruments
+    .filter(item => String(item.marketType || item.category || '').toUpperCase() === 'SPOT')
+    .map(item => String((item as any).baseAsset || item.symbol?.split(/[\/_-]/)[0] || '').toUpperCase())
+    .filter(coin => /^[A-Z0-9]{2,20}$/.test(coin)))].sort();
 
   const accountValue: string | null = null;
   const openFunding = () => {
@@ -102,34 +105,6 @@ export default function HomeView({ instruments, onSelectInstrument, onNavigate, 
     setFundingHistory([]);
     setFundingHistoryLoaded(false);
   };
-  useEffect(() => {
-    const showFunding = () => openFunding();
-    window.addEventListener('sire:show-funding-drawer', showFunding);
-    return () => window.removeEventListener('sire:show-funding-drawer', showFunding);
-  }, []);
-
-  useEffect(() => {
-    if (!fundingOpen || fundingStep !== 'fiat' || fundingFiatCrypto.length) return;
-    let cancelled = false;
-    setFundingFiatCatalogBusy(true);
-    fetch('/api/sire/bitget/catalog', { credentials: 'include', cache: 'no-store' })
-      .then(async response => {
-        const data = await response.json();
-        if (!response.ok || !data?.ok || !Array.isArray(data.instruments)) throw new Error(data?.error || 'Could not load the Bitget Spot catalogue.');
-        const coins = [...new Set(data.instruments
-          .filter((item:any) => String(item.marketType || item.category || '').toUpperCase() === 'SPOT' && String(item.status || 'TRADING').toUpperCase() === 'TRADING')
-          .map((item:any) => String(item.baseAsset || '').toUpperCase())
-          .filter((coin:string) => /^[A-Z0-9]{2,20}$/.test(coin)))].sort();
-        if (!cancelled) {
-          setFundingFiatCrypto(coins);
-          if (coins.length && !coins.includes(fundingFiatCoin)) setFundingFiatCoin(coins.includes('USDT') ? 'USDT' : coins[0]);
-        }
-      })
-      .catch(error => { if (!cancelled) setFundingError(error instanceof Error ? error.message : String(error)); })
-      .finally(() => { if (!cancelled) setFundingFiatCatalogBusy(false); });
-    return () => { cancelled = true; };
-  }, [fundingOpen, fundingStep, fundingFiatCrypto.length]);
-
   const filteredFundingCoins = useMemo(() => {
     const q = fundingCoinSearch.trim().toLowerCase();
     return fundingCoins.filter(item => !q || String(item.coin||'').toLowerCase().includes(q) || String(item.name||'').toLowerCase().includes(q));
@@ -446,7 +421,7 @@ export default function HomeView({ instruments, onSelectInstrument, onNavigate, 
           <section className="sire-funding-drawer" role="dialog" aria-modal="true" aria-label="Add funds" onMouseDown={event => event.stopPropagation()}>
             <div className="sire-funding-head">
               {fundingStep !== 'main' && <button type="button" className="sire-funding-icon-button" onClick={() => { setFundingStep(fundingStep === 'exchange' || fundingStep === 'buy' ? 'crypto' : fundingStep === 'transfer' ? 'crypto' : 'main'); setFundingError(''); }} aria-label="Back"><ArrowLeft size={18}/></button>}
-              <div><span>ADD FUNDS</span><h2>{({main:'Choose funding method',crypto:'Crypto funding',transfer:'Transfer crypto',exchange:'To exchange',fiat:'Fiat deposit',agents:'Payment agents',p2p:'P2P funding',buy:'Buy crypto'} as Record<string,string>)[fundingStep]}</h2></div>
+              <div><span>ADD FUNDS</span><h2>{({main:'Choose funding method',crypto:'Crypto funding',transfer:'Transfer crypto',exchange:'To exchange',fiat:'Bank transfer',agents:'Payment agents',p2p:'P2P funding',buy:'Buy crypto'} as Record<string,string>)[fundingStep]}</h2></div>
               <button type="button" className="sire-funding-icon-button" onClick={() => setFundingOpen(false)} aria-label="Close"><X size={18}/></button>
             </div>
             {fundingStep === 'main' && <div className="sire-funding-options">
@@ -480,15 +455,15 @@ export default function HomeView({ instruments, onSelectInstrument, onNavigate, 
               <p className="sire-funding-warning">Only transfer the selected crypto over the exact network shown. Check the address and any memo/tag before sending.</p>
             </div>}
             {fundingStep === 'fiat' && <div className="sire-funding-form sire-funding-bank-transfer">
-              <div className="sire-funding-unavailable-mark">↔</div><h3>Pay fiat · Receive crypto</h3>
-              <p className="sire-funding-note">Crypto choices load from Bitget’s live Spot catalogue. Fiat payment methods, third-party providers and executable purchase quotes must be supplied by the on-ramp offer service.</p>
-              <label className="sire-funding-field"><span>Pay currency</span><select value="NGN" disabled><option value="NGN">NGN · Nigerian naira</option></select></label>
-              <label className="sire-funding-field"><span>You pay · NGN</span><input type="number" min="0" step="any" placeholder="Enter amount" value={fundingFiatAmount} onChange={event => setFundingFiatAmount(event.target.value)} /></label>
-              <label className="sire-funding-field"><span>You receive</span><select value={fundingFiatCoin} onChange={event => setFundingFiatCoin(event.target.value)} disabled={fundingFiatCatalogBusy || !fundingFiatCrypto.length}>{fundingFiatCrypto.map(coin => <option key={coin} value={coin}>{coin}</option>)}</select></label>
-              <div className="sire-funding-address"><span>PAYMENT SUMMARY</span><div className="sire-funding-history-row"><span><b>Amount to pay</b></span><strong>{fundingFiatAmount && Number(fundingFiatAmount) > 0 ? '₦' + Number(fundingFiatAmount).toLocaleString() : '—'}</strong></div><div className="sire-funding-history-row"><span><b>Crypto to receive</b></span><strong>{fundingFiatCoin || '—'}</strong></div><small>{fundingFiatCatalogBusy ? 'Loading live Bitget Spot assets…' : fundingFiatCrypto.length ? 'Asset availability does not guarantee a third-party provider offer for this currency or payment method.' : 'Live Bitget Spot assets could not be loaded.'}</small></div>
-              <button type="button" className="sire-funding-primary" onClick={() => setFundingError('No executable Bitget third-party quote endpoint is available in the documented API connection. No provider offer, exchange rate, fee or payment instruction was invented; no payment has been initiated.')} disabled={!fundingFiatAmount || Number(fundingFiatAmount) <= 0 || !fundingFiatCoin || fundingFiatCatalogBusy}>Get quote</button>
-              {fundingError && <p className="sire-funding-note">{fundingError}</p>}
-              <p className="sire-funding-warning">Payment is disabled until a real third-party offer and quote can be retrieved and validated. The public Bitget Spot catalogue is not a fiat purchase quote.</p>
+              <div className="sire-funding-unavailable-mark">₦</div><h3>SIRE Bank Transfer</h3>
+              <p className="sire-funding-note">Choose how much you want to pay and which crypto you want to receive. This is a SIRE-native flow; it does not connect to or open an exchange.</p>
+              <label className="sire-funding-field"><span>Bank transfer currency</span><select value="NGN" disabled><option value="NGN">NGN · Nigerian naira</option></select></label>
+              <label className="sire-funding-field"><span>Transfer amount · NGN</span><input type="number" min="100" step="any" placeholder="Enter amount in ₦" value={fundingFiatAmount} onChange={event => { setFundingFiatAmount(event.target.value); setFundingFiatQuoteRequested(false); }} /></label>
+              <label className="sire-funding-field"><span>Crypto to receive</span><select value={fundingFiatCoin} onChange={event => { setFundingFiatCoin(event.target.value); setFundingFiatQuoteRequested(false); }} disabled={!fundingFiatCrypto.length}>{fundingFiatCrypto.map(coin => <option key={coin} value={coin}>{coin}</option>)}</select></label>
+              <div className="sire-funding-address"><span>TRANSFER SUMMARY</span><div className="sire-funding-history-row"><span><b>You pay</b></span><strong>{fundingFiatAmount && Number(fundingFiatAmount) > 0 ? '₦' + Number(fundingFiatAmount).toLocaleString() : '—'}</strong></div><div className="sire-funding-history-row"><span><b>You receive</b></span><strong>{fundingFiatCoin || '—'}</strong></div><small>{fundingFiatCrypto.length ? 'Assets are sourced from SIRE’s loaded spot-market catalogue.' : 'No spot assets are currently available in SIRE’s market catalogue.'}</small></div>
+              <button type="button" className="sire-funding-primary" onClick={() => { setFundingFiatQuoteRequested(true); setFundingError('SIRE-native transfer details and verified NGN-to-crypto quote calculation must be configured before a payment can be started. No bank account, rate, fee or crypto amount has been fabricated.'); }} disabled={!fundingFiatAmount || Number(fundingFiatAmount) < 100 || !fundingFiatCoin}>Continue</button>
+              {fundingFiatQuoteRequested && fundingError && <p className="sire-funding-note">{fundingError}</p>}
+              <p className="sire-funding-warning">No transfer is initiated yet. SIRE must connect its own receiving bank account and a verified NGN/crypto pricing source before it can show payment instructions or credit crypto.</p>
             </div>}
             {(['agents','p2p','buy'] as string[]).includes(fundingStep) && <div className="sire-funding-unavailable"><div className="sire-funding-unavailable-mark">—</div><h3>{fundingStep === 'agents' ? 'Payment agents' : fundingStep === 'p2p' ? 'P2P funding' : 'Buy crypto'}</h3><p>{fundingStep === 'agents' ? 'Verified agents and their supported currencies are not connected yet.' : fundingStep === 'p2p' ? 'P2P offers and payment protection are not connected yet.' : 'Crypto purchase methods and live quotes are not connected yet.'}</p><span>Not available yet · No payment will be initiated</span></div>}
           </section>
