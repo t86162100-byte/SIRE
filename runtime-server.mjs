@@ -771,7 +771,7 @@ const server = http.createServer(async (req,res) => {
         const user=await currentUser(req);
         if(!user) return json(401,{ok:false,error:'Sign in to fund your SIRE account.'});
         const parsed=body?JSON.parse(body):{};
-        const origin=String(process.env.SIRE_PUBLIC_BASE_URL||'https://sire-yeuy.onrender.com').replace(/\\/+$/,'');
+        const origin=String(process.env.SIRE_PUBLIC_BASE_URL||'https://sire-yeuy.onrender.com').replace(/\/+$/,'');
         const result=await createPagaDeposit(user,parsed,origin);
         return json(200,result);
       } catch(cause) {
