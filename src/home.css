@@ -5431,3 +5431,113 @@
  .market-asset-logo{width:34px!important;height:34px!important;min-width:34px!important}
  .market-asset-price strong{font-size:11px!important}
 }
+
+/* SIRE HOME V2 — structural visual refresh */
+.sire-home-v2{background:#050606!important;color:#f7f8f8!important;--hv-panel:#0b0d0e;--hv-line:#292e31;--hv-muted:#929ba0}
+.sire-home-v2:before,.sire-home-v2:after{display:none!important}
+.sire-home-v2 .sire-home-header{height:66px!important;padding:calc(env(safe-area-inset-top) + 8px) 18px 8px!important;background:#050606!important;border-bottom:1px solid #252a2d!important;backdrop-filter:none!important}
+.sire-home-v2 .sire-home-logo{width:82px!important;max-height:30px!important;object-fit:contain!important}
+.sire-home-v2 .sire-home-header-actions{gap:7px!important}
+.sire-home-v2 .sire-home-icon{width:37px!important;height:37px!important;border:1px solid #2c3134!important;border-radius:11px!important;background:#0c0e0f!important;color:#fff!important}
+.sire-home-v2 .sire-home-scroll{height:calc(100dvh - 66px)!important;padding:0 17px 24px!important}
+.sire-home-v2 .sire-home-intro{padding:27px 1px 20px!important;margin-bottom:16px!important;border-bottom:1px solid #292e31!important}
+.sire-home-v2 .sire-home-intro-meta{display:flex!important;justify-content:space-between!important;align-items:center!important;gap:8px!important;margin-bottom:18px!important;font:700 9px/1.4 ui-monospace,monospace!important;letter-spacing:.15em!important;color:#9ba3a8!important}
+.sire-home-v2 .sire-home-live-mark{display:inline-flex!important;align-items:center!important;gap:6px!important;padding:6px 8px!important;border:1px solid #353b3f!important;border-radius:6px!important;font-size:8px!important;color:#d4d8da!important}
+.sire-home-v2 .sire-home-live-mark i{width:5px!important;height:5px!important;border-radius:50%!important;background:#fff!important}
+.sire-home-v2 .sire-home-intro h1{margin:0!important;font-size:clamp(34px,9vw,47px)!important;line-height:.99!important;letter-spacing:-.065em!important;font-weight:850!important;color:#fff!important}
+.sire-home-v2 .sire-home-intro h1 em{font-style:normal!important;color:#92999e!important}
+.sire-home-v2 .sire-home-intro p{margin:13px 0 19px!important;max-width:300px!important;font-size:12px!important;line-height:1.65!important;color:#a1a8ad!important}
+.sire-home-v2 .sire-home-intro-search{display:flex!important;align-items:center!important;gap:10px!important;width:100%!important;min-height:48px!important;padding:0 12px!important;border:1px solid #343a3e!important;border-radius:10px!important;background:#0c0e0f!important;color:#fff!important;text-align:left!important}
+.sire-home-v2 .sire-home-intro-search span{flex:1!important;font-size:11px!important;color:#9aa2a7!important}
+.sire-home-v2 .sire-home-intro-search kbd{padding:3px 7px!important;border:1px solid #3a4044!important;border-radius:5px!important;background:#151819!important;color:#c7cdd0!important}
+.sire-home-v2 .sire-home-kicker{font:750 9px/1.4 ui-monospace,monospace!important;letter-spacing:.15em!important;color:#929ba0!important}
+.sire-home-v2 .sire-home-account{position:relative!important;overflow:hidden!important;margin:0 0 29px!important;padding:17px!important;border:1px solid #353b3f!important;border-radius:16px!important;background:linear-gradient(145deg,#131617,#0b0d0e 62%,#080909)!important}
+.sire-home-v2 .sire-home-account:after{content:"";position:absolute;right:-48px;top:-60px;width:160px;height:160px;border:1px solid #282e31;border-radius:50%;box-shadow:0 0 0 18px rgba(255,255,255,.012),0 0 0 38px rgba(255,255,255,.009);pointer-events:none}
+.sire-home-v2 .sire-home-account-top{display:flex!important;justify-content:space-between!important;align-items:flex-start!important;gap:8px!important;position:relative!important;z-index:1!important}
+.sire-home-v2 .sire-home-account-label{display:flex!important;align-items:center!important;gap:8px!important;margin-top:8px!important;font-size:11px!important;color:#c4c9cc!important}
+.sire-home-v2 .sire-home-balance-eye{display:grid!important;place-items:center!important;width:26px!important;height:26px!important;padding:0!important;border:1px solid #343a3e!important;border-radius:7px!important;background:#171a1c!important;color:#fff!important}
+.sire-home-v2 .sire-home-account-wallet{display:flex!important;align-items:center!important;gap:6px!important;min-height:32px!important;padding:0 9px!important;border:1px solid #fff!important;border-radius:8px!important;background:#fff!important;color:#050606!important;font-size:10px!important;font-weight:800!important}
+.sire-home-v2 .sire-home-account-value{position:relative!important;z-index:1!important;margin:21px 0 16px!important;font-size:clamp(36px,10vw,47px)!important;line-height:1!important;letter-spacing:-.065em!important;font-weight:850!important;color:#fff!important}
+.sire-home-v2 .sire-home-account-value small{font-size:10px!important;letter-spacing:.08em!important;color:#8f989d!important}
+.sire-home-v2 .sire-home-account-foot{display:flex!important;align-items:center!important;gap:7px!important;position:relative!important;z-index:1!important;padding:12px 0 15px!important;border-top:1px solid #292e31!important;border-bottom:1px solid #292e31!important;font-size:10px!important;color:#9ba3a8!important}
+.sire-home-v2 .sire-home-account-foot strong{margin-left:auto!important;color:#fff!important;font-size:11px!important}
+.sire-home-v2 .sire-home-account-note{font-size:8px!important;color:#6f787e!important}
+.sire-home-v2 .sire-home-account-actions{display:grid!important;grid-template-columns:repeat(5,minmax(0,1fr))!important;gap:5px!important;margin-top:15px!important;position:relative!important;z-index:1!important}
+.sire-home-v2 .sire-home-account-actions button{display:flex!important;align-items:center!important;flex-direction:column!important;gap:7px!important;min-width:0!important;padding:0!important;border:0!important;background:transparent!important;color:#c6cbce!important}
+.sire-home-v2 .sire-home-account-actions button span{display:grid!important;place-items:center!important;width:39px!important;height:39px!important;border:1px solid #fff!important;border-radius:11px!important;background:#fff!important;color:#050606!important}
+.sire-home-v2 .sire-home-account-actions button b{font-size:9px!important;font-weight:700!important;color:#c6cbce!important}
+.sire-home-v2 .sire-home-launch{margin:0 0 31px!important}
+.sire-home-v2 .sire-home-section-heading{display:flex!important;justify-content:space-between!important;align-items:flex-end!important;gap:10px!important;margin:0 0 13px!important}
+.sire-home-v2 .sire-home-section-heading h2{margin:6px 0 0!important;font-size:23px!important;letter-spacing:-.05em!important;line-height:1.05!important;color:#fff!important}
+.sire-home-v2 .sire-home-heading-index{font:700 8px/1.4 ui-monospace,monospace!important;letter-spacing:.1em!important;color:#697278!important}
+.sire-home-v2 .sire-home-launch-grid{display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:9px!important}
+.sire-home-v2 .sire-home-launch-tile{position:relative!important;display:flex!important;flex-direction:column!important;align-items:flex-start!important;min-height:129px!important;padding:13px!important;border:1px solid #2b3033!important;border-radius:13px!important;background:#0b0d0e!important;color:#fff!important;text-align:left!important}
+.sire-home-v2 .sire-home-launch-tile.sire-home-launch-primary{border-color:#fff!important;background:#fff!important;color:#050606!important}
+.sire-home-v2 .sire-home-launch-icon{display:grid!important;place-items:center!important;width:35px!important;height:35px!important;margin-bottom:13px!important;border:1px solid #3a4044!important;border-radius:10px!important;background:#16191b!important;color:#fff!important}
+.sire-home-v2 .sire-home-launch-primary .sire-home-launch-icon{border-color:#d8dcde!important;background:#e8ebec!important;color:#050606!important}
+.sire-home-v2 .sire-home-launch-tile>b{font-size:15px!important;font-weight:850!important}
+.sire-home-v2 .sire-home-launch-tile>small{margin-top:4px!important;font-size:10px!important;color:#9ca4a9!important}
+.sire-home-v2 .sire-home-launch-primary>small{color:#4d555a!important}
+.sire-home-v2 .sire-home-launch-arrow{position:absolute!important;right:12px!important;top:14px!important;color:#aab1b5!important}
+.sire-home-v2 .sire-home-launch-primary .sire-home-launch-arrow{color:#050606!important}
+.sire-home-v2 .sire-home-section{margin:0 0 31px!important;padding:0!important;border:0!important;border-radius:0!important;background:transparent!important;box-shadow:none!important}
+.sire-home-v2 .sire-home-section-head{display:flex!important;align-items:flex-end!important;justify-content:space-between!important;gap:10px!important;margin:0 0 15px!important;padding:0 0 12px!important;border-bottom:1px solid #2a2f32!important}
+.sire-home-v2 .sire-home-section-head h2{margin:6px 0 0!important;font-size:25px!important;line-height:1!important;letter-spacing:-.055em!important;font-weight:850!important;color:#fff!important}
+.sire-home-v2 .sire-home-section-head>button{display:inline-flex!important;align-items:center!important;gap:6px!important;min-height:33px!important;padding:0 10px!important;border:1px solid #fff!important;border-radius:8px!important;background:#fff!important;color:#050606!important;font-size:10px!important;font-weight:800!important}
+.sire-home-v2 .sire-home-market-filter-shell{margin:0 0 12px!important;padding:0!important;border:0!important;background:transparent!important}
+.sire-home-v2 .sire-home-market-tabs{display:flex!important;gap:6px!important;overflow-x:auto!important;padding:0 0 12px!important;scrollbar-width:none!important}
+.sire-home-v2 .sire-home-market-tabs button{flex:0 0 auto!important;min-height:35px!important;padding:0 12px!important;border:1px solid #303639!important;border-radius:8px!important;background:#101315!important;color:#aeb6ba!important;font-size:10px!important;font-weight:750!important}
+.sire-home-v2 .sire-home-market-tabs button.active{border-color:#fff!important;background:#fff!important;color:#050606!important;box-shadow:0 2px 0 #9ba1a5!important}
+.sire-home-v2 .sire-home-market-subtabs{display:flex!important;align-items:center!important;gap:10px!important;margin:0!important;padding:10px 0 0!important;border-top:1px solid #202528!important}
+.sire-home-v2 .sire-home-market-subtabs-label{font:700 8px/1.4 ui-monospace,monospace!important;letter-spacing:.12em!important;color:#727b81!important;white-space:nowrap!important}
+.sire-home-v2 .sire-home-market-subtabs-track{display:flex!important;gap:6px!important;overflow-x:auto!important}
+.sire-home-v2 .sire-home-market-subtabs-track button{padding:7px 10px!important;border:1px solid #303639!important;border-radius:7px!important;background:#0d0f10!important;color:#aeb5b9!important;font-size:9px!important;font-weight:750!important}
+.sire-home-v2 .sire-home-market-subtabs-track button.active{background:#fff!important;border-color:#fff!important;color:#050606!important}
+.sire-home-v2 .sire-home-market-table-head{display:grid!important;grid-template-columns:minmax(0,1fr) auto 64px!important;gap:8px!important;padding:0 0 9px!important;border-bottom:1px solid #292e31!important;font:700 8px/1.4 ui-monospace,monospace!important;letter-spacing:.09em!important;color:#707a80!important}
+.sire-home-v2 .sire-home-market-table-head span:nth-child(2),.sire-home-v2 .sire-home-market-table-head span:nth-child(3){text-align:right!important}
+.sire-home-v2 .sire-home-watchlist{display:flex!important;flex-direction:column!important;gap:0!important;border-top:0!important}
+.sire-home-v2 .sire-home-watch-row{display:grid!important;grid-template-columns:minmax(0,1fr) 65px!important;align-items:center!important;gap:8px!important;margin:0!important;padding:14px 0!important;border:0!important;border-bottom:1px solid #22272a!important;border-radius:0!important;background:transparent!important}
+.sire-home-v2 .sire-home-watch-main{display:grid!important;grid-template-columns:37px minmax(0,1fr) auto!important;align-items:center!important;gap:9px!important;min-width:0!important;padding:0!important;border:0!important;background:transparent!important;text-align:left!important}
+.sire-home-v2 .market-asset-logo{grid-column:1!important;grid-row:1!important;width:35px!important;height:35px!important;min-width:35px!important;border:1px solid #363c40!important;border-radius:50%!important;background:#151819!important}
+.sire-home-v2 .market-source-logo{width:13px!important;height:13px!important;right:-2px!important;bottom:-2px!important;border:1px solid #050606!important;background:#fff!important}
+.sire-home-v2 .market-asset-name{grid-column:2!important;grid-row:1!important;display:flex!important;flex-direction:column!important;gap:4px!important;min-width:0!important}
+.sire-home-v2 .market-asset-name b{font-size:13px!important;font-weight:850!important;color:#f7f8f8!important}
+.sire-home-v2 .market-asset-name small{overflow:hidden!important;text-overflow:ellipsis!important;white-space:nowrap!important;font-size:8px!important;color:#838d93!important}
+.sire-home-v2 .market-asset-price{grid-column:3!important;grid-row:1!important;text-align:right!important;min-width:0!important}
+.sire-home-v2 .market-asset-price strong{display:block!important;font-size:11px!important;font-weight:800!important;color:#fff!important;white-space:nowrap!important}
+.sire-home-v2 .market-asset-price small{display:block!important;margin-top:4px!important;font-size:8px!important;color:#7c858b!important;white-space:nowrap!important}
+.sire-home-v2 .market-trade-button{display:flex!important;align-items:center!important;justify-content:center!important;min-height:31px!important;padding:0 4px!important;border:1px solid #fff!important;border-radius:7px!important;background:#fff!important;color:#050606!important;font-size:9px!important;font-weight:900!important}
+.sire-home-v2 .market-trade-button.negative{border-color:#454b4f!important;background:#1b1f21!important;color:#fff!important}
+.sire-home-v2 .market-trade-button.neutral{border-color:#353b3f!important;background:#111416!important;color:#c3c9cc!important}
+.sire-home-v2 .sire-home-pulse-track{display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:8px!important}
+.sire-home-v2 .sire-home-pulse-card{min-width:0!important;max-width:none!important;flex:auto!important;border:1px solid #2b3033!important;border-radius:12px!important;background:#0b0d0e!important}
+.sire-home-v2 .sire-home-pulse-main{display:block!important;width:100%!important;padding:11px!important;background:transparent!important;text-align:left!important}
+.sire-home-v2 .sire-home-pulse-top{display:flex!important;align-items:center!important;justify-content:space-between!important;gap:6px!important;margin-bottom:14px!important}
+.sire-home-v2 .sire-home-pulse-logo{width:29px!important;height:29px!important;border:1px solid #373d41!important;border-radius:50%!important;background:#16191b!important}
+.sire-home-v2 .sire-home-pulse-copy b{font-size:11px!important;color:#fff!important}
+.sire-home-v2 .sire-home-pulse-copy small{font-size:8px!important;color:#838c92!important}
+.sire-home-v2 .sire-home-pulse-source{padding:4px 5px!important;border:1px solid #303639!important;border-radius:5px!important;background:#141719!important}
+.sire-home-v2 .sire-home-pulse-source small{font-size:7px!important;color:#aeb5b9!important}
+.sire-home-v2 .sire-home-pulse-value{display:flex!important;align-items:center!important;justify-content:space-between!important;gap:5px!important}
+.sire-home-v2 .sire-home-pulse-value strong{font-size:clamp(12px,3.6vw,16px)!important;letter-spacing:-.04em!important;color:#fff!important;white-space:nowrap!important}
+.sire-home-v2 .sire-home-pulse-value b{padding:4px 5px!important;border:1px solid #343a3e!important;border-radius:5px!important;background:#151819!important;font-size:8px!important;color:#fff!important;white-space:nowrap!important}
+.sire-home-v2 .sire-home-pulse-chart{margin-top:10px!important;padding-top:8px!important;border-top:1px solid #272c2f!important}
+.sire-home-v2 .sire-home-bottom-feature{position:relative!important;display:flex!important;align-items:flex-start!important;gap:13px!important;overflow:hidden!important;margin:7px 0 30px!important;padding:20px 15px!important;border:1px solid #353b3f!important;border-radius:14px!important;background:#101314!important}
+.sire-home-v2 .sire-home-feature-number{font:800 10px/1.5 ui-monospace,monospace!important;color:#7c858a!important}
+.sire-home-v2 .sire-home-feature-copy{position:relative!important;z-index:1!important;max-width:250px!important}
+.sire-home-v2 .sire-home-feature-copy h2{margin:9px 0!important;font-size:27px!important;line-height:1!important;letter-spacing:-.06em!important;color:#fff!important}
+.sire-home-v2 .sire-home-feature-copy p{margin:0!important;font-size:10px!important;line-height:1.6!important;color:#9aa2a7!important}
+.sire-home-v2 .sire-home-feature-mark{position:absolute!important;right:12px!important;bottom:12px!important;display:grid!important;place-items:center!important;width:52px!important;height:52px!important;border:1px solid #454b4f!important;border-radius:14px!important;background:#fff!important;color:#050606!important}
+.sire-home-v2 .sire-home-discover-v2 .sire-home-new-grid{display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:8px!important}
+.sire-home-v2 .sire-home-discover-icon{display:grid!important;place-items:center!important;width:32px!important;height:32px!important;border:1px solid #3a4044!important;border-radius:9px!important;background:#171a1c!important;color:#fff!important}
+.sire-home-v2 .sire-home-new-grid button{display:grid!important;grid-template-columns:34px minmax(0,1fr) 14px!important;grid-template-rows:auto auto!important;align-items:center!important;gap:5px 9px!important;min-width:0!important;min-height:77px!important;padding:10px!important;border:1px solid #2d3336!important;border-radius:11px!important;background:#0b0d0e!important;color:#fff!important;text-align:left!important}
+.sire-home-v2 .sire-home-new-grid button>span:nth-child(2){grid-column:2!important;grid-row:1!important;font-size:10px!important;font-weight:800!important;color:#fff!important}
+.sire-home-v2 .sire-home-new-grid button>small{grid-column:2!important;grid-row:2!important;font-size:8px!important;color:#899197!important}
+.sire-home-v2 .sire-home-new-grid button>svg{grid-column:3!important;grid-row:1/3!important;color:#a5adb2!important}
+.sire-home-v2 .sire-home-footer{display:flex!important;flex-direction:column!important;align-items:center!important;gap:8px!important;margin-top:29px!important;padding:22px 10px 0!important;border-top:1px solid #252a2d!important;text-align:center!important}
+.sire-home-v2 .sire-home-footer img{width:72px!important;height:24px!important;object-fit:contain!important;opacity:.85!important}
+.sire-home-v2 .sire-home-footer>span{font:700 8px/1.4 ui-monospace,monospace!important;letter-spacing:.15em!important;color:#c4cace!important}
+.sire-home-v2 .sire-home-footer small{font-size:9px!important;line-height:1.5!important;color:#737c82!important}
+.sire-home-v2 .sire-home-bottom-spacer{height:35px!important}
+.sire-home-v2 button:focus-visible{outline:2px solid #fff!important;outline-offset:3px!important}
+@media(max-width:380px){.sire-home-v2 .sire-home-scroll{padding-left:13px!important;padding-right:13px!important}.sire-home-v2 .sire-home-account{padding:14px!important}.sire-home-v2 .sire-home-account-actions button span{width:35px!important;height:35px!important}.sire-home-v2 .sire-home-watch-row{grid-template-columns:minmax(0,1fr) 59px!important}.sire-home-v2 .sire-home-watch-main{grid-template-columns:32px minmax(0,1fr) auto!important;gap:6px!important}.sire-home-v2 .market-asset-logo{width:30px!important;height:30px!important;min-width:30px!important}.sire-home-v2 .market-asset-price strong{font-size:10px!important}.sire-home-v2 .sire-home-pulse-track{grid-template-columns:1fr!important}}
