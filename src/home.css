@@ -5283,3 +5283,45 @@
     mix-blend-mode:normal !important;
   }
 }
+
+
+/* SIRE Home redesign — monochrome, compact exchange dashboard */
+.sire-home{background:#050606!important;color:#f5f6f7!important}
+.sire-home:before{background:none!important}
+.sire-home-header{background:#050606!important;border-bottom:1px solid #17191b!important;backdrop-filter:none!important}
+.sire-home-brand,.sire-home-icon{color:#f5f6f7!important}
+.sire-home-mark{background:#151719!important;color:#fff!important;box-shadow:none!important}
+.sire-home-scroll{padding-left:14px!important;padding-right:14px!important}
+.sire-home-welcome{padding:18px 2px 20px!important}
+.sire-home-welcome>span,.sire-home-promo>div:nth-child(2)>span{font-size:10px!important;letter-spacing:.14em!important;font-weight:800!important;color:#9ca3aa!important}
+.sire-home-welcome h1{margin:7px 0 5px!important;font-size:25px!important;line-height:1.18!important;letter-spacing:-.035em!important;color:#fff!important;font-weight:850!important}
+.sire-home-welcome p{margin:0!important;color:#a4a9af!important;font-size:12px!important;font-weight:600!important}
+.sire-home-welcome p i{font-style:normal!important;color:#555b60!important;padding:0 4px!important}
+.sire-home-balance,.sire-home-section,.sire-home-intelligence,.sire-home-copy-card,.sire-home-ai-card,.sire-home-brief,.sire-home-promo{background:#090a0b!important;border:1px solid #272a2d!important;box-shadow:none!important;color:#f5f6f7!important}
+.sire-home-balance{border-radius:15px!important}
+.sire-home-balance-title span,.sire-home-balance-pnl span,.sire-home-balance-available span{color:#a6abb0!important}
+.sire-home-balance-wallet,.sire-home-balance-eye{background:#141618!important;border:1px solid #292d30!important;color:#f3f4f5!important;box-shadow:none!important}
+.sire-home-balance-value{color:#fff!important}
+.sire-home-balance-actions button{color:#f2f3f4!important}
+.balance-action-icon{background:#17191b!important;border:1px solid #282c2f!important;color:#fff!important;box-shadow:none!important}
+.sire-home-events-media,.sire-home-liquid,.sire-home-gpu,.sire-home-hero{display:none!important}
+.sire-home-promo{display:flex!important;align-items:center!important;gap:13px!important;padding:14px!important;margin:16px 0 20px!important;border-radius:14px!important}
+.sire-home-promo-icon{width:46px!important;height:46px!important;flex:0 0 46px!important;display:grid!important;place-items:center!important;border-radius:10px!important;background:#17191b!important;color:#fff!important}
+.sire-home-promo>div:nth-child(2){flex:1!important;min-width:0!important}
+.sire-home-promo strong{display:block!important;color:#f5f6f7!important;font-size:14px!important;line-height:1.35!important;margin:4px 0!important}
+.sire-home-promo p{margin:0!important;color:#9da3a9!important;font-size:11px!important;line-height:1.45!important}
+.sire-home-promo>svg{color:#a6abb0!important;flex:0 0 auto!important}
+.sire-home-section-head h2,.sire-home-section h2{color:#fff!important}
+.sire-home-section-head>div>span,.sire-home-section-head button{color:#9da3a9!important}
+.sire-home-filter button,.sire-home-market-filter button,.sire-home-watch-filter button,.sire-home-subfilter button{background:#101214!important;border:1px solid #272a2d!important;color:#c4c8cc!important;box-shadow:none!important}
+.sire-home-filter button.active,.sire-home-market-filter button.active,.sire-home-watch-filter button.active,.sire-home-subfilter button.active{background:#fff!important;color:#090a0b!important;border-color:#fff!important}
+.sire-home-watch-row,.sire-home-pulse-card,.sire-home-intel-stats>div,.sire-home-actions-grid button,.sire-home-earn-grid button,.sire-home-new-grid button{background:#090a0b!important;border-color:#272a2d!important;color:#f5f6f7!important;box-shadow:none!important}
+.sire-home-watch-main,.market-asset-name b,.market-asset-price strong,.market-asset-volume b{color:#f5f6f7!important}
+.market-asset-name small,.market-asset-volume small,.sire-home-pulse-copy small{color:#969da3!important}
+.sire-home-copy-card,.sire-home-ai-card{border-radius:14px!important}
+.sire-home-copy-card h2,.sire-home-ai-card h2,.sire-home-intel-top strong{color:#fff!important}
+.sire-home-copy-card p,.sire-home-intel-note p,.sire-home-ai-card span{color:#a1a6ac!important}
+.sire-home-intel-icon,.sire-home-ai-icon,.sire-home-copy-orbit{background:#151719!important;color:#fff!important;box-shadow:none!important}
+.sire-home-intel-top button,.sire-home-copy-card button,.sire-home-ai-cta{background:#fff!important;color:#090a0b!important;border:0!important;box-shadow:none!important}
+.sire-home-bottom-spacer{height:110px!important}
+@media (max-width:480px){.sire-home-welcome h1{font-size:23px!important}.sire-home-welcome{padding-top:15px!important;padding-bottom:16px!important}.sire-home-balance{padding:15px!important}.sire-home-promo{margin-top:13px!important}}
