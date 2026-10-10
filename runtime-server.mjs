@@ -860,7 +860,7 @@ const server = http.createServer(async (req,res) => {
         const origin='https://sire-yeuy.onrender.com';
         const order=await alchemyPayRequest('POST','/open/api/v4/merchant/trade/create',{
           side:'BUY',merchantOrderNo,amount:String(amount),fiatCurrency:fiat,cryptoCurrency:crypto,orderType:'4',
-          address,network,payWayCode,redirectUrl:origin+'/?funding=complete',callbackUrl:origin+'/api/sire/onramp/callback',
+          address,network,payWayCode,redirectUrl:origin+'/?funding=complete',
           clientIp:alchemyClientIp(req)
         },accessToken);
         const result=order?.data||{};
