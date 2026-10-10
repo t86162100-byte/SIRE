@@ -29,9 +29,11 @@ type HomeInstrument = {
   instrumentType?: string;
 };
 
+type HomeDestination = 'home' | 'market' | 'trade' | 'discover' | 'portfolio';
 type Props = {
   instruments: HomeInstrument[];
   onSelectInstrument?: (item: HomeInstrument) => void;
+  onNavigate?: (tab: HomeDestination) => void;
   videoSrc?: string;
 };
 
