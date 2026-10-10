@@ -1,5 +1,5 @@
 import http from 'node:http';
-import { randomUUID, createHmac } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
 import { readFile, stat } from 'node:fs/promises';
 import { extname, join, normalize } from 'node:path';
 import { WebSocket, WebSocketServer } from 'ws';
@@ -11,6 +11,7 @@ import { ws } from './compat/appdeploy-sdk/index.js';
 import { realtime } from './backend/realtime.ts';
 import { getStoredHistory, persistHistoryBars, historyStoreStatus } from './backend/deriv-history-store.ts';
 import { signup, login, logout, currentUser, googleStart, googleCallback } from './backend/auth.ts';
+import { createPagaDeposit, handlePagaCallback, getPagaAccount } from './backend/paga-funding.ts';
 import { runSireDiagnostics } from './backend/sire-diagnostics.ts';
 import { runAutonomousCycle } from './autonomous/sire-autonomous-cycle.ts';
 import { recordIssue, getRecentIssues } from './backend/sire-issue-tracker.ts';
@@ -744,35 +745,6 @@ async function bitgetWalletRequest(path, body) {
   return data?.data??data;
 }
 
-function alchemyPayConfig(){
-  const appId=String(process.env.ALCHEMYPAY_APP_ID||'').trim();
-  const appSecret=String(process.env.ALCHEMYPAY_APP_SECRET||'').trim();
-  const env=String(process.env.ALCHEMYPAY_ENV||'test').trim().toLowerCase();
-  if(!appId||!appSecret) throw new Error('Fiat purchase is not configured yet. Add ALCHEMYPAY_APP_ID and ALCHEMYPAY_APP_SECRET in Render after merchant onboarding.');
-  if(!['test','production','prod'].includes(env)) throw new Error('ALCHEMYPAY_ENV must be test or production.');
-  return {appId,appSecret,base:env==='test'?'https://openapi-test.alchemypay.org':'https://openapi.alchemypay.org'};
-}
-function alchemyCanonical(value){
-  if(Array.isArray(value)) return value.map(alchemyCanonical);
-  if(value&&typeof value==='object') return Object.fromEntries(Object.keys(value).filter(k=>value[k]!==undefined&&value[k]!==null&&value[k]!=='').sort().map(k=>[k,alchemyCanonical(value[k])]));
-  return value;
-}
-async function alchemyPayRequest(method,path,body={},accessToken=''){
-  const cfg=alchemyPayConfig();
-  const timestamp=String(Date.now());
-  const canonicalBody=method==='GET'?'':JSON.stringify(alchemyCanonical(body));
-  const sign=createHmac('sha256',cfg.appSecret).update(timestamp+method.toUpperCase()+path+canonicalBody).digest('base64');
-  const response=await fetch(cfg.base+path,{method,headers:{Accept:'application/json','Content-Type':'application/json',appid:cfg.appId,timestamp,sign,...(accessToken?{'access-token':accessToken}:{})},...(method==='POST'?{body:canonicalBody}:{}),signal:AbortSignal.timeout(12000)});
-  const raw=await response.text();let data={};try{data=raw?JSON.parse(raw):{};}catch{throw new Error('Fiat provider returned an unreadable response.');}
-  if(!response.ok||data?.success!==true||String(data?.returnCode||'0000')!=='0000') throw new Error('Fiat provider request failed ('+String(data?.returnCode||response.status)+'): '+String(data?.returnMsg||raw).slice(0,350));
-  return data;
-}
-function alchemyClientIp(req){
-  const forwarded=String(req.headers['x-forwarded-for']||'').split(',')[0].trim();
-  const ip=forwarded||String(req.socket?.remoteAddress||'');
-  return ip.replace(/^::ffff:/,'').slice(0,64);
-}
-
 const server = http.createServer(async (req,res) => {
   if (req.method === 'OPTIONS') { res.writeHead(204,{ 'Access-Control-Allow-Origin':'*','Access-Control-Allow-Methods':'GET,POST,PUT,DELETE,OPTIONS','Access-Control-Allow-Headers':'Content-Type, Authorization' }); return res.end(); }
   if (await serveStatic(req,res)) return;
@@ -793,84 +765,42 @@ const server = http.createServer(async (req,res) => {
       }catch(cause){const status=Number(cause?.status)>=400&&Number(cause?.status)<600?Number(cause.status):503;return json(status,{ok:false,error:cause instanceof Error?cause.message:String(cause),code:cause?.code??null});}
     }
 
-    if ((req.method === 'GET' && pathname === '/api/sire/onramp/catalog') ||
-        (req.method === 'POST' && (pathname === '/api/sire/onramp/quote' || pathname === '/api/sire/onramp/order'))) {
-      const json=(status,payload)=>res.writeHead(status,{'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify(payload));
+    if (req.method === 'POST' && pathname === '/api/sire/paga/deposit') {
+      const json=(status,payload)=>res.writeHead(status,{'Access-Control-Allow-Origin':'*','Access-Control-Allow-Credentials':'true','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify(payload));
       try {
         const user=await currentUser(req);
-        if(!user) return json(401,{ok:false,error:'Sign in to use SIRE fiat purchases.'});
-        const url=new URL(req.url||'/','http://sire.local');
+        if(!user) return json(401,{ok:false,error:'Sign in to fund your SIRE account.'});
         const parsed=body?JSON.parse(body):{};
-        const fiat=String(req.method==='GET'?(url.searchParams.get('fiat')||'NGN'):(parsed.fiat||'NGN')).trim().toUpperCase();
-        if(!/^[A-Z]{3}$/.test(fiat)) return json(400,{ok:false,error:'Choose a valid three-letter fiat currency.'});
-        if(req.method==='GET'){
-          const [fiatData,cryptoData]=await Promise.all([
-            alchemyPayRequest('GET','/open/api/v4/merchant/fiat/list?type=BUY'),
-            alchemyPayRequest('GET','/open/api/v4/merchant/crypto/list?fiat='+encodeURIComponent(fiat))
-          ]);
-          const fiatMethods=(Array.isArray(fiatData.data)?fiatData.data:[]).filter((x)=>String(x.currency||'').toUpperCase()===fiat);
-          const cryptos=(Array.isArray(cryptoData.data)?cryptoData.data:[]).filter((x)=>Number(x.buyEnable)===1&&x.crypto&&x.network);
-          const selectedCrypto=String(url.searchParams.get('crypto')||'').trim().toUpperCase();
-          const selectedNetwork=String(url.searchParams.get('network')||'').trim().toUpperCase();
-          let methods=fiatMethods;
-          if(selectedCrypto&&selectedNetwork){
-            const methodData=await alchemyPayRequest('POST','/open/api/v4/merchant/query/cryptoFiatMethod',{fiat,crypto:selectedCrypto,network:selectedNetwork,side:'BUY'});
-            const eligible=Array.isArray(methodData.data)?methodData.data:[];
-            methods=eligible.map(x=>({...x,...(fiatMethods.find(m=>String(m.payWayCode)===String(x.payWayCode))||{})}));
-          }
-          const bankMethods=methods.filter(x=>/bank|transfer|african/i.test(String(x.payWayName||'')));
-          return json(200,{ok:true,provider:'ALCHEMY_PAY',fiatCurrencies:[...new Set((Array.isArray(fiatData.data)?fiatData.data:[]).map(x=>String(x.currency||'').toUpperCase()).filter(x=>/^[A-Z]{3}$/.test(x)))].sort(),fiat,cryptoAssets:cryptos,paymentMethods:methods,bankTransferMethods:bankMethods,configured:true});
-        }
-        const crypto=String(parsed.crypto||'').trim().toUpperCase();
-        const network=String(parsed.network||'').trim().toUpperCase();
-        const payWayCode=String(parsed.payWayCode||'').trim();
-        const amount=Number(parsed.amount);
-        if(!/^[A-Z0-9]{2,20}$/.test(crypto)||!/^[A-Z0-9._-]{2,30}$/.test(network)||!/^\d{1,10}$/.test(payWayCode)||!Number.isFinite(amount)||amount<=0) return json(400,{ok:false,error:'Choose a supported crypto/network/payment method and enter a valid amount.'});
-        if(pathname.endsWith('/quote')){
-          const [cryptoData,methodData]=await Promise.all([
-            alchemyPayRequest('GET','/open/api/v4/merchant/crypto/list?fiat='+encodeURIComponent(fiat)),
-            alchemyPayRequest('POST','/open/api/v4/merchant/query/cryptoFiatMethod',{fiat,crypto,network,side:'BUY'})
-          ]);
-          const supported=(Array.isArray(cryptoData.data)?cryptoData.data:[]).some(x=>String(x.crypto||'').toUpperCase()===crypto&&String(x.network||'').toUpperCase()===network&&Number(x.buyEnable)===1);
-          if(!supported) return json(400,{ok:false,error:'That crypto and network are not currently supported for purchase in the selected currency.'});
-          const methods=Array.isArray(methodData.data)?methodData.data:[];
-          const chosen=methods.find(x=>String(x.payWayCode)===payWayCode);
-          if(!chosen) return json(400,{ok:false,error:'That payment method is not available for this crypto/network/currency combination.'});
-          const quote=await alchemyPayRequest('POST','/open/api/v4/merchant/order/quote',{crypto,network,fiat,amount:String(amount),payWayCode,side:'BUY',type:'ALL'});
-          const rows=Array.isArray(quote.data)?quote.data:(quote.data?[quote.data]:[]);
-          const selected=rows.find(x=>String(x.payWayCode)===payWayCode);
-          if(!selected) return json(502,{ok:false,error:'The provider did not return a quote for the selected payment method.'});
-          return json(200,{ok:true,provider:'ALCHEMY_PAY',fiat,crypto,network,amount,quote:selected,traceId:quote.traceId||null});
-        }
-        const email=String(user.email||'').trim().toLowerCase();
-        const address=String(parsed.address||'').trim();
-        if(!email||!address||address.length>200) return json(400,{ok:false,error:'A valid signed-in email and receiving wallet address are required.'});
-        const [cryptoData,methodData]=await Promise.all([
-          alchemyPayRequest('GET','/open/api/v4/merchant/crypto/list?fiat='+encodeURIComponent(fiat)),
-          alchemyPayRequest('POST','/open/api/v4/merchant/query/cryptoFiatMethod',{fiat,crypto,network,side:'BUY'})
-        ]);
-        const supported=(Array.isArray(cryptoData.data)?cryptoData.data:[]).some(x=>String(x.crypto||'').toUpperCase()===crypto&&String(x.network||'').toUpperCase()===network&&Number(x.buyEnable)===1);
-        const chosen=(Array.isArray(methodData.data)?methodData.data:[]).find(x=>String(x.payWayCode)===payWayCode);
-        if(!supported||!chosen) return json(400,{ok:false,error:'The selected purchase route is no longer available. Refresh the live catalogue and quote.'});
-        if(amount<Number(chosen.minPurchaseAmount||0)||Number(chosen.maxPurchaseAmount)>0&&amount>Number(chosen.maxPurchaseAmount)) return json(400,{ok:false,error:'Amount is outside the provider’s current limits for this payment method.'});
-        const tokenData=await alchemyPayRequest('POST','/open/api/v4/merchant/getToken',{email});
-        const accessToken=String(tokenData?.data?.accessToken||'');
-        if(!accessToken) throw new Error('The fiat provider did not return a checkout token.');
-        const merchantOrderNo='SIRE'+Date.now().toString(36).toUpperCase()+randomUUID().replace(/-/g,'').slice(0,8).toUpperCase();
-        const origin='https://sire-yeuy.onrender.com';
-        const order=await alchemyPayRequest('POST','/open/api/v4/merchant/trade/create',{
-          side:'BUY',merchantOrderNo,amount:String(amount),fiatCurrency:fiat,cryptoCurrency:crypto,orderType:'4',
-          address,network,payWayCode,redirectUrl:origin+'/?funding=complete',
-          clientIp:alchemyClientIp(req)
-        },accessToken);
-        const result=order?.data||{};
-        const paymentUrl=String(result.payUrl||result.webUrl||'');
-        if(!/^https:\/\//i.test(paymentUrl)) throw new Error('The provider did not return a valid secure checkout link.');
-        return json(200,{ok:true,provider:'ALCHEMY_PAY',orderNo:String(result.orderNo||merchantOrderNo),paymentUrl,expiresInHours:24});
+        const origin=String(process.env.SIRE_PUBLIC_BASE_URL||'https://sire-yeuy.onrender.com').replace(/\\/+$/,'');
+        const result=await createPagaDeposit(user,parsed,origin);
+        return json(200,result);
       } catch(cause) {
         const message=cause instanceof Error?cause.message:String(cause);
-        const status=/not configured yet/.test(message)?503:/sign in/.test(message)?401:400;
+        const status=/sign in/i.test(message)?401:/configure|not configured|locked|DATABASE_URL/i.test(message)?503:400;
         return json(status,{ok:false,error:message});
+      }
+    }
+    if (req.method === 'GET' && pathname === '/api/sire/paga/account') {
+      const json=(status,payload)=>res.writeHead(status,{'Access-Control-Allow-Origin':'*','Access-Control-Allow-Credentials':'true','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify(payload));
+      try {
+        const user=await currentUser(req);
+        if(!user) return json(401,{ok:false,error:'Sign in to view your SIRE funding account.'});
+        return json(200,await getPagaAccount(user));
+      } catch(cause) {
+        const message=cause instanceof Error?cause.message:String(cause);
+        return json(/sign in/i.test(message)?401:503,{ok:false,error:message});
+      }
+    }
+    if (req.method === 'POST' && pathname === '/api/sire/paga/callback') {
+      const json=(status,payload)=>res.writeHead(status,{'Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify(payload));
+      try {
+        const payload=body?JSON.parse(body):{};
+        const result=await handlePagaCallback(payload);
+        return json(200,result);
+      } catch(cause) {
+        const message=cause instanceof Error?cause.message:String(cause);
+        console.error('[PAGA CALLBACK]',message);
+        return json(/signature/i.test(message)?401:503,{ok:false,error:message});
       }
     }
 
