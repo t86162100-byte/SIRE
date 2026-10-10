@@ -3,7 +3,7 @@ import './home.css';
 import {
   ArrowRight, Bell, BrainCircuit, ChevronRight, CircleUserRound, Eye, EyeOff, Flame,
   Grid2X2, LineChart, Search, Sparkles, TrendingUp, Wallet, ArrowDownToLine, ArrowUpFromLine, Repeat2,
-  BadgePercent, Megaphone, Trophy, CalendarClock, Gift, MoreHorizontal,
+  BadgePercent, Megaphone, Trophy, CalendarClock, Gift, MoreHorizontal, CircleHelp,
 } from 'lucide-react';
 
 type HomeInstrument = {
@@ -64,8 +64,8 @@ function money(value?: number) {
 
 
 
-export default function HomeView({ instruments, onSelectInstrument, videoSrc = '/sire-home-hero.mp4' }: Props) {
-  const [searchOpen, setSearchOpen] = useState(false);
+export default function HomeView({ instruments, onSelectInstrument, onNavigate, videoSrc = '/sire-home-hero.mp4' }: Props) {
+  const [searchOpen, setSearchOpen] = useState(false);\n  const [supportOpen, setSupportOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [balanceVisible, setBalanceVisible] = useState(true);
   const [activeEvent, setActiveEvent] = useState(0);
@@ -191,20 +191,13 @@ export default function HomeView({ instruments, onSelectInstrument, videoSrc = '
   return (
     <main className="sire-home sire-home-v2">
       <header className="sire-home-header">
-        <div className="sire-home-brand"><img className="sire-home-logo" src="/sire-logo.svg" alt="SIRE" /><span className="sire-home-brand-caption">MARKETS / TERMINAL</span></div>
+        <button type="button" className="sire-home-icon sire-home-profile-button" onClick={() => onNavigate?.('portfolio')} aria-label="Open profile and wallet"><CircleUserRound size={23} /></button>
         <div className="sire-home-header-actions">
-          <button type="button" className="sire-home-icon" onClick={() => setSearchOpen(true)} aria-label="Search markets"><Search size={19} /></button>
-          <button type="button" className="sire-home-icon" aria-label="Notifications"><Bell size={18} /><i /></button>
-          <button type="button" className="sire-home-icon" aria-label="Profile"><CircleUserRound size={20} /></button>
+          <button type="button" className="sire-home-icon" onClick={() => { setQuery(''); setSearchOpen(true); }} aria-label="Search SIRE"><Search size={21} /></button>
+          <button type="button" className="sire-home-icon" onClick={() => setSupportOpen(true)} aria-label="Help and support"><CircleHelp size={22} /></button>
         </div>
       </header>
       <div className="sire-home-scroll">
-        <section className="sire-home-intro">
-          <div className="sire-home-intro-meta"><span>YOUR MARKET DESK</span><span className="sire-home-live-mark"><i /> MARKET FEED</span></div>
-          <h1>See the market.<br /><em>Make your move.</em></h1>
-          <p>One workspace for spot markets, futures and digital assets.</p>
-          <button type="button" className="sire-home-intro-search" onClick={() => setSearchOpen(true)}><Search size={17} /><span>Search assets, pairs and markets</span><kbd>/</kbd></button>
-        </section>
 
         <section className="sire-home-account" aria-label="Account overview">
           <div className="sire-home-account-top">
@@ -306,12 +299,14 @@ export default function HomeView({ instruments, onSelectInstrument, videoSrc = '
       {searchOpen && (
         <div className="sire-home-search-overlay" onClick={() => setSearchOpen(false)}>
           <div className="sire-home-search-sheet" onClick={event => event.stopPropagation()}>
-            <div className="sire-home-search-head"><strong>Search Markets</strong><button type="button" onClick={() => setSearchOpen(false)}>×</button></div>
-            <div className="sire-home-search-input"><Search size={17} /><input autoFocus value={query} onChange={event => setQuery(event.target.value)} placeholder="Search instruments, markets..." /></div>
+            <div className="sire-home-search-head"><strong>Search SIRE</strong><button type="button" onClick={() => setSearchOpen(false)} aria-label="Close search">×</button></div>
+            <div className="sire-home-search-input"><Search size={17} /><input autoFocus value={query} onChange={event => setQuery(event.target.value)} placeholder="Search markets, tools and pages…" /></div>
+            {!query.trim() && <div className="sire-home-global-links"><span>QUICK NAVIGATION</span>{([{label:'Home',detail:'Overview',tab:'home'},{label:'Markets',detail:'Browse instruments',tab:'market'},{label:'Spot & Futures',detail:'Trading workspace',tab:'trade'},{label:'Discover',detail:'Explore assets',tab:'discover'},{label:'Wallet',detail:'Portfolio and balances',tab:'portfolio'}] as {label:string;detail:string;tab:HomeDestination}[]).map(link=><button type="button" key={link.tab} onClick={()=>{onNavigate?.(link.tab);setSearchOpen(false);}}><span><b>{link.label}</b><small>{link.detail}</small></span><ChevronRight size={16}/></button>)}</div>}
             <div className="sire-home-search-results">{searchResults.map(item => <button key={item.id} onClick={() => { onSelectInstrument?.(item); setSearchOpen(false); }}><img src={item.logoUrl || fallbackLogo(item.displaySymbol || item.symbol)} alt="" /><span><b>{String(item.displaySymbol || item.symbol).toUpperCase()}</b><small>{item.providerLabel || item.provider || 'MARKET'}</small></span><ChevronRight size={15} /></button>)}</div>
           </div>
         </div>
       )}
+      {supportOpen && <div className="sire-home-support-overlay" onClick={()=>setSupportOpen(false)}><section className="sire-home-support-sheet" onClick={event=>event.stopPropagation()}><div className="sire-home-search-head"><strong>Help & support</strong><button type="button" onClick={()=>setSupportOpen(false)} aria-label="Close support">×</button></div><p>What do you need help with?</p><button type="button" onClick={()=>{setSupportOpen(false);onNavigate?.('market')}}><span><b>Markets & prices</b><small>Finding instruments and understanding market data</small></span><ChevronRight size={16}/></button><button type="button" onClick={()=>{setSupportOpen(false);onNavigate?.('trade')}}><span><b>Trading</b><small>Open the Spot and Futures workspace</small></span><ChevronRight size={16}/></button><button type="button" onClick={()=>{setSupportOpen(false);onNavigate?.('portfolio')}}><span><b>Wallet & account</b><small>Open your portfolio and wallet tools</small></span><ChevronRight size={16}/></button></section></div>}
     </main>
   );
 }
