@@ -160,6 +160,57 @@ export async function bitgetMarketOrderBook(category:string,symbol:string,limit=
   };
 }
 
+export async function bitgetOwnerDepositAddress(coinInput:string,chainInput=''){
+  const coin=String(coinInput||'').trim().toUpperCase();
+  const chain=String(chainInput||'').trim();
+  if(!/^[A-Z0-9]{2,20}$/.test(coin)) throw new Error('Choose a valid coin symbol before requesting a Bitget deposit address.');
+  if(chain && !/^[A-Za-z0-9._-]{1,40}$/.test(chain)) throw new Error('Invalid network identifier.');
+  const qs=new URLSearchParams({coin,...(chain?{chain}:{})}).toString();
+  const result=await bitgetRequest('GET','/api/v3/account/deposit-address?'+qs);
+  const raw=result?.data;
+  const rows=Array.isArray(raw)?raw:(raw?[raw]:[]);
+  const addresses=rows.map((row:any)=>({
+    coin:String(row?.coin||coin),
+    chain:String(row?.chain||row?.chainName||chain),
+    address:String(row?.address||''),
+    tag:String(row?.tag||row?.memo||''),
+    url:String(row?.url||''),
+    cTime:String(row?.cTime||'')
+  })).filter((row:any)=>row.address);
+  return {ok:true,provider:'BITGET',coin,addresses};
+}
+
+export async function bitgetOwnerDepositRecords(input:any={}){
+  const now=Date.now();
+  const requestedEnd=Number(input?.endTime);
+  const requestedStart=Number(input?.startTime);
+  const endTime=Number.isFinite(requestedEnd)&&requestedEnd>0?Math.min(requestedEnd,now):now;
+  const startTime=Number.isFinite(requestedStart)&&requestedStart>0?requestedStart:endTime-30*24*60*60*1000;
+  if(startTime>=endTime) throw new Error('Deposit history start time must be earlier than end time.');
+  if(endTime-startTime>90*24*60*60*1000) throw new Error('Deposit history can query at most 90 days per request.');
+  const limit=Math.max(1,Math.min(100,Math.floor(Number(input?.limit)||50)));
+  const coin=String(input?.coin||'').trim().toUpperCase();
+  if(coin&&!/^[A-Z0-9]{2,20}$/.test(coin)) throw new Error('Invalid coin filter.');
+  const cursor=String(input?.cursor||'').trim();
+  const params=new URLSearchParams({startTime:String(Math.floor(startTime)),endTime:String(Math.floor(endTime)),limit:String(limit),...(coin?{coin}:{}),...(cursor?{cursor}:{})});
+  const result=await bitgetRequest('GET','/api/v3/account/deposit-records?'+params.toString());
+  const rows=Array.isArray(result?.data)?result.data:Array.isArray(result?.data?.list)?result.data.list:[];
+  return {ok:true,provider:'BITGET',startTime,endTime,limit,records:rows.map((row:any)=>({
+    orderId:String(row?.orderId||''),
+    recordId:String(row?.recordId||''),
+    coin:String(row?.coin||''),
+    type:String(row?.type||'deposit'),
+    destination:String(row?.dest||''),
+    amount:String(row?.size||'0'),
+    status:String(row?.status||'unknown'),
+    fromAddress:String(row?.fromAddress||''),
+    toAddress:String(row?.toAddress||''),
+    chain:String(row?.chain||''),
+    createdTime:String(row?.createdTime||''),
+    updatedTime:String(row?.updatedTime||'')
+  }))};
+}
+
 export async function bitgetOwnerAccount(){
   const data=await bitgetRequest('GET','/api/v3/account/assets');
   return {ok:true,accountEquity:data?.data?.accountEquity??null,usdtEquity:data?.data?.usdtEquity??null,assets:Array.isArray(data?.data?.assets)?data.data.assets:[]};
