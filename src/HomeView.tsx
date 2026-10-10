@@ -93,6 +93,12 @@ export default function HomeView({ instruments, onSelectInstrument, onNavigate, 
     setFundingError('');
     setFundingAddress(null);
   };
+  useEffect(() => {
+    const showFunding = () => openFunding();
+    window.addEventListener('sire:show-funding-drawer', showFunding);
+    return () => window.removeEventListener('sire:show-funding-drawer', showFunding);
+  }, []);
+
   const filteredFundingCoins = useMemo(() => {
     const q = fundingCoinSearch.trim().toLowerCase();
     return fundingCoins.filter(item => !q || String(item.coin||'').toLowerCase().includes(q) || String(item.name||'').toLowerCase().includes(q));
