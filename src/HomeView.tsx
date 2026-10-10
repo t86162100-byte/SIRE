@@ -197,6 +197,7 @@ export default function HomeView({ instruments, onSelectInstrument, onNavigate, 
         <button type="button" className="sire-home-icon sire-home-profile-button" onClick={() => onNavigate?.('portfolio')} aria-label="Open profile and wallet"><CircleUserRound size={23} /></button>
         <div className="sire-home-header-actions">
           <button type="button" className="sire-home-icon" onClick={() => { setQuery(''); setSearchOpen(true); }} aria-label="Search SIRE"><Search size={21} /></button>
+          <button type="button" className="sire-home-icon" onClick={() => onNavigate?.('discover')} aria-label="Notifications"><Bell size={21} /></button>
           <button type="button" className="sire-home-icon" onClick={() => setSupportOpen(true)} aria-label="Help and support"><CircleHelp size={22} /></button>
         </div>
       </header>
