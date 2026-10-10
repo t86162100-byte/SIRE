@@ -3,7 +3,7 @@ import './home.css';
 import AuthGate, { type SireUser } from './AuthGate';
 import {
   ArrowRight, Bell, BrainCircuit, ChevronRight, CircleUserRound, Eye, EyeOff, Flame,
-  Grid2X2, LineChart, Search, Sparkles, TrendingUp, Wallet, Plus,
+  Grid2X2, LineChart, Search, Sparkles, TrendingUp, Wallet, Plus, X, ArrowLeft,
   Megaphone, Trophy, CalendarClock, Gift, CircleHelp,
 } from 'lucide-react';
 
@@ -75,7 +75,62 @@ export default function HomeView({ instruments, onSelectInstrument, onNavigate, 
   const [accountUser, setAccountUser] = useState<SireUser | null>(null);
   const [authMode, setAuthMode] = useState<'login' | 'signup' | null>(null);
   const [totalValueVisible, setTotalValueVisible] = useState(true);
+  const [fundingOpen, setFundingOpen] = useState(false);
+  const [fundingStep, setFundingStep] = useState<'main'|'crypto'|'transfer'|'exchange'|'fiat'|'agents'|'p2p'|'buy'>('main');
+  const [fundingCoinSearch, setFundingCoinSearch] = useState('');
+  const [fundingCoins, setFundingCoins] = useState<any[]>([]);
+  const [fundingCoinsBusy, setFundingCoinsBusy] = useState(false);
+  const [fundingCoin, setFundingCoin] = useState<any>(null);
+  const [fundingNetwork, setFundingNetwork] = useState('');
+  const [fundingAddress, setFundingAddress] = useState<any>(null);
+  const [fundingError, setFundingError] = useState('');
+  const [fundingAddressBusy, setFundingAddressBusy] = useState(false);
+
   const accountValue: string | null = null;
+  const openFunding = () => {
+    setFundingOpen(true);
+    setFundingStep('main');
+    setFundingError('');
+    setFundingAddress(null);
+  };
+  const filteredFundingCoins = useMemo(() => {
+    const q = fundingCoinSearch.trim().toLowerCase();
+    return fundingCoins.filter(item => !q || String(item.coin||'').toLowerCase().includes(q) || String(item.name||'').toLowerCase().includes(q));
+  }, [fundingCoins, fundingCoinSearch]);
+  useEffect(() => {
+    if (!fundingOpen || fundingStep !== 'exchange' || fundingCoins.length) return;
+    let cancelled = false;
+    setFundingCoinsBusy(true);
+    fetch('/api/sire/bitget/deposit/coins', { credentials: 'include', cache: 'no-store' })
+      .then(async response => {
+        const data = await response.json();
+        if (!response.ok || !data?.ok) throw new Error(data?.error || 'Could not load supported deposit assets.');
+        if (!cancelled) setFundingCoins(Array.isArray(data.coins) ? data.coins : []);
+      })
+      .catch(error => { if (!cancelled) setFundingError(error instanceof Error ? error.message : String(error)); })
+      .finally(() => { if (!cancelled) setFundingCoinsBusy(false); });
+    return () => { cancelled = true; };
+  }, [fundingOpen, fundingStep, fundingCoins.length]);
+  const requestFundingAddress = async () => {
+    if (!fundingCoin?.coin || !fundingNetwork) { setFundingError('Select a crypto and its supported deposit network.'); return; }
+    setFundingAddressBusy(true); setFundingError(''); setFundingAddress(null);
+    try {
+      const params = new URLSearchParams({ coin: String(fundingCoin.coin), chain: fundingNetwork });
+      const response = await fetch('/api/sire/bitget/deposit/address?' + params.toString(), { credentials: 'include', cache: 'no-store' });
+      const data = await response.json();
+      if (!response.ok || !data?.ok) throw new Error(data?.error || 'Could not retrieve a deposit address.');
+      const match = (Array.isArray(data.addresses) ? data.addresses : []).find((row:any) => String(row.chain||'') === fundingNetwork && row.address);
+      if (!match) throw new Error('The exchange did not return an address for this asset/network. No address was invented.');
+      setFundingAddress(match);
+    } catch (error) { setFundingError(error instanceof Error ? error.message : String(error)); }
+    finally { setFundingAddressBusy(false); }
+  };
+  const copyFundingValue = async (value:string) => {
+    if (!value) return;
+    try { await navigator.clipboard.writeText(value); setFundingError('Copied to clipboard.'); }
+    catch { setFundingError('Clipboard access is unavailable on this device.'); }
+  };
+
 
   useEffect(() => {
     let active = true;
@@ -232,7 +287,7 @@ export default function HomeView({ instruments, onSelectInstrument, onNavigate, 
               </svg>
             </div>
           </div>
-          {!accountUser ? <div className="sire-home-value-actions"><button type="button" className="sire-home-value-login" onClick={() => setAuthMode('login')}>Log in</button><button type="button" className="sire-home-value-signup" onClick={() => setAuthMode('signup')}>Sign up <ArrowRight size={15}/></button></div> : <button type="button" className="sire-home-value-add-funds" onClick={() => window.dispatchEvent(new CustomEvent('sire:open-wallet-deposit'))}><Plus size={17}/> Add funds</button>}
+          {!accountUser ? <div className="sire-home-value-actions"><button type="button" className="sire-home-value-login" onClick={() => setAuthMode('login')}>Log in</button><button type="button" className="sire-home-value-signup" onClick={() => setAuthMode('signup')}>Sign up <ArrowRight size={15}/></button></div> : <button type="button" className="sire-home-value-add-funds" onClick={openFunding}><Plus size={17}/> Add funds</button>}
         </section>
 
         <section className="sire-home-launch">
@@ -328,7 +383,46 @@ export default function HomeView({ instruments, onSelectInstrument, onNavigate, 
       )}
       {authMode && <AuthGate user={accountUser} initialMode={authMode} onUser={user => { setAccountUser(user); if (user) setAuthMode(null); }} onClose={() => setAuthMode(null)} />}
       {notificationsOpen && <div className="sire-home-support-overlay" onClick={()=>setNotificationsOpen(false)}><section className="sire-home-support-sheet" onClick={event=>event.stopPropagation()}><div className="sire-home-search-head"><strong>Notifications</strong><button type="button" onClick={()=>setNotificationsOpen(false)} aria-label="Close notifications">×</button></div><div className="sire-home-notifications-empty"><Bell size={24}/><b>You're all caught up</b><span>Important account and market updates will appear here.</span></div></section></div>}
-      {supportOpen && <div className="sire-home-support-overlay" onClick={()=>setSupportOpen(false)}><section className="sire-home-support-sheet" onClick={event=>event.stopPropagation()}><div className="sire-home-search-head"><strong>Help & support</strong><button type="button" onClick={()=>setSupportOpen(false)} aria-label="Close support">×</button></div><p>What do you need help with?</p><button type="button" onClick={()=>{setSupportOpen(false);onNavigate?.('market')}}><span><b>Markets & prices</b><small>Finding instruments and understanding market data</small></span><ChevronRight size={16}/></button><button type="button" onClick={()=>{setSupportOpen(false);onNavigate?.('trade')}}><span><b>Trading</b><small>Open the Spot and Futures workspace</small></span><ChevronRight size={16}/></button><button type="button" onClick={()=>{setSupportOpen(false);onNavigate?.('portfolio')}}><span><b>Wallet & account</b><small>Open your portfolio and wallet tools</small></span><ChevronRight size={16}/></button></section></div>}
+              {fundingOpen && <div className="sire-funding-backdrop" onMouseDown={() => setFundingOpen(false)}>
+          <section className="sire-funding-drawer" role="dialog" aria-modal="true" aria-label="Add funds" onMouseDown={event => event.stopPropagation()}>
+            <div className="sire-funding-head">
+              {fundingStep !== 'main' && <button type="button" className="sire-funding-icon-button" onClick={() => { setFundingStep(fundingStep === 'exchange' || fundingStep === 'buy' ? 'crypto' : fundingStep === 'transfer' ? 'crypto' : 'main'); setFundingError(''); }} aria-label="Back"><ArrowLeft size={18}/></button>}
+              <div><span>ADD FUNDS</span><h2>{({main:'Choose funding method',crypto:'Crypto funding',transfer:'Transfer crypto',exchange:'To exchange',fiat:'Fiat deposit',agents:'Payment agents',p2p:'P2P funding',buy:'Buy crypto'} as Record<string,string>)[fundingStep]}</h2></div>
+              <button type="button" className="sire-funding-icon-button" onClick={() => setFundingOpen(false)} aria-label="Close"><X size={18}/></button>
+            </div>
+            {fundingStep === 'main' && <div className="sire-funding-options">
+              <button type="button" onClick={() => { setFundingStep('crypto'); setFundingError(''); }}><span className="sire-funding-option-icon">₿</span><span><b>Crypto</b><small>Buy crypto or transfer assets</small></span><ChevronRight size={17}/></button>
+              <button type="button" onClick={() => { setFundingStep('fiat'); setFundingError(''); }}><span className="sire-funding-option-icon">₦</span><span><b>Fiat</b><small>Deposit with supported local currency methods</small></span><ChevronRight size={17}/></button>
+              <button type="button" onClick={() => { setFundingStep('agents'); setFundingError(''); }}><span className="sire-funding-option-icon">↔</span><span><b>Payment Agents</b><small>Fund through a verified payment agent</small></span><ChevronRight size={17}/></button>
+              <button type="button" onClick={() => { setFundingStep('p2p'); setFundingError(''); }}><span className="sire-funding-option-icon">P2P</span><span><b>P2P</b><small>Peer-to-peer funding options</small></span><ChevronRight size={17}/></button>
+            </div>}
+            {fundingStep === 'crypto' && <div className="sire-funding-options">
+              <button type="button" onClick={() => { setFundingStep('buy'); setFundingError(''); }}><span className="sire-funding-option-icon">＋</span><span><b>Buy Crypto</b><small>Purchase crypto using an available payment method</small></span><ChevronRight size={17}/></button>
+              <button type="button" onClick={() => { setFundingStep('transfer'); setFundingError(''); }}><span className="sire-funding-option-icon">⇄</span><span><b>Transfer Crypto</b><small>Receive crypto into a SIRE destination</small></span><ChevronRight size={17}/></button>
+            </div>}
+            {fundingStep === 'transfer' && <div className="sire-funding-options">
+              <button type="button" onClick={() => { setFundingOpen(false); window.dispatchEvent(new CustomEvent('sire:open-wallet-receive')); }}><span className="sire-funding-option-icon"><Wallet size={20}/></span><span><b>To Wallet</b><small>Receive into your self-custody SIRE Wallet</small></span><ChevronRight size={17}/></button>
+              <button type="button" onClick={() => { setFundingStep('exchange'); setFundingError(''); setFundingCoin(null); setFundingNetwork(''); setFundingAddress(null); }}><span className="sire-funding-option-icon">⇢</span><span><b>To Exchange</b><small>Choose a supported asset and deposit network</small></span><ChevronRight size={17}/></button>
+            </div>}
+            {fundingStep === 'exchange' && <div className="sire-funding-form">
+              {!fundingCoin ? <>
+                <label className="sire-funding-search"><Search size={16}/><input value={fundingCoinSearch} onChange={event => setFundingCoinSearch(event.target.value)} placeholder="Search supported crypto"/></label>
+                {fundingCoinsBusy && <p className="sire-funding-note">Loading supported assets and networks…</p>}
+                {!fundingCoinsBusy && !fundingCoins.length && <p className="sire-funding-note">{fundingError || 'No supported deposit assets could be loaded. Sign in and try again.'}</p>}
+                <div className="sire-funding-coin-list">{filteredFundingCoins.slice(0,100).map(item => <button type="button" key={item.coin} onClick={() => { setFundingCoin(item); setFundingNetwork(item.networks?.[0]?.chain || ''); setFundingAddress(null); setFundingError(''); }}><span className="sire-funding-coin-icon">{String(item.coin||'?').slice(0,2)}</span><span><b>{item.coin}</b><small>{item.name}</small></span><ChevronRight size={16}/></button>)}</div>
+              </> : <>
+                <button type="button" className="sire-funding-change" onClick={() => { setFundingCoin(null); setFundingNetwork(''); setFundingAddress(null); }}>‹ Choose another crypto · {fundingCoin.coin}</button>
+                <label className="sire-funding-field"><span>Deposit network</span><select value={fundingNetwork} onChange={event => { setFundingNetwork(event.target.value); setFundingAddress(null); setFundingError(''); }}><option value="">Select network</option>{(fundingCoin.networks||[]).map((network:any) => <option key={network.chain} value={network.chain}>{network.chain}{network.memoRequired ? ' · Memo/tag required' : ''}</option>)}</select></label>
+                <button type="button" className="sire-funding-primary" disabled={!fundingNetwork || fundingAddressBusy} onClick={() => void requestFundingAddress()}>{fundingAddressBusy ? 'Retrieving address…' : 'Show deposit address'}</button>
+                {fundingAddress && <div className="sire-funding-address"><span>{fundingAddress.coin} · {fundingAddress.chain}</span><code>{fundingAddress.address}</code><button type="button" onClick={() => void copyFundingValue(fundingAddress.address)}>Copy address</button>{fundingAddress.tag && <><span>MEMO / TAG — REQUIRED</span><code>{fundingAddress.tag}</code><button type="button" onClick={() => void copyFundingValue(fundingAddress.tag)}>Copy memo/tag</button></>}</div>}
+              </>}
+              {fundingError && <p className="sire-funding-note">{fundingError}</p>}
+              <p className="sire-funding-warning">Only transfer the selected crypto over the exact network shown. Check the address and any memo/tag before sending.</p>
+            </div>}
+            {(['fiat','agents','p2p','buy'] as string[]).includes(fundingStep) && <div className="sire-funding-unavailable"><div className="sire-funding-unavailable-mark">—</div><h3>{fundingStep === 'fiat' ? 'Fiat deposits' : fundingStep === 'agents' ? 'Payment agents' : fundingStep === 'p2p' ? 'P2P funding' : 'Buy crypto'}</h3><p>{fundingStep === 'fiat' ? 'Fiat currency and payment methods will appear here when a verified deposit provider is connected.' : fundingStep === 'agents' ? 'Verified agents and their supported currencies are not connected yet.' : fundingStep === 'p2p' ? 'P2P offers and payment protection are not connected yet.' : 'Crypto purchase methods and live quotes are not connected yet.'}</p><span>Not available yet · No payment will be initiated</span></div>}
+          </section>
+        </div>}
+        {supportOpen && <div className="sire-home-support-overlay" onClick={()=>setSupportOpen(false)}><section className="sire-home-support-sheet" onClick={event=>event.stopPropagation()}><div className="sire-home-search-head"><strong>Help & support</strong><button type="button" onClick={()=>setSupportOpen(false)} aria-label="Close support">×</button></div><p>What do you need help with?</p><button type="button" onClick={()=>{setSupportOpen(false);onNavigate?.('market')}}><span><b>Markets & prices</b><small>Finding instruments and understanding market data</small></span><ChevronRight size={16}/></button><button type="button" onClick={()=>{setSupportOpen(false);onNavigate?.('trade')}}><span><b>Trading</b><small>Open the Spot and Futures workspace</small></span><ChevronRight size={16}/></button><button type="button" onClick={()=>{setSupportOpen(false);onNavigate?.('portfolio')}}><span><b>Wallet & account</b><small>Open your portfolio and wallet tools</small></span><ChevronRight size={16}/></button></section></div>}
     </main>
   );
 }
