@@ -5565,3 +5565,25 @@
 .sire-home-v2 .sire-home-search-overlay{z-index:55!important;backdrop-filter:blur(8px)!important;-webkit-backdrop-filter:blur(8px)!important}
 .sire-home-v2 .sire-home-search-sheet{max-height:calc(100dvh - env(safe-area-inset-top) - 28px)!important;overflow:auto!important}
 @media(max-width:380px){.sire-home-v2 .sire-home-header-actions{gap:7px!important}.sire-home-v2 .sire-home-scroll{padding-left:13px!important;padding-right:13px!important}}
+
+
+/* Expanded Home account value panel */
+.sire-home-v2 .sire-home-value-card{position:relative!important;isolation:isolate!important;overflow:hidden!important;min-height:326px!important;box-sizing:border-box!important;margin:0 0 30px!important;padding:21px 19px 18px!important;border:1px solid #343a3e!important;border-radius:20px!important;background:radial-gradient(ellipse at 80% 85%,rgba(255,255,255,.075),transparent 48%),linear-gradient(145deg,#141718 0%,#090b0c 65%,#101213 100%)!important;color:#fff!important;box-shadow:0 18px 42px rgba(0,0,0,.2),inset 0 1px 0 rgba(255,255,255,.045)!important}
+.sire-home-v2 .sire-home-value-card:before{content:"";position:absolute;z-index:-1;left:10%;right:10%;bottom:61px;height:92px;border-radius:50%;background:rgba(255,255,255,.08);filter:blur(32px);pointer-events:none}
+.sire-home-v2 .sire-home-value-card-top{display:flex!important;align-items:center!important;justify-content:space-between!important;gap:12px!important}
+.sire-home-v2 .sire-home-value-card-top>span{font:800 9px/1.4 ui-monospace,monospace!important;letter-spacing:.17em!important;color:#a0a8ad!important}
+.sire-home-v2 .sire-home-value-card-top>button{display:grid!important;place-items:center!important;width:33px!important;height:33px!important;padding:0!important;border:1px solid #353b3f!important;border-radius:50%!important;background:rgba(255,255,255,.035)!important;color:#f3f5f5!important}
+.sire-home-v2 .sire-home-value-amount{display:flex!important;align-items:baseline!important;gap:9px!important;margin-top:8px!important;font-size:clamp(38px,10vw,48px)!important;line-height:1.05!important;letter-spacing:-.07em!important;font-weight:850!important;color:#fff!important}
+.sire-home-v2 .sire-home-value-amount small{font-size:10px!important;letter-spacing:.1em!important;font-weight:750!important;color:#9da5aa!important}
+.sire-home-v2 .sire-home-value-chart{position:relative!important;height:108px!important;margin:5px -5px 0!important;overflow:hidden!important}
+.sire-home-v2 .sire-home-value-chart svg{display:block!important;width:100%!important;height:100%!important;overflow:visible!important}
+.sire-home-v2 .sire-home-value-chart>span{position:absolute!important;left:5px!important;bottom:5px!important;font-size:8px!important;letter-spacing:.02em!important;color:#777f84!important}
+.sire-home-v2 .sire-home-value-actions{display:grid!important;grid-template-columns:1fr 1fr!important;gap:9px!important;margin-top:9px!important}
+.sire-home-v2 .sire-home-value-actions button,.sire-home-v2 .sire-home-value-add-funds{display:flex!important;align-items:center!important;justify-content:center!important;gap:7px!important;min-height:45px!important;padding:0 15px!important;border:1px solid #3a4044!important;border-radius:999px!important;background:#111416!important;color:#f3f5f5!important;font-size:12px!important;font-weight:800!important}
+.sire-home-v2 .sire-home-value-actions .sire-home-value-signup,.sire-home-v2 .sire-home-value-add-funds{border-color:#fff!important;background:#fff!important;color:#050606!important}
+.sire-home-v2 .sire-home-value-add-funds{width:100%!important;margin-top:9px!important}
+.sire-home-v2 .sire-home-value-actions button:active,.sire-home-v2 .sire-home-value-add-funds:active{transform:scale(.99)!important}
+.sire-home-v2 .sire-auth-overlay{z-index:100!important;overflow-y:auto!important;padding:calc(env(safe-area-inset-top) + 18px) 15px calc(env(safe-area-inset-bottom) + 18px)!important;box-sizing:border-box!important}
+.sire-home-v2 .sire-auth-card{position:relative!important}
+.sire-home-v2 .sire-auth-close{position:absolute!important;top:12px!important;right:12px!important;display:grid!important;place-items:center!important;width:34px!important;height:34px!important;border:1px solid #353b3f!important;border-radius:50%!important;background:#111416!important;color:#fff!important}
+@media(max-width:380px){.sire-home-v2 .sire-home-value-card{min-height:310px!important;padding:18px 15px 15px!important;border-radius:17px!important}.sire-home-v2 .sire-home-value-chart{height:101px!important}}
