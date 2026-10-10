@@ -12,3 +12,27 @@
 .sire-home-v2 .sire-home-value-actions button,.sire-home-v2 .sire-home-value-add-funds{min-height:43px!important;font-size:12px!important}
 .sire-home-v2 .sire-home-value-add-funds{margin-top:17px!important}
 @media(max-width:380px){.sire-home-v2 .sire-home-value-card{padding:calc(75px + env(safe-area-inset-top) + 11px) 15px 15px!important;border-radius:0 0 17px 17px!important}.sire-home-v2 .sire-home-value-main{gap:8px!important}.sire-home-v2 .sire-home-value-amount{font-size:clamp(25px,7.2vw,32px)!important}.sire-home-v2 .sire-home-value-chart{height:67px!important}}
+
+/* Full-bleed header panel: flush to both viewport edges with a softly curved base */
+.sire-home-v2 .sire-home-value-card{
+  position:relative!important;
+  width:100vw!important;
+  max-width:none!important;
+  margin-left:calc(50% - 50vw)!important;
+  margin-right:0!important;
+  margin-top:calc(-75px - env(safe-area-inset-top))!important;
+  border-left:0!important;
+  border-right:0!important;
+  border-top:0!important;
+  border-bottom:1px solid #292e31!important;
+  border-radius:0 0 30px 30px!important;
+  clip-path:none!important;
+  overflow:hidden!important;
+  box-sizing:border-box!important;
+  background:radial-gradient(ellipse at 80% 55%,rgba(255,255,255,.065),transparent 45%),linear-gradient(180deg,#050606 0%,#090b0c 70%,#101213 100%)!important;
+}
+.sire-home-v2 .sire-home-header{background:rgba(5,6,6,.98)!important;backdrop-filter:none!important;-webkit-backdrop-filter:none!important}
+.sire-home-v2 .sire-home-header:after{background:linear-gradient(180deg,rgba(5,6,6,.12),rgba(5,6,6,0))!important}
+@media(max-width:380px){
+ .sire-home-v2 .sire-home-value-card{width:100vw!important;margin-left:calc(50% - 50vw)!important;margin-right:0!important;border-radius:0 0 26px 26px!important}
+}
