@@ -303,7 +303,6 @@ export default function App() {
   const [homeOpen, setHomeOpen] = useState(true);
   const [tradeOpen, setTradeOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<AppTab>('home');
-  const [spotReturnToTrade, setSpotReturnToTrade] = useState(false);
   const [chartLayout, setChartLayout] = useState<1 | 2>(1);
   const [activeChartIndex, setActiveChartIndex] = useState(0);
   const [linked, setLinked] = useState(false);
@@ -318,28 +317,7 @@ export default function App() {
 
   const liveInstruments = instruments;
 
-  useEffect(() => {
-    const consumeSpotReturn = () => setSpotReturnToTrade(false);
-    window.addEventListener('sire:spot-return-consumed', consumeSpotReturn);
-    return () => window.removeEventListener('sire:spot-return-consumed', consumeSpotReturn);
-  }, []);
 
-  useEffect(() => {
-    const openSpotMarketPicker = () => {
-      setTradeOpen(false);
-      setActiveTab('market');
-      setSpotReturnToTrade(true);
-      window.dispatchEvent(new CustomEvent('sire:navigate-tab', { detail: { tab: 'market' } }));
-      setProviderFilter('BITGET');
-      setCategoryFilter('CRYPTO');
-      setMarketSubcategoryFilter('Spot');
-      setMarketSubSubcategoryFilter('ALL');
-      setMarketLeafFilter('ALL');
-      setSearch('');
-    };
-    window.addEventListener('sire:open-market-for-spot', openSpotMarketPicker);
-    return () => window.removeEventListener('sire:open-market-for-spot', openSpotMarketPicker);
-  }, []);
 
   useEffect(() => {
     const openTrade = () => setTradeOpen(true);
@@ -635,14 +613,6 @@ export default function App() {
   const selectInstrument = (item: Instrument) => {
     setSelected(item);
     setSearch('');
-    // Spot pair selection is a navigation handoff, not a chart selection.
-    // Do this first so choosing a Spot instrument cannot mutate the chart state.
-    if (spotReturnToTrade && item.provider === 'BITGET' && normalizeMarketLabel(item.marketType) === 'spot') {
-      setTradeOpen(true);
-      setActiveTab('trade');
-      window.dispatchEvent(new CustomEvent('sire:navigate-tab', { detail: { tab: 'trade' } }));
-      return;
-    }
     // Selecting an instrument from the Market tab must stay in Market.
     if (activeTab === 'market') return;
     if (chartableInstruments.some(candidate => candidate.id === item.id)) {
@@ -703,7 +673,7 @@ export default function App() {
 
   if (activeTab === 'trade' || tradeOpen) {
     const ethUsdt = liveInstruments.find(item => item.provider === 'BITGET' && String(item.symbol || '').toUpperCase() === 'ETHUSDT');
-    return <TradeView referencePrice={Number(ethUsdt?.price || 0)} referenceChange={Number(ethUsdt?.priceChangePercent ?? ethUsdt?.change24h ?? 0)} forceSpot={spotReturnToTrade} spotSymbol={spotReturnToTrade ? selected?.symbol : undefined} />;
+    return <TradeView referencePrice={Number(ethUsdt?.price || 0)} referenceChange={Number(ethUsdt?.priceChangePercent ?? ethUsdt?.change24h ?? 0)} />;
   }
 
   if (activeTab === 'portfolio') {
