@@ -232,7 +232,7 @@ export default function HomeView({ instruments, onSelectInstrument, onNavigate, 
               </svg>
             </div>
           </div>
-          {!accountUser ? <div className="sire-home-value-actions"><button type="button" className="sire-home-value-login" onClick={() => setAuthMode('login')}>Log in</button><button type="button" className="sire-home-value-signup" onClick={() => setAuthMode('signup')}>Sign up <ArrowRight size={15}/></button></div> : <button type="button" className="sire-home-value-add-funds" onClick={() => onNavigate?.('portfolio')}><Plus size={17}/> Add funds</button>}
+          {!accountUser ? <div className="sire-home-value-actions"><button type="button" className="sire-home-value-login" onClick={() => setAuthMode('login')}>Log in</button><button type="button" className="sire-home-value-signup" onClick={() => setAuthMode('signup')}>Sign up <ArrowRight size={15}/></button></div> : <button type="button" className="sire-home-value-add-funds" onClick={() => window.dispatchEvent(new CustomEvent('sire:open-wallet-deposit'))}><Plus size={17}/> Add funds</button>}
         </section>
 
         <section className="sire-home-launch">
