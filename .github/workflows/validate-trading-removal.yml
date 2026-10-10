@@ -1,0 +1,25 @@
+name: Validate trading removal
+on:
+  pull_request:
+    branches: [render-migration]
+    paths:
+      - 'src/**'
+      - 'backend/**'
+      - 'runtime-server.mjs'
+      - 'package.json'
+      - '.github/workflows/validate-trading-removal.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm install --ignore-scripts --no-audit --no-fund
+      - run: node --check runtime-server.mjs
+      - run: npm run build
