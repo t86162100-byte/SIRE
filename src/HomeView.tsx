@@ -67,7 +67,8 @@ function money(value?: number) {
 
 
 export default function HomeView({ instruments, onSelectInstrument, onNavigate, videoSrc = '/sire-home-hero.mp4' }: Props) {
-  const [searchOpen, setSearchOpen] = useState(false);\n  const [supportOpen, setSupportOpen] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [supportOpen, setSupportOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [balanceVisible, setBalanceVisible] = useState(true);
   const [activeEvent, setActiveEvent] = useState(0);
