@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import './home.css';
+import AuthGate, { type SireUser } from './AuthGate';
 import {
-  ArrowRight, Bell, BrainCircuit, ChevronRight, CircleUserRound, Flame,
-  Grid2X2, LineChart, Search, Sparkles, TrendingUp, Wallet,
+  ArrowRight, Bell, BrainCircuit, ChevronRight, CircleUserRound, Eye, EyeOff, Flame,
+  Grid2X2, LineChart, Search, Sparkles, TrendingUp, Wallet, Plus,
   Megaphone, Trophy, CalendarClock, Gift, CircleHelp,
 } from 'lucide-react';
 
@@ -71,6 +72,19 @@ export default function HomeView({ instruments, onSelectInstrument, onNavigate, 
   const [supportOpen, setSupportOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [query, setQuery] = useState('');
+  const [accountUser, setAccountUser] = useState<SireUser | null>(null);
+  const [authMode, setAuthMode] = useState<'login' | 'signup' | null>(null);
+  const [totalValueVisible, setTotalValueVisible] = useState(true);
+  const [accountValue, setAccountValue] = useState<string | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    fetch('/api/auth/me', { credentials: 'same-origin', cache: 'no-store' })
+      .then(response => response.ok ? response.json() : null)
+      .then(payload => { if (active && payload?.user) setAccountUser(payload.user); })
+      .catch(() => {});
+    return () => { active = false; };
+  }, []);
   const [activeEvent, setActiveEvent] = useState(0);
   const [activeMarketFilter, setActiveMarketFilter] = useState('Hot');
   const [activeMarketSubfilter, setActiveMarketSubfilter] = useState('Spot');
@@ -203,6 +217,21 @@ export default function HomeView({ instruments, onSelectInstrument, onNavigate, 
       </header>
       <div className="sire-home-scroll">
 
+        <section className="sire-home-value-card" aria-label="Total account value">
+          <div className="sire-home-value-card-top"><span>TOTAL VALUE</span><button type="button" onClick={() => setTotalValueVisible(value => !value)} aria-label={totalValueVisible ? 'Hide total value' : 'Show total value'}>{totalValueVisible ? <Eye size={17}/> : <EyeOff size={17}/>}</button></div>
+          <div className="sire-home-value-amount">{totalValueVisible ? (accountValue ?? '—') : '••••••'}<small>USD</small></div>
+          <div className="sire-home-value-chart" aria-label="Account value history unavailable until balance data is connected">
+            <svg viewBox="0 0 340 92" preserveAspectRatio="none" role="img" aria-label="Balance progress chart placeholder">
+              <defs><linearGradient id="sireBalanceArea" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#ffffff" stopOpacity=".22"/><stop offset="100%" stopColor="#ffffff" stopOpacity="0"/></linearGradient><filter id="sireBalanceGlow" x="-30%" y="-80%" width="160%" height="260%"><feGaussianBlur stdDeviation="5"/></filter></defs>
+              <path d="M0 73 C22 70 29 55 48 60 S78 72 98 51 S126 47 145 54 S176 35 197 43 S225 29 245 36 S280 20 299 28 S322 15 340 12 L340 92 L0 92 Z" fill="url(#sireBalanceArea)"/>
+              <path d="M0 73 C22 70 29 55 48 60 S78 72 98 51 S126 47 145 54 S176 35 197 43 S225 29 245 36 S280 20 299 28 S322 15 340 12" fill="none" stroke="#fff" strokeOpacity=".45" strokeWidth="7" filter="url(#sireBalanceGlow)"/>
+              <path d="M0 73 C22 70 29 55 48 60 S78 72 98 51 S126 47 145 54 S176 35 197 43 S225 29 245 36 S280 20 299 28 S322 15 340 12" fill="none" stroke="#f8f9f9" strokeWidth="1.7" strokeLinecap="round"/>
+            </svg>
+            {!accountValue && <span>Balance history will appear here</span>}
+          </div>
+          {!accountUser ? <div className="sire-home-value-actions"><button type="button" className="sire-home-value-login" onClick={() => setAuthMode('login')}>Log in</button><button type="button" className="sire-home-value-signup" onClick={() => setAuthMode('signup')}>Sign up <ArrowRight size={15}/></button></div> : <button type="button" className="sire-home-value-add-funds" onClick={() => onNavigate?.('portfolio')}><Plus size={17}/> Add funds</button>}
+        </section>
+
         <section className="sire-home-launch">
           <div className="sire-home-section-heading"><div><span className="sire-home-kicker">GO DIRECT</span><h2>Open a workspace</h2></div><span className="sire-home-heading-index">01 — 04</span></div>
           <div className="sire-home-launch-grid">
@@ -294,6 +323,7 @@ export default function HomeView({ instruments, onSelectInstrument, onNavigate, 
           </div>
         </div>
       )}
+      {authMode && <AuthGate user={accountUser} initialMode={authMode} onUser={user => { setAccountUser(user); if (user) setAuthMode(null); }} onClose={() => setAuthMode(null)} />}
       {notificationsOpen && <div className="sire-home-support-overlay" onClick={()=>setNotificationsOpen(false)}><section className="sire-home-support-sheet" onClick={event=>event.stopPropagation()}><div className="sire-home-search-head"><strong>Notifications</strong><button type="button" onClick={()=>setNotificationsOpen(false)} aria-label="Close notifications">×</button></div><div className="sire-home-notifications-empty"><Bell size={24}/><b>You're all caught up</b><span>Important account and market updates will appear here.</span></div></section></div>}
       {supportOpen && <div className="sire-home-support-overlay" onClick={()=>setSupportOpen(false)}><section className="sire-home-support-sheet" onClick={event=>event.stopPropagation()}><div className="sire-home-search-head"><strong>Help & support</strong><button type="button" onClick={()=>setSupportOpen(false)} aria-label="Close support">×</button></div><p>What do you need help with?</p><button type="button" onClick={()=>{setSupportOpen(false);onNavigate?.('market')}}><span><b>Markets & prices</b><small>Finding instruments and understanding market data</small></span><ChevronRight size={16}/></button><button type="button" onClick={()=>{setSupportOpen(false);onNavigate?.('trade')}}><span><b>Trading</b><small>Open the Spot and Futures workspace</small></span><ChevronRight size={16}/></button><button type="button" onClick={()=>{setSupportOpen(false);onNavigate?.('portfolio')}}><span><b>Wallet & account</b><small>Open your portfolio and wallet tools</small></span><ChevronRight size={16}/></button></section></div>}
     </main>
