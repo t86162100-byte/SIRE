@@ -89,16 +89,16 @@ export default function HomeView({ instruments, onSelectInstrument, onNavigate, 
   const [fundingHistoryBusy, setFundingHistoryBusy] = useState(false);
   const [fundingHistoryLoaded, setFundingHistoryLoaded] = useState(false);
   const [fundingFiatAmount, setFundingFiatAmount] = useState('');
+  const [fundingFiatCurrency, setFundingFiatCurrency] = useState('NGN');
   const [fundingFiatCoin, setFundingFiatCoin] = useState('USDT');
-  const [fundingFiatQuoteRequested, setFundingFiatQuoteRequested] = useState(false);
-  const fundingFiatCrypto = [...new Set(instruments
-    .filter(item => String(item.marketType || item.category || '').toUpperCase() === 'SPOT')
-    .map(item => {
-      const raw = String((item as any).baseAsset || item.displaySymbol || item.symbol || '').toUpperCase();
-      const separated = raw.split(/[\/_-]/)[0];
-      return separated !== raw ? separated : raw.replace(/(USDT|USDC|FDUSD|USDE|BUSD|USD|BTC|ETH|EUR|NGN)$/, '');
-    })
-    .filter(coin => /^[A-Z0-9]{2,20}$/.test(coin)))].sort();
+  const [fundingFiatNetwork, setFundingFiatNetwork] = useState('');
+  const [fundingFiatAddress, setFundingFiatAddress] = useState('');
+  const [fundingFiatCatalog, setFundingFiatCatalog] = useState<any>(null);
+  const [fundingFiatQuote, setFundingFiatQuote] = useState<any>(null);
+  const [fundingFiatBusy, setFundingFiatBusy] = useState(false);
+  const [fundingFiatQuoteBusy, setFundingFiatQuoteBusy] = useState(false);
+  const [fundingFiatOrderBusy, setFundingFiatOrderBusy] = useState(false);
+  const [fundingFiatOrder, setFundingFiatOrder] = useState<any>(null);
 
   const accountValue: string | null = null;
   const openFunding = () => {
@@ -127,6 +127,79 @@ export default function HomeView({ instruments, onSelectInstrument, onNavigate, 
       .finally(() => { if (!cancelled) setFundingCoinsBusy(false); });
     return () => { cancelled = true; };
   }, [fundingOpen, fundingStep, fundingCoins.length]);
+  useEffect(() => {
+    if (!fundingOpen || fundingStep !== 'fiat') return;
+    let cancelled = false;
+    setFundingFiatBusy(true);
+    setFundingError('');
+    fetch('/api/sire/onramp/catalog?fiat=' + encodeURIComponent(fundingFiatCurrency), { credentials: 'include', cache: 'no-store' })
+      .then(async response => {
+        const data = await response.json();
+        if (!response.ok || !data?.ok) throw new Error(data?.error || 'Could not load live fiat purchase options.');
+        if (!cancelled) {
+          setFundingFiatCatalog(data);
+          if (!data.cryptoAssets?.some((x:any) => x.crypto === fundingFiatCoin)) {
+            setFundingFiatCoin(data.cryptoAssets?.[0]?.crypto || '');
+            setFundingFiatNetwork(data.cryptoAssets?.[0]?.network || '');
+          }
+        }
+      })
+      .catch(error => { if (!cancelled) { setFundingFiatCatalog(null); setFundingError(error instanceof Error ? error.message : String(error)); } })
+      .finally(() => { if (!cancelled) setFundingFiatBusy(false); });
+    return () => { cancelled = true; };
+  }, [fundingOpen, fundingStep, fundingFiatCurrency]);
+
+  useEffect(() => {
+    if (!fundingOpen || fundingStep !== 'fiat' || !fundingFiatCurrency || !fundingFiatCoin || !fundingFiatNetwork) return;
+    let cancelled = false;
+    const params = new URLSearchParams({ fiat: fundingFiatCurrency, crypto: fundingFiatCoin, network: fundingFiatNetwork });
+    fetch('/api/sire/onramp/catalog?' + params.toString(), { credentials: 'include', cache: 'no-store' })
+      .then(async response => {
+        const data = await response.json();
+        if (!response.ok || !data?.ok) throw new Error(data?.error || 'Could not load available payment methods.');
+        if (!cancelled) setFundingFiatCatalog(data);
+      })
+      .catch(error => { if (!cancelled) setFundingError(error instanceof Error ? error.message : String(error)); });
+    return () => { cancelled = true; };
+  }, [fundingOpen, fundingStep, fundingFiatCurrency, fundingFiatCoin, fundingFiatNetwork]);
+
+  const requestFiatQuote = async () => {
+    if (!fundingFiatAmount || Number(fundingFiatAmount) <= 0 || !fundingFiatCoin || !fundingFiatNetwork || !fundingFiatCatalog?.bankTransferMethods?.length) {
+      setFundingError('Choose a currently supported bank transfer route and enter a valid amount.');
+      return;
+    }
+    setFundingFiatQuoteBusy(true); setFundingError(''); setFundingFiatQuote(null); setFundingFiatOrder(null);
+    try {
+      const method = fundingFiatCatalog.bankTransferMethods[0];
+      const response = await fetch('/api/sire/onramp/quote', {
+        method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fiat: fundingFiatCurrency, crypto: fundingFiatCoin, network: fundingFiatNetwork, amount: fundingFiatAmount, payWayCode: method.payWayCode })
+      });
+      const data = await response.json();
+      if (!response.ok || !data?.ok) throw new Error(data?.error || 'Could not retrieve a live quote.');
+      setFundingFiatQuote(data);
+    } catch (error) { setFundingError(error instanceof Error ? error.message : String(error)); }
+    finally { setFundingFiatQuoteBusy(false); }
+  };
+
+  const createFiatOrder = async () => {
+    if (!fundingFiatQuote || !fundingFiatAddress.trim()) { setFundingError('Enter the wallet address where the purchased crypto should be delivered.'); return; }
+    setFundingFiatOrderBusy(true); setFundingError('');
+    try {
+      const method = fundingFiatCatalog?.bankTransferMethods?.[0];
+      if (!method) throw new Error('The bank transfer method is no longer available. Refresh the quote.');
+      const response = await fetch('/api/sire/onramp/order', {
+        method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fiat: fundingFiatCurrency, crypto: fundingFiatCoin, network: fundingFiatNetwork, amount: fundingFiatAmount, payWayCode: method.payWayCode, address: fundingFiatAddress.trim() })
+      });
+      const data = await response.json();
+      if (!response.ok || !data?.ok) throw new Error(data?.error || 'Could not create the payment order.');
+      setFundingFiatOrder(data);
+      if (data.paymentUrl) window.location.assign(data.paymentUrl);
+    } catch (error) { setFundingError(error instanceof Error ? error.message : String(error)); }
+    finally { setFundingFiatOrderBusy(false); }
+  };
+
   const requestFundingAddress = async () => {
     const coin = String(fundingCoin?.coin || '').toUpperCase();
     const networkMeta = (fundingCoin?.networks || []).find((item:any) => String(item.chain || '') === fundingNetwork && item.depositEnabled !== false);
@@ -459,15 +532,21 @@ export default function HomeView({ instruments, onSelectInstrument, onNavigate, 
               <p className="sire-funding-warning">Only transfer the selected crypto over the exact network shown. Check the address and any memo/tag before sending.</p>
             </div>}
             {fundingStep === 'fiat' && <div className="sire-funding-form sire-funding-bank-transfer">
-              <div className="sire-funding-unavailable-mark">₦</div><h3>SIRE Bank Transfer</h3>
-              <p className="sire-funding-note">Choose how much you want to pay and which crypto you want to receive. This is a SIRE-native flow; it does not connect to or open an exchange.</p>
-              <label className="sire-funding-field"><span>Bank transfer currency</span><select value="NGN" disabled><option value="NGN">NGN · Nigerian naira</option></select></label>
-              <label className="sire-funding-field"><span>Transfer amount · NGN</span><input type="number" min="100" step="any" placeholder="Enter amount in ₦" value={fundingFiatAmount} onChange={event => { setFundingFiatAmount(event.target.value); setFundingFiatQuoteRequested(false); }} /></label>
-              <label className="sire-funding-field"><span>Crypto to receive</span><select value={fundingFiatCoin} onChange={event => { setFundingFiatCoin(event.target.value); setFundingFiatQuoteRequested(false); }} disabled={!fundingFiatCrypto.length}>{fundingFiatCrypto.map(coin => <option key={coin} value={coin}>{coin}</option>)}</select></label>
-              <div className="sire-funding-address"><span>TRANSFER SUMMARY</span><div className="sire-funding-history-row"><span><b>You pay</b></span><strong>{fundingFiatAmount && Number(fundingFiatAmount) > 0 ? '₦' + Number(fundingFiatAmount).toLocaleString() : '—'}</strong></div><div className="sire-funding-history-row"><span><b>You receive</b></span><strong>{fundingFiatCoin || '—'}</strong></div><small>{fundingFiatCrypto.length ? 'Assets are sourced from SIRE’s loaded spot-market catalogue.' : 'No spot assets are currently available in SIRE’s market catalogue.'}</small></div>
-              <button type="button" className="sire-funding-primary" onClick={() => { setFundingFiatQuoteRequested(true); setFundingError('SIRE-native transfer details and verified NGN-to-crypto quote calculation must be configured before a payment can be started. No bank account, rate, fee or crypto amount has been fabricated.'); }} disabled={!fundingFiatAmount || Number(fundingFiatAmount) < 100 || !fundingFiatCoin}>Continue</button>
-              {fundingFiatQuoteRequested && fundingError && <p className="sire-funding-note">{fundingError}</p>}
-              <p className="sire-funding-warning">No transfer is initiated yet. SIRE must connect its own receiving bank account and a verified NGN/crypto pricing source before it can show payment instructions or credit crypto.</p>
+              <div className="sire-funding-unavailable-mark">₦</div><h3>Bank transfer</h3>
+              <p className="sire-funding-note">Choose a live supported currency, crypto network and local bank-payment option. SIRE retrieves availability and pricing from its payment provider; payment details appear only after a real order is created.</p>
+              <label className="sire-funding-field"><span>Pay currency</span><select value={fundingFiatCurrency} onChange={event => { setFundingFiatCurrency(event.target.value); setFundingFiatQuote(null); setFundingFiatCatalog(null); setFundingFiatOrder(null); setFundingError(''); }} disabled={fundingFiatBusy}><option value="">Choose currency</option>{(fundingFiatCatalog?.fiatCurrencies || ['NGN']).map((currency:string) => <option key={currency} value={currency}>{currency}</option>)}</select></label>
+              <label className="sire-funding-field"><span>Amount · {fundingFiatCurrency}</span><input type="number" min="1" step="any" placeholder="Enter amount" value={fundingFiatAmount} onChange={event => { setFundingFiatAmount(event.target.value); setFundingFiatQuote(null); setFundingFiatOrder(null); }} /></label>
+              <label className="sire-funding-field"><span>Crypto to receive</span><select value={fundingFiatCoin} onChange={event => { const coin=event.target.value; const asset=(fundingFiatCatalog?.cryptoAssets||[]).find((x:any)=>x.crypto===coin); setFundingFiatCoin(coin); setFundingFiatNetwork(asset?.network||''); setFundingFiatQuote(null); setFundingFiatOrder(null); }} disabled={fundingFiatBusy || !(fundingFiatCatalog?.cryptoAssets||[]).length}><option value="">Choose crypto</option>{[...new Set((fundingFiatCatalog?.cryptoAssets||[]).map((x:any)=>x.crypto))].map((coin:any) => <option key={coin} value={coin}>{coin}</option>)}</select></label>
+              <label className="sire-funding-field"><span>Receiving network</span><select value={fundingFiatNetwork} onChange={event => { setFundingFiatNetwork(event.target.value); setFundingFiatQuote(null); setFundingFiatOrder(null); }} disabled={fundingFiatBusy || !fundingFiatCoin}><option value="">Choose network</option>{(fundingFiatCatalog?.cryptoAssets||[]).filter((x:any)=>x.crypto===fundingFiatCoin).map((x:any) => <option key={x.network} value={x.network}>{x.network}</option>)}</select></label>
+              {fundingFiatBusy && <p className="sire-funding-note">Loading supported currencies, assets and networks…</p>}
+              {!fundingFiatBusy && fundingFiatCatalog && !(fundingFiatCatalog.bankTransferMethods||[]).length && <p className="sire-funding-note">No bank-transfer payment method is currently returned for this currency and crypto network. Choose another supported route; SIRE will not substitute a card or invent bank details.</p>}
+              {!!fundingFiatCatalog?.bankTransferMethods?.length && <div className="sire-funding-address"><span>PAYMENT METHOD</span><div className="sire-funding-history-row"><span><b>{fundingFiatCatalog.bankTransferMethods[0].payWayName || 'Bank transfer'}</b></span><small>{fundingFiatCatalog.bankTransferMethods[0].payWayCode}</small></div><small>Available payment method supplied by the provider for the selected currency and network.</small></div>}
+              <button type="button" className="sire-funding-primary" onClick={() => void requestFiatQuote()} disabled={fundingFiatBusy || fundingFiatQuoteBusy || !fundingFiatAmount || Number(fundingFiatAmount)<=0 || !fundingFiatCatalog?.bankTransferMethods?.length}>{fundingFiatQuoteBusy ? 'Getting live quote…' : 'Get live quote'}</button>
+              {fundingFiatQuote && <div className="sire-funding-address"><span>LIVE PURCHASE QUOTE</span><div className="sire-funding-history-row"><span><b>You pay</b></span><strong>{fundingFiatQuote.fiat} {fundingFiatQuote.amount}</strong></div><div className="sire-funding-history-row"><span><b>Estimated crypto</b></span><strong>{fundingFiatQuote.quote?.cryptoQuantity ?? '—'} {fundingFiatQuote.crypto}</strong></div><div className="sire-funding-history-row"><span><b>Provider fee</b></span><strong>{fundingFiatQuote.quote?.rampFee ?? '—'} {fundingFiatQuote.fiat}</strong></div><div className="sire-funding-history-row"><span><b>Network fee</b></span><strong>{fundingFiatQuote.quote?.cryptoNetworkFee ?? '—'} {fundingFiatQuote.crypto}</strong></div><small>Estimate only. The provider’s checkout shows the final amount before payment.</small></div>}
+              {fundingFiatQuote && <><label className="sire-funding-field"><span>Receive crypto at wallet address</span><input value={fundingFiatAddress} onChange={event => setFundingFiatAddress(event.target.value)} placeholder="Paste your receiving wallet address" autoComplete="off" /></label><button type="button" className="sire-funding-primary" onClick={() => void createFiatOrder()} disabled={fundingFiatOrderBusy || !fundingFiatAddress.trim()}>{fundingFiatOrderBusy ? 'Creating secure checkout…' : 'Continue to secure payment'}</button></>}
+              {fundingFiatOrder && <p className="sire-funding-note">Order {fundingFiatOrder.orderNo} created. Opening the provider’s secure checkout…</p>}
+              {fundingError && <p className="sire-funding-note">{fundingError}</p>}
+              <p className="sire-funding-warning">Never send money to a personal account shown in chat. Only follow payment instructions in the verified checkout. Crypto is delivered to the address you enter; verify the network and address before continuing.</p>
             </div>}
             {(['agents','p2p','buy'] as string[]).includes(fundingStep) && <div className="sire-funding-unavailable"><div className="sire-funding-unavailable-mark">—</div><h3>{fundingStep === 'agents' ? 'Payment agents' : fundingStep === 'p2p' ? 'P2P funding' : 'Buy crypto'}</h3><p>{fundingStep === 'agents' ? 'Verified agents and their supported currencies are not connected yet.' : fundingStep === 'p2p' ? 'P2P offers and payment protection are not connected yet.' : 'Crypto purchase methods and live quotes are not connected yet.'}</p><span>Not available yet · No payment will be initiated</span></div>}
           </section>
