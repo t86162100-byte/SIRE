@@ -1,9 +1,9 @@
 import { FormEvent, useEffect, useState } from 'react';
-import { Mail, Lock, UserRound, LogIn, UserPlus } from 'lucide-react';
+import { Mail, Lock, UserRound, LogIn, UserPlus, X } from 'lucide-react';
 
 export type SireUser = { id:string; email:string; name:string; createdAt:string };
 
-type Props = { user:SireUser|null; onUser:(user:SireUser|null)=>void };
+type Props = { user:SireUser|null; onUser:(user:SireUser|null)=>void; initialMode?:'login'|'signup'; onClose?:()=>void };
 
 export default function AuthGate({ user, onUser }: Props) {
   const [mode,setMode]=useState<'login'|'signup'>('login');
@@ -12,7 +12,7 @@ export default function AuthGate({ user, onUser }: Props) {
   useEffect(()=>{ if(user) return; fetch('/api/auth/me',{credentials:'same-origin',cache:'no-store'}).then(r=>r.json()).then(d=>{if(d.user) onUser(d.user);}).catch(()=>{}); },[user,onUser]);
   if(user) return null;
   const submit=async(e:FormEvent)=>{e.preventDefault();setBusy(true);setError('');try{const endpoint=mode==='login'?'/api/auth/login':'/api/auth/signup';const body=mode==='login'?{email,password}:{name,email,password};const r=await fetch(endpoint,{method:'POST',headers:{'Content-Type':'application/json'},credentials:'same-origin',body:JSON.stringify(body)});const d=await r.json();if(!r.ok)throw new Error(d.error||'Authentication failed.');onUser(d.user);setPassword('');}catch(err){setError(err instanceof Error?err.message:'Authentication failed.');}finally{setBusy(false);}};
-  return <div className="sire-auth-overlay"><section className="sire-auth-card">
+  return <div className="sire-auth-overlay" onClick={onClose}><section className="sire-auth-card" onClick={event=>event.stopPropagation()}>{onClose && <button type="button" className="sire-auth-close" aria-label="Close sign in" onClick={onClose}><X size={18}/></button>}
     <div className="sire-auth-brand"><div className="sire-auth-mark">S</div><div><strong>SIRE</strong><span>Intelligence workspace</span></div></div>
     <div className="sire-auth-heading"><h1>{mode==='login'?'Welcome back':'Create your SIRE account'}</h1><p>{mode==='login'?'Sign in to keep your workspace and conversations synced.':'Create an account to keep your SIRE workspace across devices.'}</p></div>
     <button className="sire-auth-google" type="button" disabled={busy} onClick={()=>{ window.location.href='/api/auth/google'; }}><span className="sire-google-g">G</span><span>Continue with Google</span></button>
