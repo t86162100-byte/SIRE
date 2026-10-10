@@ -64,7 +64,7 @@ test('Futures leverage uses the selected category, symbol, and margin mode', asy
 });
 
 test('trigger and trailing-stop order payloads are formed without network access', async () => {
-  const calls = mockFetch(() => response({ orderId: '123456789014' }));
+  const calls = mockFetch((url) => url.endsWith('/api/v3/account/settings') ? response({ holdMode: 'hedge_mode' }) : response({ orderId: '123456789014' }));
   await bitgetOwnerPlaceTriggerOrder({ category: 'SPOT', symbol: 'BTCUSDT', side: 'buy', qty: '0.001', triggerPrice: '50000', orderType: 'limit', price: '49900', planType: 'normal_plan', triggerType: 'mark_price' });
   const trigger = JSON.parse(calls[0].options.body);
   assert.equal(trigger.type, 'trigger');
