@@ -88,17 +88,11 @@ export default function HomeView({ instruments, onSelectInstrument, onNavigate, 
   const [fundingHistory, setFundingHistory] = useState<any[]>([]);
   const [fundingHistoryBusy, setFundingHistoryBusy] = useState(false);
   const [fundingHistoryLoaded, setFundingHistoryLoaded] = useState(false);
-  const [fundingFiatAmount, setFundingFiatAmount] = useState('');
-  const [fundingFiatCurrency, setFundingFiatCurrency] = useState('NGN');
-  const [fundingFiatCoin, setFundingFiatCoin] = useState('USDT');
-  const [fundingFiatNetwork, setFundingFiatNetwork] = useState('');
-  const [fundingFiatAddress, setFundingFiatAddress] = useState('');
-  const [fundingFiatCatalog, setFundingFiatCatalog] = useState<any>(null);
-  const [fundingFiatQuote, setFundingFiatQuote] = useState<any>(null);
-  const [fundingFiatBusy, setFundingFiatBusy] = useState(false);
-  const [fundingFiatQuoteBusy, setFundingFiatQuoteBusy] = useState(false);
-  const [fundingFiatOrderBusy, setFundingFiatOrderBusy] = useState(false);
-  const [fundingFiatOrder, setFundingFiatOrder] = useState<any>(null);
+  const [pagaAmount, setPagaAmount] = useState('');
+  const [pagaCheckout, setPagaCheckout] = useState<any>(null);
+  const [pagaBusy, setPagaBusy] = useState(false);
+  const [pagaLoading, setPagaLoading] = useState(false);
+  const [pagaAccount, setPagaAccount] = useState<any>(null);
 
   const accountValue: string | null = null;
   const openFunding = () => {
@@ -130,75 +124,94 @@ export default function HomeView({ instruments, onSelectInstrument, onNavigate, 
   useEffect(() => {
     if (!fundingOpen || fundingStep !== 'fiat') return;
     let cancelled = false;
-    setFundingFiatBusy(true);
-    setFundingError('');
-    fetch('/api/sire/onramp/catalog?fiat=' + encodeURIComponent(fundingFiatCurrency), { credentials: 'include', cache: 'no-store' })
+    setPagaLoading(true);
+    fetch('/api/sire/paga/account', { credentials: 'same-origin', cache: 'no-store' })
       .then(async response => {
         const data = await response.json();
-        if (!response.ok || !data?.ok) throw new Error(data?.error || 'Could not load live fiat purchase options.');
-        if (!cancelled) {
-          setFundingFiatCatalog(data);
-          if (!data.cryptoAssets?.some((x:any) => x.crypto === fundingFiatCoin && x.network === fundingFiatNetwork)) {
-            setFundingFiatCoin(data.cryptoAssets?.[0]?.crypto || '');
-            setFundingFiatNetwork(data.cryptoAssets?.[0]?.network || '');
-          }
-        }
+        if (!response.ok || !data?.ok) throw new Error(data?.error || 'Could not load your SIRE funding account.');
+        if (!cancelled) setPagaAccount(data);
       })
-      .catch(error => { if (!cancelled) { setFundingFiatCatalog(null); setFundingError(error instanceof Error ? error.message : String(error)); } })
-      .finally(() => { if (!cancelled) setFundingFiatBusy(false); });
+      .catch(error => { if (!cancelled) setFundingError(error instanceof Error ? error.message : String(error)); })
+      .finally(() => { if (!cancelled) setPagaLoading(false); });
     return () => { cancelled = true; };
-  }, [fundingOpen, fundingStep, fundingFiatCurrency]);
+  }, [fundingOpen, fundingStep]);
 
-  useEffect(() => {
-    if (!fundingOpen || fundingStep !== 'fiat' || !fundingFiatCurrency || !fundingFiatCoin || !fundingFiatNetwork) return;
-    let cancelled = false;
-    const params = new URLSearchParams({ fiat: fundingFiatCurrency, crypto: fundingFiatCoin, network: fundingFiatNetwork });
-    fetch('/api/sire/onramp/catalog?' + params.toString(), { credentials: 'include', cache: 'no-store' })
-      .then(async response => {
-        const data = await response.json();
-        if (!response.ok || !data?.ok) throw new Error(data?.error || 'Could not load available payment methods.');
-        if (!cancelled) setFundingFiatCatalog(data);
-      })
-      .catch(error => { if (!cancelled) setFundingError(error instanceof Error ? error.message : String(error)); });
-    return () => { cancelled = true; };
-  }, [fundingOpen, fundingStep, fundingFiatCurrency, fundingFiatCoin, fundingFiatNetwork]);
+  const refreshPagaAccount = async () => {
+    setPagaLoading(true);
+    try {
+      const response = await fetch('/api/sire/paga/account', { credentials: 'same-origin', cache: 'no-store' });
+      const data = await response.json();
+      if (!response.ok || !data?.ok) throw new Error(data?.error || 'Could not refresh your funding balance.');
+      setPagaAccount(data);
+      setFundingError('');
+    } catch (error) { setFundingError(error instanceof Error ? error.message : String(error)); }
+    finally { setPagaLoading(false); }
+  };
 
-  const requestFiatQuote = async () => {
-    if (!fundingFiatAmount || Number(fundingFiatAmount) <= 0 || !fundingFiatCoin || !fundingFiatNetwork || !fundingFiatCatalog?.bankTransferMethods?.length) {
-      setFundingError('Choose a currently supported bank transfer route and enter a valid amount.');
+  const startPagaDeposit = async () => {
+    const amount = Number(pagaAmount);
+    if (!Number.isFinite(amount) || amount <= 0) {
+      setFundingError('Enter a valid NGN deposit amount greater than zero.');
       return;
     }
-    setFundingFiatQuoteBusy(true); setFundingError(''); setFundingFiatQuote(null); setFundingFiatOrder(null);
+    setPagaBusy(true);
+    setFundingError('');
+    setPagaCheckout(null);
     try {
-      const method = fundingFiatCatalog.bankTransferMethods[0];
-      const response = await fetch('/api/sire/onramp/quote', {
-        method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ fiat: fundingFiatCurrency, crypto: fundingFiatCoin, network: fundingFiatNetwork, amount: fundingFiatAmount, payWayCode: method.payWayCode })
+      const response = await fetch('/api/sire/paga/deposit', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ amount: amount.toFixed(2) }),
       });
       const data = await response.json();
-      if (!response.ok || !data?.ok) throw new Error(data?.error || 'Could not retrieve a live quote.');
-      setFundingFiatQuote(data);
+      if (!response.ok || !data?.ok) throw new Error(data?.error || 'Could not prepare Paga checkout.');
+      setPagaCheckout(data);
     } catch (error) { setFundingError(error instanceof Error ? error.message : String(error)); }
-    finally { setFundingFiatQuoteBusy(false); }
+    finally { setPagaBusy(false); }
   };
 
-  const createFiatOrder = async () => {
-    if (!fundingFiatQuote || !fundingFiatAddress.trim()) { setFundingError('Enter the wallet address where the purchased crypto should be delivered.'); return; }
-    setFundingFiatOrderBusy(true); setFundingError('');
-    try {
-      const method = fundingFiatCatalog?.bankTransferMethods?.[0];
-      if (!method) throw new Error('The bank transfer method is no longer available. Refresh the quote.');
-      const response = await fetch('/api/sire/onramp/order', {
-        method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ fiat: fundingFiatCurrency, crypto: fundingFiatCoin, network: fundingFiatNetwork, amount: fundingFiatAmount, payWayCode: method.payWayCode, address: fundingFiatAddress.trim() })
-      });
-      const data = await response.json();
-      if (!response.ok || !data?.ok) throw new Error(data?.error || 'Could not create the payment order.');
-      setFundingFiatOrder(data);
-      if (data.paymentUrl) window.location.assign(data.paymentUrl);
-    } catch (error) { setFundingError(error instanceof Error ? error.message : String(error)); }
-    finally { setFundingFiatOrderBusy(false); }
-  };
+  useEffect(() => {
+    if (!pagaCheckout || fundingStep !== 'fiat') return;
+    const host = document.getElementById('sire-paga-checkout-host');
+    if (!host) return;
+    host.replaceChildren();
+    const form = document.createElement('form');
+    form.method = 'POST';
+    const script = document.createElement('script');
+    script.src = String(pagaCheckout.checkoutScript || '');
+    script.async = true;
+    script.setAttribute('data-public_key', String(pagaCheckout.publicKey || ''));
+    script.setAttribute('data-amount', String(pagaCheckout.amount || ''));
+    script.setAttribute('data-currency', 'NGN');
+    script.setAttribute('data-payment_reference', String(pagaCheckout.reference || ''));
+    script.setAttribute('data-charge_url', String(pagaCheckout.chargeUrl || ''));
+    script.setAttribute('data-email', String(pagaCheckout.email || accountUser?.email || ''));
+    script.setAttribute('data-button_label', 'Pay securely with Paga');
+    script.setAttribute('data-width', '220');
+    script.setAttribute('data-callback_url', String(pagaCheckout.callbackUrl || ''));
+    script.setAttribute('data-funding_sources', String(pagaCheckout.fundingSources || 'TRANSFER,CARD,PAGA,USSD'));
+    form.appendChild(script);
+    host.appendChild(form);
+    return () => { host.replaceChildren(); };
+  }, [pagaCheckout, fundingStep, accountUser]);
+
+  useEffect(() => {
+    if (!accountUser) return;
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('paga_payment') !== 'returned') return;
+    setFundingOpen(true);
+    setFundingStep('fiat');
+    setFundingError('Payment return received. Your NGN balance changes only after Paga confirms the payment.');
+    void fetch('/api/sire/paga/account', { credentials: 'same-origin', cache: 'no-store' })
+      .then(response => response.json())
+      .then(data => { if (data?.ok) setPagaAccount(data); })
+      .catch(() => {});
+    params.delete('paga_payment');
+    params.delete('reference');
+    const query = params.toString();
+    window.history.replaceState({}, '', window.location.pathname + (query ? '?' + query : '') + window.location.hash);
+  }, [accountUser]);
 
   const requestFundingAddress = async () => {
     const coin = String(fundingCoin?.coin || '').toUpperCase();
@@ -498,12 +511,12 @@ export default function HomeView({ instruments, onSelectInstrument, onNavigate, 
           <section className="sire-funding-drawer" role="dialog" aria-modal="true" aria-label="Add funds" onMouseDown={event => event.stopPropagation()}>
             <div className="sire-funding-head">
               {fundingStep !== 'main' && <button type="button" className="sire-funding-icon-button" onClick={() => { setFundingStep(fundingStep === 'exchange' || fundingStep === 'buy' ? 'crypto' : fundingStep === 'transfer' ? 'crypto' : 'main'); setFundingError(''); }} aria-label="Back"><ArrowLeft size={18}/></button>}
-              <div><span>ADD FUNDS</span><h2>{({main:'Choose funding method',crypto:'Crypto funding',transfer:'Transfer crypto',exchange:'To exchange',fiat:'Bank transfer',agents:'Payment agents',p2p:'P2P funding',buy:'Buy crypto'} as Record<string,string>)[fundingStep]}</h2></div>
+              <div><span>ADD FUNDS</span><h2>{({main:'Choose funding method',crypto:'Crypto funding',transfer:'Transfer crypto',exchange:'To exchange',fiat:'Fiat funding',agents:'Payment agents',p2p:'P2P funding',buy:'Buy crypto'} as Record<string,string>)[fundingStep]}</h2></div>
               <button type="button" className="sire-funding-icon-button" onClick={() => setFundingOpen(false)} aria-label="Close"><X size={18}/></button>
             </div>
             {fundingStep === 'main' && <div className="sire-funding-options">
               <button type="button" onClick={() => { setFundingStep('crypto'); setFundingError(''); }}><span className="sire-funding-option-icon">₿</span><span><b>Crypto</b><small>Buy crypto or transfer assets</small></span><ChevronRight size={17}/></button>
-              <button type="button" onClick={() => { setFundingStep('fiat'); setFundingError(''); }}><span className="sire-funding-option-icon">↔</span><span><b>Bank Transfer</b><small>Pay in fiat and receive crypto</small></span><ChevronRight size={17}/></button>
+              <button type="button" onClick={() => { setFundingStep('fiat'); setFundingError(''); }}><span className="sire-funding-option-icon">↔</span><span><b>Fiat funding</b><small>Fund your SIRE account using Paga</small></span><ChevronRight size={17}/></button>
               <button type="button" onClick={() => { setFundingStep('agents'); setFundingError(''); }}><span className="sire-funding-option-icon">↔</span><span><b>Payment Agents</b><small>Fund through a verified payment agent</small></span><ChevronRight size={17}/></button>
               <button type="button" onClick={() => { setFundingStep('p2p'); setFundingError(''); }}><span className="sire-funding-option-icon">P2P</span><span><b>P2P</b><small>Peer-to-peer funding options</small></span><ChevronRight size={17}/></button>
             </div>}
@@ -532,21 +545,16 @@ export default function HomeView({ instruments, onSelectInstrument, onNavigate, 
               <p className="sire-funding-warning">Only transfer the selected crypto over the exact network shown. Check the address and any memo/tag before sending.</p>
             </div>}
             {fundingStep === 'fiat' && <div className="sire-funding-form sire-funding-bank-transfer">
-              <div className="sire-funding-unavailable-mark">₦</div><h3>Bank transfer</h3>
-              <p className="sire-funding-note">Choose a live supported currency, crypto network and local bank-payment option. SIRE retrieves availability and pricing from its payment provider; payment details appear only after a real order is created.</p>
-              <label className="sire-funding-field"><span>Pay currency</span><select value={fundingFiatCurrency} onChange={event => { setFundingFiatCurrency(event.target.value); setFundingFiatQuote(null); setFundingFiatCatalog(null); setFundingFiatOrder(null); setFundingError(''); }} disabled={fundingFiatBusy}><option value="">Choose currency</option>{(fundingFiatCatalog?.fiatCurrencies || ['NGN']).map((currency:string) => <option key={currency} value={currency}>{currency}</option>)}</select></label>
-              <label className="sire-funding-field"><span>Amount · {fundingFiatCurrency}</span><input type="number" min="1" step="any" placeholder="Enter amount" value={fundingFiatAmount} onChange={event => { setFundingFiatAmount(event.target.value); setFundingFiatQuote(null); setFundingFiatOrder(null); }} /></label>
-              <label className="sire-funding-field"><span>Crypto to receive</span><select value={fundingFiatCoin} onChange={event => { const coin=event.target.value; const asset=(fundingFiatCatalog?.cryptoAssets||[]).find((x:any)=>x.crypto===coin); setFundingFiatCoin(coin); setFundingFiatNetwork(asset?.network||''); setFundingFiatQuote(null); setFundingFiatOrder(null); }} disabled={fundingFiatBusy || !(fundingFiatCatalog?.cryptoAssets||[]).length}><option value="">Choose crypto</option>{[...new Set((fundingFiatCatalog?.cryptoAssets||[]).map((x:any)=>x.crypto))].map((coin:any) => <option key={coin} value={coin}>{coin}</option>)}</select></label>
-              <label className="sire-funding-field"><span>Receiving network</span><select value={fundingFiatNetwork} onChange={event => { setFundingFiatNetwork(event.target.value); setFundingFiatQuote(null); setFundingFiatOrder(null); }} disabled={fundingFiatBusy || !fundingFiatCoin}><option value="">Choose network</option>{(fundingFiatCatalog?.cryptoAssets||[]).filter((x:any)=>x.crypto===fundingFiatCoin).map((x:any) => <option key={x.network} value={x.network}>{x.network}</option>)}</select></label>
-              {fundingFiatBusy && <p className="sire-funding-note">Loading supported currencies, assets and networks…</p>}
-              {!fundingFiatBusy && fundingFiatCatalog && !(fundingFiatCatalog.bankTransferMethods||[]).length && <p className="sire-funding-note">No bank-transfer payment method is currently returned for this currency and crypto network. Choose another supported route; SIRE will not substitute a card or invent bank details.</p>}
-              {!!fundingFiatCatalog?.bankTransferMethods?.length && <div className="sire-funding-address"><span>PAYMENT METHOD</span><div className="sire-funding-history-row"><span><b>{fundingFiatCatalog.bankTransferMethods[0].payWayName || 'Bank transfer'}</b></span><small>{fundingFiatCatalog.bankTransferMethods[0].payWayCode}</small></div><small>Available payment method supplied by the provider for the selected currency and network.</small></div>}
-              <button type="button" className="sire-funding-primary" onClick={() => void requestFiatQuote()} disabled={fundingFiatBusy || fundingFiatQuoteBusy || !fundingFiatAmount || Number(fundingFiatAmount)<=0 || !fundingFiatCatalog?.bankTransferMethods?.length}>{fundingFiatQuoteBusy ? 'Getting live quote…' : 'Get live quote'}</button>
-              {fundingFiatQuote && <div className="sire-funding-address"><span>LIVE PURCHASE QUOTE</span><div className="sire-funding-history-row"><span><b>You pay</b></span><strong>{fundingFiatQuote.fiat} {fundingFiatQuote.amount}</strong></div><div className="sire-funding-history-row"><span><b>Estimated crypto</b></span><strong>{fundingFiatQuote.quote?.cryptoQuantity ?? '—'} {fundingFiatQuote.crypto}</strong></div><div className="sire-funding-history-row"><span><b>Provider fee</b></span><strong>{fundingFiatQuote.quote?.rampFee ?? '—'} {fundingFiatQuote.fiat}</strong></div><div className="sire-funding-history-row"><span><b>Network fee</b></span><strong>{fundingFiatQuote.quote?.cryptoNetworkFee ?? '—'} {fundingFiatQuote.crypto}</strong></div><small>Estimate only. The provider’s checkout shows the final amount before payment.</small></div>}
-              {fundingFiatQuote && <><label className="sire-funding-field"><span>Receive crypto at wallet address</span><input value={fundingFiatAddress} onChange={event => setFundingFiatAddress(event.target.value)} placeholder="Paste your receiving wallet address" autoComplete="off" /></label><button type="button" className="sire-funding-primary" onClick={() => void createFiatOrder()} disabled={fundingFiatOrderBusy || !fundingFiatAddress.trim()}>{fundingFiatOrderBusy ? 'Creating secure checkout…' : 'Continue to secure payment'}</button></>}
-              {fundingFiatOrder && <p className="sire-funding-note">Order {fundingFiatOrder.orderNo} created. Opening the provider’s secure checkout…</p>}
+              <div className="sire-funding-unavailable-mark">₦</div><h3>Fund your SIRE account</h3>
+              <p className="sire-funding-note">Use Paga to fund your SIRE NGN balance. Available checkout methods depend on your Paga business account. Funds are credited only after the signed callback and server-side payment verification both succeed.</p>
+              <div className="sire-funding-address"><span>SIRE NGN BALANCE</span><strong>₦{Number(pagaAccount?.balance || 0).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</strong><small>{pagaLoading ? 'Refreshing account…' : 'Verified deposits only'}</small></div>
+              <label className="sire-funding-field"><span>Deposit amount · NGN</span><input type="number" min="0.01" step="0.01" inputMode="decimal" placeholder="Enter amount in naira" value={pagaAmount} onChange={event => { setPagaAmount(event.target.value); setPagaCheckout(null); setFundingError(''); }} /></label>
+              <button type="button" className="sire-funding-primary" disabled={pagaBusy || !pagaAmount || Number(pagaAmount)<=0} onClick={() => void startPagaDeposit()}>{pagaBusy ? 'Preparing secure checkout…' : 'Continue with Paga'}</button>
+              {pagaCheckout && <div className="sire-funding-address"><span>PAYMENT REFERENCE</span><code>{pagaCheckout.reference}</code><small>Amount: ₦{Number(pagaCheckout.amount).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})} · Status: awaiting payment</small><div id="sire-paga-checkout-host" className="sire-paga-checkout-host" /><small>If the secure Paga button does not appear, check the provider configuration in Render.</small></div>}
+              <button type="button" className="sire-funding-secondary" disabled={pagaLoading} onClick={() => void refreshPagaAccount()}>{pagaLoading ? 'Refreshing…' : 'Refresh balance & history'}</button>
+              {!!pagaAccount?.deposits?.length && <div className="sire-funding-history"><span className="sire-funding-kicker">RECENT FIAT DEPOSITS</span>{pagaAccount.deposits.map((row:any) => <div className="sire-funding-history-row" key={row.reference}><span><b>₦{Number(row.amount).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</b><small>{row.reference}</small></span><span><b>{String(row.status||'pending').toUpperCase()}</b><small>{formatFundingTime(row.paidAt || row.createdAt)}</small></span></div>)}</div>}
               {fundingError && <p className="sire-funding-note">{fundingError}</p>}
-              <p className="sire-funding-warning">Never send money to a personal account shown in chat. Only follow payment instructions in the verified checkout. Crypto is delivered to the address you enter; verify the network and address before continuing.</p>
+              <p className="sire-funding-warning">Do not treat a browser redirect as proof of payment. SIRE credits the balance only after it validates Paga's callback and verifies the charge server-side. This is an NGN funding route; it does not convert fiat to crypto.</p>
             </div>}
             {(['agents','p2p','buy'] as string[]).includes(fundingStep) && <div className="sire-funding-unavailable"><div className="sire-funding-unavailable-mark">—</div><h3>{fundingStep === 'agents' ? 'Payment agents' : fundingStep === 'p2p' ? 'P2P funding' : 'Buy crypto'}</h3><p>{fundingStep === 'agents' ? 'Verified agents and their supported currencies are not connected yet.' : fundingStep === 'p2p' ? 'P2P offers and payment protection are not connected yet.' : 'Crypto purchase methods and live quotes are not connected yet.'}</p><span>Not available yet · No payment will be initiated</span></div>}
           </section>
