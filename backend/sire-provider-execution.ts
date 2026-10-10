@@ -160,6 +160,21 @@ export async function bitgetMarketOrderBook(category:string,symbol:string,limit=
   };
 }
 
+export async function bitgetOwnerDepositCoins(){
+  const result=await bitgetPublic('/api/v2/spot/public/coins');
+  const rows=Array.isArray(result?.data)?result.data:[];
+  const coins=rows.map((row:any)=>{
+    const networks=(Array.isArray(row?.chains)?row.chains:[]).map((chain:any)=>({
+      chain:String(chain?.chain||chain?.chainName||''),
+      name:String(chain?.needTag===true?'Requires memo/tag':''),
+      depositEnabled:chain?.rechargeable===true||String(chain?.rechargeable).toLowerCase()==='true',
+      memoRequired:chain?.needTag===true||String(chain?.needTag).toLowerCase()==='true'
+    })).filter((chain:any)=>chain.chain&&chain.depositEnabled);
+    return {coin:String(row?.coin||''),name:String(row?.coinName||row?.coin||''),networks};
+  }).filter((row:any)=>row.coin&&row.networks.length);
+  return {ok:true,provider:'BITGET',coins};
+}
+
 export async function bitgetOwnerDepositAddress(coinInput:string,chainInput=''){
   const coin=String(coinInput||'').trim().toUpperCase();
   const chain=String(chainInput||'').trim();
