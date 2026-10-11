@@ -13,7 +13,7 @@ import TradeView from './TradeView';
 import SireWalletPanel from './SireWalletPanel';
 import './sireWalletPanel.css';
 
-type MarketProvider = 'DERIV' | 'BITGET' | 'COINGECKO' | 'BINANCE';
+type MarketProvider = 'DERIV' | 'BITGET' | 'COINGECKO';
 type AppTab = 'home' | 'market' | 'trade' | 'discover' | 'portfolio';
 export type Instrument = Partial<DerivInstrument> & Partial<BitgetInstrument> & {
   id: string;
@@ -624,7 +624,7 @@ export default function App() {
     setSearch('');
     // Spot pair selection is a navigation handoff, not a chart selection.
     // Do this first so choosing a Spot instrument cannot mutate the chart state.
-    if (spotReturnToTrade && ((item.provider === 'COINGECKO' && item.marketGroup === 'CRYPTO') || (item.provider === 'BINANCE' && normalizeMarketLabel(item.marketType) === 'spot'))) {
+    if (spotReturnToTrade && item.provider === 'COINGECKO' && item.marketGroup === 'CRYPTO') {
       setTradeOpen(true);
       setActiveTab('trade');
       window.dispatchEvent(new CustomEvent('sire:navigate-tab', { detail: { tab: 'trade' } }));
