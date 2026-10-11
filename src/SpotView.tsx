@@ -58,7 +58,6 @@ export default function SpotView({ wallet, initialSymbol, onConnect }: Props) {
   const [snapshot, setSnapshot] = useState<Snapshot>({});
   const [book, setBook] = useState<SpotBook>({ asks:[], bids:[], lastTrade:null });
   const [balances, setBalances] = useState<SpotBalance[]>([]);
-  const [, setSubVersion] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [mobilePanel, setMobilePanel] = useState<'Trade'|'Chart'>('Trade');
