@@ -19,7 +19,7 @@ import { saveLimitOrder, listLimitOrders, cancelLimitOrder, runLimitOrderMonitor
 import { fetchBinanceMarketSnapshotServer, fetchBinanceHistoryServer } from './backend/binance-catalog.ts';
 import { bitgetMarketSubscribe, bitgetMarketUnsubscribe, bitgetMarketDisconnect, startBitgetLiveDiagnostics, bitgetLiveStatus } from './backend/bitget-live-market.ts';
 import { bitgetAuthenticatedHealth, bitgetMarketOrderBook, bitgetOwnerDepositAddress, bitgetOwnerDepositRecords, bitgetOwnerDepositCoins, bitgetOwnerAccount, bitgetOwnerPlaceOrder, bitgetOwnerFuturesPositions, bitgetOwnerSetFuturesLeverage, bitgetOwnerCancelOrder, bitgetOwnerCancelAllOrders, bitgetOwnerModifyOrder, bitgetOwnerOpenOrders, bitgetOwnerOrderHistory, bitgetOwnerOrderInfo, bitgetOwnerPlaceTriggerOrder, bitgetOwnerPendingTriggerOrders, bitgetOwnerCancelTriggerOrder, bitgetOwnerModifyTriggerOrder, bitgetOwnerStrategyOrderHistory } from './backend/sire-provider-execution.ts';
-import { fetchSireSpotCatalogServer, sireSpotCatalogStatus } from './backend/sire-spot-catalog.ts';
+import { fetchSireSpotCatalogServer, fetchSireSpotHistoryServer, sireSpotCatalogStatus } from './backend/sire-spot-catalog.ts';
 import { createFuturesSchedule, listFuturesSchedules, controlFuturesSchedule, cancelAllFuturesSchedules, runFuturesScheduleBatch } from './backend/futures-scheduler.ts';
 import { ensureSireSpotTables, getSpotBook, placeSpotOrder, cancelSpotOrder, getSpotAccount, getSpotOrders, getSpotTrades, spotEngineStatus, spotSubscribe, spotUnsubscribe, spotDisconnect } from './backend/sire-spot-engine.ts';
 import { getRoutedSpotLiquidity, spotLiquidityStatus } from './backend/sire-spot-liquidity.ts';
@@ -1260,6 +1260,21 @@ const server = http.createServer(async (req,res) => {
         const message = cause instanceof Error ? cause.message : String(cause);
         console.error('[SIRE SPOT CATALOG]', cause instanceof Error ? (cause.stack || message) : message);
         return res.writeHead(502,{ 'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8' }).end(JSON.stringify({ ok:false, error:message, provider:'CoinGecko' }));
+      }
+    }
+
+    if (req.method === 'GET' && pathname === '/api/sire/spot/history') {
+      try {
+        const url = new URL(req.url || '/', 'http://sire.local');
+        const asset = String(url.searchParams.get('asset') || '');
+        const interval = String(url.searchParams.get('interval') || '1m');
+        const countBack = Number(url.searchParams.get('countBack') || 500);
+        const bars = await fetchSireSpotHistoryServer(asset, interval, countBack);
+        return res.writeHead(200,{ 'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8' }).end(JSON.stringify({ok:true,bars}));
+      } catch (cause) {
+        const message = cause instanceof Error ? cause.message : String(cause);
+        console.error('[SIRE SPOT HISTORY]', cause instanceof Error ? (cause.stack || message) : message);
+        return res.writeHead(502,{ 'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8' }).end(JSON.stringify({ok:false,error:message,provider:'CoinGecko'}));
       }
     }
     if (req.method === 'GET' && pathname === '/api/sire/spot/catalog/status') {
