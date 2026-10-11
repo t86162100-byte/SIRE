@@ -60,13 +60,6 @@ const categoryFor=(instrument:any)=>{
 const instTypeFor=(category:string)=>({SPOT:'spot',MARGIN:'spot', 'USDT-FUTURES':'usdt-futures','COIN-FUTURES':'coin-futures','USDC-FUTURES':'usdc-futures'} as Record<string,string>)[category]||'spot';
 const intervalMap:Record<string,string>={'1m':'1m','3m':'3m','5m':'5m','15m':'15m','30m':'30m','1h':'1H','2h':'2H','4h':'4H','6h':'6H','8h':'8H','12h':'12H','1d':'1D','3d':'3D','1w':'1W','1M':'1M'};
 
-export async function fetchBitgetInstruments():Promise<BitgetInstrument[]>{
-  const response=await fetch('/api/sire/bitget/catalog?source=market-tab&t='+Date.now(),{cache:'no-store',headers:{Accept:'application/json'}});
-  const payload=await response.json().catch(()=>({}));
-  if(!response.ok||!payload?.ok||!Array.isArray(payload?.instruments)) throw new Error(payload?.error||'Bitget native catalog is unavailable.');
-  return payload.instruments as BitgetInstrument[];
-}
-
 async function getBars(instrument:any,symbol:string,interval:string,end?:number,limit=1000,onDiagnostic?:(e:Diagnostic)=>void):Promise<Bar[]>{
   const category=categoryFor(instrument);
   const native=intervalMap[interval]||'1m';
