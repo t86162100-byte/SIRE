@@ -89,6 +89,10 @@ export type Instrument = Partial<DerivInstrument> & Partial<BitgetInstrument> & 
   chainLogoUrl?: string;
   contractAddress?: string;
   metadataSource?: string;
+  sourceAssetId?: string;
+  assetType?: string;
+  tradableOnSire?: boolean;
+  dataSource?: string;
 };
 
 const makeLogoFallback = (label: string) => {
