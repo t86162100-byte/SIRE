@@ -1,8 +1,8 @@
 type Json = Record<string, any>;
 
-const CG_PRO_KEY = s(process.env.COINGECKO_PRO_API_KEY || (String(process.env.COINGECKO_API_PLAN || '').toLowerCase() === 'pro' ? process.env.COINGECKO_API_KEY : ''));
-const CG_DEMO_KEY = s(process.env.COINGECKO_DEMO_API_KEY || (String(process.env.COINGECKO_API_PLAN || 'demo').toLowerCase() !== 'pro' ? process.env.COINGECKO_API_KEY : ''));
-const API_HOST = s(process.env.COINGECKO_API_HOST) || (CG_PRO_KEY ? 'https://pro-api.coingecko.com/api/v3' : 'https://api.coingecko.com/api/v3');
+const CG_PRO_KEY = String(process.env.COINGECKO_PRO_API_KEY || (String(process.env.COINGECKO_API_PLAN || '').toLowerCase() === 'pro' ? process.env.COINGECKO_API_KEY : '')).trim();
+const CG_DEMO_KEY = String(process.env.COINGECKO_DEMO_API_KEY || (String(process.env.COINGECKO_API_PLAN || 'demo').toLowerCase() !== 'pro' ? process.env.COINGECKO_API_KEY : '')).trim();
+const API_HOST = String(process.env.COINGECKO_API_HOST || '').trim() || (CG_PRO_KEY ? 'https://pro-api.coingecko.com/api/v3' : 'https://api.coingecko.com/api/v3');
 const CACHE_TTL_MS = 5 * 60_000;
 const MIN_REFRESH_GAP_MS = 30_000;
 const MAX_PAGES = 4;
