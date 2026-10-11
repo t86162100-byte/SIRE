@@ -70,14 +70,14 @@ export default function SpotView({ wallet, initialSymbol, onConnect }: Props) {
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
-    fetch('/api/sire/bitget/catalog?t=' + Date.now(), { cache:'no-store', headers:{Accept:'application/json'} })
-      .then(response => readJsonResponse(response,'Bitget catalog'))
+    fetch('/api/sire/spot/catalog?t=' + Date.now(), { cache:'no-store', headers:{Accept:'application/json'} })
+      .then(response => readJsonResponse(response,'CoinGecko crypto catalog'))
       .then(payload => {
         if (cancelled) return;
-        if (!payload?.ok || !Array.isArray(payload?.instruments)) throw new Error(payload?.error || 'Unable to load Bitget Spot markets.');
-        const spot = payload.instruments.filter((item:SireSpotMarket) => item.status === 'TRADING' && item.marketType === 'Spot' && item.quote === 'USDT');
+        if (!payload?.ok || !Array.isArray(payload?.markets)) throw new Error(payload?.error || 'Unable to load the CoinGecko crypto catalog.');
+        const spot = payload.markets.filter((item:SireSpotMarket) => item.marketType === 'Spot' && item.quote === 'USDT');
         setInstruments(spot);
-        setSelected(current => current || spot.find(item => item.symbol === initialSymbol) || spot.find(item => item.symbol === 'BTCUSDT') || spot[0] || null);
+        setSelected(current => current || spot.find(item => item.symbol === initialSymbol) || spot.find(item => item.sourceAssetId === 'bitcoin') || spot[0] || null);
       })
       .catch(e => { if (!cancelled) setError(e instanceof Error ? e.message : String(e)); })
       .finally(() => { if (!cancelled) setLoading(false); });
@@ -234,7 +234,7 @@ export default function SpotView({ wallet, initialSymbol, onConnect }: Props) {
     <main className="sire-spot-workspace">
       <section className="sire-spot-trade-panel">
         <div className="sire-spot-trade-content">
-          <button type="button" className="sire-spot-instrument-pill" onClick={() => { setPickerOpen(false); window.dispatchEvent(new CustomEvent('sire:open-market-for-spot')); }} aria-label="Select spot instrument">
+          <button type="button" className="sire-spot-instrument-pill" onClick={() => { setPickerOpen(true); setSearch(''); }} aria-label="Select spot instrument">
             <span className="sire-spot-instrument-logo">
               <img src={selected?.logoUrl || ''} alt="" onError={e => { e.currentTarget.style.display='none'; }} />
               {!selected?.logoUrl && <span>{base.slice(0,1) || '?'}</span>}
@@ -310,14 +310,14 @@ export default function SpotView({ wallet, initialSymbol, onConnect }: Props) {
       </aside>
     </main>
 
-    {false && pickerOpen && <div className="sire-spot-picker-backdrop" onClick={() => setPickerOpen(false)}>
+    {pickerOpen && <div className="sire-spot-picker-backdrop" onClick={() => setPickerOpen(false)}>
       <section className="sire-spot-picker" onClick={e => e.stopPropagation()}>
         <div className="sire-spot-picker-head"><strong>Select spot pair</strong><button type="button" onClick={() => setPickerOpen(false)}>×</button></div>
-        <div className="sire-spot-search"><Search size={15}/><input autoFocus value={search} onChange={e => setSearch(e.target.value)} placeholder="Search BTC, ETH, SOL…" /></div>
-        <div className="sire-spot-picker-list">{filtered.map(item => <button key={item.symbol} type="button" onClick={() => { setSelected(item); setPickerOpen(false); setSearch(''); }}><span>{item.baseAsset}/{item.quote}</span><small>{item.symbol}</small><b>{item.price ? formatPrice(Number(item.price)) : '—'}</b></button>)}</div>
+        <div className="sire-spot-search"><Search size={15}/><input autoFocus value={search} onChange={e => setSearch(e.target.value)} placeholder="Search any crypto by name or symbol…" /></div>
+        <div className="sire-spot-picker-list">{filtered.map(item => <button key={String((item as any).sourceAssetId || item.symbol)} type="button" onClick={() => { setSelected(item); setPickerOpen(false); setSearch(''); setError(''); }}><span>{item.assetName || item.baseAsset}/{item.quote}</span><small>{item.symbol} · {item.status === 'CATALOG_ONLY' ? 'Catalog asset · quote unavailable' : 'CoinGecko reference price'}</small><b>{item.price ? formatPrice(Number(item.price)) : '—'}</b></button>)}</div>
       </section>
     </div>}
 
-    {loading && <div className="sire-spot-loading"><LoaderCircle className="sire-spin" size={17}/> Loading markets…</div>}
+    {loading && <div className="sire-spot-loading"><LoaderCircle className="sire-spin" size={17}/> Loading full crypto catalog…</div>}
   </div>;
 }
