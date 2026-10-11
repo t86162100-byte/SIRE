@@ -68,6 +68,11 @@ async function getJson(url: string) {
 async function loadCatalog(): Promise<Json> {
   const pages: Json[][] = [];
 
+  // CoinGecko's coins/list is the complete active asset directory; market pages
+  // enrich the highest-ranked assets with live reference data.
+  const allCoinsPayload = await getJson(API_HOST + '/coins/list');
+  if (!Array.isArray(allCoinsPayload)) throw new Error('CoinGecko full coin directory returned an unexpected response.');
+
   // Pace pages instead of bursting all four requests concurrently.
   for (let index = 0; index < MAX_PAGES; index++) {
     const page = index + 1;
@@ -121,12 +126,45 @@ async function loadCatalog(): Promise<Json> {
     });
   }
 
+  const marketIds = new Set(markets.map(item => String(item.sourceAssetId || '')));
+  let directoryOnlyCount = 0;
+  for (const coin of allCoinsPayload) {
+    const id = s(coin?.id);
+    const symbol = s(coin?.symbol).toUpperCase();
+    const name = s(coin?.name);
+    if (!id || !symbol || !name || marketIds.has(id)) continue;
+    // Preserve every CoinGecko-listed asset in the directory even when the
+    // market-data pages do not include a current quote for it. These entries
+    // are discoverable, but are explicitly not represented as priced markets.
+    markets.push({
+      id: 'SIRE:' + id,
+      symbol: symbol + 'USDT',
+      name: symbol + '/USDT',
+      baseAsset: symbol,
+      quote: 'USDT',
+      quoteAsset: 'USDT',
+      status: 'CATALOG_ONLY',
+      marketType: 'Spot',
+      marketGroup: 'CRYPTO',
+      provider: 'COINGECKO',
+      sourceAssetId: id,
+      assetName: name,
+      logoUrl: '',
+      decimals: 8,
+    });
+    marketIds.add(id);
+    directoryOnlyCount++;
+  }
+
   return {
     ok: true,
     provider: 'CoinGecko',
-    pairPolicy: 'SIRE-managed USDT spot pairs',
+    source: 'CoinGecko active coin directory + paginated USD market data',
+    pairPolicy: 'SIRE-managed USDT spot catalog; quotes are reference data, not proof of executable liquidity',
     generatedAt: Date.now(),
     count: markets.length,
+    pricedCount: markets.length - directoryOnlyCount,
+    directoryOnlyCount,
     markets,
   };
 }
