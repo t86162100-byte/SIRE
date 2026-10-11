@@ -96,7 +96,10 @@ export type Instrument = Partial<DerivInstrument> & Partial<BitgetInstrument> & 
 };
 
 const makeLogoFallback = (label: string) => {
-  const text = String(label || '?').slice(0, 2).toUpperCase();
+  // Slice Unicode code points, not UTF-16 code units: a two-unit slice can
+  // split an emoji/supplementary character and make encodeURIComponent throw
+  // URIError ("URI malformed") while the market catalogue is being mapped.
+  const text = Array.from(String(label || '?').toUpperCase()).slice(0, 2).join('');
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128"><circle cx="64" cy="64" r="62" fill="#20242b"/><text x="64" y="69" text-anchor="middle" dominant-baseline="middle" font-family="Arial,sans-serif" font-size="42" font-weight="900" fill="#fff">${text}</text></svg>`;
   return 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(svg);
 };
