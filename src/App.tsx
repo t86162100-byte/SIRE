@@ -104,7 +104,7 @@ const makeLogoFallback = (label: string) => {
 const makeAssetLogoFallback = (item: Instrument) => makeLogoFallback(item.displaySymbol || item.symbol);
 
 const MARKET_TOP_GROUPS = ['CRYPTO', 'TRADE FI', 'FOREX', 'COMMODITIES', 'INDICES', 'SYNTHETICS', 'ALPHA'] as const;
-const MARKET_SOURCES: readonly MarketProvider[] = ['COINGECKO', 'BINANCE', 'DERIV'];
+const MARKET_SOURCES: readonly ('ALL' | MarketProvider)[] = ['ALL', 'COINGECKO', 'BINANCE', 'DERIV'];
 
 const MARKET_SUBGROUPS: Record<string, readonly string[]> = { CRYPTO: ['Spot', 'Futures', 'Margin'], 'TRADE FI': ['Stocks', 'Futures', 'Spot'] };
 
@@ -125,7 +125,7 @@ const MARKET_LEAF_FILTERS: Record<string, readonly string[]> = {
 };
 
 const visibleMarketTopGroups = (_provider: 'ALL' | MarketProvider) => MARKET_TOP_GROUPS;
-const sourceDisplayName = (value: string) => value === 'DERIV' ? 'Deriv' : value === 'COINGECKO' ? 'CoinGecko Universe' : value === 'BINANCE' ? 'Binance Instruments' : value;
+const sourceDisplayName = (value: string) => value === 'ALL' ? 'All sources' : value === 'DERIV' ? 'Deriv' : value === 'COINGECKO' ? 'CoinGecko Universe' : value === 'BINANCE' ? 'Binance Instruments' : value;
 const sourceLogoUrl = (value: string) => value === 'COINGECKO' ? 'https://www.coingecko.com/favicon.ico' : value === 'BINANCE' ? 'https://www.binance.com/favicon.ico' : 'https://deriv.com/favicon.ico';
 
 const normalizeMarketLabel = (value: unknown) =>
