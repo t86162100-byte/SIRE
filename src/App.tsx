@@ -4,7 +4,7 @@ import { Search, SlidersHorizontal, X, ChevronDown } from 'lucide-react';
 import ResearchLab from './ResearchLab';
 import HomeView from './HomeView';
 import FinancialChart from './FinancialChart';
-import { fetchDerivInstruments, type DerivInstrument } from './derivMarketData';
+import { type DerivInstrument } from './derivMarketData';
 import { type BitgetInstrument } from './bitgetMarketData';
 import { SireErrorScreen } from './SireErrorBoundary';
 import './nativeTerminal.css';
