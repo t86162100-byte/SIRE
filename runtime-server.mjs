@@ -1256,6 +1256,16 @@ const server = http.createServer(async (req,res) => {
     if (req.method === 'GET' && pathname === '/api/sire/bitget/catalog/status') {
       return res.writeHead(200,{ 'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8' }).end(JSON.stringify(bitgetCatalogStatus()));
     }
+    if (req.method === 'GET' && pathname === '/api/sire/binance/catalog') {
+      try {
+        const catalog = await fetchBinanceCatalogServer();
+        return res.writeHead(200,{'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify({ok:true,provider:'BINANCE',source:'Binance public instrument metadata',...catalog}));
+      } catch (cause) {
+        const message = cause instanceof Error ? cause.message : String(cause);
+        console.error('[SIRE BINANCE CATALOG]', message);
+        return res.writeHead(502,{'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify({ok:false,error:message,provider:'BINANCE'}));
+      }
+    }
     if (req.method === 'GET' && pathname === '/api/sire/spot/catalog') {
       try {
         const url = new URL(req.url || '/', 'http://sire.local');
