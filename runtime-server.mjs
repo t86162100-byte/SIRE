@@ -998,7 +998,7 @@ const server = http.createServer(async (req,res) => {
         const url = new URL(req.url || '/', 'http://sire.local');
         const symbol = String(url.searchParams.get('symbol') || 'BTCUSDT').toUpperCase();
         const depth = Number(url.searchParams.get('depth') || 25);
-        const book = await getRoutedSpotLiquidity(symbol, depth);
+        const book = await getSpotBook(symbol, depth);
         return res.writeHead(200,{'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify(book));
       } catch (cause) {
         return res.writeHead(400,{'Access-Control-Allow-Origin':'*','Content-Type':'application/json; charset=utf-8'}).end(JSON.stringify({ok:false,error:cause instanceof Error ? cause.message : String(cause)}));
