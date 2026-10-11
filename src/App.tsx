@@ -287,8 +287,8 @@ const loadBinanceUniverse = async (): Promise<Instrument[]> => {
 };
 
 const chooseInitialMarketInstrument = (items: Instrument[]) =>
-  items.find(item => item.provider === 'COINGECKO' && item.sourceAssetId === 'bitcoin') ||
   items.find(item => item.provider === 'BINANCE' && item.symbol === 'BTCUSDT') ||
+  items.find(item => item.provider === 'COINGECKO' && item.sourceAssetId === 'bitcoin') ||
   items.find(item => item.provider === 'DERIV' && item.exchangeOpen !== 0 && item.tradingSuspended !== 1) ||
   items[0] || null;
 
@@ -666,7 +666,7 @@ export default function App() {
     setSearch('');
     // Spot pair selection is a navigation handoff, not a chart selection.
     // Do this first so choosing a Spot instrument cannot mutate the chart state.
-    if (spotReturnToTrade && item.provider === 'BITGET' && normalizeMarketLabel(item.marketType) === 'spot') {
+    if (spotReturnToTrade && ((item.provider === 'COINGECKO' && item.marketGroup === 'CRYPTO') || (item.provider === 'BINANCE' && normalizeMarketLabel(item.marketType) === 'spot'))) {
       setTradeOpen(true);
       setActiveTab('trade');
       window.dispatchEvent(new CustomEvent('sire:navigate-tab', { detail: { tab: 'trade' } }));
@@ -731,7 +731,7 @@ export default function App() {
   }
 
   if (activeTab === 'trade' || tradeOpen) {
-    const ethUsdt = liveInstruments.find(item => item.provider === 'BITGET' && String(item.symbol || '').toUpperCase() === 'ETHUSDT');
+    const ethUsdt = liveInstruments.find(item => item.provider === 'COINGECKO' && item.sourceAssetId === 'ethereum') || liveInstruments.find(item => item.provider === 'BINANCE' && String(item.symbol || '').toUpperCase() === 'ETHUSDT');
     return <TradeView referencePrice={Number(ethUsdt?.price || 0)} referenceChange={Number(ethUsdt?.priceChangePercent ?? ethUsdt?.change24h ?? 0)} forceSpot={spotReturnToTrade} spotSymbol={spotReturnToTrade ? selected?.symbol : undefined} />;
   }
 
