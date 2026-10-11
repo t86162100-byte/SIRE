@@ -103,29 +103,16 @@ const makeLogoFallback = (label: string) => {
 
 const makeAssetLogoFallback = (item: Instrument) => makeLogoFallback(item.displaySymbol || item.symbol);
 
-const MARKET_TOP_GROUPS = ['CRYPTO', 'TRADE FI', 'FOREX', 'COMMODITIES', 'INDICES', 'SYNTHETICS', 'ALPHA'] as const;
-const MARKET_SOURCES: readonly ('ALL' | MarketProvider)[] = ['ALL', 'COINGECKO', 'BINANCE', 'DERIV'];
+const MARKET_TOP_GROUPS = ['ALL', 'CRYPTO', 'TOKENIZED STOCKS', 'TOKENIZED COMMODITIES', 'TOKENIZED ETFS', 'TOP GAINERS', 'TOP LOSERS'] as const;
+const MARKET_SOURCES: readonly ('ALL' | MarketProvider)[] = ['ALL', 'COINGECKO'];
 
-const MARKET_SUBGROUPS: Record<string, readonly string[]> = { CRYPTO: ['Spot', 'Futures', 'Margin'], 'TRADE FI': ['Stocks', 'Futures', 'Spot'] };
+const MARKET_SUBGROUPS: Record<string, readonly string[]> = {};
 
-const MARKET_SUBSUBGROUPS: Record<string, readonly string[]> = {
-  'CRYPTO::Spot': ['ALL', 'New', 'Key Assets', 'Pre-IPO', 'Stocks', 'ETF', 'Metals', '0 fee', 'Stablecoin', 'AI', 'Meme', 'Solana ecosystem', 'RWA', 'GameFi', 'DeFi', 'NFT', 'Payment', 'DePIN'],
-  'CRYPTO::Futures': ['ALL', 'New', 'Key Assets', 'Pre-IPO', 'Stocks', 'ETF', 'Metals', 'Commodity', 'US Preferred Stocks', 'Stablecoin', 'AI', 'Meme', 'Solana ecosystem', 'GameFi', 'DeFi', 'NFT', 'Payment', 'DePIN', 'Pre-market'],
-  'CRYPTO::Margin': ['Key Asset', 'Stablecoin', 'AI', 'Meme', 'Solana ecosystem', 'RWA', 'GameFi', 'DeFi', 'NFT', 'Payment', 'DePIN'],
-  'TRADE FI::Stocks': ['U.S. stock', 'ETFs'],
-  'TRADE FI::Futures': ['Commodities', 'ETFs', 'Stocks', 'Fx', 'Pre-IPO'],
-  'TRADE FI::Spot': ['bStocks', 'tCommodities'],
-  'ALPHA::Alpha': ['Point+', 'Tokenized Securities', 'BSC', 'Robinhood', 'Ethereum', 'Solana', 'Base', 'Arbitrum', 'Sonic', 'Sui', 'TRON'],
-};
-
-const MARKET_LEAF_FILTERS: Record<string, readonly string[]> = {
-  'CRYPTO::Futures::USDT-M': ['All', 'New', 'Crypto', 'DeFi', 'Metavers', 'Payment', 'PoW', 'Storage', 'NFT', 'TradFi', 'Index', 'Pre-IPO', 'USDC', 'Chinese', 'Alpha', 'AI', 'Layer-1', 'RWA', 'Layer-2', 'Gaming', 'Meme', 'Infrastructure'],
-  'CRYPTO::Futures::COIN-M': ['All', 'PoW', 'Storage', 'Layer-1', 'Layer-2', 'Meme', 'Infrastructure', 'Payment'],
-  'CRYPTO::Futures::Margin': ['ETH', 'XAU', 'BTC', 'XAG', 'SOL', 'XRP', 'DOGE'],
-};
+const MARKET_SUBSUBGROUPS: Record<string, readonly string[]> = {};
+const MARKET_LEAF_FILTERS: Record<string, readonly string[]> = {};
 
 const visibleMarketTopGroups = (_provider: 'ALL' | MarketProvider) => MARKET_TOP_GROUPS;
-const sourceDisplayName = (value: string) => value === 'ALL' ? 'All sources' : value === 'DERIV' ? 'Deriv' : value === 'COINGECKO' ? 'CoinGecko Universe' : value === 'BINANCE' ? 'Binance Instruments' : value;
+const sourceDisplayName = (value: string) => value === 'ALL' ? 'All CoinGecko assets' : 'CoinGecko Universe';
 const sourceLogoUrl = (value: string) => value === 'COINGECKO' ? 'https://www.coingecko.com/favicon.ico' : value === 'BINANCE' ? 'https://www.binance.com/favicon.ico' : 'https://deriv.com/favicon.ico';
 
 const normalizeMarketLabel = (value: unknown) =>
@@ -157,14 +144,15 @@ const isBitget = (item: Instrument) => item.provider === 'BITGET';
 const matchesMarketTopGroup = (item: Instrument, group: string) => {
   const marketGroup = normalizeMarketLabel((item as any).marketGroup);
   const category = normalizeMarketLabel(item.category);
-  const instrumentType = normalizeMarketLabel((item as any).instrumentType);
-  if (group === 'CRYPTO') return marketGroup === 'crypto' || category === 'crypto' || instrumentType.includes('crypto');
-  if (group === 'TRADE FI') return marketGroup === 'tradfi' || marketGroup === 'trade fi' || category === 'tradfi' || category === 'stocks' || category === 'etfs';
-  if (group === 'FOREX') return marketGroup === 'forex' || category === 'forex';
-  if (group === 'COMMODITIES') return marketGroup === 'commodities' || category === 'commodities';
-  if (group === 'INDICES') return marketGroup === 'indices' || category === 'indices';
-  if (group === 'SYNTHETICS') return marketGroup === 'synthetics' || category === 'synthetic' || category === 'synthetic indices';
-  if (group === 'ALPHA') return category === 'alpha' || marketGroup === 'alpha' || instrumentType === 'alpha';
+  const marketType = normalizeMarketLabel(item.marketType);
+  const change = Number(item.priceChangePercent ?? item.change24h ?? 0);
+  if (group === 'ALL') return true;
+  if (group === 'CRYPTO') return marketGroup === 'crypto' || category === 'crypto' || marketType === 'spot';
+  if (group === 'TOKENIZED STOCKS') return marketType === 'stocks' || category === 'stocks';
+  if (group === 'TOKENIZED COMMODITIES') return marketType === 'commodities' || category === 'commodities';
+  if (group === 'TOKENIZED ETFS') return marketType === 'etfs' || category === 'etfs';
+  if (group === 'TOP GAINERS') return change > 0;
+  if (group === 'TOP LOSERS') return change < 0;
   return false;
 };
 
@@ -291,9 +279,7 @@ const loadBinanceUniverse = async (): Promise<Instrument[]> => {
 };
 
 const chooseInitialMarketInstrument = (items: Instrument[]) =>
-  items.find(item => item.provider === 'BINANCE' && item.symbol === 'BTCUSDT') ||
   items.find(item => item.provider === 'COINGECKO' && item.sourceAssetId === 'bitcoin') ||
-  items.find(item => item.provider === 'DERIV' && item.exchangeOpen !== 0 && item.tradingSuspended !== 1) ||
   items[0] || null;
 
 export default function App() {
@@ -398,40 +384,23 @@ export default function App() {
   useEffect(() => {
     let cancelled = false;
     const loadUniverse = async () => {
-      const [cryptoResult, binanceResult, derivResult] = await Promise.allSettled([
-        loadCoinGeckoUniverse(),
-        loadBinanceUniverse(),
-        fetchDerivInstruments(),
-      ]);
-      if (cancelled) return;
-      const combined: Instrument[] = [];
-      const errors: string[] = [];
-      if (cryptoResult.status === 'fulfilled') combined.push(...cryptoResult.value);
-      else errors.push('CoinGecko: ' + (cryptoResult.reason instanceof Error ? cryptoResult.reason.message : String(cryptoResult.reason)));
-      if (binanceResult.status === 'fulfilled') combined.push(...binanceResult.value);
-      else errors.push('Binance: ' + (binanceResult.reason instanceof Error ? binanceResult.reason.message : String(binanceResult.reason)));
-      if (derivResult.status === 'fulfilled') {
-        combined.push(...derivResult.value.map(item => ({
-          ...item,
-          id:'DERIV:' + item.symbol,
-          provider:'DERIV' as MarketProvider,
-          providerLabel:'Deriv',
-          marketGroup:item.category === 'synthetic' ? 'SYNTHETICS' : item.category === 'forex' ? 'FOREX' : item.category === 'commodities' ? 'COMMODITIES' : item.category === 'indices' ? 'INDICES' : item.category === 'stocks' ? 'TRADE FI' : 'CRYPTO',
-          marketType:item.category === 'synthetic' ? 'Synthetic Indices' : item.category,
-          category:item.category === 'synthetic' ? 'Synthetic Indices' : item.category,
-          displaySymbol:item.name || item.symbol,
-          logoUrl:makeLogoFallback(item.symbol),
-          providerLogoUrl:'https://deriv.com/favicon.ico',
-          tradableOnSire:false,
-        })) as Instrument[]);
-      } else errors.push('Deriv: ' + (derivResult.reason instanceof Error ? derivResult.reason.message : String(derivResult.reason)));
-      const unique = combined.filter((item,index,all) => item.id && all.findIndex(other => other.id === item.id) === index);
-      setInstruments(unique);
-      const initial = chooseInitialMarketInstrument(unique);
-      setSelected(current => current && unique.some(item => item.id === current.id) ? current : initial);
-      setChartSymbols(current => current.length ? current : [initial?.symbol || '']);
-      setDerivError(errors.length === 3 ? errors.join(' · ') : '');
-      setDerivLoading(false);
+      try {
+        const assets = await loadCoinGeckoUniverse();
+        if (cancelled) return;
+        const unique = assets.filter((item, index, all) => item.id && all.findIndex(other => other.id === item.id) === index);
+        setInstruments(unique);
+        const initial = unique.find(item => item.sourceAssetId === 'bitcoin') || unique[0] || null;
+        setSelected(current => current && unique.some(item => item.id === current.id) ? current : initial);
+        setChartSymbols(current => current.length ? current : [initial?.symbol || '']);
+        setDerivError('');
+      } catch (error) {
+        if (cancelled) return;
+        setInstruments([]);
+        setSelected(null);
+        setDerivError(error instanceof Error ? error.message : String(error));
+      } finally {
+        if (!cancelled) setDerivLoading(false);
+      }
     };
     void loadUniverse();
     return () => { cancelled = true; };
@@ -550,12 +519,12 @@ export default function App() {
       const leafMatch = categoryFilter === 'ALL' || marketSubcategoryFilter === 'ALL' || marketSubSubcategoryFilter === 'ALL' || marketLeafFilter === 'ALL'
         ? true
         : matchesMarketLeaf(item, categoryFilter, marketSubcategoryFilter, marketSubSubcategoryFilter, marketLeafFilter);
-      const searchMatch = !q || [item.name, item.symbol, item.providerLabel, item.marketType, item.category].map(value => String(value ?? '')).join(' ').toLowerCase().includes(q);
+      const searchMatch = !q || [item.name, item.symbol, item.assetName, item.sourceAssetId, item.marketType, item.category].map(value => String(value ?? '')).join(' ').toLowerCase().includes(q);
       return providerMatch && topMatch && subgroupMatch && subSubgroupMatch && leafMatch && searchMatch;
     });
   }, [randomizedInstruments, deferredSearch, providerFilter, categoryFilter, marketSubcategoryFilter, marketSubSubcategoryFilter, marketLeafFilter]);
 
-  const chartableInstruments = useMemo(() => liveInstruments.filter(item => item.provider === 'DERIV' || item.provider === 'BINANCE'), [liveInstruments]);
+  const chartableInstruments = useMemo(() => liveInstruments.filter(item => item.provider === 'COINGECKO'), [liveInstruments]);
   const bitgetLiveKey = (item: Instrument) => {
     if (item.provider !== 'BITGET') return null;
     const market = String(item.marketSubcategory || '').toUpperCase();
@@ -735,7 +704,7 @@ export default function App() {
   }
 
   if (activeTab === 'trade' || tradeOpen) {
-    const ethUsdt = liveInstruments.find(item => item.provider === 'COINGECKO' && item.sourceAssetId === 'ethereum') || liveInstruments.find(item => item.provider === 'BINANCE' && String(item.symbol || '').toUpperCase() === 'ETHUSDT');
+    const ethUsdt = liveInstruments.find(item => item.provider === 'COINGECKO' && item.sourceAssetId === 'ethereum');
     return <TradeView referencePrice={Number(ethUsdt?.price || 0)} referenceChange={Number(ethUsdt?.priceChangePercent ?? ethUsdt?.change24h ?? 0)} forceSpot={spotReturnToTrade} spotSymbol={spotReturnToTrade ? selected?.symbol : undefined} />;
   }
 
@@ -793,7 +762,7 @@ export default function App() {
                   setMarketLeafFilter('ALL');
                 }}
               >
-                <span>{group}</span>
+                <span>{group === 'ALL' ? 'ALL ASSETS' : group}</span>
                 <i aria-hidden="true" />
               </button>
             ))}
