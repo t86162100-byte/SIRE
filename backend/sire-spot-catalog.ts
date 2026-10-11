@@ -1,6 +1,8 @@
 type Json = Record<string, any>;
 
-const API_HOST = 'https://api.coingecko.com/api/v3';
+const CG_PRO_KEY = s(process.env.COINGECKO_PRO_API_KEY || (String(process.env.COINGECKO_API_PLAN || '').toLowerCase() === 'pro' ? process.env.COINGECKO_API_KEY : ''));
+const CG_DEMO_KEY = s(process.env.COINGECKO_DEMO_API_KEY || (String(process.env.COINGECKO_API_PLAN || 'demo').toLowerCase() !== 'pro' ? process.env.COINGECKO_API_KEY : ''));
+const API_HOST = s(process.env.COINGECKO_API_HOST) || (CG_PRO_KEY ? 'https://pro-api.coingecko.com/api/v3' : 'https://api.coingecko.com/api/v3');
 const CACHE_TTL_MS = 5 * 60_000;
 const MIN_REFRESH_GAP_MS = 30_000;
 const MAX_PAGES = 4;
@@ -27,12 +29,13 @@ function retryDelayMs(response: Response, attempt: number) {
 }
 
 async function getJson(url: string) {
-  const apiKey = s(process.env.COINGECKO_API_KEY || process.env.CG_API_KEY);
+  const demoKey = CG_DEMO_KEY || s(process.env.CG_API_KEY);
   const headers: Record<string, string> = {
     Accept: 'application/json',
-    'User-Agent': 'SIRE-Spot-Catalog/1.1',
+    'User-Agent': 'SIRE-Spot-Catalog/1.2',
   };
-  if (apiKey) headers['x-cg-demo-api-key'] = apiKey;
+  if (CG_PRO_KEY) headers['x-cg-pro-api-key'] = CG_PRO_KEY;
+  else if (demoKey) headers['x-cg-demo-api-key'] = demoKey;
 
   for (let attempt = 0; attempt <= MAX_RETRIES_429; attempt++) {
     const controller = new AbortController();
@@ -239,6 +242,42 @@ async function loadCatalog(): Promise<Json> {
   };
 }
 
+
+function buildFallbackCatalog(cause: unknown): Json {
+  // Keep the symbol picker usable during a CoinGecko outage/rate limit.
+  // This small fallback is explicitly marked as directory-only; the full
+  // CoinGecko directory is restored automatically once the API responds.
+  const seed: Array<[string, string, string]> = [
+    ['bitcoin','BTC','Bitcoin'], ['ethereum','ETH','Ethereum'], ['tether','USDT','Tether'],
+    ['binancecoin','BNB','BNB'], ['solana','SOL','Solana'], ['ripple','XRP','XRP'],
+    ['usd-coin','USDC','USDC'], ['staked-ether','STETH','Lido Staked Ether'],
+    ['dogecoin','DOGE','Dogecoin'], ['tron','TRX','TRON'], ['the-open-network','TON','Toncoin'],
+    ['cardano','ADA','Cardano'], ['avalanche-2','AVAX','Avalanche'], ['shiba-inu','SHIB','Shiba Inu'],
+    ['chainlink','LINK','Chainlink'], ['bitcoin-cash','BCH','Bitcoin Cash'], ['sui','SUI','Sui'],
+    ['polkadot','DOT','Polkadot'], ['litecoin','LTC','Litecoin'], ['stellar','XLM','Stellar'],
+    ['hedera-hashgraph','HBAR','Hedera'], ['uniswap','UNI','Uniswap'], ['near','NEAR','NEAR Protocol'],
+    ['aptos','APT','Aptos'], ['internet-computer','ICP','Internet Computer'], ['ethereum-classic','ETC','Ethereum Classic'],
+    ['render-token','RENDER','Render'], ['cosmos','ATOM','Cosmos'], ['arbitrum','ARB','Arbitrum'],
+    ['optimism','OP','Optimism'], ['filecoin','FIL','Filecoin'], ['aave','AAVE','Aave'],
+    ['pepe','PEPE','Pepe'], ['bonk','BONK','Bonk'], ['fetch-ai','FET','Artificial Superintelligence Alliance'],
+    ['pax-gold','PAXG','PAX Gold'], ['tether-gold','XAUT','Tether Gold']
+  ];
+  const markets = seed.map(([id, symbol, name]) => ({
+    id: 'SIRE:COIN:' + id, symbol: symbol + 'USDT', name: symbol + '/USDT',
+    baseAsset: symbol, quote: 'USDT', quoteAsset: 'USDT', status: 'CATALOG_ONLY',
+    tradableOnSire: false, marketType: 'Spot', marketGroup: 'CRYPTO',
+    provider: 'COINGECKO', sourceAssetId: id, assetName: name, logoUrl: '',
+    decimals: 8, dataSource: 'CoinGecko fallback directory (no live quote)'
+  }));
+  return {
+    ok: true, provider: 'CoinGecko', source: 'CoinGecko fallback symbol directory',
+    warning: 'CoinGecko API is temporarily rate-limited. Showing a small directory fallback until API access recovers.',
+    error: cause instanceof Error ? cause.message : String(cause),
+    generatedAt: Date.now(), count: markets.length, pricedCount: 0,
+    directoryOnlyCount: markets.length, rwaCount: 0, markets
+  };
+}
+
 export async function fetchSireSpotCatalogServer(force = false): Promise<Json> {
   const now = Date.now();
 
@@ -258,7 +297,10 @@ export async function fetchSireSpotCatalogServer(force = false): Promise<Json> {
         console.warn('[SIRE SPOT] CoinGecko refresh failed; serving cached catalog:', error instanceof Error ? error.message : String(error));
         return cache.data;
       }
-      throw error;
+      const fallbackData = buildFallbackCatalog(error);
+      cache = { at: Date.now(), data: fallbackData };
+      console.warn('[SIRE SPOT] Serving fallback CoinGecko directory:', fallbackData.error);
+      return fallbackData;
     })
     .finally(() => {
       inflight = null;
