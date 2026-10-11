@@ -87,7 +87,16 @@ const MIME = { '.html':'text/html; charset=utf-8','.js':'text/javascript; charse
 
 async function serveStatic(req, res) {
   if (!req.url || !['GET','HEAD'].includes(req.method || '')) return false;
-  const requestPath = decodeURIComponent(new URL(req.url, 'http://sire.local').pathname);
+  let requestPath = '/';
+  try {
+    requestPath = decodeURIComponent(new URL(req.url, 'http://sire.local').pathname);
+  } catch (cause) {
+    const message = cause instanceof Error ? cause.message : String(cause);
+    console.warn('[SIRE HTTP] malformed request URI:', message);
+    if (!res.headersSent) res.writeHead(400, { 'Content-Type':'text/plain; charset=utf-8', 'Cache-Control':'no-store' });
+    res.end('Bad Request');
+    return true;
+  }
   if (requestPath.startsWith('/api/') || requestPath === '/ws') return false;
   const candidate = requestPath === '/' ? join(DIST,'index.html') : join(DIST, normalize(requestPath).replace(/^[/\\]+/,''));
   let filePath = candidate;
