@@ -247,9 +247,21 @@ const matchesMarketLeaf = (item: Instrument, group: string, subgroup: string, su
 const makeProviderLogoFallback = (_item: Instrument) => 'https://deriv.com/favicon.ico';
 
 const loadCoinGeckoUniverse = async (): Promise<Instrument[]> => {
-  const response = await fetch('/api/sire/spot/catalog?t=' + Date.now(), { cache:'no-store', headers:{Accept:'application/json'} });
-  const payload = await response.json().catch(() => ({}));
-  if (!response.ok || !payload?.ok || !Array.isArray(payload?.markets)) throw new Error(payload?.error || 'CoinGecko universe is unavailable.');
+  const endpoint = '/api/sire/spot/catalog?t=' + Date.now();
+  let response: Response;
+  try {
+    response = await fetch(endpoint, { cache:'no-store', headers:{Accept:'application/json'} });
+  } catch (cause) {
+    throw new Error('Spot catalog network request failed: ' + (cause instanceof Error ? cause.message : String(cause)));
+  }
+  const raw = await response.text();
+  let payload: any = {};
+  try { payload = raw ? JSON.parse(raw) : {}; } catch {
+    throw new Error('Spot catalog endpoint returned non-JSON (HTTP ' + response.status + '): ' + raw.slice(0, 240));
+  }
+  if (!response.ok || !payload?.ok || !Array.isArray(payload?.markets)) {
+    throw new Error('Spot catalog endpoint HTTP ' + response.status + ': ' + String(payload?.error || 'invalid catalog payload') + (payload?.stage ? ' [stage=' + payload.stage + ']' : ''));
+  }
   return payload.markets.map((item:any) => ({
     ...item,
     id: String(item.id || ('COINGECKO:' + (item.sourceAssetId || item.symbol))),
