@@ -22,7 +22,8 @@ function clearCookie(name:string) { return `${name}=; Path=/; Max-Age=0; HttpOnl
 function headerSession(req:any) {
   const raw = String(req.headers?.cookie || '');
   const match = raw.split(';').map((v:string)=>v.trim()).find((v:string)=>v.startsWith('sire_session='));
-  return match ? decodeURIComponent(match.slice('sire_session='.length)) : '';
+  if (!match) return '';
+  try { return decodeURIComponent(match.slice('sire_session='.length)); } catch { return ''; }
 }
 async function findUserByEmail(email:string) {
   if (!process.env.DATABASE_URL) throw new Error('Account database is not configured.');
@@ -91,7 +92,8 @@ function baseUrl(req:any) {
 function readCookie(req:any, name:string) {
   const raw = String(req.headers?.cookie || '');
   const match = raw.split(';').map((v:string)=>v.trim()).find((v:string)=>v.startsWith(`${name}=`));
-  return match ? decodeURIComponent(match.slice(name.length + 1)) : '';
+  if (!match) return '';
+  try { return decodeURIComponent(match.slice(name.length + 1)); } catch { return ''; }
 }
 function googleStateCookie(state:string) {
   return `sire_google_state=${encodeURIComponent(state)}; Path=/; Max-Age=600; HttpOnly; Secure; SameSite=Lax`;
