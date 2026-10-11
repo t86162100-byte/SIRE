@@ -17,7 +17,6 @@ import { runAutonomousCycle } from './autonomous/sire-autonomous-cycle.ts';
 import { recordIssue, getRecentIssues } from './backend/sire-issue-tracker.ts';
 import { saveLimitOrder, listLimitOrders, cancelLimitOrder, runLimitOrderMonitorBatch, limitOrderStoreStatus } from './backend/limit-order-store.ts';
 import { fetchBinanceCatalogServer, fetchBinanceMarketSnapshotServer, fetchBinanceHistoryServer } from './backend/binance-catalog.ts';
-import { fetchBitgetCatalogServer, bitgetCatalogStatus } from './backend/bitget-catalog.ts';
 import { bitgetMarketSubscribe, bitgetMarketUnsubscribe, bitgetMarketDisconnect, startBitgetLiveDiagnostics, bitgetLiveStatus } from './backend/bitget-live-market.ts';
 import { bitgetAuthenticatedHealth, bitgetMarketOrderBook, bitgetOwnerDepositAddress, bitgetOwnerDepositRecords, bitgetOwnerDepositCoins, bitgetOwnerAccount, bitgetOwnerPlaceOrder, bitgetOwnerFuturesPositions, bitgetOwnerSetFuturesLeverage, bitgetOwnerCancelOrder, bitgetOwnerCancelAllOrders, bitgetOwnerModifyOrder, bitgetOwnerOpenOrders, bitgetOwnerOrderHistory, bitgetOwnerOrderInfo, bitgetOwnerPlaceTriggerOrder, bitgetOwnerPendingTriggerOrders, bitgetOwnerCancelTriggerOrder, bitgetOwnerModifyTriggerOrder, bitgetOwnerStrategyOrderHistory } from './backend/sire-provider-execution.ts';
 import { fetchSireSpotCatalogServer, sireSpotCatalogStatus } from './backend/sire-spot-catalog.ts';
@@ -1241,21 +1240,6 @@ const server = http.createServer(async (req,res) => {
       // Keep account equity and API permission details private to the SIRE owner.
       return res.writeHead(result.ok ? 200 : 502,{ 'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8' }).end(JSON.stringify(result));
     }
-    if (req.method === 'GET' && pathname === '/api/sire/bitget/catalog') {
-      try {
-        const url = new URL(req.url || '/', 'http://sire.local');
-        const force = url.searchParams.get('refresh') === '1';
-        const catalog = await fetchBitgetCatalogServer(force);
-        return res.writeHead(200,{ 'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8' }).end(JSON.stringify(catalog));
-      } catch (cause) {
-        const message = cause instanceof Error ? cause.message : String(cause);
-        console.error('[SIRE BITGET CATALOG]', message);
-        return res.writeHead(502,{ 'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8' }).end(JSON.stringify({ ok:false, error:message, provider:'BITGET' }));
-      }
-    }
-    if (req.method === 'GET' && pathname === '/api/sire/bitget/catalog/status') {
-      return res.writeHead(200,{ 'Access-Control-Allow-Origin':'*','Cache-Control':'no-store','Content-Type':'application/json; charset=utf-8' }).end(JSON.stringify(bitgetCatalogStatus()));
-    }
     if (req.method === 'GET' && pathname === '/api/sire/binance/catalog') {
       try {
         const catalog = await fetchBinanceCatalogServer();
@@ -1471,25 +1455,6 @@ server.listen(PORT,HOST,async()=>{
     void bitgetAuthenticatedHealth().then(result => console.log('[BITGET AUTH HEALTH]', JSON.stringify({ok:result.ok,authenticated:result.authenticated,detail:result.detail,assetCount:result.assetCount??null}))).catch(error => console.warn('[BITGET AUTH HEALTH]', error instanceof Error ? error.message : String(error)));
   } else {
     console.warn('[BITGET AUTH HEALTH] credentials are not configured in Render.');
-  }
-  try {
-    const catalog = await fetchBitgetCatalogServer(false);
-    const candidates = [];
-    const pick = (instType, predicate) => {
-      const item = (catalog?.instruments || []).find(predicate);
-      if (item) candidates.push({instType, symbol:String(item.symbol).toUpperCase()});
-    };
-    pick('spot', x => x.marketType === 'Spot' && x.symbol === 'BTCUSDT');
-    pick('spot', x => x.marketType === 'Spot' && x.quote === 'USDT' && x.symbol !== 'BTCUSDT');
-    pick('usdt-futures', x => x.marketSubcategory === 'USDT-M' && x.symbol === 'BTCUSDT');
-    pick('usdt-futures', x => x.marketSubcategory === 'USDT-M' && x.symbol !== 'BTCUSDT');
-    pick('coin-futures', x => x.marketSubcategory === 'COIN-M' && String(x.symbol).startsWith('BTC'));
-    pick('coin-futures', x => x.marketSubcategory === 'COIN-M');
-    pick('usdc-futures', x => x.marketSubcategory === 'USDC-M' && String(x.symbol).includes('BTC'));
-    pick('usdc-futures', x => x.marketSubcategory === 'USDC-M');
-    await startBitgetLiveDiagnostics(candidates);
-  } catch (error) {
-    console.warn('[BITGET LIVE DIAG] startup failed', error instanceof Error ? error.message : String(error));
   }
   console.log('[DERIV HISTORY STORE]', JSON.stringify(await historyStoreStatus()));
   console.log('[SIRE SPOT ENGINE] initializing persistent order, trade, balance and ledger tables');
