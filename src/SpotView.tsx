@@ -161,7 +161,7 @@ export default function SpotView({ wallet, initialSymbol, onConnect }: Props) {
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
-    return instruments.filter(item => !q || item.symbol.toLowerCase().includes(q) || String(item.name).toLowerCase().includes(q)).slice(0,80);
+    return instruments.filter(item => !q || item.symbol.toLowerCase().includes(q) || String(item.name).toLowerCase().includes(q) || String(item.assetName || '').toLowerCase().includes(q) || String((item as any).sourceAssetId || '').toLowerCase().includes(q)).slice(0,80);
   }, [instruments, search]);
 
   const marketPrice = Number(book.lastTrade?.price || snapshot.price || selected?.price || 0);
