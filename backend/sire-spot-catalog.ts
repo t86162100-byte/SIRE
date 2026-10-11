@@ -7,7 +7,7 @@ const CACHE_TTL_MS = 5 * 60_000;
 const MIN_REFRESH_GAP_MS = 30_000;
 const MAX_PAGES = 4;
 const PER_PAGE = 250;
-const MAX_RETRIES_429 = 3;
+const MAX_RETRIES_429 = 1;
 
 let cache: { at: number; data: Json } | null = null;
 let inflight: Promise<Json> | null = null;
