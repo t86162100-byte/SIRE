@@ -309,6 +309,43 @@ export async function fetchSireSpotCatalogServer(force = false): Promise<Json> {
   return inflight;
 }
 
+export async function fetchSireSpotHistoryServer(sourceAssetId: string, interval = '1m', countBack = 500) {
+  const id = s(sourceAssetId);
+  if (!id) throw new Error('CoinGecko source asset id is required for chart history.');
+  const seconds: Record<string, number> = {
+    '1m':60,'2m':120,'3m':180,'5m':300,'10m':600,'15m':900,'20m':1200,'30m':1800,
+    '45m':2700,'1h':3600,'2h':7200,'3h':10800,'4h':14400,'6h':21600,'8h':28800,
+    '12h':43200,'1d':86400,'1w':604800
+  };
+  const step = seconds[interval];
+  if (!step) throw new Error('Unsupported CoinGecko chart interval: ' + interval);
+  const wanted = Math.max(20, Math.min(1000, Math.floor(Number(countBack) || 500)));
+  const days = Math.min(365, Math.max(1, Math.ceil((wanted * step) / 86400) + 1));
+  const data = await getJson(API_HOST + '/coins/' + encodeURIComponent(id) + '/market_chart?vs_currency=usd&days=' + days);
+  if (!Array.isArray(data?.prices)) throw new Error('CoinGecko returned no price history for ' + id + '.');
+  const rows = data.prices
+    .map((row: any) => [Number(row?.[0]), Number(row?.[1])])
+    .filter((row: number[]) => Number.isFinite(row[0]) && Number.isFinite(row[1]))
+    .sort((a: number[], b: number[]) => a[0] - b[0]);
+  if (!rows.length) return [];
+  const bars: Json[] = [];
+  let current: any = null;
+  for (const [ms, price] of rows) {
+    const time = Math.floor(ms / 1000);
+    const bucket = Math.floor(time / step) * step;
+    if (!current || current.time !== bucket) {
+      if (current) bars.push(current);
+      current = { time: bucket, open: price, high: price, low: price, close: price };
+    } else {
+      current.high = Math.max(current.high, price);
+      current.low = Math.min(current.low, price);
+      current.close = price;
+    }
+  }
+  if (current) bars.push(current);
+  return bars.slice(-wanted);
+}
+
 export function sireSpotCatalogStatus() {
   return {
     ok: Boolean(cache?.data),
