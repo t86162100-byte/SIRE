@@ -63,9 +63,9 @@ export default function SpotView({ wallet, initialSymbol, onConnect }: Props) {
   const [error, setError] = useState('');
   const [mobilePanel, setMobilePanel] = useState<'Trade'|'Chart'>('Trade');
   const [bookView, setBookView] = useState<'both'|'asks'|'bids'>('both');
-  const [tradingMode, setTradingMode] = useState<'PAPER'|'BITGET_DEMO'|'LIVE'>('PAPER');
+  const [tradingMode] = useState<'PAPER'>('PAPER');
 
-  useEffect(() => { let cancelled=false; fetch('/api/sire/bitget/trading-mode',{cache:'no-store',headers:{Accept:'application/json'}}).then(r=>readJsonResponse(r,'Trading mode')).then(p=>{if(!cancelled&&p?.ok&&['PAPER','BITGET_DEMO','LIVE'].includes(p.mode))setTradingMode(p.mode)}).catch(()=>{if(!cancelled)setTradingMode('PAPER')}); return()=>{cancelled=true}; }, []);
+
 
   useEffect(() => {
     let cancelled = false;
@@ -94,12 +94,11 @@ export default function SpotView({ wallet, initialSymbol, onConnect }: Props) {
     });
     setBook({asks:[],bids:[],lastTrade:null});
     let cancelled = false;
-    const category = String(selected.marketType || 'Spot').toUpperCase() === 'MARGIN' ? 'SPOT' : 'SPOT';
-    fetch('/api/sire/bitget/orderbook?category=' + category + '&symbol=' + encodeURIComponent(selected.symbol) + '&limit=25', {cache:'no-store', headers:{Accept:'application/json'}})
-      .then(r=>readJsonResponse(r,'Bitget order book')).then(p => {
+    fetch('/api/sire/spot/book?symbol=' + encodeURIComponent(selected.symbol) + '&depth=25', {cache:'no-store', headers:{Accept:'application/json'}})
+      .then(r=>readJsonResponse(r,'SIRE Spot order book')).then(p => {
         if(!cancelled && p?.ok) setBook({
           asks:Array.isArray(p.asks)?p.asks:[], bids:Array.isArray(p.bids)?p.bids:[],
-          lastTrade:null, source:p.source
+          lastTrade:p.lastTrade || null, source:p.source
         });
       }).catch(()=>{});
     return () => { cancelled = true; };
@@ -114,50 +113,40 @@ export default function SpotView({ wallet, initialSymbol, onConnect }: Props) {
       if (closed) return;
       const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
       socket = new WebSocket(protocol + '//' + window.location.host + '/ws');
-      socket.onopen = () => {
-        const instType = selected.marketType === 'Margin' ? 'spot' : 'spot';
-        socket?.send(JSON.stringify({type:'bitget.market.subscribe',subscriptions:[{instType,symbol:selected.symbol}]}));
-      };
+      socket.onopen = () => socket?.send(JSON.stringify({type:'spot.subscribe',symbol:selected.symbol}));
       socket.onmessage = event => {
         try {
           const msg = JSON.parse(String(event.data || '{}'));
-          if (msg?.type !== 'bitget.market.update') return;
+          if (msg?.type !== 'spot.update') return;
           const payload = msg.payload || {};
           if (String(payload.symbol || '').toUpperCase() !== selected.symbol.toUpperCase()) return;
-          if (payload.type === 'ticker') {
-            setSnapshot({
-              price:Number.isFinite(Number(payload.price)) ? Number(payload.price) : undefined,
-              bid:Number.isFinite(Number(payload.bid)) ? Number(payload.bid) : undefined,
-              ask:Number.isFinite(Number(payload.ask)) ? Number(payload.ask) : undefined,
-              percent:Number.isFinite(Number(payload.change24h)) ? Number(payload.change24h) * 100 : undefined
-            });
-          } else if (payload.type === 'depth') {
-            setBook({
-              asks:Array.isArray(payload.asks)?payload.asks.map((x:any)=>({price:Number(x[0]),quantity:Number(x[1])})):[],
-              bids:Array.isArray(payload.bids)?payload.bids.map((x:any)=>({price:Number(x[0]),quantity:Number(x[1])})):[],
-              lastTrade:null, source:'BITGET_WS'
-            });
-          }
-          setSubVersion(v => v + 1);
+          const nextBook = payload.book || {};
+          setBook({
+            asks:Array.isArray(nextBook.asks)?nextBook.asks:[],
+            bids:Array.isArray(nextBook.bids)?nextBook.bids:[],
+            lastTrade:payload.trade || nextBook.lastTrade || null,
+            source:nextBook.source || 'SIRE_MATCHING_ENGINE'
+          });
+          if (payload.trade?.price) setSnapshot(current => ({...current,price:Number(payload.trade.price)}));
         } catch {}
       };
-      socket.onclose = () => {
-        if (!closed) retry = setTimeout(connect, 1000);
-      };
+      socket.onclose = () => { if (!closed) retry = setTimeout(connect, 1500); };
     };
     connect();
     return () => { closed = true; if(retry) clearTimeout(retry); try { socket?.close(); } catch {} };
-  }, [selected?.symbol, selected?.marketType]);
+  }, [selected?.symbol]);
 
   useEffect(() => {
     let cancelled = false;
-    fetch('/api/sire/bitget/account', {cache:'no-store', headers:{Accept:'application/json'}})
-      .then(r=>readJsonResponse(r,'Bitget account')).then(p=>{
+    const walletQuery = wallet ? '?wallet=' + encodeURIComponent(wallet) : '';
+    fetch('/api/sire/spot/account' + walletQuery, {cache:'no-store', headers:{Accept:'application/json'}})
+      .then(r=>readJsonResponse(r,'SIRE Spot account')).then(p=>{
         if(cancelled || !p?.ok) return;
-        setBalances(Array.isArray(p.assets) ? p.assets.map((a:any)=>({asset:String(a.coin||''),available:Number(a.available||0),locked:Number(a.locked||0)})) : []);
+        const rows = Array.isArray(p.assets) ? p.assets : Array.isArray(p.balances) ? p.balances : [];
+        setBalances(rows.map((a:any)=>({asset:String(a.asset||a.coin||''),available:Number(a.available||0),locked:Number(a.locked||0)})));
       }).catch(()=>{});
     return () => { cancelled = true; };
-  }, []);
+  }, [wallet]);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -193,24 +182,19 @@ export default function SpotView({ wallet, initialSymbol, onConnect }: Props) {
     if ((orderType === 'Limit' || orderType === 'Stop-limit') && (!Number(price) || Number(price) <= 0)) { setError('Enter a valid limit price.'); return; }
     if (!effectivePrice || !tradeQuantity) { setError('There is no executable SIRE Spot price/liquidity for this order.'); return; }
     try {
-      const clientOid=(globalThis.crypto?.randomUUID?.() || ('sire-' + Date.now() + '-' + Math.random().toString(36).slice(2))).slice(0,32);
+      if (conditional) { setError('SIRE Spot currently supports Market and Limit orders only.'); return; }
+      if (!wallet) { setError('Connect your SIRE wallet before placing an order.'); return; }
+      const clientOrderId=(globalThis.crypto?.randomUUID?.() || ('sire-' + Date.now() + '-' + Math.random().toString(36).slice(2))).slice(0,100);
       const body:any={
-        category:selected?.marketType === 'Margin' ? 'MARGIN' : 'SPOT',
+        wallet,
         symbol:selected?.symbol,
-        side:side.toLowerCase(),
-        qty:(orderType === 'Market' || orderType === 'Trigger') && side === 'Buy' ? total : tradeQuantity,
-        clientOid
+        side:side.toUpperCase(),
+        type:orderType.toUpperCase(),
+        quantity:tradeQuantity,
+        clientOrderId,
+        ...(orderType === 'Limit' ? {price:Number(price)} : {})
       };
-      if (conditional) {
-        body.planType='normal_plan';
-        body.triggerPrice=Number(triggerPrice);
-        body.orderType=orderType === 'Stop-limit' ? 'limit' : 'market';
-        if(orderType === 'Stop-limit') body.price=Number(price);
-      } else {
-        body.orderType=orderType.toLowerCase();
-        if(orderType === 'Limit') body.price=Number(price);
-      }
-      const response = await fetch(conditional ? '/api/sire/bitget/order/trigger' : '/api/sire/bitget/order', {
+      const response = await fetch('/api/sire/spot/orders', {
         method:'POST', headers:{'content-type':'application/json','accept':'application/json'},
         body:JSON.stringify(body)
       });
@@ -218,15 +202,18 @@ export default function SpotView({ wallet, initialSymbol, onConnect }: Props) {
       if (!response.ok || !payload?.ok) throw new Error(String(payload?.error || 'SIRE Spot order was rejected.'));
       setQuantity('');
       const [bookResponse, accountResponse] = await Promise.all([
-        fetch('/api/sire/bitget/orderbook?category=SPOT&symbol=' + encodeURIComponent(selected?.symbol || '') + '&limit=25', {cache:'no-store', headers:{Accept:'application/json'}}),
-        fetch('/api/sire/bitget/account', {cache:'no-store', headers:{Accept:'application/json'}})
+        fetch('/api/sire/spot/book?symbol=' + encodeURIComponent(selected?.symbol || '') + '&depth=25', {cache:'no-store', headers:{Accept:'application/json'}}),
+        fetch('/api/sire/spot/account?wallet=' + encodeURIComponent(wallet), {cache:'no-store', headers:{Accept:'application/json'}})
       ]);
       const [nextBook,nextAccount] = await Promise.all([
-        readJsonResponse(bookResponse,'Bitget order book'),
-        readJsonResponse(accountResponse,'Bitget account')
+        readJsonResponse(bookResponse,'SIRE Spot order book'),
+        readJsonResponse(accountResponse,'SIRE Spot account')
       ]);
-      if(nextBook?.ok) setBook({asks:nextBook.asks||[],bids:nextBook.bids||[],lastTrade:null,source:nextBook.source});
-      if(nextAccount?.ok) setBalances((nextAccount.assets||[]).map((a:any)=>({asset:String(a.coin||''),available:Number(a.available||0),locked:Number(a.locked||0)})));
+      if(nextBook?.ok) setBook({asks:nextBook.asks||[],bids:nextBook.bids||[],lastTrade:nextBook.lastTrade||null,source:nextBook.source});
+      if(nextAccount?.ok) {
+        const rows = Array.isArray(nextAccount.assets) ? nextAccount.assets : Array.isArray(nextAccount.balances) ? nextAccount.balances : [];
+        setBalances(rows.map((a:any)=>({asset:String(a.asset||a.coin||''),available:Number(a.available||0),locked:Number(a.locked||0)})));
+      }
     } catch (e) { setError(e instanceof Error ? e.message : String(e)); }
   };
 
@@ -245,7 +232,7 @@ export default function SpotView({ wallet, initialSymbol, onConnect }: Props) {
             </span>
             <ChevronDown size={15}/>
           </button>
-          <div className={'sire-trading-mode-banner '+(tradingMode==='LIVE'?'live':tradingMode==='BITGET_DEMO'?'demo':'paper')}><b>{tradingMode}</b><span>{tradingMode==='PAPER'?'Simulated orders · no funds used':tradingMode==='BITGET_DEMO'?'Bitget demo account':'Live exchange orders'}</span></div>
+          <div className="sire-trading-mode-banner paper"><b>SIRE SPOT</b><span>SIRE-managed market data and order engine</span></div>
 
           <div className="sire-spot-side-row">
             <button type="button" className={side === 'Buy' ? 'active buy' : ''} onClick={() => setSide('Buy')}>Buy</button>
@@ -257,7 +244,7 @@ export default function SpotView({ wallet, initialSymbol, onConnect }: Props) {
               <span>{orderType}</span><ChevronDown size={14}/>
             </button>
             {orderTypeOpen && <div className="sire-spot-order-type-menu">
-              {(['Market','Limit','Stop-limit','Trigger'] as OrderType[]).map(type => <button key={type} type="button" className={orderType === type ? 'active' : ''} onClick={() => { setOrderType(type); setOrderTypeOpen(false); }}>{type}</button>)}
+              {(['Market','Limit'] as OrderType[]).map(type => <button key={type} type="button" className={orderType === type ? 'active' : ''} onClick={() => { setOrderType(type); setOrderTypeOpen(false); }}>{type}</button>)}
             </div>}
           </div>
 
