@@ -89,6 +89,64 @@ async function loadCatalog(): Promise<Json> {
     pages.push(Array.isArray(result) ? result : []);
   }
 
+  // CoinGecko's RWA directory adds tokenized stocks, commodities and ETFs.
+  // RWA market quotes are kept separate from underlying exchange spot prices.
+  let rwaRows: Json[] = [];
+  try {
+    const rwaList = await getJson(API_HOST + '/rwas/list');
+    const rwaMarkets: Json[] = [];
+    if (Array.isArray(rwaList)) {
+      for (let index = 0; index < Math.ceil(rwaList.length / 250); index++) {
+        const url = new URL(API_HOST + '/rwas/markets');
+        url.searchParams.set('per_page', String(PER_PAGE));
+        url.searchParams.set('page', String(index + 1));
+        url.searchParams.set('price_change_percentage', '24h');
+        if (index > 0) await sleep(750);
+        const pageRows = await getJson(url.toString());
+        if (Array.isArray(pageRows)) rwaMarkets.push(...pageRows);
+      }
+      const marketById = new Map(rwaMarkets.map(row => [s(row?.id), row]));
+      rwaRows = rwaList.map((asset: Json) => {
+        const id = s(asset?.id), symbol = s(asset?.symbol).toUpperCase(), name = s(asset?.name);
+        if (!id || !symbol || !name) return null;
+        const market = marketById.get(id);
+        const data = market?.tokenized_market_data || {};
+        const rawType = s(asset?.asset_type).toLowerCase();
+        const type = rawType === 'commodity' ? 'Commodities' : rawType === 'etf' ? 'ETFs' : 'Stocks';
+        return {
+          id: 'SIRE:RWA:' + id,
+          symbol,
+          name,
+          baseAsset: symbol,
+          quote: 'USD',
+          quoteAsset: 'USD',
+          status: 'REFERENCE_ONLY',
+          marketType: type,
+          category: type,
+          marketSubcategory: type,
+          marketSubSubcategory: 'Tokenized ' + type,
+          marketGroup: 'TRADE FI',
+          marketFilters: ['TRADE FI', type, 'Tokenized RWA'],
+          instrumentType: 'Tokenized ' + type,
+          instrumentSubtype: 'CoinGecko aggregated RWA',
+          provider: 'COINGECKO',
+          sourceAssetId: id,
+          assetType: rawType,
+          price: n(data?.current_price),
+          priceChangePercent: n(data?.price_change_percentage_24h_in_currency ?? data?.price_change_percentage_24h),
+          marketCap: n(data?.market_cap),
+          volume24h: n(data?.total_volume),
+          logoUrl: '',
+          tradableOnSire: false,
+          dataSource: 'CoinGecko tokenized RWA aggregate',
+        };
+      }).filter(Boolean) as Json[];
+    }
+  } catch (error) {
+    // CoinGecko RWA endpoints may require a plan/key not configured in this deployment.
+    console.warn('[SIRE UNIVERSE] CoinGecko RWA directory unavailable:', error instanceof Error ? error.message : String(error));
+  }
+
   const seen = new Set<string>();
   const markets: Json[] = [];
 
@@ -126,6 +184,14 @@ async function loadCatalog(): Promise<Json> {
     });
   }
 
+  const rwaIds = new Set<string>();
+  for (const item of rwaRows) {
+    const key = String(item.sourceAssetId || '');
+    if (!key || rwaIds.has(key)) continue;
+    rwaIds.add(key);
+    markets.push(item);
+  }
+
   const marketIds = new Set(markets.map(item => String(item.sourceAssetId || '')));
   let directoryOnlyCount = 0;
   for (const coin of allCoinsPayload) {
@@ -159,12 +225,14 @@ async function loadCatalog(): Promise<Json> {
   return {
     ok: true,
     provider: 'CoinGecko',
-    source: 'CoinGecko active coin directory + paginated USD market data',
+    source: 'CoinGecko full active coin directory + market data + tokenized RWA directory',
     pairPolicy: 'SIRE-managed USDT spot catalog; quotes are reference data, not proof of executable liquidity',
     generatedAt: Date.now(),
     count: markets.length,
-    pricedCount: markets.length - directoryOnlyCount,
+    pricedCount: markets.filter(item => Number.isFinite(Number(item.price))).length,
     directoryOnlyCount,
+    rwaCount: rwaRows.length,
+    assetClasses: [...new Set(markets.map(item => String(item.marketType || 'Crypto Asset')))],
     markets,
   };
 }
