@@ -113,7 +113,7 @@ const MARKET_LEAF_FILTERS: Record<string, readonly string[]> = {};
 
 const visibleMarketTopGroups = (_provider: 'ALL' | MarketProvider) => MARKET_TOP_GROUPS;
 const sourceDisplayName = (value: string) => value === 'ALL' ? 'All CoinGecko assets' : 'CoinGecko Universe';
-const sourceLogoUrl = (value: string) => value === 'COINGECKO' ? 'https://www.coingecko.com/favicon.ico' : value === 'BINANCE' ? 'https://www.binance.com/favicon.ico' : 'https://deriv.com/favicon.ico';
+const sourceLogoUrl = (_value: string) => 'https://www.coingecko.com/favicon.ico';
 
 const normalizeMarketLabel = (value: unknown) =>
   String(value || '').trim().toLowerCase().replace(/[\s_-]+/g, ' ');
@@ -262,21 +262,6 @@ const loadCoinGeckoUniverse = async (): Promise<Instrument[]> => {
   })) as Instrument[];
 };
 
-const loadBinanceUniverse = async (): Promise<Instrument[]> => {
-  const response = await fetch('/api/sire/binance/catalog?t=' + Date.now(), { cache:'no-store', headers:{Accept:'application/json'} });
-  const payload = await response.json().catch(() => ({}));
-  if (!response.ok || !payload?.ok || !Array.isArray(payload?.instruments)) throw new Error(payload?.error || 'Binance instrument universe is unavailable.');
-  return payload.instruments.map((item:any) => ({
-    ...item,
-    id:'BINANCE:' + String(item.marketType || 'Market') + ':' + String(item.symbol || ''),
-    provider:'BINANCE' as MarketProvider,
-    providerLabel:'Binance market metadata',
-    displaySymbol:String(item.name || item.symbol),
-    logoUrl:item.logoUrl || item.assetLogoUrl || makeLogoFallback(item.baseAsset || item.symbol),
-    providerLogoUrl:'https://www.binance.com/favicon.ico',
-    tradableOnSire:false,
-  })) as Instrument[];
-};
 
 const chooseInitialMarketInstrument = (items: Instrument[]) =>
   items.find(item => item.provider === 'COINGECKO' && item.sourceAssetId === 'bitcoin') ||
@@ -738,7 +723,7 @@ export default function App() {
             onClick={() => setExchangeDrawerOpen(true)}
           >
             <SlidersHorizontal size={14} />
-            <span>Sources</span>
+            <span>Universe</span>
             {providerFilter !== 'ALL' && <em>1</em>}
             <ChevronDown size={13} />
           </button>
@@ -834,12 +819,12 @@ export default function App() {
 
         {exchangeDrawerOpen && (
           <div className="sire-exchange-drawer-backdrop" role="presentation" onClick={() => setExchangeDrawerOpen(false)}>
-            <section className="sire-exchange-drawer" role="dialog" aria-modal="true" aria-label="Select market source" onClick={event => event.stopPropagation()}>
+            <section className="sire-exchange-drawer" role="dialog" aria-modal="true" aria-label="CoinGecko asset universe" onClick={event => event.stopPropagation()}>
               <div className="sire-exchange-drawer-head">
                 <div>
-                  <span>MARKET VENUES</span>
-                  <strong>Select market source</strong>
-                  <small>Choose a venue without leaving the market view.</small>
+                  <span>COINGECKO ASSET UNIVERSE</span>
+                  <strong>CoinGecko asset universe</strong>
+                  <small>Browse CoinGecko-listed crypto assets and tokenized real-world assets.</small>
                 </div>
                 <button type="button" className="sire-exchange-drawer-close" aria-label="Close exchange drawer" onClick={() => setExchangeDrawerOpen(false)}>
                   <X size={17} />
@@ -849,8 +834,8 @@ export default function App() {
               <div className="sire-exchange-drawer-search">
                 <Search size={14} />
                 <input
-                  aria-label="Search market sources"
-                  placeholder="Search market sources"
+                  aria-label="Search asset categories"
+                  placeholder="Search asset categories"
                   onChange={event => {
                     const query = event.target.value.trim().toLowerCase();
                     document.querySelectorAll<HTMLElement>('.sire-exchange-option').forEach(option => {
