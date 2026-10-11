@@ -158,7 +158,7 @@ async function loadCatalog(): Promise<Json> {
     seen.add(id);
 
     markets.push({
-      id: 'SIRE:' + symbol + 'USDT',
+      id: 'SIRE:COIN:' + id,
       symbol: symbol + 'USDT',
       name: symbol + '/USDT',
       baseAsset: symbol,
