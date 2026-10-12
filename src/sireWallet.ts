@@ -1,4 +1,5 @@
 import { HDNodeWallet, JsonRpcProvider, Wallet, type TransactionRequest } from 'ethers';
+import { readEvmTokenMetadata } from './wallet/assets/evmTokenMetadata';
 
 export type SireChainFamily='evm';
 export type SireNetwork={id:string;name:string;family:SireChainFamily;chainId:number;nativeSymbol:string;nativeName:string;rpcUrls:string[];explorerUrl:string};
@@ -35,6 +36,7 @@ export function getNetwork(id:string){const n=SIRE_NETWORKS.find(x=>x.id===id);i
 async function rpc(n:SireNetwork,m:string,p:unknown[]){let last:unknown;for(const url of n.rpcUrls){try{const r=await fetch(url,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({jsonrpc:'2.0',id:Date.now(),method:m,params:p})});const x=await r.json();if(!r.ok||x?.error)throw new Error(String(x?.error?.message||`RPC HTTP ${r.status}`));return x.result}catch(e){last=e}}throw last instanceof Error?last:new Error('All configured RPC endpoints are unavailable.')}
 export async function getNativeBalance(id:string,address=getWalletAddress()){if(!address)return'0';return BigInt(await rpc(getNetwork(id),'eth_getBalance',[address,'latest'])).toString()}
 export async function getTokenBalance(id:string,contract:string,address=getWalletAddress()){if(!address)return'0';if(!/^0x[0-9a-fA-F]{40}$/.test(contract))throw new Error('Invalid EVM token contract address.');const data=`0x70a08231${address.slice(2).padStart(64,'0')}`;return BigInt(await rpc(getNetwork(id),'eth_call',[{to:contract,data},'latest'])||'0x0').toString()}
+export async function getTokenMetadata(id:string,contract:string){const n=getNetwork(id);return readEvmTokenMetadata(n.rpcUrls,contract,n.chainId)}
 export async function sendTransaction(id:string,request:TransactionRequest){if(!unlocked)throw new Error('Unlock SIRE Wallet before signing.');const n=getNetwork(id);const provider=new JsonRpcProvider(n.rpcUrls[0],n.chainId,{staticNetwork:true});const tx=await unlocked.connect(provider).populateTransaction({...request,from:unlocked.address,chainId:n.chainId});const signed=await unlocked.signTransaction(tx);return String(await rpc(n,'eth_sendRawTransaction',[signed]))}
 
 // Compatibility exports for SIRE trading flows while the legacy wallet modules are removed.
