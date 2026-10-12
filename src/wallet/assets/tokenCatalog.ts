@@ -12,23 +12,12 @@ export type CatalogToken = {
   logoURI?: string;
 };
 
-const PLATFORM_BY_CHAIN_ID: Record<number, string> = {
-  1: 'ethereum',
-  8453: 'base',
-  42161: 'arbitrum-one',
-  10: 'optimistic-ethereum',
-  56: 'binance-smart-chain',
-  137: 'polygon-pos',
-  43114: 'avalanche',
-};
-
 const cache = new Map<number, { expiresAt: number; tokens: CatalogToken[] }>();
 const CACHE_TTL_MS = 15 * 60 * 1000;
 const MAX_RESPONSE_BYTES = 20 * 1024 * 1024;
 
 export function getTokenCatalogUrl(chainId: number): string | null {
-  const platform = PLATFORM_BY_CHAIN_ID[chainId];
-  return platform ? `https://tokens.coingecko.com/${platform}/all.json` : null;
+  return Number.isSafeInteger(chainId) && chainId > 0 ? 'https://tokens.uniswap.org' : null;
 }
 
 export function parseTokenCatalog(payload: unknown, expectedChainId: number): CatalogToken[] {
