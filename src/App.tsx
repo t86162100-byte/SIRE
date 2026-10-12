@@ -250,33 +250,41 @@ const matchesMarketLeaf = (item: Instrument, group: string, subgroup: string, su
 const makeProviderLogoFallback = (_item: Instrument) => 'https://deriv.com/favicon.ico';
 
 const loadCoinGeckoUniverse = async (): Promise<Instrument[]> => {
-  const endpoint = '/api/sire/spot/catalog?t=' + Date.now();
-  let response: Response;
-  try {
-    response = await fetch(endpoint, { cache:'no-store', headers:{Accept:'application/json'} });
-  } catch (cause) {
-    throw new Error('Spot catalog network request failed: ' + (cause instanceof Error ? cause.message : String(cause)));
-  }
-  const raw = await response.text();
-  let payload: any = {};
-  try { payload = raw ? JSON.parse(raw) : {}; } catch {
-    throw new Error('Spot catalog endpoint returned non-JSON (HTTP ' + response.status + '): ' + raw.slice(0, 240));
-  }
-  if (!response.ok || !payload?.ok || !Array.isArray(payload?.markets)) {
-    throw new Error('Spot catalog endpoint HTTP ' + response.status + ': ' + String(payload?.error || 'invalid catalog payload') + (payload?.stage ? ' [stage=' + payload.stage + ']' : ''));
-  }
-  return payload.markets.map((item:any) => ({
-    ...item,
-    id: String(item.id || ('COINGECKO:' + (item.sourceAssetId || item.symbol))),
-    provider:'COINGECKO' as MarketProvider,
-    providerLabel:'CoinGecko',
-    displaySymbol:String(item.assetName || item.name || item.symbol),
-    logoUrl:item.logoUrl || makeLogoFallback(item.baseAsset || item.symbol),
-    providerLogoUrl:'https://www.coingecko.com/favicon.ico',
-    tradableOnSire:false,
+  // UI-only mock universe. This branch intentionally has no market-data,
+  // catalogue, exchange, wallet, or backend dependency.
+  const symbols = [
+    ['BTC','Bitcoin'],['ETH','Ethereum'],['SOL','Solana'],['BNB','BNB'],['XRP','XRP'],
+    ['ADA','Cardano'],['DOGE','Dogecoin'],['AVAX','Avalanche'],['LINK','Chainlink'],
+    ['DOT','Polkadot'],['MATIC','Polygon'],['LTC','Litecoin'],['BCH','Bitcoin Cash'],
+    ['UNI','Uniswap'],['ATOM','Cosmos'],['NEAR','NEAR Protocol'],['APT','Aptos'],
+    ['ARB','Arbitrum'],['OP','Optimism'],['SUI','Sui'],['PEPE','Pepe'],['AAVE','Aave'],
+    ['MKR','Maker'],['INJ','Injective'],['FIL','Filecoin'],['TRX','TRON'],
+    ['TON','Toncoin'],['SHIB','Shiba Inu'],['USDT','Tether'],['USDC','USD Coin']
+  ];
+  return symbols.map(([symbol, name], index) => ({
+    id: 'UI:' + symbol,
+    provider: 'COINGECKO' as MarketProvider,
+    providerLabel: 'UI Demo',
+    exchange: 'UI Demo',
+    marketType: 'spot',
+    category: 'crypto',
+    displaySymbol: symbol,
+    symbol,
+    name,
+    assetName: name,
+    logoUrl: makeLogoFallback(symbol),
+    providerLogoUrl: makeLogoFallback('UI'),
+    price: 100 + index * 137.42,
+    bid: 99 + index * 137.42,
+    ask: 101 + index * 137.42,
+    change24h: (index % 7 - 3) * 1.25,
+    priceChangePercent: (index % 7 - 3) * 1.25,
+    volume24h: 1000000 + index * 250000,
+    sourceAssetId: symbol.toLowerCase(),
+    tradableOnSire: false,
+    dataSource: 'ui-mock'
   })) as Instrument[];
 };
-
 
 const chooseInitialMarketInstrument = (items: Instrument[]) =>
   items.find(item => item.provider === 'COINGECKO' && item.sourceAssetId === 'bitcoin') ||
