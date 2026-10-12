@@ -41,7 +41,7 @@ export function parseEvmNetworkDirectory(payload: unknown, knownChainIds: readon
     if (!Number.isSafeInteger(chainId) || chainId <= 0 || !name || !nativeName || !nativeSymbol ||
       !Number.isInteger(decimals) || decimals < 0 || decimals > 36 || known.has(chainId) || seen.has(chainId) ||
       network === 'testnet' || /testnet|sepolia|goerli|devnet|test network|hoodi/i.test(name) ||
-      status === 'deprecated' || status === 'incubating' || rpcUrls.length === 0 ||
+      status === 'deprecated' || rpcUrls.length === 0 ||
       (Array.isArray(item.redFlags) && item.redFlags.length > 0)) continue;
     seen.add(chainId);
     const explorers = Array.isArray(item.explorers) ? item.explorers as Array<Record<string, unknown>> : [];
