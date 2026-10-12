@@ -1,19 +1,15 @@
 import { HDNodeWallet, JsonRpcProvider, Wallet, type TransactionRequest } from 'ethers';
 import { readEvmTokenMetadata } from './wallet/assets/evmTokenMetadata';
+import { WALLET_CHAIN_REGISTRY } from './wallet/chainRegistry';
 
 export type SireChainFamily='evm';
 export type SireNetwork={id:string;name:string;family:SireChainFamily;chainId:number;nativeSymbol:string;nativeName:string;rpcUrls:string[];explorerUrl:string};
 export type SireAsset={id:string;networkId:string;kind:'native'|'token';symbol:string;name:string;decimals:number;contractAddress?:string;balance?:string;priceUsd?:number;verified?:boolean};
 
 const STORAGE_KEY='sire.wallet.v2';
-export const SIRE_NETWORKS:SireNetwork[]=[
-{id:'ethereum',name:'Ethereum',family:'evm',chainId:1,nativeSymbol:'ETH',nativeName:'Ether',rpcUrls:['https://ethereum-rpc.publicnode.com','https://eth.llamarpc.com'],explorerUrl:'https://etherscan.io'},
-{id:'base',name:'Base',family:'evm',chainId:8453,nativeSymbol:'ETH',nativeName:'Ether',rpcUrls:['https://mainnet.base.org','https://base-rpc.publicnode.com'],explorerUrl:'https://basescan.org'},
-{id:'arbitrum-one',name:'Arbitrum One',family:'evm',chainId:42161,nativeSymbol:'ETH',nativeName:'Ether',rpcUrls:['https://arb1.arbitrum.io/rpc','https://arbitrum-one-rpc.publicnode.com'],explorerUrl:'https://arbiscan.io'},
-{id:'optimism',name:'Optimism',family:'evm',chainId:10,nativeSymbol:'ETH',nativeName:'Ether',rpcUrls:['https://mainnet.optimism.io','https://optimism-rpc.publicnode.com'],explorerUrl:'https://optimistic.etherscan.io'},
-{id:'bnb-smart-chain',name:'BNB Smart Chain',family:'evm',chainId:56,nativeSymbol:'BNB',nativeName:'BNB',rpcUrls:['https://bsc-dataseed.binance.org','https://bsc-rpc.publicnode.com'],explorerUrl:'https://bscscan.com'},
-{id:'polygon',name:'Polygon',family:'evm',chainId:137,nativeSymbol:'POL',nativeName:'POL',rpcUrls:['https://polygon-rpc.com','https://polygon-bor-rpc.publicnode.com'],explorerUrl:'https://polygonscan.com'},
-{id:'avalanche-c',name:'Avalanche C-Chain',family:'evm',chainId:43114,nativeSymbol:'AVAX',nativeName:'Avalanche',rpcUrls:['https://api.avax.network/ext/bc/C/rpc','https://avalanche-c-chain-rpc.publicnode.com'],explorerUrl:'https://snowtrace.io'}];
+export const SIRE_NETWORKS:SireNetwork[]=WALLET_CHAIN_REGISTRY
+.filter(chain=>chain.family==='evm'&&chain.status!=='listed'&&typeof chain.chainId==='number')
+.map(chain=>({id:chain.id,name:chain.name,family:'evm' as const,chainId:chain.chainId as number,nativeSymbol:chain.nativeAsset.symbol,nativeName:chain.nativeAsset.name,rpcUrls:[...chain.rpcUrls],explorerUrl:chain.explorerUrl||''}));
 type StoredWallet={version:2;address:string;keystore:string;createdAt:string};
 let unlocked:Wallet|HDNodeWallet|null=null;let pending:HDNodeWallet|null=null;
 function storage(){if(typeof window==='undefined'||!window.localStorage)throw new Error('SIRE Wallet storage is unavailable in this browser.');return window.localStorage}
