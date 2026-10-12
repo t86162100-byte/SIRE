@@ -32,10 +32,9 @@ const EVM_IMPLEMENTED: readonly WalletOperation[] = [
 ];
 
 const EVM_TESTED_IN_WALLET_CI: readonly WalletOperation[] = [
-  // CI currently tests RPC chain identity/failover and token discovery, not live signing/broadcast.
-  'native-balance',
-  'token-balance',
-  'token-metadata',
+  // These are the only adapter operations directly covered by deterministic unit tests today.
+  'derive-account',
+  'validate-address',
 ];
 
 export function getAdapterCapabilityReport(chain: WalletChain): AdapterCapabilityReport {
