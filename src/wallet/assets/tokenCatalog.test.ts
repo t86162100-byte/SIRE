@@ -2,13 +2,11 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { getTokenCatalogUrl, parseTokenCatalog } from './tokenCatalog';
 
-test('token catalog maps configured EVM chain IDs to chain-specific lists', () => {
-  assert.equal(getTokenCatalogUrl(1), 'https://tokens.coingecko.com/ethereum/all.json');
-  assert.equal(getTokenCatalogUrl(8453), 'https://tokens.coingecko.com/base/all.json');
-  assert.equal(getTokenCatalogUrl(42161), 'https://tokens.coingecko.com/arbitrum-one/all.json');
-  assert.equal(getTokenCatalogUrl(56), 'https://tokens.coingecko.com/binance-smart-chain/all.json');
-  assert.equal(getTokenCatalogUrl(137), 'https://tokens.coingecko.com/polygon-pos/all.json');
-  assert.equal(getTokenCatalogUrl(999999), null);
+test('token catalog uses a live chain-filtered community directory without a hard-coded chain map', () => {
+  assert.equal(getTokenCatalogUrl(1), 'https://tokens.uniswap.org');
+  assert.equal(getTokenCatalogUrl(8453), 'https://tokens.uniswap.org');
+  assert.equal(getTokenCatalogUrl(999999), 'https://tokens.uniswap.org');
+  assert.equal(getTokenCatalogUrl(0), null);
 });
 
 test('token catalog filters wrong-chain, malformed and duplicate token entries', () => {
