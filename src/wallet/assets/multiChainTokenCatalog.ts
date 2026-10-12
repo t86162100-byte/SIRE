@@ -1,12 +1,7 @@
 import type { CatalogToken } from './tokenCatalog';
 
-export type CatalogNetwork = { id: string; family: string; chainId?: number };
+export type CatalogNetwork = { id: string; family: string; chainId?: number; catalogSlug?: string };
 
-const TRUST_WALLET_LISTS: Record<string, string> = {
-  tron: 'tron', solana: 'solana', ton: 'ton',
-  ethereum: 'ethereum', base: 'base', 'bnb-smart-chain': 'smartchain',
-  polygon: 'polygon', 'arbitrum-one': 'arbitrum', optimism: 'optimism', 'avalanche-c': 'avalanchec',
-};
 const UNISWAP_LIST_URL = 'https://tokens.uniswap.org';
 const cache = new Map<string, { expiresAt: number; tokens: CatalogToken[] }>();
 const TTL_MS = 30 * 60 * 1000;
@@ -65,23 +60,13 @@ export async function getMultiChainTokenCatalog(
   if (cached && cached.expiresAt > Date.now()) return cached.tokens;
 
   let tokens: CatalogToken[] = [];
-  let firstError: unknown;
   if (network.family === 'evm' && typeof network.chainId === 'number') {
-    try {
-      const { getTokenCatalog } = await import('./tokenCatalog');
-      tokens = await getTokenCatalog(network.chainId);
-    } catch (error) {
-      firstError = error;
-      try {
-        tokens = parseTokenList(await fetchList(UNISWAP_LIST_URL, fetchImpl), network.chainId, 'evm');
-      } catch {
-        if (firstError instanceof Error) throw new Error(`${firstError.message} Community fallback also failed.`);
-        throw new Error('No public token catalog is available for this EVM network.');
-      }
-    }
+    tokens = parseTokenList(await fetchList(UNISWAP_LIST_URL, fetchImpl), network.chainId, 'evm');
   } else {
-    const slug = TRUST_WALLET_LISTS[network.id];
-    if (!slug) throw new Error('No public token catalog is configured for this network yet.');
+    const slug = network.catalogSlug || network.id.replace(/^catalog-/, '');
+    if (!slug || !/^[a-z0-9][a-z0-9_-]{0,60}$/i.test(slug)) {
+      throw new Error('This network has no valid public asset-directory identifier.');
+    }
     tokens = parseTokenList(
       await fetchList(`https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/${slug}/tokenlist.json`, fetchImpl),
       network.chainId ?? -1,
