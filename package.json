@@ -15,7 +15,7 @@
     "test:paper": "node --import tsx --test backend/sire-paper-exchange.test.mjs backend/trading-safety.test.mjs",
     "test:bitget-contract": "node --import tsx --test backend/bitget-provider-contract.test.mjs",
     "test:bitget-demo": "node --import tsx --test backend/bitget-demo-lifecycle.test.mjs",
-    "test:wallet": "node --import tsx --test src/wallet/providers/evmRpc.test.ts src/wallet/chainRegistry.test.ts src/wallet/assets/evmAssetDiscovery.test.ts"
+    "test:wallet": "node --import tsx --test src/wallet/providers/evmRpc.test.ts src/wallet/chainRegistry.test.ts src/wallet/assets/evmAssetDiscovery.test.ts src/wallet/adapters/evmCapabilities.test.ts"
   },
   "dependencies": {
     "@appdeploy/client": "file:./compat/appdeploy-client",
