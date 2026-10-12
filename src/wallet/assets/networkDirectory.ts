@@ -89,12 +89,17 @@ export async function getTrustWalletChainDirectory(fetchImpl: typeof fetch = fet
       }
     } catch { /* ignore invalid local cache */ }
   }
-  const response = await fetchImpl('https://api.github.com/repos/trustwallet/assets/contents/blockchains?ref=master', {
-    headers: { Accept: 'application/vnd.github+json' },
-  });
-  if (!response.ok) throw new Error(`Asset network directory request failed (${response.status}).`);
-  const payload: unknown = await response.json();
-  if (!Array.isArray(payload)) throw new Error('Asset network directory returned an invalid response.');
+  const payload: unknown[] = [];
+  for (let page = 1; page <= 10; page++) {
+    const response = await fetchImpl(`https://api.github.com/repos/trustwallet/assets/contents/blockchains?ref=master&per_page=100&page=${page}`, {
+      headers: { Accept: 'application/vnd.github+json' },
+    });
+    if (!response.ok) throw new Error(`Asset network directory request failed (${response.status}).`);
+    const pagePayload: unknown = await response.json();
+    if (!Array.isArray(pagePayload)) throw new Error('Asset network directory returned an invalid response.');
+    payload.push(...pagePayload);
+    if (pagePayload.length < 100) break;
+  }
   const networks: DiscoveredCatalogNetwork[] = payload
     .filter((entry): entry is Record<string, unknown> => Boolean(entry && typeof entry === 'object'))
     .filter(entry => entry.type === 'dir' && typeof entry.name === 'string' && /^[a-z0-9][a-z0-9_-]{0,60}$/i.test(entry.name))
