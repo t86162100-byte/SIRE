@@ -21,4 +21,5 @@ dependencies {
     implementation("androidx.appcompat:appcompat:1.7.1")
     // Pinned candidate crypto core. Verify package availability and checksum in CI.
     implementation("com.trustwallet:wallet-core:4.8.4")
+    testImplementation("junit:junit:4.13.2")
 }
