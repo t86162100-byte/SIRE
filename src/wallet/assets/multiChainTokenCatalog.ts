@@ -5,7 +5,7 @@ export type CatalogNetwork = { id: string; family: string; chainId?: number };
 const TRUST_WALLET_LISTS: Record<string, string> = {
   tron: 'tron', solana: 'solana', ton: 'ton',
   ethereum: 'ethereum', base: 'base', 'bnb-smart-chain': 'smartchain',
-  polygon: 'polygon', 'arbitrum-one': 'arbitrum', optimism: 'optimism', 'avalanche-c': 'avalanche',
+  polygon: 'polygon', 'arbitrum-one': 'arbitrum', optimism: 'optimism', 'avalanche-c': 'avalanchec',
 };
 const UNISWAP_LIST_URL = 'https://tokens.uniswap.org';
 const cache = new Map<string, { expiresAt: number; tokens: CatalogToken[] }>();
@@ -33,7 +33,7 @@ function parseTokenList(payload: unknown, chainId: number, family: string): Cata
       /^(EQ|UQ)[A-Za-z0-9_-]{46,48}$/.test(address) ||
       /^[0-9a-fA-F]{64}$/.test(address) || /^\d+$/.test(address)
     )) continue;
-    const key = address.toLowerCase();
+    const key = evm ? address.toLowerCase() : address;
     if (seen.has(key)) continue;
     seen.add(key);
     result.push({
