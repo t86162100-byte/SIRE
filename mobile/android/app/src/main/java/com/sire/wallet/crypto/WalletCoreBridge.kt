@@ -41,7 +41,7 @@ object WalletCoreBridge {
 
     private fun CoinType.derivationPath(): String = when (this) {
         CoinType.ETHEREUM -> "m/44'/60'/0'/0/0"
-        CoinType.BITCOIN -> "m/84'/0'/0'/0/0"
+        CoinType.BITCOIN -> "m/44'/0'/0'/0/0"
         else -> "library-default"
     }
 }
