@@ -12,6 +12,10 @@ import wallet.core.jni.HDWallet
  * be reliably zeroized.
  */
 object WalletCoreBridge {
+    init {
+        System.loadLibrary("TrustWalletCore")
+    }
+
     data class DerivedAddress(
         val coin: String,
         val address: String,
