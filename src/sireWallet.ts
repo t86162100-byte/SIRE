@@ -3,8 +3,8 @@ import { readEvmTokenMetadata } from './wallet/assets/evmTokenMetadata';
 import { WALLET_CHAIN_REGISTRY } from './wallet/chainRegistry';
 import { requestEvmRpc } from './wallet/providers/evmRpc';
 
-export type SireChainFamily='evm';
-export type SireNetwork={id:string;name:string;family:SireChainFamily;chainId:number;nativeSymbol:string;nativeName:string;rpcUrls:string[];explorerUrl:string;directorySource?:string;shortName?:string};
+export type SireChainFamily='evm'|'catalog';
+export type SireNetwork={id:string;name:string;family:SireChainFamily;chainId:number;nativeSymbol:string;nativeName:string;rpcUrls:string[];explorerUrl:string;directorySource?:string;shortName?:string;catalogSlug?:string};
 export type SireAsset={id:string;networkId:string;kind:'native'|'token';symbol:string;name:string;decimals:number;contractAddress?:string;balance?:string;priceUsd?:number;verified?:boolean};
 
 const STORAGE_KEY='sire.wallet.v2';
