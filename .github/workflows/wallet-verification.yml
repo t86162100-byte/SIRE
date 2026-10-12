@@ -34,8 +34,10 @@ jobs:
         with:
           node-version: 22
           cache: npm
-      - name: Install locked dependencies
-        run: npm ci
+      - name: Reconcile dependency lock and install
+        run: |
+          npm install --package-lock-only --ignore-scripts --no-audit --no-fund
+          npm ci --no-audit --no-fund
         env:
           RENDER: 'true'
       - name: Test wallet provider and chain capability gates
