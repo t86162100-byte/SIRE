@@ -5615,3 +5615,147 @@
 .sire-funding-history-row>span:last-child{text-align:right;flex-shrink:0}
 .sire-funding-history-row b{font-size:11px;color:#f4f4f4;overflow-wrap:anywhere}
 .sire-funding-history-row small,.sire-funding-address>small{font-size:10px;line-height:1.5;color:#969696}
+
+
+/* Home header + total balance design — intentionally scoped to these two surfaces. */
+.sire-home-v2 .sire-home-header{
+  height:68px!important;
+  padding:calc(env(safe-area-inset-top) + 10px) 17px 10px!important;
+  border:0!important;
+  background:linear-gradient(180deg,rgba(4,6,10,.92) 0%,rgba(4,6,10,.64) 68%,transparent 100%)!important;
+  backdrop-filter:blur(18px) saturate(125%)!important;
+  -webkit-backdrop-filter:blur(18px) saturate(125%)!important;
+}
+.sire-home-v2 .sire-home-header-actions{gap:5px!important}
+.sire-home-v2 .sire-home-icon{
+  width:39px!important;height:39px!important;
+  border:1px solid rgba(255,255,255,.075)!important;
+  border-radius:50%!important;
+  background:rgba(255,255,255,.025)!important;
+  color:#f4f6f7!important;
+  box-shadow:inset 0 1px rgba(255,255,255,.045)!important;
+}
+.sire-home-v2 .sire-home-profile-button{
+  border-color:rgba(255,255,255,.1)!important;
+  background:rgba(255,255,255,.035)!important;
+}
+.sire-home-v2 .sire-home-icon:active{
+  background:rgba(255,255,255,.09)!important;
+  transform:scale(.97);
+}
+.sire-home-v2 .sire-home-icon i{
+  right:6px!important;top:5px!important;
+  width:6px!important;height:6px!important;
+}
+.sire-home-v2 .sire-home-scroll{
+  padding-top:68px!important;
+}
+
+/* Total balance */
+.sire-home-v2 .sire-home-value-card{
+  min-height:0!important;
+  height:auto!important;
+  margin:0 0 24px!important;
+  padding:22px 18px 17px!important;
+  border:1px solid rgba(255,255,255,.105)!important;
+  border-radius:26px!important;
+  background:
+    radial-gradient(100% 80% at 92% 100%,rgba(111,224,240,.055),transparent 55%),
+    radial-gradient(75% 75% at 0% 0%,rgba(255,255,255,.045),transparent 58%),
+    linear-gradient(145deg,#111516 0%,#080a0b 68%,#0d1011 100%)!important;
+  box-shadow:
+    0 22px 55px rgba(0,0,0,.32),
+    inset 0 1px rgba(255,255,255,.07)!important;
+}
+.sire-home-v2 .sire-home-value-card:before{
+  left:5%!important;right:5%!important;bottom:52px!important;height:70px!important;
+  background:rgba(102,221,235,.055)!important;
+  filter:blur(34px)!important;
+}
+.sire-home-v2 .sire-home-value-main{
+  display:block!important;
+}
+.sire-home-v2 .sire-home-value-copy{
+  position:relative!important;
+  z-index:2!important;
+}
+.sire-home-v2 .sire-home-value-card-top{
+  min-height:25px!important;
+}
+.sire-home-v2 .sire-home-value-card-top>span{
+  font-size:9px!important;
+  letter-spacing:.18em!important;
+  color:#899296!important;
+}
+.sire-home-v2 .sire-home-value-card-top button{
+  width:30px!important;height:30px!important;
+  display:grid!important;place-items:center!important;
+  border:1px solid rgba(255,255,255,.07)!important;
+  border-radius:50%!important;
+  background:rgba(255,255,255,.035)!important;
+  color:#aeb8bc!important;
+}
+.sire-home-v2 .sire-home-value-amount{
+  margin-top:10px!important;
+  font-size:37px!important;
+  line-height:.98!important;
+  letter-spacing:-.06em!important;
+  font-weight:850!important;
+  color:#fbfcfc!important;
+  text-shadow:0 0 28px rgba(255,255,255,.08)!important;
+}
+.sire-home-v2 .sire-home-value-amount small{
+  margin-left:6px!important;
+  font-size:9px!important;
+  letter-spacing:.14em!important;
+  color:#788286!important;
+}
+.sire-home-v2 .sire-home-value-chart{
+  height:96px!important;
+  margin:8px -4px -2px!important;
+  opacity:.82!important;
+}
+.sire-home-v2 .sire-home-value-chart svg path:first-of-type{
+  fill:rgba(255,255,255,.07)!important;
+}
+.sire-home-v2 .sire-home-value-chart svg path:nth-of-type(2){
+  stroke:rgba(255,255,255,.16)!important;
+}
+.sire-home-v2 .sire-home-value-chart svg path:nth-of-type(3){
+  stroke:#f7f9f9!important;
+  stroke-width:1.55!important;
+  stroke-opacity:.72!important;
+}
+.sire-home-v2 .sire-home-value-actions{
+  margin-top:12px!important;
+  gap:8px!important;
+}
+.sire-home-v2 .sire-home-value-actions button,
+.sire-home-v2 .sire-home-value-add-funds{
+  min-height:43px!important;
+  border-radius:13px!important;
+  border:1px solid rgba(255,255,255,.09)!important;
+  background:rgba(255,255,255,.035)!important;
+  color:#e8edef!important;
+  font-size:11px!important;
+  box-shadow:inset 0 1px rgba(255,255,255,.045)!important;
+}
+.sire-home-v2 .sire-home-value-actions .sire-home-value-signup,
+.sire-home-v2 .sire-home-value-add-funds{
+  border-color:#eef2f2!important;
+  background:#f4f7f7!important;
+  color:#070909!important;
+}
+.sire-home-v2 .sire-home-value-add-funds{
+  width:100%!important;
+  margin-top:12px!important;
+}
+@media(max-width:380px){
+  .sire-home-v2 .sire-home-value-card{
+    min-height:0!important;
+    padding:20px 15px 15px!important;
+    border-radius:23px!important;
+  }
+  .sire-home-v2 .sire-home-value-amount{font-size:33px!important}
+  .sire-home-v2 .sire-home-value-chart{height:88px!important}
+}
