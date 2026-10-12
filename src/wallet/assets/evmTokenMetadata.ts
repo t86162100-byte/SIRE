@@ -15,8 +15,10 @@ export async function readEvmTokenMetadata(rpcUrls: readonly string[], contractA
   let lastError: unknown;
 
   for (const rpcUrl of rpcUrls) {
-    const provider = new JsonRpcProvider(rpcUrl, chainId, { staticNetwork: true });
+    const provider = new JsonRpcProvider(rpcUrl);
     try {
+      const network = await provider.getNetwork();
+      if (network.chainId !== BigInt(chainId)) throw new Error(`RPC chain mismatch: expected ${chainId}, received ${network.chainId.toString()}.`);
       const [nameRaw, symbolRaw, decimalsRaw] = await Promise.all([
         provider.call({ to: address, data: tokenInterface.encodeFunctionData('name') }),
         provider.call({ to: address, data: tokenInterface.encodeFunctionData('symbol') }),
