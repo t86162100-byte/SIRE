@@ -4,13 +4,27 @@ import { WALLET_CHAIN_REGISTRY } from './wallet/chainRegistry';
 import { requestEvmRpc } from './wallet/providers/evmRpc';
 
 export type SireChainFamily='evm';
-export type SireNetwork={id:string;name:string;family:SireChainFamily;chainId:number;nativeSymbol:string;nativeName:string;rpcUrls:string[];explorerUrl:string};
+export type SireNetwork={id:string;name:string;family:SireChainFamily;chainId:number;nativeSymbol:string;nativeName:string;rpcUrls:string[];explorerUrl:string;directorySource?:string;shortName?:string};
 export type SireAsset={id:string;networkId:string;kind:'native'|'token';symbol:string;name:string;decimals:number;contractAddress?:string;balance?:string;priceUsd?:number;verified?:boolean};
 
 const STORAGE_KEY='sire.wallet.v2';
 export const SIRE_NETWORKS:SireNetwork[]=WALLET_CHAIN_REGISTRY
 .filter(chain=>chain.family==='evm'&&chain.status!=='listed'&&typeof chain.chainId==='number')
 .map(chain=>({id:chain.id,name:chain.name,family:'evm' as const,chainId:chain.chainId as number,nativeSymbol:chain.nativeAsset.symbol,nativeName:chain.nativeAsset.name,rpcUrls:[...chain.rpcUrls],explorerUrl:chain.explorerUrl||''}));
+
+/** Register public-directory EVM metadata for browsing and read-only RPCs only. */
+export function registerDiscoveredEvmNetworks(networks: readonly SireNetwork[]) {
+  const knownIds = new Set(SIRE_NETWORKS.map(n => n.chainId));
+  const knownNames = new Set(SIRE_NETWORKS.map(n => n.name.toLowerCase()));
+  for (const n of networks) {
+    if (n.family !== 'evm' || !Number.isSafeInteger(n.chainId) || n.chainId <= 0 ||
+      !n.name.trim() || !n.rpcUrls.length || knownIds.has(n.chainId) || knownNames.has(n.name.toLowerCase())) continue;
+    SIRE_NETWORKS.push({ ...n, rpcUrls: [...n.rpcUrls] });
+    knownIds.add(n.chainId);
+    knownNames.add(n.name.toLowerCase());
+  }
+  SIRE_NETWORKS.sort((a, b) => a.name.localeCompare(b.name));
+}
 type StoredWallet={version:2;address:string;keystore:string;createdAt:string};
 let unlocked:Wallet|HDNodeWallet|null=null;let pending:HDNodeWallet|null=null;
 function storage(){if(typeof window==='undefined'||!window.localStorage)throw new Error('SIRE Wallet storage is unavailable in this browser.');return window.localStorage}
